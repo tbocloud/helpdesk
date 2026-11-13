@@ -44,6 +44,7 @@
     >
       <div class="flex min-w-0 flex-col gap-6">
         <SignoffFields :f="f" tall />
+        <SignoffDetails :f="f" />
 
         <section
           class="flex flex-col gap-2"
@@ -52,7 +53,7 @@
           <h3 :id="`${id}-questions`" class="text-base-medium text-ink-gray-9">
             {{ f.isUat ? __("Tests") : __("Questions") }}
           </h3>
-          <p v-if="f.isUat && !f.editing" class="text-p-sm text-ink-gray-6">
+          <p v-if="f.fromPlan && !f.editing" class="text-p-sm text-ink-gray-6">
             {{
               __(
                 "The tests come from the approved SRS when the sign-off is saved; you can change them afterwards."
@@ -162,6 +163,7 @@ import {
   type CarriedSignoff,
   type SignoffSource,
 } from "../useSignoffForm";
+import SignoffDetails from "./SignoffDetails.vue";
 import SignoffFields from "./SignoffFields.vue";
 import SignoffPreview from "./SignoffPreview.vue";
 import SignoffSendConfirm from "./SignoffSendConfirm.vue";
@@ -203,6 +205,7 @@ const previewValues = computed(() => ({
   signatory_contact: f.form.signatory_contact,
   customer_address: f.form.customer_address,
   cc_emails: f.ccList.join(", "),
+  details: f.detailPayload(),
   items: f.form.items,
 }));
 

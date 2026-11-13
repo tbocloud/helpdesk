@@ -17,9 +17,22 @@ export const PLACEHOLDERS = [
   "customer_name",
   "customer_address",
   "project_name",
+  "erpnext_version",
+  "uat_site_url",
+  "live_site_url",
+  "uat_start_date",
+  "uat_end_date",
+  "go_live_date",
+  "support_start_date",
+  "support_end_date",
+  "srs_version",
+  "srs_date",
   "modules",
   "training_date",
   "trainer_name",
+  "services",
+  "period_from",
+  "period_to",
   "sign_off_link",
   "sender_name",
   "sender_designation",
@@ -69,6 +82,21 @@ const SIGNOFF_STATUS: Record<string, StatusMeta> = {
   },
   Cancelled: { label: "Cancelled", icon: LucideCircleSlash, tone: "neutral" },
 };
+
+// the ten stages of TBO's Sign-off requirements (HD Signoff Template's stage; their fields
+// and rules come from the server, hd_signoff_template.STAGES)
+export const SIGNOFF_STAGES = [
+  "SRS / Requirement Sign-off",
+  "Module Training Sign-off",
+  "UAT Sign-off",
+  "UAT Sign-off and Go-Live",
+  "Go-Live Confirmation",
+  "Project Completion / Handover",
+  "Content Calendar / Strategy Approval",
+  "Monthly Deliverables Sign-off",
+  "Campaign Completion Sign-off",
+  "Website / Landing Page Go-Live",
+];
 
 /** The details, mail and questions can be edited (before sending, or after changes were asked). */
 export function isEditableStatus(status?: string): boolean {

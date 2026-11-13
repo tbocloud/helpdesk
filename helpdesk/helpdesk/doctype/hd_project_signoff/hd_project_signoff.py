@@ -29,6 +29,8 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import (
     add_days,
+    add_months,
+    cint,
     escape_html,
     format_datetime,
     formatdate,
@@ -39,6 +41,17 @@ from frappe.utils import (
     getdate,
     now_datetime,
     nowdate,
+)
+
+from helpdesk.helpdesk.doctype.hd_signoff_template.hd_signoff_template import (
+    DIGITAL_MARKETING,
+    ERPNEXT,
+    LEGACY_SECTIONS,
+    PAID_ADS,
+    PLATFORMS,
+    SERVICES,
+    STAGES,
+    TRAINING_STAGE,
 )
 
 DRAFT = "Draft"
@@ -58,6 +71,57 @@ NEEDS_FOLLOW_UP = (NOT_CLEAR, ESCALATED)
 # asked for changes
 EDITABLE_STATUSES = (DRAFT, CHANGES_REQUESTED)
 CLOSED_STATUSES = (SIGNED_OFF, CANCELLED)
+# a stage's details (TBO's Sign-off requirements, Data model): plain fields and child tables
+DETAIL_FIELDS = (
+    "erpnext_version",
+    "uat_site_url",
+    "live_site_url",
+    "srs_reference",
+    "srs_version",
+    "srs_date",
+    "uat_start_date",
+    "uat_end_date",
+    "issues_raised",
+    "issues_resolved",
+    "go_live_date",
+    "support_start_date",
+    "support_end_date",
+    "support_channel",
+    "masters_migrated",
+    "opening_balances_migrated",
+    "migration_remarks",
+    "services",
+    "platforms",
+    "period_from",
+    "period_to",
+    "pages_delivered",
+    "reach",
+    "impressions",
+    "engagement_rate",
+    "followers_gained",
+    "website_visits",
+    "leads",
+    "performance_summary",
+    "approved_budget",
+    "actual_spend",
+    "billed_through",
+    "next_period_plan",
+    "delivery_report",
+)
+DETAIL_TABLES = {
+    "modules": ("module", "processes_covered", "status", "remarks"),
+    "open_items": ("issue", "severity", "agreed_action", "target_date"),
+    "attendees": ("attendee_name", "designation"),
+    "deliverables": (
+        "deliverable_type",
+        "planned_qty",
+        "delivered_qty",
+        "customer_approved",
+        "link",
+        "remarks",
+    ),
+    "carry_forward": ("item", "reason", "moved_to"),
+}
 # what can't change while the customer has the mail (questions are checked on their own)
 LOCKED_FIELDS = (
     "module_title",
@@ -69,6 +133,8 @@ LOCKED_FIELDS = (
     "email_subject",
     "email_body",
     "attach_pdf",
+    "declaration",
+    *DETAIL_FIELDS,
 )
 # the words TBO Smart's record_uat knows for a UAT's state
 ERP_STATES = {SIGNED_OFF: "Signed", CANCELLED: "Reopened"}
@@ -78,7 +144,15 @@ MAX_TEXT = 1000
 PORTAL_PATH = "/project-signoff"
 TRAINING = "Training"
 UAT = "UAT"
-DOCUMENT_TEMPLATE = "helpdesk/templates/signoff/signoff_letter.html"
+# the requirements' two print formats, and the app templates they include
+PRINT_FORMATS = {
+    ERPNEXT: "Sign-off – ERPNext Implementation",
+    DIGITAL_MARKETING: "Sign-off – Digital Marketing",
+}
+DOCUMENT_TEMPLATES = {
+    ERPNEXT: "helpdesk/templates/signoff/signoff_erpnext.html",
+    DIGITAL_MARKETING: "helpdesk/templates/signoff/signoff_digital.html",
+}
 
 # a mail's placeholders, {{ name }}: filled from the sign-off, never run as a template, so a
 # template's text can't execute anything (docs/project-signoff.md, Mail)
@@ -86,6 +160,27 @@ PLACEHOLDER = re.compile(r"{{\s*([a-zA-Z_]+)\s*}}")
 LINK_PLACEHOLDER = "sign_off_link"
 # left blank when unknown rather than holding the mail back (a missing address only warns)
 OPTIONAL_PLACEHOLDERS = ("sender_designation", "customer_address")
+# what a filled-in detail is called in "Fill …" (the form's labels)
+DETAIL_LABELS = {
+    "modules": "Modules covered",
+    "training_date": "Training date",
+    "trainer": "Trainer",
+    "erpnext_version": "ERPNext version",
+    "uat_site_url": "UAT site URL",
+    "live_site_url": "Live site URL",
+    "srs_reference": "SRS document",
+    "srs_version": "SRS version",
+    "srs_date": "SRS date",
+    "uat_start_date": "UAT start date",
+    "uat_end_date": "UAT end date",
+    "go_live_date": "Go-live date",
+    "support_start_date": "Support start date",
+    "support_end_date": "Support end date",
+    "services": "Services",
+    "platforms": "Platforms",
+    "period_from": "Period from",
+    "period_to": "Period to",
+}
 REMINDER_AFTER_WORKING_DAYS = 2
 EMAIL_SPLIT = re.compile(r"[,;\s]+")
 
@@ -93,15 +188,17 @@ EMAIL_SPLIT = re.compile(r"[,;\s]+")
 class HDProjectSignoff(Document):
     def before_insert(self):
         self.copy_template_items()
+        self.copy_template_details()
         self.log_event(_("Created"))
 
     def validate(self):
         self.validate_project()
-        self.validate_module()
+        self.set_title()
         self.validate_trainer()
         self.set_signatory()
         self.validate_address()
         self.clean_items()
+        self.clean_details()
         self.clean_mail()
         self.prevent_locked_changes()
 
@@ -118,11 +215,89 @@ class HDProjectSignoff(Document):
                 ).format(self.project_name or self.project)
             )
 
-    def validate_module(self):
-        """Only a training sign-off needs its module (TBO's Sign-off requirements, Record rules)."""
-        self.module_title = (self.module_title or "").strip()
-        if not self.is_uat() and not self.module_title:
-            frappe.throw(_("Name the module, e.g. Accounts."))
+    def set_title(self):
+        """A training's title is its modules; any other sign-off keeps its own, else its stage
+        or template's name. Only a training needs its modules, and only when it is sent (TBO's
+        Sign-off requirements, Record rules)."""
+        modules = self.module_names()
+        if self.stage == TRAINING_STAGE and modules:
+            self.module_title = ", ".join(modules)[:140]
+        self.module_title = (
+            (self.module_title or "").strip() or self.stage or self.template or ""
+        )
+        if not self.module_title:
+            frappe.throw(_("Pick a template, or name what the sign-off is for."))
+
+    def module_names(self) -> list[str]:
+        return [r.module.strip() for r in self.modules if (r.module or "").strip()]
+
+    def clean_details(self):
+        """The stage's details: known services and platforms, periods that run forward,
+        counts that aren't negative, and blank table rows dropped."""
+        self.services = self.clean_choices(self.services, SERVICES)
+        self.platforms = self.clean_choices(self.platforms, PLATFORMS)
+        for start, end, label in (
+            ("period_from", "period_to", _("The period")),
+            ("uat_start_date", "uat_end_date", _("UAT")),
+            ("support_start_date", "support_end_date", _("The support period")),
+        ):
+            if (
+                self.get(start)
+                and self.get(end)
+                and getdate(self.get(start)) > getdate(self.get(end))
+            ):
+                frappe.throw(_("{0} ends before it starts.").format(label))
+        for field in (
+            "issues_raised",
+            "issues_resolved",
+            "reach",
+            "impressions",
+            "followers_gained",
+            "website_visits",
+            "leads",
+        ):
+            if cint(self.get(field)) < 0:
+                frappe.throw(
+                    _("{0} can't be negative.").format(_(self.meta.get_label(field)))
+                )
+        if cint(self.issues_resolved) > cint(self.issues_raised) and self.issues_raised:
+            frappe.throw(_("More issues are resolved than were raised."))
+        for table, fields in DETAIL_TABLES.items():
+            first = fields[0]
+            self.set(
+                table, [r for r in self.get(table) if str(r.get(first) or "").strip()]
+            )
+
+    @staticmethod
+    def clean_choices(text: str | None, allowed: tuple[str, ...]) -> str:
+        """Comma-separated choices from `allowed`, in its order, each once."""
+        picked = {p.strip().lower() for p in (text or "").split(",") if p.strip()}
+        unknown = picked - {a.lower() for a in allowed}
+        if unknown:
+            frappe.throw(
+                _("{0} isn't one of: {1}.").format(
+                    ", ".join(sorted(unknown)), ", ".join(allowed)
+                )
+            )
+        return ", ".join(a for a in allowed if a.lower() in picked)
+
+    def shown_sections(self) -> tuple[str, ...]:
+        """The parts of the details and the document this sign-off's stage shows (ad spend
+        on a month's deliverables only when Paid Ads is a service)."""
+        stage = STAGES.get(self.stage or "")
+        if not stage:
+            return LEGACY_SECTIONS
+        sections = stage["sections"]
+        if self.stage == "Monthly Deliverables Sign-off" and PAID_ADS not in (
+            self.services or ""
+        ):
+            sections = tuple(s for s in sections if s != "ad_spend")
+        return sections
+
+    def kind(self) -> str:
+        """ERP Implementation or Digital Marketing: which document it gets."""
+        stage = STAGES.get(self.stage or "")
+        return stage["project_type"] if stage else ERPNEXT
 
     def validate_trainer(self):
         from helpdesk.tasky.permissions import get_project_team
@@ -236,8 +411,13 @@ class HDProjectSignoff(Document):
             )
         if before.status in EDITABLE_STATUSES:
             return
-        if self.question_rows(before) != self.question_rows(self) or any(
-            before.get(field) != self.get(field) for field in LOCKED_FIELDS
+        if (
+            self.question_rows(before) != self.question_rows(self)
+            or any(before.get(field) != self.get(field) for field in LOCKED_FIELDS)
+            or any(
+                self.table_rows(before, table) != self.table_rows(self, table)
+                for table in DETAIL_TABLES
+            )
         ):
             frappe.throw(
                 _(
@@ -256,6 +436,10 @@ class HDProjectSignoff(Document):
     @staticmethod
     def question_rows(doc) -> list[tuple]:
         return [(r.section, r.question, r.help_text) for r in doc.items]
+
+    @staticmethod
+    def table_rows(doc, table: str) -> list[tuple]:
+        return [tuple(r.get(f) for f in DETAIL_TABLES[table]) for r in doc.get(table)]
 
     def clean_mail(self):
         """The mail's CC are valid addresses, one each; a subject needs a body and the other way round."""
@@ -298,6 +482,29 @@ class HDProjectSignoff(Document):
                     "help_text": row.help_text,
                 },
             )
+
+    def copy_template_details(self):
+        """The template's kind, stage and declaration, and (a month's deliverables) the
+        previous calendar month as the period when none is given."""
+        if not self.template:
+            return
+        template = frappe.db.get_value(
+            "HD Signoff Template",
+            self.template,
+            ["stage", "declaration_text", "module", "signoff_type"],
+            as_dict=True,
+        )
+        # a UAT template makes a UAT (Pass / Fail, recorded on the plan when there is one)
+        if template.signoff_type == UAT:
+            self.signoff_type = UAT
+        self.stage = self.stage or template.stage
+        self.declaration = self.declaration or template.declaration_text
+        if self.stage == TRAINING_STAGE and not self.modules and template.module:
+            self.append("modules", {"module": template.module, "status": "Completed"})
+        if self.stage == "Monthly Deliverables Sign-off" and not self.period_from:
+            first = getdate(add_months(nowdate(), -1)).replace(day=1)
+            self.period_from = first
+            self.period_to = add_days(add_months(first, 1), -1)
 
     # --- helpers ---
 
@@ -405,12 +612,31 @@ class HDProjectSignoff(Document):
         if not self.email_subject or not self.mail_body_text():
             frappe.throw(_("Write the mail's subject and message before sending it."))
         self.check_mail_ready()
+        self.check_stage_details()
         uses_link = LINK_PLACEHOLDER in PLACEHOLDER.findall(self.email_body or "")
         if uses_link and not self.items:
             frappe.throw(
                 _(
                     "The mail links to the questions page, but there are no questions. Add questions, or take {0} out of the mail."
                 ).format("{{ " + LINK_PLACEHOLDER + " }}")
+            )
+
+    def check_stage_details(self):
+        """What the stage needs is filled (TBO's Sign-off requirements: the go-live date for
+        UAT Sign-off and Go-Live, the modules and training date for a training...)."""
+        stage = STAGES.get(self.stage or "")
+        if not stage:
+            return
+        missing = [
+            _(DETAIL_LABELS.get(field, field))
+            for field in stage["required"]
+            if not (self.get(field) if field != "modules" else self.module_names())
+        ]
+        if missing:
+            frappe.throw(
+                _("Fill {0}: the {1} needs it.").format(
+                    ", ".join(missing), _(self.stage)
+                )
             )
 
     def check_mail_ready(self):
@@ -503,14 +729,21 @@ class HDProjectSignoff(Document):
     def mail_attachments(self, fresh: bool) -> list:
         """The sign-off document as a File on the project: made anew for each send, the one
         sent before for a reminder."""
-        if not self.attach_pdf:
-            return []
-        if fresh or not self.sent_pdf:
-            file_name, content = self.render_document(
-                self.document_context(), self.document_title()
-            )
-            self.sent_pdf = self.save_project_file(file_name, content).name
-        return [self.sent_pdf]
+        files = []
+        if self.attach_pdf:
+            if fresh or not self.sent_pdf:
+                file_name, content = self.render_document(self.document_context())
+                self.sent_pdf = self.save_project_file(file_name, content).name
+            files.append(self.sent_pdf)
+        # a month's or a campaign's delivery report goes along (the requirements, Attachments)
+        report = (
+            frappe.db.get_value("File", {"file_url": self.delivery_report}, "name")
+            if self.delivery_report and "attachments" in self.shown_sections()
+            else None
+        )
+        if report:
+            files.append(report)
+        return files
 
     def deliver(
         self,
@@ -658,13 +891,18 @@ class HDProjectSignoff(Document):
             if self.signatory_contact
             else None
         )
-        if self.is_uat():
-            # a UAT's modules are its tests' sections, from the SRS
+        # the modules covered; a UAT without them, its tests' sections from the SRS
+        modules = ", ".join(self.module_names())
+        if not modules and self.is_uat():
             modules = ", ".join(
                 dict.fromkeys(r.section for r in self.items if r.section)
             )
-        else:
+        elif not modules and not self.stage:
             modules = self.module_title
+
+        def day(field):
+            return formatdate(self.get(field)) if self.get(field) else ""
+
         return {
             # "Dear Sir/Madam Asha Menon" when the salutation isn't known (the requirements)
             "contact_salutation": (contact.salutation if contact else "")
@@ -676,9 +914,20 @@ class HDProjectSignoff(Document):
             or frappe.db.get_value("Project", self.project, "project_name")
             or "",
             "modules": modules or "",
-            "training_date": formatdate(self.training_date)
-            if self.training_date
-            else "",
+            "training_date": day("training_date"),
+            "erpnext_version": self.erpnext_version or "",
+            "uat_site_url": self.uat_site_url or "",
+            "live_site_url": self.live_site_url or "",
+            "uat_start_date": day("uat_start_date"),
+            "uat_end_date": day("uat_end_date"),
+            "go_live_date": day("go_live_date"),
+            "support_start_date": day("support_start_date"),
+            "support_end_date": day("support_end_date"),
+            "srs_version": self.srs_version or "",
+            "srs_date": day("srs_date"),
+            "services": self.services or "",
+            "period_from": day("period_from"),
+            "period_to": day("period_to"),
             "trainer_name": get_fullname(self.trainer) if self.trainer else "",
             "sender_name": get_fullname(sender) if sender != "Guest" else "",
             "sender_designation": self.employee_designation(sender),
@@ -709,8 +958,21 @@ class HDProjectSignoff(Document):
             "customer_name": _("the project's customer"),
             "customer_address": _("Address"),
             "project_name": _("the project's name"),
-            "modules": _("Module"),
+            "modules": _("Modules covered"),
             "training_date": _("Training date"),
+            "erpnext_version": _("ERPNext version"),
+            "uat_site_url": _("UAT site URL"),
+            "live_site_url": _("Live site URL"),
+            "uat_start_date": _("UAT start date"),
+            "uat_end_date": _("UAT end date"),
+            "go_live_date": _("Go-live date"),
+            "support_start_date": _("Support start date"),
+            "support_end_date": _("Support end date"),
+            "srs_version": _("SRS version"),
+            "srs_date": _("SRS date"),
+            "services": _("Services"),
+            "period_from": _("Period from"),
+            "period_to": _("Period to"),
             "trainer_name": _("Trainer"),
             "sender_name": _("your name"),
             "sender_designation": _("your designation"),
@@ -1019,6 +1281,7 @@ class HDProjectSignoff(Document):
         acceptance_reference: str | None = None,
         signed_on: str | None = None,
         signed_off_by: str | None = None,
+        signed_copy: str | None = None,
     ):
         """The customer accepted (by replying): who for the customer, when, and the reply as
         evidence (the one picked; none when it came to another mailbox). In memory; `sign_off`
@@ -1045,6 +1308,7 @@ class HDProjectSignoff(Document):
         self.signer_email = (contact.email_id or "").strip().lower()
         self.signed_on = when
         self.acceptance_reference = reply.name if reply else None
+        self.signed_copy = self.check_signed_copy(signed_copy)
         self.status = SIGNED_OFF
         self.revoke_link(log=False)
         self.flags.signoff_action = True
@@ -1054,6 +1318,21 @@ class HDProjectSignoff(Document):
             if self.signer_designation
             else self.signer_name,
         )
+
+    def check_signed_copy(self, file_url: str | None) -> str | None:
+        """A signed copy uploaded as the acceptance: a file that exists, kept private on the
+        project so it stays with the sign-off."""
+        if not file_url:
+            return None
+        name = frappe.db.get_value("File", {"file_url": file_url}, "name")
+        if not name:
+            frappe.throw(_("The signed copy wasn't uploaded. Upload it again."))
+        frappe.db.set_value(
+            "File",
+            name,
+            {"attached_to_doctype": "Project", "attached_to_name": self.project},
+        )
+        return file_url
 
     def check_reply(self, communication: str | None) -> frappe._dict | None:
         """The customer's reply: a mail received in this sign-off's thread."""
@@ -1085,10 +1364,13 @@ class HDProjectSignoff(Document):
         acceptance_reference: str | None = None,
         signed_on: str | None = None,
         signed_off_by: str | None = None,
+        signed_copy: str | None = None,
     ):
         """Mark signed off, save the signed PDF on the project, send it, tell our people and the
         lead's timeline, and complete the project if this was the last training sign-off."""
-        self.mark_signed_off(acceptance_reference, signed_on, signed_off_by)
+        self.mark_signed_off(
+            acceptance_reference, signed_on, signed_off_by, signed_copy
+        )
         pdf, content = self.make_signed_pdf()
         self.signed_pdf = pdf.name
         self.save(ignore_permissions=True)
@@ -1126,7 +1408,7 @@ class HDProjectSignoff(Document):
         self.revoke_link(log=False)
         self.flags.signoff_action = True
         self.log_event(_("Cancelled"), detail=reason)
-        if was_signed_off and not self.is_uat():
+        if was_signed_off and self.is_training():
             frappe.db.set_value("Project", self.project, "custom_signoff_letter", None)
         if was_signed_off:
             self.tell_erp_site()
@@ -1202,6 +1484,10 @@ class HDProjectSignoff(Document):
         return {
             "name": config.brand_name or "TBO",
             "logo": self.logo_data_uri(config.brand_logo),
+            # the site's default Letter Head (the requirements: our letterhead), when set
+            "letter_head": frappe.db.get_value(
+                "Letter Head", {"is_default": 1, "disabled": 0}, "content"
+            ),
         }
 
     @staticmethod
@@ -1237,41 +1523,65 @@ class HDProjectSignoff(Document):
             }
         ).insert(ignore_permissions=True)
 
-    def render_html(
-        self, context: dict, title: str, template: str = DOCUMENT_TEMPLATE
-    ) -> str:
+    def document_source(self) -> str:
+        """The sign-off document's Jinja: its template's print format, else the requirements'
+        format for its kind (ERP Implementation or Digital Marketing), else the app template
+        that format includes."""
+        names = [
+            frappe.db.get_value("HD Signoff Template", self.template, "print_format")
+            if self.template
+            else None,
+            PRINT_FORMATS[self.kind()],
+        ]
+        for name in filter(None, names):
+            html = frappe.db.get_value(
+                "Print Format", {"name": name, "disabled": 0}, "html"
+            )
+            if html:
+                return html
+        return '{% include "' + DOCUMENT_TEMPLATES[self.kind()] + '" %}'
+
+    def render_html(self, context: dict, template: str | None = None) -> str:
         """A document of the sign-off as HTML: the sign-off document (what goes out with the
-        mail, previewed on the full page, and once signed off the signed record) or the
-        project's completion letter."""
-        return frappe.render_template(  # the app's own fixed template, not user input - nosemgrep
-            template,
-            {"brand": self.brand(), "title": title, **context},
+        mail, previewed on the full page, and once signed off the signed record) through its
+        print format, or (`template`) the project's completion letter."""
+        if template:
+            # the app's own fixed template, not user input - nosemgrep
+            return frappe.render_template(template, context)
+        # a print format is a System Manager's, as anywhere in Frappe - nosemgrep
+        return frappe.render_template(
+            self.document_source(), {"doc": self, "ctx": context}
         )
 
     def render_document(
-        self, context: dict, title: str, template: str = DOCUMENT_TEMPLATE
+        self, context: dict, template: str | None = None
     ) -> tuple[str, bytes]:
         """(file name, content): a PDF, or a print-ready HTML page where wkhtmltopdf isn't installed."""
-        html = self.render_html(context, title, template)
-        safe_title = re.sub(r'[\\/:*?"<>|]+', "-", title).strip()
+        html = self.render_html(context, template)
+        safe_title = re.sub(r'[\\/:*?"<>|]+', "-", context["title"]).strip()
         if shutil.which("wkhtmltopdf"):
             from frappe.utils.pdf import get_pdf
 
             return f"{safe_title}.pdf", get_pdf(html, {"page-size": "A4"})
         return f"{safe_title}.html", html.encode()
 
-    def document_title(self) -> str:
+    def document_heading(self) -> str:
+        """Titled after the template's stage, e.g. "UAT Sign-off Certificate"."""
+        if self.stage:
+            return _("{0} Certificate").format(_(self.stage))
         return (
-            _("UAT sign-off - {0}") if self.is_uat() else _("Sign-off - {0} - {1}")
-        ).format(self.label(), self.name or _("New"))
+            _("User acceptance sign-off") if self.is_uat() else _("Training sign-off")
+        )
 
-    def document_context(self) -> dict:
-        """What the document shows: customer (as sent), project, the questions with their
-        answers, the declaration, and both signatures once signed off."""
-        sections: dict[str, list] = {}
-        for row in self.items:
-            sections.setdefault(row.section or _("General"), []).append(row)
-        customer_name = self.customer_name()
+    def document_context(self, signed_title: bool = False) -> dict:
+        """Everything the two print formats show (TBO's Sign-off requirements, Sign-off
+        document): header, customer (as sent), project, the stage's sections, the questions
+        with their answers, the declaration and both signatures once signed off. A print
+        format opened from Frappe's print view computes it itself."""
+
+        def day(value):
+            return formatdate(value) if value else ""
+
         contact = (
             self.contact_details(self.signatory_contact)
             if self.signatory_contact
@@ -1286,10 +1596,20 @@ class HDProjectSignoff(Document):
             else None
         )
         tbo_signer = self.link_sent_by or frappe.session.user
+        lead = self.project_lead()
+        questions: dict[str, list] = {}
+        for row in self.items:
+            questions.setdefault(row.section or _("General"), []).append(row)
+        heading = self.document_heading()
         return {
-            "doc": self,
-            "sections": sections,
-            "customer_name": customer_name,
+            "brand": self.brand(),
+            "title": (
+                _("{0} - {1} - signed off") if signed_title else _("{0} - {1}")
+            ).format(heading, self.name or _("New")),
+            "heading": heading,
+            "date": day(self.link_sent_on or nowdate()),
+            "shown": set(self.shown_sections()),
+            "customer_name": self.customer_name(),
             "address": self.address_display or self.formatted_address(),
             "contact_name": self.signatory_name
             or (contact.full_name if contact else ""),
@@ -1297,34 +1617,93 @@ class HDProjectSignoff(Document):
             or (contact.designation if contact else "")
             or "",
             "contact_email": self.signatory_email or "",
-            "project_manager": get_fullname(self.project_lead())
-            if self.project_lead()
-            else "",
+            "project_name": self.project_name or self.project,
+            "project_manager": get_fullname(lead) if lead else "",
+            "project_coordinator": self.project_coordinator(),
             "trainer_name": get_fullname(self.trainer) if self.trainer else "",
-            "training_date": formatdate(self.training_date)
-            if self.training_date
-            else "",
-            "date": formatdate(self.link_sent_on or nowdate()),
+            "training_date": day(self.training_date),
+            "dates": {
+                field: day(self.get(field))
+                for field in (
+                    "srs_date",
+                    "uat_start_date",
+                    "uat_end_date",
+                    "go_live_date",
+                    "support_start_date",
+                    "support_end_date",
+                    "period_from",
+                    "period_to",
+                )
+            },
+            "open_item_dates": [day(r.target_date) for r in self.open_items],
+            "content_calendar": self.content_calendar_link(),
+            "delivery_report_name": (
+                self.delivery_report.rsplit("/", 1)[-1] if self.delivery_report else ""
+            ),
+            "questions": questions,
+            "answers": self.answer_labels(),
+            "declaration": self.declaration or self.default_declaration(),
             "signed": signed,
-            "signed_on": formatdate(self.signed_on) if signed else "",
-            "acceptance": _("Email reply of {0}").format(format_datetime(reply_on))
-            if reply_on
+            "signed_on": day(self.signed_on) if signed else "",
+            "acceptance": (
+                _("Email reply of {0}").format(format_datetime(reply_on))
+                if reply_on
+                else _("Signed copy")
+                if self.signed_copy
+                else ""
+            )
+            if signed
             else "",
             "tbo_name": get_fullname(tbo_signer) if tbo_signer != "Guest" else "",
             "tbo_designation": self.employee_designation(tbo_signer),
-            # long sentences live here: an HTML formatter would wrap them inside _()
-            "declaration": _(
-                "We confirm that we tested the system as listed above and accept it."
-            )
+        }
+
+    def default_declaration(self) -> str:
+        """The stage's declaration when the template has none (a stage-less sign-off's are
+        a training's or a UAT's)."""
+        from helpdesk.helpdesk.doctype.hd_signoff_template.hd_signoff_template import (
+            DECLARATIONS,
+        )
+
+        if self.stage in DECLARATIONS:
+            return DECLARATIONS[self.stage]
+        # long sentences live here: an HTML formatter would wrap them inside _()
+        return (
+            _("We confirm that we tested the system as listed above and accept it.")
             if self.is_uat()
             else _(
                 "We confirm that the training listed above has been completed to our satisfaction."
-            ),
-            "kind_title": _("User acceptance sign-off")
-            if self.is_uat()
-            else _("Training sign-off"),
-            "answers": self.answer_labels(),
-        }
+            )
+        )
+
+    def project_coordinator(self) -> str:
+        from helpdesk.tasky.permissions import COORDINATOR_PROJECT_ROLE
+
+        user = frappe.db.get_value(
+            "Project User",
+            {
+                "parenttype": "Project",
+                "parent": self.project,
+                "custom_role": COORDINATOR_PROJECT_ROLE,
+            },
+            "user",
+        )
+        return get_fullname(user) if user else ""
+
+    def content_calendar_link(self) -> str:
+        """The content calendar, when the customer has posts in the period (Period: "link to
+        that period's content calendar if it is in the app")."""
+        if not (self.period_from and self.period_to and self.customer):
+            return ""
+        if not frappe.db.exists(
+            "HD Content Post",
+            {
+                "customer": self.customer,
+                "publish_on": ("between", [self.period_from, self.period_to]),
+            },
+        ):
+            return ""
+        return get_url(f"/helpdesk/content?date={self.period_from}")
 
     def answer_labels(self) -> dict:
         """How an answer reads: a UAT's Done is Pass, Not clear Fail, Escalated Blocker."""
@@ -1340,12 +1719,7 @@ class HDProjectSignoff(Document):
 
     def make_signed_pdf(self):
         file_name, content = self.render_document(
-            self.document_context(),
-            (
-                _("UAT signed off - {0} - {1}")
-                if self.is_uat()
-                else _("Signed off - {0} - {1}")
-            ).format(self.label(), self.name),
+            self.document_context(signed_title=True)
         )
         return self.save_project_file(file_name, content), content
 
@@ -1355,7 +1729,9 @@ class HDProjectSignoff(Document):
         ours = {self.link_sent_by, self.trainer, self.project_lead()}
         self.deliver(
             (
-                _("{0} signed off") if self.is_uat() else _("{0} training signed off")
+                _("{0} training signed off")
+                if self.is_training()
+                else _("{0} signed off")
             ).format(self.label()),
             "<p>"
             + _(
@@ -1375,9 +1751,9 @@ class HDProjectSignoff(Document):
     # --- project roll-up ---
 
     def project_signoffs(self) -> list[dict]:
-        """The project's training sign-offs that count (the completion letter's; a UAT or a
-        cancelled one doesn't)."""
-        return frappe.get_all(
+        """The project's training sign-offs that count (the completion letter's; a UAT, another
+        stage or a cancelled one doesn't). A stage-less one made before stages is a training."""
+        rows = frappe.get_all(
             "HD Project Signoff",
             filters={
                 "project": self.project,
@@ -1386,6 +1762,7 @@ class HDProjectSignoff(Document):
             },
             fields=[
                 "name",
+                "stage",
                 "module_title",
                 "status",
                 "training_date",
@@ -1399,10 +1776,14 @@ class HDProjectSignoff(Document):
             order_by="signed_on asc, creation asc",
             limit_page_length=0,
         )
+        return [r for r in rows if r.stage in (None, "", TRAINING_STAGE)]
+
+    def is_training(self) -> bool:
+        return not self.is_uat() and self.stage in (None, "", TRAINING_STAGE)
 
     def complete_project_if_all_signed(self):
         """Every training sign-off of the project signed off: the completion letter goes on the project and out by email."""
-        if self.is_uat():
+        if not self.is_training():
             return
         signoffs = self.project_signoffs()
         if not signoffs or any(s.status != SIGNED_OFF for s in signoffs):
@@ -1416,6 +1797,10 @@ class HDProjectSignoff(Document):
             s.signed_on = formatdate(s.signed_on)
         file_name, content = self.render_document(
             {
+                "brand": self.brand(),
+                "title": _("Project completion - {0}").format(
+                    project.project_name or self.project
+                ),
                 "project_name": project.project_name or self.project,
                 "customer_name": self.customer_name(),
                 "signoffs": signoffs,
@@ -1427,7 +1812,6 @@ class HDProjectSignoff(Document):
                     "Each module's signed record is kept on the project. Generated {0}."
                 ).format(format_datetime(now_datetime())),
             },
-            _("Project completion - {0}").format(project.project_name or self.project),
             template="helpdesk/templates/signoff/completion_letter.html",
         )
         letter = self.save_project_file(file_name, content)

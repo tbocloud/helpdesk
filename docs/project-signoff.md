@@ -3,17 +3,11 @@
 A **sign-off** is the customer's written acceptance of one stage of a project: a module's
 training (Accounts: Sales, Purchase…; HR…), UAT, and (with the templates still to come) the SRS,
 go-live, handover or a month of digital marketing. It follows **TBO's Sign-off requirements**
-("Sign-off Feature Enhancement – Developer Requirements", 12 Nov 2026), built in three parts:
-
-1. **This part (done):** one dialog to set up, fill in and send a sign-off, **Edit in full page**
-   with a mail and a document preview, the customer's name and address fetched, To and CC, the
-   mail sent from the app as a Communication, the requirements' statuses with **Mark signed off**
-   and **Mark changes requested**, the mail history, the attached sign-off document, and the
-   requirements' roles.
-2. **Next:** the ERPNext Implementation details (modules table, SRS, environment, UAT and go-live
-   dates, support period, open items, data migration), its print format and its six templates.
-3. **Then:** the Digital Marketing details (services, platforms, period, deliverables,
-   performance, ad spend, carry-forward items), its print format and its four templates.
+("Sign-off Feature Enhancement – Developer Requirements", 12 Nov 2026), all seven changes:
+the mail template selector by project type, the mail editor filled in from the template,
+**Edit in full page**, the customer's name and address fetched, To / CC and **Send to
+customer**, the **ERPNext Implementation** and **Digital Marketing** details with their two print
+formats and ten stage templates, and status tracking with the mail history.
 
 The sign-off goes to the contact who signs for the customer as a mail from the app, with the
 sign-off document attached and, when it has questions, a link to a **questions page** where the
@@ -49,6 +43,63 @@ is generated.
   regular expression, not rendered with Jinja (the requirements say `frappe.render_template`), so
   a template's text can never execute anything. The syntax is the same.
 - **Not clear creates a task**, not a ticket: it is project work for the trainer.
+- **The stage decides the details.** A template has a stage (one of the requirements' ten); a
+  sign-off copies it, and the stage says which sections its form and document show, what must be
+  filled before it is sent, and what the dialog asks for (the rest are on the full page). One
+  table of stages (`hd_signoff_template.STAGES`, `SECTIONS`) drives the server checks, the forms
+  (sent by `get_signoff_form`) and the documents. The project types are this site's: the
+  requirements' "ERPNext Implementation" is **ERP Implementation**.
+
+## Stages and details
+
+The ten stages (`HD Signoff Template.stage`, copied to the sign-off), their project type, the
+sections they show (the documents' "Shown for"), what blocks sending until filled, and what the
+New sign-off dialog asks:
+
+| Stage | Project type | Sections | Needed to send | In the dialog |
+| --- | --- | --- | --- | --- |
+| SRS / Requirement Sign-off | ERP Implementation | requirement | SRS version, SRS date | the same |
+| Module Training Sign-off | ERP Implementation | modules, training | modules, training date, trainer | the same |
+| UAT Sign-off | ERP Implementation | environment, requirement, modules, UAT, open items | modules, UAT site URL | the same |
+| UAT Sign-off and Go-Live | ERP Implementation | + go-live, support | modules, UAT site URL, go-live date | modules, go-live date |
+| Go-Live Confirmation | ERP Implementation | environment, data migration, go-live, support | go-live date, live site URL, support dates | go-live date, live site URL |
+| Project Completion / Handover | ERP Implementation | modules, open items (pending), support | support end date | the same |
+| Content Calendar / Strategy Approval | Digital Marketing | engagement, period, next period plan | services, period | the same |
+| Monthly Deliverables Sign-off | Digital Marketing | engagement, period, deliverables, performance, ad spend (only with Paid Ads), carry-forward, next period plan, attachments | services, period | the same |
+| Campaign Completion Sign-off | Digital Marketing | engagement, period (campaign dates), deliverables, performance, ad spend, attachments | period | services, period |
+| Website / Landing Page Go-Live | Digital Marketing | engagement, website | live URL, go-live date | the same |
+
+The fields of each section (`SECTIONS`):
+- **environment**: UAT site URL, live site URL, ERPNext version (default "V16");
+  **requirement**: SRS document, version, date; **modules**: the Modules covered table (module,
+  key processes covered, status Completed / Partially Completed / Deferred, remarks);
+  **uat**: UAT start and end date, issues raised, issues resolved; **open items**: issue,
+  severity (High / Medium / Low), agreed action, target date ("Known exceptions accepted by the
+  customer"); **training**: training date, trainer, attendees (name, designation);
+  **migration**: masters migrated, opening balances migrated, remarks; **go-live**: go-live
+  date; **support**: support start and end date, support channel (email or helpdesk).
+- **engagement**: services (Social Media, SEO, Paid Ads, Content, Website, Email Marketing) and
+  platforms (Instagram, Facebook, LinkedIn, YouTube, Google), chosen as chips; the account
+  manager on the document is the project lead; **period**: from and to (a month's deliverables
+  default to the previous calendar month), with a link to that period's content calendar on the
+  document when the customer has posts in it; **deliverables**: type (post, reel, story, blog, ad
+  creative, video, landing page), planned and delivered quantity, approved by the customer, link
+  or remarks, which **Fill from the content calendar** counts from the customer's content posts
+  in the period (`get_signoff_deliverables`); **performance**: reach, impressions, engagement
+  rate, followers gained, website visits, leads, a summary; **ad spend**: approved budget, actual
+  spend, billed through (the customer's card or TBO); **carry-forward**: item, reason, moved to;
+  **next period plan**; **website**: live URL, go-live date, pages delivered; **attachments**:
+  the delivery report, which goes with the mail.
+
+Picking a template fills in the stage's defaults: the template's module as the first module
+covered (a training), the project's modules (a UAT: those its sign-offs cover, else its SRS's),
+"V16" as the ERPNext version, last month for a month's deliverables, and the template's Attach
+default. A training's title is its modules; any other sign-off is named after its stage (or its
+template), so **Module** is asked only of a sign-off without a stage. Picking a **UAT template**
+makes a UAT (Pass / Fail words; recorded on the plan when there is one). Checks on save: known
+services and platforms, periods that run forward, counts that aren't negative, no more issues
+resolved than raised, blank table rows dropped (`clean_details`). After sending, the details and
+tables are read-only like the mail.
 
 ## Statuses
 
@@ -73,10 +124,12 @@ Item answers: **Pending**, **Done**, **Not clear**, **Escalated**.
    [From the lead](#from-the-lead)). The dialog (`SignoffFormDialog.vue`, about 900px, header and
    buttons fixed, the form scrolling) has three sections (`SignoffFields.vue`):
    - **Sign-off setup**: project type (read-only; a select when the project has none, which only
-     narrows the templates), sign-off template (filtered by kind and project type, "No template:
-     start empty" last; "Mail content and questions are copied in; you can change them before
-     sending."), and for a training the module (required only here), training date and trainer;
-     a UAT's tester.
+     narrows the templates), sign-off template (every template of the project's type, "No
+     template: start empty" last; "Mail content and questions are copied in; you can change them
+     before sending."), and the stage's dialog details ([Stages and details](#stages-and-details):
+     e.g. **Modules covered** as a multi-select of ERPNext modules and **Go-live date** for UAT
+     Sign-off and Go-Live); a sign-off without a stage asks its module, training date and
+     trainer; a UAT from the plan, its tester.
    - **Customer**: the customer's name (read-only), its address (read-only, the primary one
      first, **Change** when it has several; "No address on file. Add address", and sending is
      still allowed), who signs (To: a contact of the customer with an email, shown with
@@ -93,9 +146,10 @@ Item answers: **Pending**, **Done**, **Not clear**, **Escalated**.
    `SignoffEditor.vue`): everything typed in the dialog carries over through the browser
    (`stores/signoffDraft.ts`; no draft record, so an abandoned dialog leaves nothing behind;
    taken once, so a reload starts fresh). Two columns (`SignoffEditorForm.vue`): the fields, a
-   tall mail editor and the questions editor (a template's questions, editable before saving; a
+   tall mail editor, every section of the stage with its tables (`SignoffDetails.vue`,
+   `SignoffDetailField.vue`, `SignoffTable.vue`) and the questions editor (a template's questions, editable before saving; a
    UAT's tests come from the SRS when saved); and a live **Mail preview** (subject, To, CC, the
-   body as the customer sees it) and **Document preview** (the sign-off document's HTML,
+   body as the customer sees it) and **Document preview** (the stage's print format,
    `preview_new_signoff_document`), both in sandboxed frames (`SignoffPreview.vue`). Same buttons
    and rules as the dialog, plus Back. Not offered from a lead's page, whose owner may not open
    the project.
@@ -108,7 +162,8 @@ Item answers: **Pending**, **Done**, **Not clear**, **Escalated**.
 4. **Sending** (`HDProjectSignoff.send_mail`): checks ([Who can do what](#who-can-do-what) and
    [Checks before sending](#checks-before-sending)), keeps the snapshot, makes a new questions
    link when there are questions (the old one stops working), renders the sign-off document and
-   saves it on the project (`sent_pdf`) when Attach is ticked, sets Sent, sent on and sent by,
+   saves it on the project (`sent_pdf`) when Attach is ticked (with the delivery report when the
+   stage has one), sets Sent, sent on and sent by,
    logs it, and sends the Communication. A send that fails rolls back with the request: it stays
    a draft and the form keeps what was typed.
 5. **The customer** reads the mail, opens the questions page if there is one (a code to their
@@ -127,8 +182,8 @@ Item answers: **Pending**, **Done**, **Not clear**, **Escalated**.
    Completing the task elsewhere does the same (`Task.clarify_signoff_item`).
 7. **Their reply** (`on_communication_insert`, a Communication hook): written on the history
    ("Reply received") and who sent the mail and the project lead are told.
-8. **Mark signed off** (Sent only): the reply (the latest received one by default, or none if it
-   came to another mailbox), the date (the reply's by default; never in the future) and who signed
+8. **Mark signed off** (Sent only): the reply (the latest received one by default), or without a
+   reply in the thread a **signed copy** uploaded instead (kept on the project), the date (the reply's by default; never in the future) and who signed
    for the customer (the To contact by default, or another contact of the customer). Then:
    - status Signed Off; signer name, designation, email from the contact; the questions link
      stops;
@@ -160,7 +215,8 @@ Item answers: **Pending**, **Done**, **Not clear**, **Escalated**.
 - CC are valid emails (the signatory is never copied on their own mail);
 - subject and body are not empty;
 - no placeholder is left unfilled ("Fill Training date: it is used in the mail.");
-- a training has its module (and, on the form, its trainer);
+- the stage's details are filled ("Fill Go-live date: the UAT Sign-off and Go-Live needs it.");
+  a sign-off without a stage, its module and trainer;
 - a mail that links to the questions page has questions;
 - a missing address only warns.
 
@@ -175,12 +231,16 @@ lists, link) and CC, kept on the sign-off (`email_subject`, `email_body`, `cc_em
 - **Placeholders**: `{{ contact_salutation }}` (the contact's salutation; "Sir/Madam" when it
   isn't known), `{{ contact_name }}`, `{{ customer_name }}`, `{{ customer_address }}` (blank when
   there is none), `{{ project_name }}`, `{{ modules }}` (the module; a UAT's: its tests' sections
-  from the SRS), `{{ training_date }}`, `{{ trainer_name }}`, `{{ sign_off_link }}`,
-  `{{ sender_name }}`, `{{ sender_designation }}` (the sender's Employee designation, blank when
-  unknown), `{{ company_name }}` (the helpdesk's brand name). The ERPNext and Digital Marketing
-  placeholders come with parts 2 and 3.
-- **Filling in** (`preview_signoff_mail`): when the template is picked, and again whenever a field
-  it uses changes, until the mail is changed by hand; then **Reapply template** puts it back after
+  from the SRS), `{{ training_date }}`, `{{ trainer_name }}`, `{{ erpnext_version }}`,
+  `{{ uat_site_url }}`, `{{ live_site_url }}`, `{{ uat_start_date }}`, `{{ uat_end_date }}`,
+  `{{ go_live_date }}`, `{{ support_start_date }}`, `{{ support_end_date }}`, `{{ srs_version }}`,
+  `{{ srs_date }}`, `{{ services }}`, `{{ period_from }}`, `{{ period_to }}`,
+  `{{ sign_off_link }}`, `{{ sender_name }}`, `{{ sender_designation }}` (the sender's Employee
+  designation, blank when unknown), `{{ company_name }}` (the helpdesk's brand name). A
+  placeholder left empty is named by its field's label ("Fill Go-live date: it is used in the
+  mail.").
+- **Filling in** (`preview_signoff_mail`, with the details): when the template is picked, and
+  again whenever a field it uses changes, until the mail is changed by hand; then **Reapply template** puts it back after
   asking ("Your changes to the mail are lost").
 - **The link** goes where `{{ sign_off_link }}` is, else at the end, with how the one-time code
   works, when the sign-off has questions; without questions no link goes.
@@ -292,9 +352,10 @@ Manager only; everything else goes through these checks.
 
 - **HD Signoff Template** (named by `template_name`): `module`, `signoff_type` (Training or UAT),
   `project_type` (Project's types, now with **Digital Marketing**; blank: any), `description`,
-  `is_active`, `email_subject`, `email_body`, `default_cc`, `items` → **HD Signoff Template Item**
-  (`section`, `question`, `help_text`). Stage, declaration text and print format come with parts 2
-  and 3.
+  `is_active`, `stage` (the ten), `declaration_text` (printed in the document),
+  `attach_pdf_default`, `print_format` (→ Print Format; blank: the stage's kind's),
+  `email_subject`, `email_body`, `default_cc`, `items` → **HD Signoff Template Item** (`section`,
+  `question`, `help_text`; optional).
 - **HD Project Signoff** (`SO-.YYYY.-.####`): `project`, `project_name`, `project_type` and
   `customer` (fetched), `module_title` (required for a training), `template`, `signoff_type`,
   `crm_plan`, `crm_recorded`, `status`, `training_date`, `trainer`; the recipient:
@@ -304,7 +365,18 @@ Manager only; everything else goes through these checks.
   `link_expires_on`, `link_sent_on` (sent on), `link_sent_by` (sent by), `reminder_sent_on`;
   signed off: `signed_on`, `signer_name`, `signer_designation`, `signer_email`, `signed_off_by` →
   Contact, `acceptance_reference` → Communication, `remarks` (changes requested or cancelled),
-  `signed_pdf` → File; `log`. The portal-signature fields (`signer_ip`, `signer_user_agent`,
+  `signed_copy` (Attach, the other acceptance), `signed_pdf` → File; `log`; the stage:
+  `stage`, `declaration`, and the details of [Stages and details](#stages-and-details)
+  (`erpnext_version`, `uat_site_url`, `live_site_url`, `srs_reference`, `srs_version`,
+  `srs_date`, `uat_start_date`, `uat_end_date`, `issues_raised`, `issues_resolved`,
+  `go_live_date`, `support_start_date`, `support_end_date`, `support_channel`,
+  `masters_migrated`, `opening_balances_migrated`, `migration_remarks`, `services`, `platforms`,
+  `period_from`, `period_to`, `pages_delivered`, `reach`, `impressions`, `engagement_rate`,
+  `followers_gained`, `website_visits`, `leads`, `performance_summary`, `approved_budget`,
+  `actual_spend`, `billed_through`, `next_period_plan`, `delivery_report`) with the child tables
+  **HD Signoff Module Item** (`modules`), **HD Signoff Open Item** (`open_items`), **HD Signoff
+  Attendee** (`attendees`), **HD Signoff Deliverable** (`deliverables`) and **HD Signoff Carry
+  Forward Item** (`carry_forward`). The portal-signature fields (`signer_ip`, `signer_user_agent`,
   `audit_ref`) are gone.
 - **HD Project Signoff Item**: `section`, `question`, `help_text`, `response`, `customer_comment`,
   `responded_on`, `clarification_task` → Task, `clarified_on`, `clarified_by`,
@@ -321,30 +393,40 @@ Manager only; everything else goes through these checks.
 
 ## PDF
 
-`helpdesk/templates/signoff/` (`letter_base.html`, `signoff_letter.html`,
-`completion_letter.html`), rendered with `frappe.utils.pdf.get_pdf` (wkhtmltopdf, A4), the
-helpdesk's brand as letterhead (HD Settings brand logo inlined). Where wkhtmltopdf isn't installed
-the same page is saved as print-ready `.html`. Old WebKit: tables, no flex or grid.
+Two print formats, as the requirements ask: **Sign-off – ERPNext Implementation** and **Sign-off –
+Digital Marketing** (standard Print Formats of the app, `helpdesk/helpdesk/print_format/`), whose
+Jinja includes the app's templates `helpdesk/templates/signoff/signoff_erpnext.html` and
+`signoff_digital.html` (sharing `signoff_parts.html` and `letter_base.html`). A sign-off uses its
+template's print format, else its kind's (`document_source`); opened from Frappe's print view,
+the format computes its own context (`document_context`). Each section shows only for the stages
+listed against it; the document is titled after the stage ("UAT Sign-off and Go-Live
+Certificate"), numbered `SO-.YYYY.-.####` and dated, on **our letterhead**: the site's default
+Letter Head when there is one, else the helpdesk's brand (this Project has no Company). Sections:
+Header, Customer (name, address, contact, designation, email), Project (name, ERPNext version,
+project manager, project coordinator) or Engagement (services, platforms, account manager), the
+stage's sections, the questions with their answers when there are any, the Declaration (the
+template's), and the signatures (the customer's name, designation, date and acceptance reference:
+the reply's date or "Signed copy"; ours: name, designation, date).
 
-The **sign-off document** (`signoff_letter.html`): header (title, number, date), Customer (name,
-address, contact person, designation, email), Project (name, project manager, module, training
-date, trainer), the questions with their answers, the declaration, and the customer's and our
-signature boxes (empty until signed off). The same page is the attachment when sent, the Document
-preview, and (filled in) the signed PDF. The requirements' Frappe print formats come with parts 2
-and 3; the project's Company and Letter Head aren't used, as this helpdesk's Project has no
-Company.
+It is rendered with `frappe.utils.pdf.get_pdf` (wkhtmltopdf, A4); where wkhtmltopdf isn't
+installed the same page is saved as print-ready `.html`. The same page is the attachment when
+sent, the Document preview and (filled in) the signed PDF. The completion letter is
+`completion_letter.html`. Old WebKit: tables, no flex or grid.
 
 ## Templates shipped
 
-`ensure_default_signoff_templates()` adds, only when missing: **Accounts**, **Stock / Inventory**
-and **HR & Payroll** (training, with the Module Training mail) and **UAT Sign-off** and **UAT
-Sign-off and Go-Live** (the Avera mail) for ERP Implementation projects. The requirements' other
-templates come with parts 2 and 3.
-
-## Not in this change
-
-Parts 2 and 3 above: the ERPNext and Digital Marketing fields, tables and placeholders, the
-template's stage and declaration, the two Frappe print formats, and the remaining templates.
+`ensure_default_signoff_templates()` (install, and the patch
+`helpdesk.patches.v16_0_2.signoff_stage_templates`) adds, only when missing, the requirements'
+ten, each with its stage, project type, mail, declaration and print format: SRS / Requirement
+Sign-off, Module Training Sign-off, UAT Sign-off, UAT Sign-off and Go-Live (the Avera mail), Go-Live
+Confirmation, Project Completion / Handover, Content Calendar / Strategy Approval, Monthly
+Deliverables Sign-off, Campaign Completion Sign-off, Website / Landing Page Go-Live. The mails of
+the requirements are used as written; the other five follow their tone (the requirements leave
+their final wording to the project coordinator, who can change them in Settings). The training
+question sets **Accounts**, **Stock / Inventory** and **HR & Payroll** stay, now with the Module
+Training stage. The patch also gives the templates a site already has their stage, declaration
+and print format, and replaces an earlier seeded mail (which asked the customer to sign on the
+page) with the requirements' mail; a mail a site changed is left alone.
 
 ## API
 
@@ -361,15 +443,21 @@ template's stage and declaration, the two Frappe print formats, and the remainin
 - `preview_new_signoff_document(project, values, lead?)` (POST) and
   `preview_signoff_document(signoff)` → the sign-off document's HTML. Nothing saved.
 - `get_template_questions(project, template, lead?)` → the template's questions.
-- `get_signoff(signoff)` → the sign-off with address, snapshot, mail, `attach_pdf`, `sent_pdf`,
-  `remarks`, signed-off fields, items, history, counts, `customer_status`, `can_edit`,
+- `get_signoff_deliverables(project, period_from, period_to, lead?)` → a period's deliverables
+  counted from the customer's content posts.
+- `get_signoff_form` also sends `stages`, `sections`, `services`, `platforms`,
+  `erpnext_modules`, `project_modules`, `detail_labels` and `fields` (each detail's label, type,
+  choices and table columns, from the doctypes).
+- `get_signoff(signoff)` → the sign-off with its stage, details (`details`, `shown_sections`),
+  address, snapshot, mail, `attach_pdf`, `sent_pdf`, `remarks`, signed-off fields, items, history, counts, `customer_status`, `can_edit`,
   `can_send`, `can_clarify`, `can_cancel`.
 - `get_signoff_mails(signoff)` → the Communications sent and received, newest first, with
   attachments (View mail history).
-- POST: `create_signoff(…, customer_address?, attach_pdf?, items?, send?, lead?)`,
-  `create_uat_signoff(…, customer_address?, attach_pdf?, send?, lead?)`, `update_signoff(…,
-  customer_address?, attach_pdf?)`, `send_signoff`, `send_signoff_reminder`,
-  `mark_signed_off(signoff, acceptance_reference?, signed_on?, signed_off_by?)`,
+- POST: `create_signoff(…, customer_address?, attach_pdf?, items?, details?, send?, lead?)`,
+  `create_uat_signoff(…, customer_address?, attach_pdf?, details?, send?, lead?)`,
+  `update_signoff(…, customer_address?, attach_pdf?, details?)`, `send_signoff`,
+  `send_signoff_reminder`,
+  `mark_signed_off(signoff, acceptance_reference?, signed_on?, signed_off_by?, signed_copy?)`,
   `mark_changes_requested(signoff, remarks)`, `cancel_signoff(signoff, reason)`,
   `revoke_signoff_link`, `mark_item_clarified`, `record_uat_again`, `delete_signoff` (drafts),
   `save_signoff_template`.
@@ -403,4 +491,9 @@ statuses are mapped; who creates and who sends (trainer drafts only, coordinator
 System Managers edit templates; the UAT from the SRS, Pass / Fail, signed off and cancelled
 recorded on the ERP site, retried and recorded by hand; the mail fills in (Sir/Madam), holds back
 what is missing, comes from the sender; Viewed; one reminder after two working days, a new wait
-after changes; signing off notes the lead; the lead page.
+after changes; signing off notes the lead; the lead page; the ten templates seeded with their
+stage; a stage's details block sending until filled; a training is named after its modules; a
+month's deliverables default to last month and show ad spend only with Paid Ads (and unknown
+services are refused); each kind gets its document with its sections; the go-live details fill
+the mail; only trainings count for the completion letter; a UAT template makes a UAT; a signed
+copy is accepted as the evidence.

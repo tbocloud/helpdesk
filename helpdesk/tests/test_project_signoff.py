@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
-from frappe.utils import add_days, getdate, now_datetime, nowdate
+from frappe.utils import add_days, add_months, getdate, now_datetime, nowdate
 
 from helpdesk.api import project_signoff as api
 from helpdesk.api import signoff_portal as portal
@@ -16,6 +16,7 @@ from helpdesk.helpdesk.doctype.hd_project_signoff.hd_project_signoff import (
 )
 from helpdesk.helpdesk.doctype.hd_signoff_template.hd_signoff_template import (
     DEFAULT_TEMPLATES,
+    STAGES,
     ensure_default_signoff_templates,
 )
 from helpdesk.test_utils import (
@@ -882,22 +883,170 @@ class TestProjectSignoff(FrappeTestCase):
         ensure_default_signoff_templates()
         uat = frappe.get_doc("HD Signoff Template", "UAT Sign-off and Go-Live")
         self.assertEqual(
-            (uat.signoff_type, uat.project_type, len(uat.items)),
-            ("UAT", "ERP Implementation", 0),
+            (uat.signoff_type, uat.project_type, uat.stage, len(uat.items)),
+            ("UAT", "ERP Implementation", "UAT Sign-off and Go-Live", 0),
         )
-        self.assertIn("{{ sign_off_link }}", uat.email_body)
-        # a UAT's template can't start a training sign-off
-        with self.assertRaises(frappe.ValidationError):
-            run_as_user(
-                PM[0],
-                lambda: api.create_signoff(
-                    self.project,
-                    "Accounts",
-                    self.contact,
-                    TRAINER[0],
-                    template="UAT Sign-off",
-                ),
+        # the requirements' Avera mail: accepted by replying
+        self.assertIn("by replying to this email", uat.email_body)
+        self.assertIn("{{ erpnext_version }}", uat.email_body)
+        # picked for an ordinary sign-off, it makes a UAT
+        created = run_as_user(
+            PM[0],
+            lambda: api.create_signoff(
+                self.project, "", self.contact, TRAINER[0], template="UAT Sign-off"
+            ),
+        )
+        doc = frappe.get_doc("HD Project Signoff", created["name"])
+        self.assertEqual(
+            (doc.signoff_type, doc.stage, doc.module_title),
+            ("UAT", "UAT Sign-off", "UAT Sign-off"),
+        )
+
+    # --- stages (TBO's Sign-off requirements, Template list) ---
+
+    def stage_signoff(self, template: str, **values):
+        ensure_default_signoff_templates()
+        return make_signoff(
+            self.project, self.contact, TRAINER[0], template, module_title="", **values
+        )
+
+    def test_the_ten_templates_are_seeded_with_their_stage(self):
+        ensure_default_signoff_templates()
+        for stage, info in STAGES.items():
+            template = frappe.get_doc("HD Signoff Template", stage)
+            self.assertEqual(
+                (template.stage, template.project_type),
+                (stage, info["project_type"]),
             )
+            self.assertTrue(template.declaration_text)
+            self.assertTrue(template.email_subject)
+            # every mail asks the customer to reply (the training's also links its form)
+            self.assertIn("reply", template.email_body)
+
+    def test_a_stage_needs_its_details_before_it_is_sent(self):
+        doc = self.stage_signoff("UAT Sign-off and Go-Live", **MAIL)
+        self.assertEqual(doc.erpnext_version, "V16")
+        doc.email_body = "<p>Please reply to confirm.</p>"
+        doc.save(ignore_permissions=True)
+        with self.assertRaises(frappe.ValidationError) as refused:
+            run_as_user(PM[0], lambda: api.send_signoff(doc.name))
+        self.assertIn("Go-live date", str(refused.exception))
+        self.assertIn("Modules covered", str(refused.exception))
+
+        doc.reload()
+        doc.update(
+            {
+                "go_live_date": add_days(nowdate(), 7),
+                "uat_site_url": "https://uat.malabar.example",
+            }
+        )
+        doc.append("modules", {"module": "Accounts", "status": "Completed"})
+        doc.save(ignore_permissions=True)
+        run_as_user(PM[0], lambda: api.send_signoff(doc.name))
+        self.assertEqual(frappe.db.get_value(doc.doctype, doc.name, "status"), "Sent")
+
+    def test_a_training_stage_is_named_after_its_modules(self):
+        doc = self.stage_signoff("Accounts")
+        self.assertEqual(doc.stage, "Module Training Sign-off")
+        # the template's module starts the modules covered, and names the sign-off
+        self.assertEqual([r.module for r in doc.modules], ["Accounts"])
+        doc.append("modules", {"module": "Stock", "status": "Partially Completed"})
+        doc.save(ignore_permissions=True)
+        self.assertEqual(doc.module_title, "Accounts, Stock")
+        values = doc.mail_values(PM[0])
+        self.assertEqual(values["modules"], "Accounts, Stock")
+
+    def test_a_months_deliverables_default_to_last_month(self):
+        doc = self.stage_signoff("Monthly Deliverables Sign-off")
+        first = getdate(add_months(nowdate(), -1)).replace(day=1)
+        self.assertEqual(
+            (getdate(doc.period_from), getdate(doc.period_to)),
+            (first, getdate(add_days(add_months(first, 1), -1))),
+        )
+        # ad spend shows only when Paid Ads is one of the services
+        self.assertNotIn("ad_spend", doc.shown_sections())
+        doc.services = "Social Media, Paid Ads"
+        self.assertIn("ad_spend", doc.shown_sections())
+        doc.services = "Social Media, Billboards"
+        with self.assertRaises(frappe.ValidationError):
+            doc.save(ignore_permissions=True)
+
+    def test_each_kind_gets_its_document(self):
+        uat = self.stage_signoff(
+            "UAT Sign-off",
+            uat_site_url="https://uat.malabar.example",
+            srs_version="2.1",
+        )
+        uat.append(
+            "open_items",
+            {
+                "issue": "GST report rounding",
+                "severity": "Medium",
+                "agreed_action": "Fix",
+            },
+        )
+        html = uat.render_html(uat.document_context())
+        for words in (
+            "UAT Sign-off Certificate",
+            "Environment",
+            "https://uat.malabar.example",
+            "Known exceptions accepted by the customer",
+            "GST report rounding",
+        ):
+            self.assertIn(words, html)
+        self.assertNotIn("Data migration", html)
+
+        monthly = self.stage_signoff(
+            "Monthly Deliverables Sign-off", services="Social Media"
+        )
+        monthly.append(
+            "deliverables",
+            {"deliverable_type": "Reel", "planned_qty": 8, "delivered_qty": 7},
+        )
+        html = monthly.render_html(monthly.document_context())
+        for words in ("Engagement", "Deliverables", "Reel", "Social Media"):
+            self.assertIn(words, html)
+        self.assertNotIn("Ad spend", html)
+
+    def test_go_live_details_fill_the_mail(self):
+        doc = self.stage_signoff(
+            "Go-Live Confirmation",
+            go_live_date="2026-12-01",
+            live_site_url="https://erp.malabar.example",
+            support_start_date="2026-12-01",
+            support_end_date="2027-02-28",
+        )
+        mail = doc.render_mail(PM[0])
+        self.assertEqual(mail["missing"], [])
+        self.assertIn("https://erp.malabar.example", mail["body"])
+        self.assertTrue(mail["subject"].startswith("Go-Live Confirmation"))
+
+    def test_only_trainings_count_for_the_completion_letter(self):
+        training, _token = self.sent()
+        srs = self.stage_signoff("SRS / Requirement Sign-off", srs_version="1.0")
+        rollup = run_as_user(PM[0], lambda: api.get_project_signoffs(self.project))
+        self.assertEqual(rollup["total"], 1)
+        self.signed_off(training)
+        self.assertTrue(
+            frappe.db.get_value("Project", self.project, "custom_signoff_letter")
+        )
+        self.assertEqual(frappe.db.get_value(srs.doctype, srs.name, "status"), "Draft")
+
+    def test_a_signed_copy_is_accepted_as_the_evidence(self):
+        doc, _token = self.sent()
+        copy = frappe.get_doc(
+            {
+                "doctype": "File",
+                "file_name": "signed-sign-off.pdf",
+                "content": b"%PDF-1.4 signed",
+                "is_private": 1,
+            }
+        ).insert(ignore_permissions=True)
+        doc = self.signed_off(doc, signed_copy=copy.file_url)
+        self.assertEqual((doc.status, doc.signed_copy), ("Signed Off", copy.file_url))
+        self.assertEqual(
+            frappe.db.get_value("File", copy.name, "attached_to_name"), self.project
+        )
 
     def test_sent_reads_viewed_once_the_customer_opens_it(self):
         doc, _token = self.sent()

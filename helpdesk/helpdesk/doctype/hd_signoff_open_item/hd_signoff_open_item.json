@@ -1,0 +1,57 @@
+{
+	"actions": [],
+	"creation": "2026-11-14 10:00:00.000000",
+	"description": "An open item the customer accepts at sign-off (Known exceptions accepted by the customer).",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"issue",
+		"severity",
+		"agreed_action",
+		"target_date"
+	],
+	"fields": [
+		{
+			"fieldname": "issue",
+			"fieldtype": "Small Text",
+			"label": "Issue",
+			"reqd": 1,
+			"in_list_view": 1,
+			"columns": 4
+		},
+		{
+			"fieldname": "severity",
+			"fieldtype": "Select",
+			"label": "Severity",
+			"options": "High\nMedium\nLow",
+			"default": "Medium",
+			"in_list_view": 1,
+			"columns": 1
+		},
+		{
+			"fieldname": "agreed_action",
+			"fieldtype": "Small Text",
+			"label": "Agreed Action",
+			"in_list_view": 1,
+			"columns": 3
+		},
+		{
+			"fieldname": "target_date",
+			"fieldtype": "Date",
+			"label": "Target Date",
+			"in_list_view": 1,
+			"columns": 2
+		}
+	],
+	"istable": 1,
+	"links": [],
+	"modified": "2026-11-14 10:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Signoff Open Item",
+	"owner": "Administrator",
+	"permissions": [],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": []
+}

@@ -5,6 +5,9 @@ import { call, createResource, toast } from "frappe-ui";
 import { computed, reactive, ref, watch } from "vue";
 import { unfilledPlaceholders, type SignoffQuestion } from "./signoffMeta";
 
+/** A stage's detail: a plain value, or (a table) its rows. */
+export type DetailValue = string | number | null | Record<string, unknown>[];
+
 /** What the sign-off form holds; the dialog and the full page share it (docs/project-signoff.md). */
 export interface SignoffFormState {
   template: string;
@@ -18,12 +21,15 @@ export interface SignoffFormState {
   body: string;
   attach_pdf: boolean;
   items: SignoffQuestion[];
+  /** the stage's details (TBO's Sign-off requirements, Data model): fields and tables */
+  details: Record<string, DetailValue>;
 }
 
 /** A saved sign-off being edited (Draft or Changes Requested). */
 export interface SignoffSource {
   name: string;
   signoff_type?: "Training" | "UAT";
+  stage?: string | null;
   template?: string | null;
   module_title?: string | null;
   training_date?: string | null;
@@ -34,6 +40,7 @@ export interface SignoffSource {
   email_subject?: string | null;
   email_body?: string | null;
   attach_pdf?: number | boolean;
+  details?: Record<string, DetailValue>;
   items: SignoffQuestion[];
 }
 
@@ -42,6 +49,7 @@ export interface CarriedSignoff {
   form: SignoffFormState;
   baseline: { subject: string; body: string };
   autoFill: boolean;
+  pickedType: string;
 }
 
 export interface SignoffTemplate {
@@ -50,6 +58,8 @@ export interface SignoffTemplate {
   module?: string;
   signoff_type?: "Training" | "UAT";
   project_type?: string | null;
+  stage?: string | null;
+  attach_pdf_default?: number;
 }
 
 export interface SignoffContact {
@@ -68,6 +78,23 @@ export interface SignoffAddress {
   display: string;
 }
 
+/** A detail field as the doctype describes it (get_signoff_form's `fields`). */
+export interface DetailField {
+  label: string;
+  fieldtype: string;
+  options?: string[] | null;
+  description?: string | null;
+  columns?: Record<string, DetailField>;
+}
+
+/** A stage of the requirements: its project type, sections, what it needs, what the dialog asks. */
+export interface SignoffStage {
+  project_type: string;
+  sections: string[];
+  required: string[];
+  dialog: string[];
+}
+
 interface FormOptions {
   project_name: string;
   project_type?: string | null;
@@ -82,6 +109,14 @@ interface FormOptions {
   can_create_uat: boolean;
   can_send: boolean;
   placeholder_labels: Record<string, string>;
+  stages: Record<string, SignoffStage>;
+  sections: Record<string, string[]>;
+  services: string[];
+  platforms: string[];
+  erpnext_modules: string[];
+  detail_labels: Record<string, string>;
+  project_modules: string[];
+  fields: Record<string, DetailField>;
 }
 
 interface Mail {
@@ -89,6 +124,14 @@ interface Mail {
   body: string;
   cc: string[];
 }
+
+export const TRAINING_STAGE = "Module Training Sign-off";
+const MONTHLY_STAGE = "Monthly Deliverables Sign-off";
+const UAT_STAGES = ["UAT Sign-off", "UAT Sign-off and Go-Live"];
+// the fields the form keeps outside `details` (they were there before stages)
+const OWN_FIELDS = ["training_date", "trainer"];
+// a stage-less sign-off (made before stages): a training's
+const LEGACY_SECTIONS = ["training"];
 
 function blankForm(): SignoffFormState {
   return {
@@ -103,7 +146,17 @@ function blankForm(): SignoffFormState {
     body: "",
     attach_pdf: true,
     items: [],
+    details: {},
   };
+}
+
+function copyDetails(details: Record<string, DetailValue> = {}) {
+  return Object.fromEntries(
+    Object.entries(details).map(([k, v]) => [
+      k,
+      Array.isArray(v) ? v.map((row) => ({ ...row })) : v,
+    ])
+  );
 }
 
 /** The words of an HTML body, so the editor tidying its markup isn't "changed by hand". */
@@ -121,10 +174,23 @@ export function splitEmails(text: string) {
     .filter(Boolean);
 }
 
+/** "Social Media, SEO" as a list, and back. */
+export function splitChoices(text: unknown): string[] {
+  return String(text || "")
+    .split(",")
+    .map((t) => t.trim())
+    .filter(Boolean);
+}
+
+function isoDate(d: Date) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 /**
- * The New sign-off form: the project's choices, the mail filled in from the template until it
- * is written by hand, why it can't be sent yet, and saving or sending it. `withQuestions`
- * (the full page) also edits the questions, starting from the template's.
+ * The New sign-off form: the project's choices, the stage's details, the mail filled in from
+ * the template until it is written by hand, why it can't be sent yet, and saving or sending
+ * it. `withQuestions` (the full page) also edits the questions, starting from the template's.
  */
 export function useSignoffForm(opts: {
   projectId: () => string;
@@ -135,9 +201,6 @@ export function useSignoffForm(opts: {
 }) {
   const form = reactive<SignoffFormState>(blankForm());
   const editing = computed(() => !!opts.signoff?.());
-  const isUat = computed(
-    () => opts.uat() || opts.signoff?.()?.signoff_type === "UAT"
-  );
   const errorMessage = ref("");
 
   // the mail as last filled in; it follows the choices until it is written by hand
@@ -167,9 +230,9 @@ export function useSignoffForm(opts: {
       form.signatory_contact = data.default_contact || "";
       form.customer_address = data.addresses[0]?.name ?? "";
       // a UAT starts on the first UAT template that fits the project, if any
-      if (isUat.value) form.template = fitting.value[0]?.name ?? "";
+      if (opts.uat()) form.template = fitting.value[0]?.name ?? "";
+      applyTemplate();
       refreshMail(true);
-      if (form.template) loadTemplateQuestions();
     },
   });
   const data = computed(() => options.data as FormOptions | undefined);
@@ -182,9 +245,14 @@ export function useSignoffForm(opts: {
     carried = !!from;
     const s = opts.signoff?.();
     if (from) {
-      Object.assign(form, { ...from.form, items: from.form.items.slice() });
+      Object.assign(form, {
+        ...from.form,
+        items: from.form.items.slice(),
+        details: copyDetails(from.form.details),
+      });
       baseline.value = { ...from.baseline };
       autoFill.value = from.autoFill;
+      pickedType.value = from.pickedType;
     } else {
       Object.assign(form, blankForm(), {
         template: s?.template ?? "",
@@ -198,10 +266,12 @@ export function useSignoffForm(opts: {
         body: s?.email_body ?? "",
         attach_pdf: s ? !!s.attach_pdf : true,
         items: s ? s.items.map((i) => ({ ...i })) : [],
+        details: copyDetails(s?.details),
       });
       baseline.value = { subject: form.subject, body: form.body };
       // a draft's own mail is kept; only a new one follows the template
       autoFill.value = !s?.email_subject;
+      pickedType.value = "";
     }
     questionsFromTemplate.value = !s && !from;
     options.reload();
@@ -210,9 +280,14 @@ export function useSignoffForm(opts: {
   /** What the dialog hands to the full page: everything typed, nothing saved. */
   function carry(): CarriedSignoff {
     return {
-      form: { ...form, items: form.items.map((i) => ({ ...i })) },
+      form: {
+        ...form,
+        items: form.items.map((i) => ({ ...i })),
+        details: copyDetails(form.details),
+      },
       baseline: { ...baseline.value },
       autoFill: autoFill.value,
+      pickedType: pickedType.value,
     };
   }
 
@@ -222,25 +297,142 @@ export function useSignoffForm(opts: {
     () => data.value?.project_type || pickedType.value
   );
 
-  // the templates for this kind of sign-off and this project's type (or any type)
+  // a new UAT from the plan offers the UAT templates; otherwise every template of the
+  // project's type (or of any type), whatever its stage
   const fitting = computed<SignoffTemplate[]>(() => {
-    const kind = isUat.value ? "UAT" : "Training";
     const type = projectType.value;
     return (data.value?.templates ?? []).filter(
       (t) =>
-        (t.signoff_type || "Training") === kind &&
+        (!opts.uat() || t.signoff_type === "UAT") &&
         (!t.project_type || !type || t.project_type === type)
     );
   });
+  const template = computed(() =>
+    (data.value?.templates ?? []).find((t) => t.name === form.template)
+  );
   const templateOptions = computed(() => [
     ...fitting.value.map((t) => ({ label: t.template_name, value: t.name })),
     {
-      label: isUat.value
+      label: opts.uat()
         ? __("No template: the standard UAT mail")
         : __("No template: start empty"),
       value: "",
     },
   ]);
+
+  // ---------- the stage: which details show, which are needed ----------
+
+  /** The stage, from the template picked (a saved sign-off keeps its own). */
+  const stage = computed(
+    () => opts.signoff?.()?.stage || template.value?.stage || ""
+  );
+  const stageInfo = computed(() =>
+    stage.value ? data.value?.stages[stage.value] : undefined
+  );
+  const isUat = computed(
+    () =>
+      opts.uat() ||
+      opts.signoff?.()?.signoff_type === "UAT" ||
+      template.value?.signoff_type === "UAT"
+  );
+  /** A UAT whose tests come from the plan's SRS (New UAT sign-off). */
+  const fromPlan = computed(() => opts.uat());
+  /** A training: the Module Training stage, or a stage-less training made before stages. */
+  const isTraining = computed(
+    () => !isUat.value && (!stage.value || stage.value === TRAINING_STAGE)
+  );
+  /** The sections the stage shows (ad spend on a month's deliverables only with Paid Ads). */
+  const shownSections = computed<string[]>(() => {
+    if (!stageInfo.value) return isTraining.value ? LEGACY_SECTIONS : [];
+    const services = splitChoices(form.details.services);
+    return stageInfo.value.sections.filter(
+      (s) =>
+        !(
+          s === "ad_spend" &&
+          stage.value === MONTHLY_STAGE &&
+          !services.includes("Paid Ads")
+        )
+    );
+  });
+  /** Every detail of the shown sections, once each, in order (the full page). */
+  const shownFields = computed<string[]>(() => [
+    ...new Set(
+      shownSections.value.flatMap((s) => data.value?.sections[s] ?? [])
+    ),
+  ]);
+  /** The details the dialog asks for; the rest are on the full page. */
+  const dialogFields = computed<string[]>(() =>
+    stageInfo.value
+      ? stageInfo.value.dialog
+      : isTraining.value
+      ? OWN_FIELDS
+      : []
+  );
+  /** A stage-less training names its module in words; a stage picks modules. */
+  const namesModule = computed(() => isTraining.value && !stage.value);
+
+  function detail(field: string): DetailValue {
+    return OWN_FIELDS.includes(field)
+      ? (form as unknown as Record<string, string>)[field]
+      : form.details[field] ?? null;
+  }
+  function setDetail(field: string, value: DetailValue) {
+    if (OWN_FIELDS.includes(field))
+      (form as unknown as Record<string, unknown>)[field] = value ?? "";
+    else form.details[field] = value;
+  }
+  function filled(field: string) {
+    const value = detail(field);
+    if (Array.isArray(value))
+      return value.some((row) =>
+        Object.values(row).some((v) => String(v ?? "").trim())
+      );
+    return String(value ?? "").trim() !== "";
+  }
+  const missingDetails = computed(() =>
+    (stageInfo.value?.required ?? [])
+      .filter((field) => !filled(field))
+      .map((field) => data.value?.detail_labels[field] || field)
+  );
+
+  /** A template's own starting point: its attach default, its module, and the stage's
+   * defaults (the ERPNext version, last month for a month's deliverables, a UAT's modules). */
+  function applyTemplate() {
+    const t = template.value;
+    if (t && t.attach_pdf_default !== undefined)
+      form.attach_pdf = !!t.attach_pdf_default;
+    if (t?.module && namesModule.value && !form.module_title.trim())
+      form.module_title = t.module;
+    const kind = stageInfo.value?.project_type;
+    if (kind === "ERP Implementation" && !form.details.erpnext_version)
+      form.details.erpnext_version = "V16";
+    const modules = (form.details.modules as Record<string, unknown>[]) || [];
+    if (!modules.length) {
+      const names =
+        stage.value === TRAINING_STAGE && t?.module
+          ? [t.module]
+          : UAT_STAGES.includes(stage.value)
+          ? data.value?.project_modules ?? []
+          : [];
+      if (names.length)
+        form.details.modules = names.map((module) => ({
+          module,
+          processes_covered: "",
+          status: "Completed",
+          remarks: "",
+        }));
+    }
+    if (stage.value === MONTHLY_STAGE && !form.details.period_from) {
+      const now = new Date();
+      form.details.period_from = isoDate(
+        new Date(now.getFullYear(), now.getMonth() - 1, 1)
+      );
+      form.details.period_to = isoDate(
+        new Date(now.getFullYear(), now.getMonth(), 0)
+      );
+    }
+  }
+
   const trainerOptions = computed(() =>
     (data.value?.team ?? []).map((m) => ({
       label: m.full_name || m.user,
@@ -267,17 +459,15 @@ export function useSignoffForm(opts: {
   );
   const ccList = computed(() => splitEmails(form.cc));
 
-  function onTemplate(name: string) {
-    const t = fitting.value.find((x) => x.name === name);
-    // suggest the template's module, without overwriting what was typed
-    if (t?.module && !form.module_title.trim()) form.module_title = t.module;
+  function onTemplate() {
+    applyTemplate();
     if (questionsFromTemplate.value) loadTemplateQuestions();
   }
 
-  /** The full page shows the template's questions to edit before saving (a UAT's come
-   * from the SRS when it is saved). */
+  /** The full page shows the template's questions to edit before saving (a UAT's from the
+   * plan come from the SRS when it is saved). */
   async function loadTemplateQuestions() {
-    if (!opts.withQuestions || editing.value || isUat.value) return;
+    if (!opts.withQuestions || editing.value || opts.uat()) return;
     if (!form.template) {
       form.items = [];
       return;
@@ -299,6 +489,43 @@ export function useSignoffForm(opts: {
   function setItems(items: SignoffQuestion[]) {
     form.items = items;
     questionsFromTemplate.value = false;
+  }
+
+  /** A month's (or a campaign's) deliverables from the content calendar. */
+  const pulling = ref(false);
+  async function pullDeliverables() {
+    if (!form.details.period_from || !form.details.period_to) {
+      toast.error(__("Set the period first."));
+      return;
+    }
+    pulling.value = true;
+    try {
+      const rows = await call(
+        "helpdesk.api.project_signoff.get_signoff_deliverables",
+        {
+          project: opts.projectId(),
+          period_from: form.details.period_from,
+          period_to: form.details.period_to,
+          lead: opts.lead?.() || null,
+        }
+      );
+      if (!rows.length)
+        toast.info(__("No posts in the content calendar for the period."));
+      else form.details.deliverables = rows;
+    } catch (e) {
+      toast.error(errorText(e, __("Couldn't read the content calendar.")));
+    } finally {
+      pulling.value = false;
+    }
+  }
+
+  /** The details as the API takes them: the shown ones, with the trainer's and the date. */
+  function detailPayload() {
+    return {
+      ...copyDetails(form.details),
+      training_date: form.training_date || null,
+      trainer: form.trainer || null,
+    };
   }
 
   // ---------- the mail: filled in from the template, until it is changed by hand ----------
@@ -329,6 +556,7 @@ export function useSignoffForm(opts: {
           training_date: form.training_date || null,
           trainer: form.trainer || null,
           customer_address: form.customer_address || null,
+          details: detailPayload(),
           lead: opts.lead?.() || null,
         }
       );
@@ -349,16 +577,18 @@ export function useSignoffForm(opts: {
       if (ask === asked) previewing.value = false;
     }
   }
-  const refreshSoon = useDebounceFn(() => refreshMail(), 300);
+  const refreshSoon = useDebounceFn(() => refreshMail(), 400);
   watch(
-    () => [
-      form.template,
-      form.signatory_contact,
-      form.module_title,
-      form.training_date,
-      form.trainer,
-      form.customer_address,
-    ],
+    () =>
+      JSON.stringify([
+        form.template,
+        form.signatory_contact,
+        form.module_title,
+        form.training_date,
+        form.trainer,
+        form.customer_address,
+        form.details,
+      ]),
     () => data.value && refreshSoon()
   );
 
@@ -376,24 +606,27 @@ export function useSignoffForm(opts: {
 
   // ---------- saving and sending ----------
 
-  // who signs, the trainer and the module: until they are picked, the mail's gaps are theirs
+  // who signs and what the stage needs: until they are given, the mail's gaps are theirs
   const detailsPicked = computed(
-    () =>
-      !!form.signatory_contact &&
-      (isUat.value || (!!form.trainer && !!form.module_title.trim()))
+    () => !!form.signatory_contact && !missingDetails.value.length
   );
 
-  /** Why it can't be sent yet, in words; "" when it can. */
+  /** Why it can't be sent yet, in words; "" when it can (the requirements' checks). */
   const sendBlocked = computed(() => {
     if (!data.value?.customer) return __("This project has no customer.");
     if (!form.signatory_contact)
       return __("Pick who signs off for the customer.");
-    if (!isUat.value && !form.module_title.trim())
+    if (namesModule.value && !form.module_title.trim())
       return __("Name the module, e.g. Accounts.");
-    if (!form.trainer)
-      return isUat.value
-        ? __("Pick who tests with the client.")
-        : __("Pick the trainer.");
+    if (namesModule.value && !form.trainer) return __("Pick the trainer.");
+    if (opts.uat() && !form.trainer)
+      return __("Pick who tests with the client.");
+    if (missingDetails.value.length)
+      return __(
+        "Fill {0}: the {1} needs it.",
+        missingDetails.value.join(", "),
+        __(stage.value)
+      );
     const bad = ccList.value.find((e) => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e));
     if (bad) return __("{0} isn't a valid email address.", bad);
     if (previewing.value) return __("Filling in the mail…");
@@ -404,7 +637,7 @@ export function useSignoffForm(opts: {
     if (
       form.body.includes("sign_off_link") &&
       opts.withQuestions &&
-      !isUat.value &&
+      !opts.uat() &&
       !form.items.some((i) => i.question.trim())
     )
       return __(
@@ -418,16 +651,20 @@ export function useSignoffForm(opts: {
   /** Save (or `send`): the sign-off's name, or null when it didn't go through (the form
    * keeps what was typed and says why). */
   async function submit(send: boolean): Promise<string | null> {
-    const draftReady =
-      (isUat.value || (!!form.module_title.trim() && !!form.trainer)) &&
-      !!form.signatory_contact &&
-      form.items.every((i) => i.question.trim());
-    if (!draftReady) {
-      errorMessage.value = isUat.value
-        ? __("Pick who tests with the client and who signs.")
-        : __(
-            "Fill in the module, trainer and signatory, and give every question some text."
-          );
+    if (!form.signatory_contact) {
+      errorMessage.value = __("Pick who signs off for the customer.");
+      return null;
+    }
+    if (opts.uat() && !form.trainer) {
+      errorMessage.value = __("Pick who tests with the client.");
+      return null;
+    }
+    if (namesModule.value && !form.module_title.trim()) {
+      errorMessage.value = __("Name the module, e.g. Accounts.");
+      return null;
+    }
+    if (!form.items.every((i) => i.question.trim())) {
+      errorMessage.value = __("Give every question some text, or remove it.");
       return null;
     }
     errorMessage.value = "";
@@ -437,6 +674,7 @@ export function useSignoffForm(opts: {
       cc_emails: ccList.value.join(", "),
       customer_address: form.customer_address || null,
       attach_pdf: form.attach_pdf ? 1 : 0,
+      details: detailPayload(),
     };
     const common = {
       module_title: form.module_title.trim(),
@@ -461,7 +699,7 @@ export function useSignoffForm(opts: {
             signoff: signoff.name,
           });
         name = signoff.name;
-      } else if (isUat.value) {
+      } else if (opts.uat()) {
         name = (
           await call("helpdesk.api.project_signoff.create_uat_signoff", {
             project: opts.projectId(),
@@ -512,6 +750,14 @@ export function useSignoffForm(opts: {
     data,
     editing,
     isUat,
+    fromPlan,
+    isTraining,
+    namesModule,
+    stage,
+    shownSections,
+    shownFields,
+    dialogFields,
+    missingDetails,
     pickedType,
     projectType,
     errorMessage,
@@ -532,10 +778,15 @@ export function useSignoffForm(opts: {
     detailsPicked,
     sendBlocked,
     saving,
+    pulling,
     start,
     carry,
     onTemplate,
     setItems,
+    detail,
+    setDetail,
+    detailPayload,
+    pullDeliverables,
     reapply,
     submit,
   });

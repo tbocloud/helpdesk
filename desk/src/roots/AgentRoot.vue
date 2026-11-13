@@ -1,9 +1,14 @@
 <template>
   <Layout class="isolate">
     <router-view v-slot="{ Component }">
-      <!-- Projects stays alive behind a project, so Back shows it at once, in its place -->
+      <!-- Projects stays alive behind a project, so Back shows it at once, in its place.
+           relative: the page holds its own absolute children (sr-only labels), so they
+           cannot stretch the panel and scroll the header away -->
       <keep-alive include="Projects">
-        <component :is="Component" class="flex flex-1 flex-col overflow-auto" />
+        <component
+          :is="Component"
+          class="relative flex min-h-0 flex-1 flex-col overflow-auto"
+        />
       </keep-alive>
     </router-view>
   </Layout>

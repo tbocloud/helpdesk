@@ -1,6 +1,6 @@
 <template>
   <div class="flex flex-col gap-6">
-    <p v-if="f.isUat && !f.editing" class="text-p-sm text-ink-gray-6">
+    <p v-if="f.fromPlan && !f.editing" class="text-p-sm text-ink-gray-6">
       {{
         __(
           "A test case for each requirement of the approved SRS on the ERP site: its steps and the expected result. The client marks each Pass or Fail; a Fail becomes an issue for the team."
@@ -45,28 +45,27 @@
           "
           @update:model-value="f.onTemplate"
         />
+        <!-- a training made without a stage names its module; a stage picks modules -->
         <TextInput
-          v-if="!f.isUat"
+          v-if="f.namesModule"
           v-model="f.form.module_title"
           :label="__('Module')"
           :placeholder="__('e.g. Accounts')"
           maxlength="140"
           required
         />
-        <TextInput
-          v-if="!f.isUat"
-          v-model="f.form.training_date"
-          type="date"
-          :label="__('Training date')"
-        />
-        <!-- Combobox layers inside the dialog, so Escape and clicking outside still close it -->
-        <Combobox
-          :label="f.isUat ? __('Tests with the client') : __('Trainer')"
-          :options="f.trainerOptions"
-          :placeholder="__('Pick from the project team')"
-          :model-value="f.form.trainer || null"
-          @update:model-value="(v: string | null) => (f.form.trainer = v || '')"
-        />
+        <!-- a UAT from the plan: who tests with the client -->
+        <SignoffDetailField v-if="uatTester" :f="f" field="trainer" compact />
+        <!-- the stage's details the dialog asks for (the full page has them all, below) -->
+        <template v-if="!tall">
+          <SignoffDetailField
+            v-for="field in f.dialogFields"
+            :key="field"
+            :f="f"
+            :field="field"
+            compact
+          />
+        </template>
       </div>
     </section>
 
@@ -281,6 +280,7 @@ import { computed, useId } from "vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideTriangleAlert from "~icons/lucide/triangle-alert";
 import { projectTypeOptions } from "../taskMeta";
+import SignoffDetailField from "./SignoffDetailField.vue";
 import type { SignoffForm } from "../useSignoffForm";
 
 const props = defineProps<{
@@ -290,6 +290,10 @@ const props = defineProps<{
 }>();
 
 const id = `signoff-${useId()}`;
+// a UAT names who tests with the client (no UAT stage asks for it among its details)
+const uatTester = computed(
+  () => props.f.isUat && !props.f.shownFields.includes("trainer")
+);
 // written here: a "}}" inside the template's {{ }} would end it
 const linkHint = __(
   "With questions, the link to the customer's questions page goes where {0} is, or at the end.",

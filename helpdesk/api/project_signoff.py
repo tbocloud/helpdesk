@@ -18,6 +18,9 @@ from frappe.utils import cint, cstr, get_datetime, get_fullname
 
 from helpdesk.helpdesk.doctype.hd_project_signoff.hd_project_signoff import (
     CANCELLED,
+    DETAIL_FIELDS,
+    DETAIL_LABELS,
+    DETAIL_TABLES,
     DRAFT,
     EDITABLE_STATUSES,
     NEEDS_FOLLOW_UP,
@@ -26,6 +29,14 @@ from helpdesk.helpdesk.doctype.hd_project_signoff.hd_project_signoff import (
     TRAINING,
     UAT,
     HDProjectSignoff,
+)
+from helpdesk.helpdesk.doctype.hd_signoff_template.hd_signoff_template import (
+    ERPNEXT_MODULES,
+    PLATFORMS,
+    SECTIONS,
+    SERVICES,
+    STAGES,
+    TRAINING_STAGE,
 )
 from helpdesk.tasky.permissions import (
     can_manage_project,
@@ -61,6 +72,7 @@ def get_project_signoffs(project: str) -> dict:
             "name",
             "module_title",
             "signoff_type",
+            "stage",
             "template",
             "status",
             "training_date",
@@ -85,8 +97,15 @@ def get_project_signoffs(project: str) -> dict:
     letter, plan = frappe.db.get_value(
         "Project", project, ["custom_signoff_letter", "custom_crm_plan"]
     )
-    # the completion letter is the training's: a UAT or a cancelled one isn't in its roll-up
-    training = [s for s in signoffs if s.signoff_type != UAT and s.status != CANCELLED]
+    # the completion letter is the trainings': a UAT, another stage or a cancelled one isn't
+    # in its roll-up (HDProjectSignoff.project_signoffs)
+    training = [
+        s
+        for s in signoffs
+        if s.signoff_type != UAT
+        and s.stage in (None, "", TRAINING_STAGE)
+        and s.status != CANCELLED
+    ]
     signed = sum(1 for s in training if s.status == SIGNED_OFF)
     return {
         "signoffs": signoffs,
@@ -148,6 +167,16 @@ def get_signoff_form(project: str, lead: str | None = None) -> dict:
         "can_create_uat": bool(info.custom_crm_plan),
         # a placeholder left in the mail is named in the words of the field that fills it
         "placeholder_labels": HDProjectSignoff.placeholder_labels(),
+        # what each stage shows and needs (TBO's Sign-off requirements), and its choices
+        "stages": STAGES,
+        "sections": SECTIONS,
+        "services": SERVICES,
+        "platforms": PLATFORMS,
+        "erpnext_modules": ERPNEXT_MODULES,
+        "detail_labels": {field: _(label) for field, label in DETAIL_LABELS.items()},
+        # a UAT's modules start as every module in the project's scope
+        "project_modules": _project_modules(project),
+        "fields": _detail_meta(),
     }
 
 
@@ -162,6 +191,7 @@ def preview_signoff_mail(
     trainer: str | None = None,
     lead: str | None = None,
     customer_address: str | None = None,
+    details: str | dict | None = None,
 ) -> dict:
     """The mail the dialog fills in: the template's (or the standard) subject and body with
     what is known so far, its CC, and the placeholders still `missing` (they hold the mail
@@ -177,9 +207,10 @@ def preview_signoff_mail(
             "trainer": trainer,
             "signatory_contact": signatory_contact,
             "customer_address": customer_address,
+            "details": details,
         },
     )
-    if doc.is_uat():
+    if doc.is_uat() and not doc.modules:
         # the modules a UAT covers are its tests' sections
         for case in _uat_cases(project, cached=True).get("cases") or []:
             doc.append("items", {"section": cstr(case.get("module"))})
@@ -198,7 +229,7 @@ def preview_new_signoff_document(
     doc.set("items", _parse_items(values.get("items") or []))
     for i, row in enumerate(doc.items, start=1):
         row.idx = i
-    return doc.render_html(doc.document_context(), doc.document_title())
+    return doc.render_html(doc.document_context())
 
 
 @frappe.whitelist()
@@ -224,9 +255,10 @@ def _unsaved_signoff(project: str, values: dict):
     def get(key: str) -> str | None:
         return cstr(values.get(key)).strip() or None
 
-    doc = frappe.get_doc(
+    # new_doc: the fields' defaults (ERPNext version "V16") apply until the form says otherwise
+    doc = frappe.new_doc(SIGNOFF)
+    doc.update(
         {
-            "doctype": SIGNOFF,
             "project": project,
             "signoff_type": UAT if values.get("signoff_type") == UAT else TRAINING,
             "template": get("template"),
@@ -236,8 +268,13 @@ def _unsaved_signoff(project: str, values: dict):
             "signatory_contact": get("signatory_contact"),
             "customer_address": get("customer_address"),
             "cc_emails": get("cc_emails"),
+            **_detail_values(values.get("details")),
         }
     )
+    if doc.template:
+        doc.stage, doc.declaration = frappe.db.get_value(
+            TEMPLATE, doc.template, ["stage", "declaration_text"]
+        ) or (None, None)
     doc.project_name = frappe.db.get_value("Project", project, "project_name")
     doc.customer = frappe.db.get_value("Project", project, "customer")
     if doc.signatory_contact:
@@ -323,6 +360,11 @@ def get_signoff(signoff: str) -> dict:
             }
             for row in reversed(doc.log)
         ],
+        "stage": doc.stage,
+        "declaration": doc.declaration,
+        "signed_copy": doc.signed_copy,
+        "shown_sections": list(doc.shown_sections()),
+        "details": _details_of(doc),
         "can_edit": can_edit,
         "can_send": _can_send(doc.project),
         "can_clarify": _can_clarify(doc),
@@ -346,14 +388,13 @@ def create_signoff(
     customer_address: str | None = None,
     attach_pdf: int | str = 1,
     items: str | list | None = None,
+    details: str | dict | None = None,
 ) -> dict:
     """A training sign-off, saved as a draft, or (`send`) sent to the customer at once with its
     mail; a send that fails saves nothing. `items` (from the full page) are its questions;
     without them, the template's are copied in."""
     project = _project_for(project, lead, manage=True)
     _check_template(template, TRAINING)
-    if not cstr(trainer).strip():
-        frappe.throw(_("Pick the trainer who ran the training."))
     doc = frappe.get_doc(
         {
             "doctype": SIGNOFF,
@@ -366,6 +407,7 @@ def create_signoff(
             "status": DRAFT,
             **_mail_fields(email_subject, email_body, cc_emails),
             **_document_fields(customer_address, attach_pdf),
+            **_detail_values(details),
             "items": _parse_items(items) if items else [],
         }
     ).insert(ignore_permissions=True)
@@ -385,6 +427,7 @@ def create_uat_signoff(
     lead: str | None = None,
     customer_address: str | None = None,
     attach_pdf: int | str = 1,
+    details: str | dict | None = None,
 ) -> dict:
     """A UAT sign-off for a project made from an implementation plan: a test case for
     each functional requirement of the plan's approved SRS on the ERP site (its module the
@@ -410,6 +453,7 @@ def create_uat_signoff(
             "crm_plan": plan,
             **_mail_fields(email_subject, email_body, cc_emails),
             **_document_fields(customer_address, attach_pdf),
+            **_uat_details(details, cases),
             "module_title": _("User acceptance testing ({0})").format(
                 found.get("srs") or plan
             )[:140],
@@ -588,6 +632,7 @@ def update_signoff(
     cc_emails: str | None = None,
     customer_address: str | None = None,
     attach_pdf: int | str = 1,
+    details: str | dict | None = None,
 ) -> dict:
     """Edit the details, mail and questions of a draft (or changes requested) sign-off."""
     doc = _get_signoff(signoff, need="edit")
@@ -597,8 +642,6 @@ def update_signoff(
                 "Only a draft, or a sign-off the customer asked to change, can be edited; this one is {0}."
             ).format(_(doc.status))
         )
-    if not doc.is_uat() and not cstr(trainer).strip():
-        frappe.throw(_("Pick the trainer who ran the training."))
     doc.module_title = cstr(module_title).strip()
     doc.training_date = training_date or None
     doc.trainer = cstr(trainer).strip() or None
@@ -606,6 +649,8 @@ def update_signoff(
     doc.set("items", _merge_items(doc, items))
     doc.update(_mail_fields(email_subject, email_body, cc_emails))
     doc.update(_document_fields(customer_address, attach_pdf))
+    if details is not None:
+        doc.update(_detail_values(details))
     doc.log_event(_("Edited"))
     doc.save(ignore_permissions=True)
     return {"name": doc.name}
@@ -741,14 +786,16 @@ def mark_signed_off(
     acceptance_reference: str | None = None,
     signed_on: str | None = None,
     signed_off_by: str | None = None,
+    signed_copy: str | None = None,
 ) -> dict:
-    """The customer accepted by replying: record who, when, and the reply; the signed PDF goes
-    on the project."""
+    """The customer accepted (by replying, or with a signed copy): record who, when, and the
+    evidence; the signed PDF goes on the project."""
     doc = _get_signoff(signoff, need="send")
     doc.sign_off(
         cstr(acceptance_reference).strip() or None,
         signed_on or None,
         cstr(signed_off_by).strip() or None,
+        cstr(signed_copy).strip() or None,
     )
     return {"status": doc.status}
 
@@ -831,7 +878,7 @@ def get_signoff_mails(signoff: str) -> list[dict]:
 def preview_signoff_document(signoff: str) -> str:
     """The sign-off document as HTML, as it goes out with the mail (Document preview)."""
     doc = _get_signoff(signoff)
-    return doc.render_html(doc.document_context(), doc.document_title())
+    return doc.render_html(doc.document_context())
 
 
 @frappe.whitelist(methods=["POST"])
@@ -867,6 +914,7 @@ def get_signoff_templates() -> list[dict]:
             template.is_active,
             template.signoff_type,
             template.project_type,
+            template.stage,
             count.as_("question_count"),
         )
         .groupby(template.name)
@@ -891,6 +939,16 @@ def get_signoff_template(template: str) -> dict:
         "email_subject": doc.email_subject,
         "email_body": doc.email_body,
         "default_cc": doc.default_cc,
+        "stage": doc.stage,
+        "declaration_text": doc.declaration_text,
+        "attach_pdf_default": doc.attach_pdf_default,
+        "print_format": doc.print_format,
+        "stages": list(STAGES),
+        "print_formats": frappe.get_all(
+            "Print Format",
+            filters={"doc_type": SIGNOFF, "disabled": 0},
+            pluck="name",
+        ),
         "items": [
             {
                 "name": row.name,
@@ -916,6 +974,10 @@ def save_signoff_template(
     email_subject: str = "",
     email_body: str = "",
     default_cc: str = "",
+    stage: str = "",
+    declaration_text: str = "",
+    attach_pdf_default: int | str = 1,
+    print_format: str = "",
 ) -> dict:
     """Create a template (no `template`) or replace an existing one's details, mail and
     questions."""
@@ -935,6 +997,10 @@ def save_signoff_template(
     doc.email_subject = cstr(email_subject).strip() or None
     doc.email_body = email_body or None
     doc.default_cc = cstr(default_cc).strip() or None
+    doc.stage = cstr(stage).strip() or None
+    doc.declaration_text = cstr(declaration_text).strip() or None
+    doc.attach_pdf_default = 1 if cint(attach_pdf_default) else 0
+    doc.print_format = cstr(print_format).strip() or None
     doc.set("items", _parse_items(items))
     doc.save(ignore_permissions=True)
     return {"name": doc.name}
@@ -1024,11 +1090,10 @@ def _check_template(template: str | None, signoff_type: str):
     ) or (0, None)
     if not active:
         frappe.throw(_("Template {0} isn't active.").format(template))
-    if (kind or TRAINING) != signoff_type:
+    # a UAT from the SRS needs a UAT template; any template starts an ordinary sign-off
+    if signoff_type == UAT and (kind or TRAINING) != UAT:
         frappe.throw(
-            _("Template {0} is for a {1} sign-off.").format(
-                template, _(kind or TRAINING)
-            )
+            _("Template {0} isn't a UAT template; pick one for UAT.").format(template)
         )
 
 
@@ -1132,6 +1197,8 @@ def _active_templates() -> list[dict]:
             template.module,
             template.signoff_type,
             template.project_type,
+            template.stage,
+            template.attach_pdf_default,
         )
         .where(template.is_active == 1)
         .orderby(template.template_name)
@@ -1277,3 +1344,164 @@ def _merge_items(doc, items: str | list) -> list:
         else:
             merged.append(values)
     return merged
+
+
+def _detail_values(details: str | dict | None) -> dict:
+    """A stage's details from the form: only its known fields, and table rows with only their
+    known columns (TBO's Sign-off requirements, Data model)."""
+    values = frappe.parse_json(details) if isinstance(details, str) else details or {}
+    out = {f: values[f] for f in DETAIL_FIELDS if f in values}
+    for field in ("training_date", "trainer"):
+        if field in values:
+            out[field] = values[field] or None
+    for table, columns in DETAIL_TABLES.items():
+        if table in values:
+            out[table] = [
+                {c: row.get(c) for c in columns}
+                for row in values.get(table) or []
+                if isinstance(row, dict)
+            ]
+    return out
+
+
+def _details_of(doc) -> dict:
+    """The sign-off's details as the form holds them."""
+    return {
+        **{f: doc.get(f) for f in DETAIL_FIELDS},
+        **{
+            table: [{c: row.get(c) for c in columns} for row in doc.get(table)]
+            for table, columns in DETAIL_TABLES.items()
+        },
+    }
+
+
+def _uat_details(details: str | dict | None, cases: list) -> dict:
+    """A UAT's details; its modules start as the SRS's (every module in scope)."""
+    values = _detail_values(details)
+    if not values.get("modules"):
+        values["modules"] = [
+            {"module": module, "status": "Completed"}
+            for module in dict.fromkeys(
+                cstr(c.get("module")) for c in cases if c.get("module")
+            )
+        ]
+    return values
+
+
+def _project_modules(project: str) -> list[str]:
+    """The modules in the project's scope: those its sign-offs have covered, else (a project
+    made from a plan) its SRS's."""
+    modules = frappe.get_all(
+        "HD Signoff Module Item",
+        filters={"parenttype": SIGNOFF, "parent": ("in", _signoff_names(project))},
+        pluck="module",
+        order_by="idx asc",
+    )
+    if not modules and frappe.db.get_value("Project", project, "custom_crm_plan"):
+        try:
+            modules = [
+                cstr(c.get("module"))
+                for c in _uat_cases(project, cached=True).get("cases") or []
+            ]
+        except frappe.ValidationError:
+            frappe.clear_messages()
+    return list(dict.fromkeys(m for m in modules if m))
+
+
+def _signoff_names(project: str) -> list[str]:
+    return frappe.get_all(SIGNOFF, filters={"project": project}, pluck="name") or [""]
+
+
+@frappe.whitelist()
+def get_signoff_deliverables(
+    project: str, period_from: str, period_to: str, lead: str | None = None
+) -> list[dict]:
+    """A digital marketing period's deliverables from the content calendar (the requirements:
+    "entered or pulled from the delivery report"): per kind of post, how many were planned,
+    published, and approved by the client."""
+    project = _project_for(project, lead)
+    customer = frappe.db.get_value("Project", project, "customer")
+    if not customer:
+        return []
+    posts = frappe.get_all(
+        "HD Content Post",
+        filters={
+            "customer": customer,
+            "publish_on": ("between", [period_from, f"{period_to} 23:59:59"]),
+            "status": ("!=", "Cancelled"),
+        },
+        fields=["format", "status", "client_decided_on"],
+        limit_page_length=0,
+    )
+    kinds: dict[str, dict] = {}
+    for post in posts:
+        kind = _deliverable_kind(post.format)
+        row = kinds.setdefault(
+            kind,
+            {
+                "deliverable_type": kind,
+                "planned_qty": 0,
+                "delivered_qty": 0,
+                "approved": 0,
+            },
+        )
+        row["planned_qty"] += 1
+        row["delivered_qty"] += post.status == "Published"
+        row["approved"] += (
+            bool(post.client_decided_on) and post.status != "Changes Requested"
+        )
+    return [
+        {
+            "deliverable_type": r["deliverable_type"],
+            "planned_qty": r["planned_qty"],
+            "delivered_qty": r["delivered_qty"],
+            "customer_approved": int(r["approved"] == r["planned_qty"]),
+            "link": "",
+            "remarks": "",
+        }
+        for r in kinds.values()
+    ]
+
+
+# a content post type in the words of the requirements' deliverables
+DELIVERABLE_WORDS = (
+    ("reel", "Reel"),
+    ("story", "Story"),
+    ("blog", "Blog"),
+    ("video", "Video"),
+    ("landing", "Landing page"),
+    ("ad", "Ad creative"),
+)
+
+
+def _deliverable_kind(post_type: str | None) -> str:
+    text = (post_type or "").lower()
+    return next((kind for word, kind in DELIVERABLE_WORDS if word in text), "Post")
+
+
+def _detail_meta() -> dict:
+    """Each detail field's label, type and choices, and each table's columns, from the
+    doctypes, so the forms build their fields from one place."""
+
+    def describe(df) -> dict:
+        return {
+            "label": _(df.label),
+            "fieldtype": df.fieldtype,
+            "options": [o for o in (df.options or "").split("\n") if o]
+            if df.fieldtype == "Select"
+            else None,
+            "description": _(df.description) if df.description else None,
+        }
+
+    meta = frappe.get_meta(SIGNOFF)
+    out = {}
+    for field in (*DETAIL_FIELDS, "training_date", "trainer"):
+        out[field] = describe(meta.get_field(field))
+    for table, columns in DETAIL_TABLES.items():
+        df = meta.get_field(table)
+        child = frappe.get_meta(df.options)
+        out[table] = {
+            **describe(df),
+            "columns": {c: describe(child.get_field(c)) for c in columns},
+        }
+    return out

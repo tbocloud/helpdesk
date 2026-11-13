@@ -1,3 +1,6 @@
+{#- a sign-off document passes everything in `ctx` (its print format); the completion letter
+    passes brand and title themselves -#}
+{%- if ctx is defined and ctx -%}{%- set brand = ctx.brand -%}{%- set title = ctx.title -%}{%- endif -%}
 <!DOCTYPE html>
 <html>
   <head>
@@ -24,6 +27,16 @@
       }
       .letterhead td {
         vertical-align: middle;
+      }
+      .letterhead-html {
+        margin-bottom: 8px;
+      }
+      .letterhead-html img {
+        max-width: 100%;
+      }
+      table.list.grid td,
+      table.list.grid th {
+        font-size: 10.5px;
       }
       .letterhead img {
         max-height: 36px;
@@ -136,10 +149,14 @@
     </style>
   </head>
   <body>
+    {% if brand.letter_head %}
+    <!-- the site's default Letter Head, as Frappe prints it -->
+    <div class="letterhead-html">{{ brand.letter_head }}</div>
+    {% endif %}
     <table class="letterhead">
       <tr>
         <td>
-          {% if brand.logo %}<img
+          {% if brand.letter_head %}{% elif brand.logo %}<img
             src="{{ brand.logo }}"
             alt="{{ brand.name|e }}"
           />{% else %}<span class="brand">{{ brand.name|e }}</span>{% endif %}

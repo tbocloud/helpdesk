@@ -223,6 +223,10 @@
                       {{ dateFormat(s.training_date, "D MMM YYYY") }}
                     </dd>
                   </template>
+                  <template v-if="s.stage">
+                    <dt class="text-ink-gray-5">{{ __("Stage") }}</dt>
+                    <dd class="text-ink-gray-8">{{ __(s.stage) }}</dd>
+                  </template>
                   <template v-if="s.template">
                     <dt class="text-ink-gray-5">{{ __("Template") }}</dt>
                     <dd class="text-ink-gray-8">{{ s.template }}</dd>
@@ -267,11 +271,20 @@
                   </dd>
                   <dt class="text-ink-gray-5">{{ __("Acceptance") }}</dt>
                   <dd class="text-ink-gray-8">
-                    {{
-                      s.acceptance_reference
-                        ? __("Their reply, kept in the mail history")
-                        : __("Recorded without a reply in the mail history")
-                    }}
+                    <template v-if="s.acceptance_reference">{{
+                      __("Their reply, kept in the mail history")
+                    }}</template>
+                    <a
+                      v-else-if="s.signed_copy"
+                      :href="s.signed_copy"
+                      target="_blank"
+                      rel="noopener"
+                      class="rounded underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+                      >{{ __("Signed copy") }}</a
+                    >
+                    <template v-else>{{
+                      __("Recorded without a reply in the mail history")
+                    }}</template>
                   </dd>
                 </dl>
               </SectionCard>
@@ -666,6 +679,32 @@
             )
           }}
         </p>
+        <!-- the requirements' other acceptance: a signed copy of the document -->
+        <div v-if="!signedOff.reply" class="flex flex-col gap-1.5">
+          <span class="text-xs text-ink-gray-5">{{
+            __("Signed copy (optional)")
+          }}</span>
+          <div class="flex flex-wrap items-center gap-2">
+            <span
+              v-if="signedOff.copy"
+              class="truncate text-sm text-ink-gray-8"
+              >{{ signedOff.copy.split("/").pop() }}</span
+            >
+            <FileUploader
+              :upload-args="{ private: true }"
+              @success="(file: { file_url: string }) => (signedOff.copy = file.file_url)"
+            >
+              <template #default="{ openFileSelector, uploading }">
+                <Button
+                  size="sm"
+                  :label="signedOff.copy ? __('Replace') : __('Upload')"
+                  :loading="uploading"
+                  @click="openFileSelector()"
+                />
+              </template>
+            </FileUploader>
+          </div>
+        </div>
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <TextInput
             v-model="signedOff.date"
@@ -811,6 +850,7 @@ import {
   Button,
   Dialog,
   Dropdown,
+  FileUploader,
   FormControl,
   TextInput,
   call,
@@ -896,6 +936,7 @@ interface SignoffDetail extends SignoffSource {
   signer_email?: string | null;
   signed_off_by?: string | null;
   acceptance_reference?: string | null;
+  signed_copy?: string | null;
   signed_pdf?: { file_name: string; file_url: string } | null;
   counts: {
     total: number;
@@ -1119,7 +1160,7 @@ function startChanges() {
 // ---------- mark signed off ----------
 
 const today = new Date().toISOString().slice(0, 10);
-const signedOff = reactive({ reply: "", date: today, contact: "" });
+const signedOff = reactive({ reply: "", date: today, contact: "", copy: "" });
 const contacts = ref<{ contact: string; full_name: string; email: string }[]>(
   []
 );
@@ -1154,6 +1195,7 @@ const contactOptions = computed(() => {
 async function startSignedOff() {
   const reply = replies.value[0];
   Object.assign(signedOff, {
+    copy: "",
     reply: reply?.name ?? "",
     date: reply ? reply.communication_date.slice(0, 10) : today,
     contact: s.value?.signatory_contact || "",
@@ -1177,6 +1219,7 @@ function markSignedOff() {
       acceptance_reference: signedOff.reply || null,
       signed_on: signedOff.date,
       signed_off_by: signedOff.contact || null,
+      signed_copy: signedOff.reply ? null : signedOff.copy || null,
     },
     __("Marked signed off; the signed PDF is on the project")
   );

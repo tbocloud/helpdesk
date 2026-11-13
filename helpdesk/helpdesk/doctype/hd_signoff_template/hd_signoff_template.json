@@ -9,15 +9,19 @@
 		"template_name",
 		"module",
 		"signoff_type",
+		"stage",
 		"column_break_1",
 		"is_active",
 		"project_type",
+		"attach_pdf_default",
+		"print_format",
 		"description_section",
 		"description",
 		"mail_section",
 		"email_subject",
 		"email_body",
 		"default_cc",
+		"declaration_text",
 		"questions_section",
 		"items"
 	],
@@ -44,7 +48,16 @@
 			"options": "Training\nUAT",
 			"default": "Training",
 			"in_list_view": 1,
-			"description": "Training: a checklist the customer confirms item by item. UAT: the client's tests come from the project's SRS, so a UAT template carries only the mail."
+			"description": "Training (standard): the questions below, if any. UAT: the client's tests come from the project's SRS, for a project made from an implementation plan."
+		},
+		{
+			"fieldname": "stage",
+			"fieldtype": "Select",
+			"label": "Stage",
+			"options": "\nSRS / Requirement Sign-off\nModule Training Sign-off\nUAT Sign-off\nUAT Sign-off and Go-Live\nGo-Live Confirmation\nProject Completion / Handover\nContent Calendar / Strategy Approval\nMonthly Deliverables Sign-off\nCampaign Completion Sign-off\nWebsite / Landing Page Go-Live",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"description": "Decides which details a sign-off shows and needs before it is sent (TBO's Sign-off requirements)."
 		},
 		{
 			"fieldname": "column_break_1",
@@ -65,6 +78,19 @@
 			"label": "Project Type",
 			"options": "\nERP Implementation\nMobile App\nWebsite\nContent Calendar\nDigital Marketing\nSupport\nOther",
 			"description": "Offered for projects of this type; blank: for every project."
+		},
+		{
+			"fieldname": "attach_pdf_default",
+			"fieldtype": "Check",
+			"label": "Attach the sign-off document by default",
+			"default": "1"
+		},
+		{
+			"fieldname": "print_format",
+			"fieldtype": "Link",
+			"label": "Print Format",
+			"options": "Print Format",
+			"description": "The sign-off document's print format; blank: the one for the stage's project type."
 		},
 		{
 			"fieldname": "description_section",
@@ -90,7 +116,7 @@
 			"fieldname": "email_body",
 			"fieldtype": "Text Editor",
 			"label": "Body",
-			"description": "Placeholders: {{ contact_salutation }}, {{ contact_name }}, {{ customer_name }}, {{ project_name }}, {{ modules }}, {{ training_date }}, {{ trainer_name }}, {{ sign_off_link }}, {{ sender_name }}, {{ sender_designation }}, {{ company_name }}. {{ sign_off_link }} is where the customer's link goes; without it the link is added at the end."
+			"description": "Placeholders like {{ contact_name }}, {{ project_name }}, {{ modules }}, {{ go_live_date }}, {{ period_from }}; the full list is in docs/project-signoff.md. {{ sign_off_link }} is where the questions page's link goes."
 		},
 		{
 			"fieldname": "default_cc",
@@ -99,9 +125,15 @@
 			"description": "Email addresses, comma separated."
 		},
 		{
+			"fieldname": "declaration_text",
+			"fieldtype": "Small Text",
+			"label": "Declaration",
+			"description": "What the customer declares; printed on the sign-off document."
+		},
+		{
 			"fieldname": "questions_section",
 			"fieldtype": "Section Break",
-			"label": "Questions"
+			"label": "Questions (optional)"
 		},
 		{
 			"fieldname": "items",
@@ -112,7 +144,7 @@
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-11-13 14:00:00.000000",
+	"modified": "2026-11-14 10:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Signoff Template",
