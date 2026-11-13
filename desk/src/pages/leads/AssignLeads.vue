@@ -341,7 +341,7 @@
             <!-- the plan for the people picked -->
             <form
               v-else
-              class="flex flex-col gap-4 rounded-xl border border-outline-gray-2 bg-surface-base p-4 lg:sticky lg:top-0"
+              class="flex flex-col gap-4 rounded-xl border border-outline-gray-2 bg-surface-base p-4 lg:sticky lg:top-0 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto"
               novalidate
               :aria-labelledby="planHeading"
               @submit.prevent="assign"
@@ -386,23 +386,67 @@
                     : undefined
                 "
               />
-              <FormControl
+              <!-- each district with its balance: the unassigned leads of the choice above -->
+              <fieldset
                 v-if="withDistricts"
-                v-model="form.district"
-                type="select"
-                :label="__('District')"
+                class="flex flex-col gap-1.5"
                 :disabled="!picked.length || !!current.campaign_district"
-                :options="districtOptions"
-                :description="
-                  current.campaign_district
-                    ? __(
-                        '{0} calls only in {1}, set in the department.',
-                        current.department,
-                        current.campaign_district
-                      )
-                    : undefined
-                "
-              />
+              >
+                <legend
+                  class="mb-1.5 flex w-full items-baseline justify-between gap-2 text-sm text-ink-gray-7"
+                >
+                  <span>{{ __("District") }}</span>
+                  <span class="text-xs text-ink-gray-5">{{
+                    __("Unassigned leads")
+                  }}</span>
+                </legend>
+                <div
+                  class="flex max-h-64 flex-col overflow-y-auto rounded-lg border border-outline-gray-2"
+                >
+                  <label
+                    v-for="row in districtRows"
+                    :key="row.value"
+                    class="flex min-h-[40px] cursor-pointer items-center gap-2.5 border-b border-outline-gray-1 px-3 text-sm last:border-0 focus-within:ring-2 focus-within:ring-inset focus-within:ring-highlight"
+                    :class="
+                      form.district === row.value
+                        ? 'bg-brand-soft text-brand-ink'
+                        : 'text-ink-gray-8 hover:bg-surface-gray-1'
+                    "
+                  >
+                    <input
+                      v-model="form.district"
+                      type="radio"
+                      name="assign-district"
+                      :value="row.value"
+                      class="size-4 shrink-0 focus:outline-none"
+                    />
+                    <span class="min-w-0 flex-1 truncate">{{ row.label }}</span>
+                    <span
+                      class="font-mono tabular-nums"
+                      :class="
+                        form.district === row.value
+                          ? ''
+                          : row.count
+                          ? 'text-ink-gray-9'
+                          : 'text-ink-gray-5'
+                      "
+                      >{{ row.count }}</span
+                    >
+                  </label>
+                </div>
+                <p
+                  v-if="current.campaign_district"
+                  class="text-p-xs text-ink-gray-6"
+                >
+                  {{
+                    __(
+                      "{0} calls only in {1}, set in the department.",
+                      current.department,
+                      current.campaign_district
+                    )
+                  }}
+                </p>
+              </fieldset>
 
               <!-- the product's unassigned leads: see them, or hand some out now -->
               <div
@@ -420,7 +464,8 @@
                     @click="openPool"
                   />
                 </div>
-                <div v-if="ready" class="flex items-end gap-2">
+                <!-- always here, so the way to hand out leads is never hidden -->
+                <div class="flex items-end gap-2">
                   <FormControl
                     v-model="giveCount"
                     type="number"
@@ -428,6 +473,7 @@
                     :max="MAX_GIVE"
                     inputmode="numeric"
                     class="w-28"
+                    :disabled="!ready"
                     :label="
                       picked.length === 1 ? __('Give now') : __('Give each now')
                     "
@@ -435,10 +481,25 @@
                   <Button
                     :label="__('Give to {0}', pickedLabel)"
                     :loading="giving"
-                    :disabled="giving"
+                    :disabled="giving || !ready"
                     @click="giveNow"
                   />
                 </div>
+                <p v-if="!ready" class="text-p-xs text-ink-gray-7">
+                  {{
+                    withDistricts
+                      ? __(
+                          "No {0} to give now. Pick a district with a balance above, or another {1}.",
+                          readyText,
+                          industryMode ? __("industry") : __("product")
+                        )
+                      : __(
+                          "No {0} to give now. Pick another {1}, or wait for new leads.",
+                          readyText,
+                          industryMode ? __("industry") : __("product")
+                        )
+                  }}
+                </p>
                 <p class="text-xs text-ink-gray-5">
                   {{
                     __(
@@ -521,13 +582,15 @@
                 </p>
               </div>
 
-              <ErrorMessage
-                v-if="formError"
-                :message="formError"
-                role="alert"
-              />
-
-              <div class="flex flex-col gap-2">
+              <!-- pinned to the panel's bottom on a wide screen, so Assign is always in view -->
+              <div
+                class="flex flex-col gap-2 border-outline-gray-2 bg-surface-base lg:sticky lg:-bottom-4 lg:-mx-4 lg:-mb-4 lg:border-t lg:px-4 lg:pb-4 lg:pt-3"
+              >
+                <ErrorMessage
+                  v-if="formError"
+                  :message="formError"
+                  role="alert"
+                />
                 <Button
                   type="submit"
                   variant="solid"
@@ -550,14 +613,14 @@
                   :disabled="save.loading"
                   @click="confirmClear = true"
                 />
+                <p class="text-xs text-ink-gray-5">
+                  {{
+                    __(
+                      "Counts from the next slot. Calls already handed out stay on their list."
+                    )
+                  }}
+                </p>
               </div>
-              <p class="text-xs text-ink-gray-5">
-                {{
-                  __(
-                    "Counts from the next slot. Calls already handed out stay on their list."
-                  )
-                }}
-              </p>
             </form>
           </div>
         </template>
@@ -927,18 +990,20 @@ const industryOptions = computed(() => {
     })),
   ];
 });
-/** "Malappuram · 40 unassigned" of the product (or industry) chosen. A plan's district whose
- * open leads are all gone stays listed, so the field never shows blank. */
-const districtOptions = computed(() => {
-  const label = (name: string, district: string | null) =>
-    __("{0} · {1} unassigned", name, String(readyIn(district)));
+/** Each district's balance of the product (or industry) chosen, the fullest first, after
+ * "Any district" with the total. A plan's district whose open leads are all gone stays listed,
+ * so the choice never disappears. */
+const districtRows = computed(() => {
   const names = current.value?.districts ?? [];
-  return [
-    { label: label(__("Any district"), null), value: "" },
-    ...(form.district && !names.includes(form.district)
+  const rows = (
+    form.district && !names.includes(form.district)
       ? [form.district, ...names]
       : names
-    ).map((name) => ({ label: label(name, name), value: name })),
+  ).map((name) => ({ label: name, value: name, count: readyIn(name) }));
+  rows.sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+  return [
+    { label: __("Any district"), value: "", count: readyIn(null) },
+    ...rows,
   ];
 });
 const short = computed(
