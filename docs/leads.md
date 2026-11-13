@@ -442,6 +442,22 @@ phone):
   without picking (the ERP site takes the next unassigned leads with a phone, hot then newest);
 - the header's **Unassigned leads** button opens the pool on its own.
 
+**All of someone's leads back to the pool at once.** With people ticked who own open leads, the
+panel's footer has a quiet **Send their 555 leads back to the pool** (the count is theirs
+together). It opens a window (`SendBackLeadsDialog.vue`) that asks which: a **Product** (or
+**Industry**) and a **District**, each listing only what those people have, with counts (*All
+products (555)*, *StayveX (555)*, *No product (12)*). It counts the leads that match, says what
+happens ("555 leads go back to StayVeX's unassigned pool. Fidha will no longer see them or their
+notes, and their calls not made yet leave Fidha's list."), and *Keep them* is the primary button;
+**Send 555 back to the pool** is the red one. Only open leads go: won and lost ones stay theirs.
+It works through them 100 at a time (`get_department_leads` for the person and the choice, then
+`unassign_leads` on those names, round after round), showing *Sending back: 200 of 555 done*, and
+can't be closed while it runs. Each round reads what the person still owns, so a lead moved to
+someone else meanwhile is never taken from them, and it never sends back more than it counted, so
+leads handed to the person meanwhile don't keep it going. If a call fails it stops, says how many went
+back, and counts again, so the button then sends the rest. No new endpoint: the ERP site's
+`unassign_leads` takes at most 500 named leads, and the hub lists 100 at a time.
+
 **Made hard to get wrong.** *Send N back to the pool* is a quiet secondary button and asks first
 ("Send 71 leads back to the pool? Shahana V K will no longer see them or their notes. They go to
 the next person's call batch."); *Keep them with X* is the primary button of that question. Under
@@ -488,7 +504,11 @@ Code: `helpdesk/api/call_batches.py` (`get_call_plans`, `save_call_plan`; a 403 
 6. To see or move someone's leads, press **N leads** on their row. Tick leads to **Move to**
    someone else, **Unassign** or **Set product**. Under **Unassigned**, tick leads and assign them,
    or type how many to give (and of which product and district) and press **Give to**.
-7. To remove someone's plan, tick them and press **Remove plan · use (department) default
+7. To take back the leads someone already has (they leave, or change department), tick them and
+   press **Send their N leads back to the pool**. Leave *All products* and *All districts* for
+   every open lead, or choose one product or district, then press **Send N back to the pool**.
+   Keep the page open until it says they are in the pool.
+8. To remove someone's plan, tick them and press **Remove plan · use (department) default
    (50 + 50)**; the button shows the department's slot sizes. It asks first ("Remove Fidha V P's
    plan? From the next slot they get GrowthX's default: Morning 50 + Afternoon 50, any
    product."), naming the campaign product instead of "any product" when the department has one.
