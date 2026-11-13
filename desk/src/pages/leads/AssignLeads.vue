@@ -613,6 +613,14 @@
                   :disabled="save.loading"
                   @click="confirmClear = true"
                 />
+                <!-- no batches at all: they get only the leads handed to them here -->
+                <Button
+                  v-if="!pickedByHand"
+                  variant="ghost"
+                  :label="__('No daily calls · assign by hand')"
+                  :disabled="save.loading"
+                  @click="confirmByHand = true"
+                />
                 <!-- the leads they already own, all at once (it asks which, and confirms) -->
                 <Button
                   v-if="pickedOwners.length"
@@ -657,6 +665,30 @@
     :people="pickedOwners"
     @changed="plans.reload()"
   />
+  <Dialog
+    v-if="current"
+    v-model:open="confirmByHand"
+    :title="__('No daily calls for {0}?', pickedLabel)"
+    size="sm"
+  >
+    <p class="text-p-base text-ink-gray-7">
+      {{
+        __(
+          "From the next slot they get no automatic calls (the department's {0} stops for them). Give them leads by hand: Give now, or See leads to pick them. Their own leads stay theirs.",
+          defaultSizes
+        )
+      }}
+    </p>
+    <div class="mt-6 flex justify-end gap-2">
+      <Button :label="__('Cancel')" @click="confirmByHand = false" />
+      <Button
+        variant="solid"
+        :label="__('Assign by hand')"
+        :loading="save.loading && byHand"
+        @click="planByHand"
+      />
+    </div>
+  </Dialog>
   <Dialog
     v-if="current"
     v-model:open="confirmClear"
@@ -851,6 +883,10 @@ const pickedOwned = computed(() =>
   pickedOwners.value.reduce((sum, m) => sum + m.leads, 0)
 );
 const sendingBack = ref(false);
+// every one picked is already on "by hand"
+const pickedByHand = computed(
+  () => !!pickedMembers.value.length && pickedMembers.value.every(isByHand)
+);
 
 // ---------- removing a plan: back to the department's slot sizes ----------
 
@@ -914,8 +950,18 @@ const anyLabel = computed(() =>
 function planChoice(member: PlanMember) {
   return (industryMode.value ? member.industry : member.product) || "";
 }
+/** A plan of 0 calls in every slot: no batches, leads are handed to them by hand. */
+function isByHand(member: PlanMember) {
+  return (
+    member.has_plan &&
+    !!current.value?.slots.length &&
+    current.value.slots.every((slot) => !member.sizes[slot.label])
+  );
+}
+
 /** "PhoebiX · Malappuram": what the person's plan calls for. */
 function planText(member: PlanMember) {
+  if (isByHand(member)) return __("By hand: no daily calls");
   const what = planChoice(member) || anyLabel.value;
   return member.district ? `${what} · ${member.district}` : what;
 }
@@ -1072,13 +1118,19 @@ const save = createResource({
             "Plan removed for {0}: they get the department's default",
             clearLabel.value
           )
+        : byHand.value
+        ? __("{0}: no daily calls. Give them leads by hand.", pickedLabel.value)
         : __("Leads assigned to {0}", pickedLabel.value)
     );
+    byHand.value = false;
     picked.value = [];
     confirmClear.value = false;
+    confirmByHand.value = false;
   },
   onError(error: unknown) {
     confirmClear.value = false;
+    confirmByHand.value = false;
+    byHand.value = false;
     formError.value = errorText(error, __("Couldn't save. Try again."));
   },
 });
@@ -1096,6 +1148,27 @@ function assign() {
     ...(industryMode.value ? { industry: form.industry || null } : {}),
     district: form.district || null,
     sizes,
+  });
+}
+
+// ---------- by hand: no daily calls ----------
+
+const confirmByHand = ref(false);
+const byHand = ref(false);
+
+/** A plan of 0 in every slot for the people picked: no batches, no 11:00 top-up. */
+function planByHand() {
+  formError.value = "";
+  if (!current.value) return;
+  clearing.value = false;
+  byHand.value = true;
+  save.submit({
+    department: current.value.department,
+    users: picked.value,
+    product: industryMode.value ? null : form.product || null,
+    ...(industryMode.value ? { industry: form.industry || null } : {}),
+    district: form.district || null,
+    sizes: Object.fromEntries(current.value.slots.map((s) => [s.label, 0])),
   });
 }
 

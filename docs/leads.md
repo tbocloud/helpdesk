@@ -445,6 +445,16 @@ phone):
   without picking (the ERP site takes the next unassigned leads with a phone, hot then newest);
 - the header's **Unassigned leads** button opens the pool on its own.
 
+**No daily calls: assign by hand.** With people ticked, the panel's footer has a quiet **No daily
+calls · assign by hand**. It asks first ("From the next slot they get no automatic calls (the
+department's 50 + 50 stops for them)…") and saves their plan as 0 in every slot (`save_call_plan`
+with zeros, the product and district as picked), so the batches and the 11:00 top-up hand them
+nothing; they get only the leads given here: **Give now** (a number of the product and district
+picked) or **See leads** (pick them one by one). The people table's plan reads *By hand: no daily
+calls*. To go back to batches, set calls per slot and press Assign leads, or **Remove plan** for
+the department's default. Today's calls leaves out a lead moved to another stage since its call
+was handed out (TBO Smart's `call-batches.md`, "A lead dealt with leaves Today's calls").
+
 **All of someone's leads back to the pool at once.** With people ticked who own open leads, the
 panel's footer has a quiet **Send their 555 leads back to the pool** (the count is theirs
 together). It opens a window (`SendBackLeadsDialog.vue`) that asks which: a **Product** (or
@@ -507,11 +517,13 @@ Code: `helpdesk/api/call_batches.py` (`get_call_plans`, `save_call_plan`; a 403 
 6. To see or move someone's leads, press **N leads** on their row. Tick leads to **Move to**
    someone else, **Unassign** or **Set product**. Under **Unassigned**, tick leads and assign them,
    or type how many to give (and of which product and district) and press **Give to**.
-7. To take back the leads someone already has (they leave, or change department), tick them and
+7. For someone who should get no automatic calls, tick them and press **No daily calls · assign
+   by hand**, then give them leads with **Give now** or **See leads**.
+8. To take back the leads someone already has (they leave, or change department), tick them and
    press **Send their N leads back to the pool**. Leave *All products* and *All districts* for
    every open lead, or choose one product or district, then press **Send N back to the pool**.
    Keep the page open until it says they are in the pool.
-8. To remove someone's plan, tick them and press **Remove plan · use (department) default
+9. To remove someone's plan, tick them and press **Remove plan · use (department) default
    (50 + 50)**; the button shows the department's slot sizes. It asks first ("Remove Fidha V P's
    plan? From the next slot they get GrowthX's default: Morning 50 + Afternoon 50, any
    product."), naming the campaign product instead of "any product" when the department has one.
