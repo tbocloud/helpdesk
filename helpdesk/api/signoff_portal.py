@@ -29,6 +29,7 @@ from frappe.utils import (
 )
 
 from helpdesk.helpdesk.doctype.hd_project_signoff.hd_project_signoff import (
+    CODE_VERIFIED,
     DRAFT,
     SIGNED,
     HDProjectSignoff,
@@ -46,7 +47,8 @@ OTP_MAX_ATTEMPTS = 5
 
 def find_signoff(token: str):
     """The sign-off this token opens, or None (unknown, replaced or revoked)."""
-    token = cstr(token).strip()
+    # exactly as sent: the rate limits count by the raw token, so a padded one mustn't open it
+    token = cstr(token)
     if len(token) < 32:
         return None
     name = frappe.db.get_value(
@@ -147,6 +149,12 @@ def otp_key(signoff: str) -> str:
     return f"hd_signoff_otp:{signoff}"
 
 
+def otp_tries_key(signoff: str) -> str:
+    """Tries at the current code, counted in Redis on their own: an atomic count, so parallel
+    guesses can't share one try."""
+    return frappe.cache.make_key(f"hd_signoff_otp_tries:{signoff}")
+
+
 def mask_email(email: str) -> str:
     local, _sep, domain = cstr(email).partition("@")
     return f"{local[:1]}{'•' * max(len(local) - 1, 1)}@{domain}"
@@ -192,9 +200,10 @@ def request_code(token: str) -> dict:
     )
     frappe.cache.set_value(
         key,
-        {"otp": code, "sent_at": str(now_datetime()), "attempts": 0},
+        {"otp": code, "sent_at": str(now_datetime())},
         expires_in_sec=OTP_TTL_SECONDS,
     )
+    frappe.cache.delete(otp_tries_key(doc.name))
     return {
         "success": True,
         "message": _("We sent a 6-digit code to {0}.").format(
@@ -216,25 +225,26 @@ def verify_code(token: str, code: str) -> dict:
             "success": False,
             "message": _("That code has expired. Ask for a new one."),
         }
-    if entry["attempts"] >= OTP_MAX_ATTEMPTS:
+    tries_key = otp_tries_key(doc.name)
+    # counted before the check, so every guess (and the right code) uses a try
+    tries = frappe.cache.incr(tries_key)
+    if tries == 1:
+        frappe.cache.expire(tries_key, OTP_TTL_SECONDS)
+    if tries > OTP_MAX_ATTEMPTS:
         frappe.cache.delete_value(key)
+        frappe.cache.delete(tries_key)
         return {
             "success": False,
             "message": _("Too many wrong tries. Ask for a new code."),
         }
     if not hmac.compare_digest(cstr(code).strip(), entry["otp"]):
-        entry["attempts"] += 1
-        remaining = (
-            OTP_TTL_SECONDS
-            - (now_datetime() - get_datetime(entry["sent_at"])).total_seconds()
-        )
-        frappe.cache.set_value(key, entry, expires_in_sec=max(int(remaining), 1))
         return {"success": False, "message": _("That code is not right. Try again.")}
+    frappe.cache.delete(tries_key)
     frappe.cache.delete_value(key)
     start_session(doc)
     ip, _agent = request_meta()
     doc.log_event(
-        _("Code verified"),
+        CODE_VERIFIED,
         by_email=doc.signatory_email,
         by_name=doc.signatory_name,
         ip_address=ip,

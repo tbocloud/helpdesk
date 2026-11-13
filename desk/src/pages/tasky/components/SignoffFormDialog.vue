@@ -188,11 +188,11 @@
             >{{ __("Filling in…") }}</span
           >
           <Button
-            v-else-if="mailEdited && !confirmReapply"
+            v-else-if="(mailEdited || !autoFill) && !confirmReapply"
             variant="ghost"
             size="sm"
             :label="__('Reapply template')"
-            @click="confirmReapply = true"
+            @click="askReapply"
           />
         </div>
         <div
@@ -284,7 +284,9 @@
             @click="submit(false)"
           />
           <template v-else>
+            <!-- from the lead page it goes out at once: its owner may not open the project to send a draft -->
             <Button
+              v-if="!lead"
               :label="__('Save as draft')"
               :loading="saving === 'draft'"
               :disabled="!!saving"
@@ -390,6 +392,8 @@ interface Template {
   module?: string;
   signoff_type?: "Training" | "UAT";
   project_type?: string | null;
+  /** the template's Always CC, comma separated */
+  default_cc?: string | null;
 }
 
 interface Contact {
@@ -455,6 +459,8 @@ const form = reactive({
 
 // the mail's state; the watcher below sets it when the dialog opens
 const baseline = ref({ subject: "", body: "" });
+// who the current template copies, so a template picked instead takes them off again
+let templateCc: string[] = [];
 // the mail follows the choices above until it is written by hand (or kept from a draft)
 const autoFill = ref(true);
 const previewing = ref(false);
@@ -466,8 +472,12 @@ const options = createResource({
   makeParams: () => ({ project: props.projectId, lead: props.lead || null }),
   onSuccess(data: { default_cc: string[]; templates: Template[] }) {
     if (editing.value) {
+      // its template's Always CC is in the draft's CC: a template picked instead replaces it
+      const own = data.templates.find((t) => t.name === form.template);
+      templateCc = (own?.default_cc ?? "").split(/[,;\s]+/).filter(Boolean);
       // a draft made before mails were kept starts from its template's
-      if (!form.subject) refreshMail(true);
+      if (form.subject) followIfUntouched();
+      else refreshMail(true);
       return;
     }
     form.cc = data.default_cc.join(", ");
@@ -497,6 +507,7 @@ watch(
       items: s ? s.items.map((i) => ({ ...i })) : [],
     });
     baseline.value = { subject: form.subject, body: form.body };
+    templateCc = [];
     // a draft's own mail is kept; only a new one follows the template
     autoFill.value = !s?.email_subject;
     options.reload();
@@ -574,6 +585,37 @@ const mailEdited = computed(
 
 // an answer for older choices must not land over the newest one
 let asked = 0;
+
+/** A draft's kept mail that is still exactly what its choices fill in was never written by
+ * hand: it goes on following them (a date set later fills in, a new signatory is greeted). */
+async function followIfUntouched() {
+  try {
+    const mail: Mail = await call(
+      "helpdesk.api.project_signoff.preview_signoff_mail",
+      mailParams()
+    );
+    if (
+      mail.subject.trim() === form.subject.trim() &&
+      words(mail.body) === words(form.body)
+    )
+      autoFill.value = true;
+  } catch {
+    // the draft keeps its mail; Reapply template is there
+  }
+}
+
+function mailParams() {
+  return {
+    project: props.projectId,
+    signoff_type: isUat.value ? "UAT" : "Training",
+    template: form.template || null,
+    signatory_contact: form.signatory_contact || null,
+    module_title: form.module_title,
+    training_date: form.training_date || null,
+    trainer: form.trainer || null,
+    lead: props.lead || null,
+  };
+}
 async function refreshMail(force = false) {
   if (!options.data?.customer) return;
   if (!force && (!autoFill.value || mailEdited.value)) return;
@@ -583,27 +625,23 @@ async function refreshMail(force = false) {
   try {
     const mail: Mail = await call(
       "helpdesk.api.project_signoff.preview_signoff_mail",
-      {
-        project: props.projectId,
-        signoff_type: isUat.value ? "UAT" : "Training",
-        template: form.template || null,
-        signatory_contact: form.signatory_contact || null,
-        module_title: form.module_title,
-        training_date: form.training_date || null,
-        trainer: form.trainer || null,
-        lead: props.lead || null,
-      }
+      mailParams()
     );
-    if (ask !== asked) return;
+    // typed into while it was being filled: what was typed stays
+    if (ask !== asked || (!force && mailEdited.value)) return;
     form.subject = mail.subject;
     form.body = mail.body;
     baseline.value = { subject: mail.subject, body: mail.body };
     autoFill.value = true;
-    // the template's own CC join who is already copied
-    const cc = new Set(ccList.value.map((e) => e.toLowerCase()));
-    form.cc = [...ccList.value, ...mail.cc.filter((e) => !cc.has(e))].join(
-      ", "
-    );
+    // the template's own CC join who is already copied, replacing an earlier template's
+    const earlier = new Set(templateCc.map((e) => e.toLowerCase()));
+    const kept = ccList.value.filter((e) => !earlier.has(e.toLowerCase()));
+    const cc = new Set(kept.map((e) => e.toLowerCase()));
+    form.cc = [
+      ...kept,
+      ...mail.cc.filter((e) => !cc.has(e.toLowerCase())),
+    ].join(", ");
+    templateCc = mail.cc;
   } catch (e) {
     if (ask === asked)
       mailError.value = errorText(e, __("Couldn't fill in the mail."));
@@ -626,6 +664,11 @@ watch(
 function reapply() {
   confirmReapply.value = false;
   refreshMail(true);
+}
+// words written by hand are lost: asked first; a kept draft mail isn't anyone's typing
+function askReapply() {
+  if (mailEdited.value) confirmReapply.value = true;
+  else reapply();
 }
 
 const labels = computed<Record<string, string>>(

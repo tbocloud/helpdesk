@@ -120,7 +120,7 @@
                   s.link_sent_on ? __('Send new link') : __('Send to customer')
                 "
                 :loading="busy === 'send'"
-                @click="s.link_sent_on ? (confirming = 'resend') : send()"
+                @click="confirming = s.link_sent_on ? 'resend' : 'send'"
               >
                 <template #prefix
                   ><LucideSend class="size-4" aria-hidden="true"
@@ -423,7 +423,7 @@
                   >
                 </span>
                 <span class="min-w-0 flex-1 text-ink-gray-8">
-                  <span class="font-medium">{{ entry.event }}</span>
+                  <span class="font-medium">{{ __(entry.event) }}</span>
                   <template v-if="entry.item && itemNumber[entry.item]">
                     ·
                     {{
@@ -556,9 +556,10 @@
       </template>
     </Dialog>
 
-    <!-- resend, revoke, delete -->
+    <!-- send, resend, revoke, delete: the mail goes to a customer, so it is said once more -->
     <Dialog
       :open="
+        confirming === 'send' ||
         confirming === 'resend' ||
         confirming === 'revoke' ||
         confirming === 'delete'
@@ -573,7 +574,9 @@
           <Button :label="__('Cancel')" @click="confirming = null" />
           <Button
             variant="solid"
-            :theme="confirming === 'resend' ? 'gray' : 'red'"
+            :theme="
+              confirming === 'send' || confirming === 'resend' ? 'gray' : 'red'
+            "
             :label="confirmCopy.action"
             :loading="!!busy"
             @click="confirmCopy.run()"
@@ -655,6 +658,7 @@ interface SignoffDetail {
   signoff_type: "Training" | "UAT";
   /** a UAT's last state on the ERP site */
   crm_recorded?: string | null;
+  crm_failed?: boolean;
   template?: string | null;
   status: string;
   training_date?: string | null;
@@ -718,7 +722,9 @@ const notRecorded = computed(
   () =>
     uat.value &&
     ["Signed", "Reopened"].includes(s.value?.status ?? "") &&
-    s.value?.crm_recorded !== s.value?.status
+    s.value?.crm_recorded !== s.value?.status &&
+    // not while the first try is still queued: only once one failed
+    !!s.value?.crm_failed
 );
 // in the customer's terms: Sent turns Viewed once they opened the link with their code
 const status = computed(() =>
@@ -776,7 +782,9 @@ const linkLine = computed(() => {
 const showEdit = ref(false);
 const openTask = ref<TaskRef | null>(null);
 const busy = ref<string | null>(null);
-const confirming = ref<"resend" | "revoke" | "delete" | "reopen" | null>(null);
+const confirming = ref<
+  "send" | "resend" | "revoke" | "delete" | "reopen" | null
+>(null);
 const reopenReason = ref("");
 const clarifying = ref<SignoffItem | null>(null);
 const clarifyNote = ref("");
@@ -826,6 +834,17 @@ const confirmCopy = computed(() => {
       message: __("The customer has never seen it. This can't be undone."),
       action: __("Delete draft"),
       run: () => remove(),
+    };
+  if (confirming.value === "send")
+    return {
+      title: __("Send the sign-off?"),
+      message: __(
+        "The mail goes to {0} ({1}) with their link to sign.",
+        s.value?.signatory_name ?? "",
+        email
+      ),
+      action: __("Send"),
+      run: () => send(),
     };
   return {
     title: __("Send a new link?"),
