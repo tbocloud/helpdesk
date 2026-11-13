@@ -873,8 +873,9 @@ def read_stale_leads(departments: list[dict], acting_user: str | None = None):
 
 @frappe.whitelist(methods=["POST"])
 def create_lead(data: dict | str, allow_duplicate: int | str = 0) -> dict:
-    """A new lead. The ERP site refuses one whose email or phone another lead already
-    has, until the person confirms with `allow_duplicate`."""
+    """A new lead. The ERP site refuses one whose email another lead already has until the
+    person confirms with `allow_duplicate`, and one whose number another lead has always
+    (docs/leads.md, "One lead per number")."""
     require_leads()
     extra = {"allow_duplicate": 1} if cint(allow_duplicate) else {}
     result = call("create_lead", post=True, data=parse_data(data), **extra) or {}
@@ -986,8 +987,8 @@ def add_lead_number(
     note: str | None = None,
     on_call: int | str = 0,
 ) -> dict:
-    """Adds a contact number to the lead: {numbers, duplicates}, `duplicates` being the
-    other leads that have it (a warning, never a refusal). `make_primary` makes it the main
+    """Adds a contact number to the lead: {numbers}. The ERP site refuses a number another
+    lead has (docs/leads.md, "One lead per number"). `make_primary` makes it the main
     number; the old one stays, marked Old. `on_call` records it as added during a call."""
     require_leads()
     if not (number or "").strip():

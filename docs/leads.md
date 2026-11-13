@@ -78,7 +78,7 @@ user exists there with a sales role, applies what they may see, and records writ
 | `get_merge_preview` | GET | `first, second` | `{leads: [Summary, Summary]}`: both leads' name, company, email, numbers, stage, owner, creation and what sits on each (`counts`, `new_numbers`) |
 | `merge_leads` | POST | `keep, merge` | the kept lead as `get_lead`; the other lead is deleted. A Sales Manager, System Manager or the head of the leads' department |
 | `get_stale_leads` | GET | `days` | `[{name, lead_name, company_name, lead_owner, tbo_department, tbo_stage, last_activity_on, idle_days}]` idle for `days` or more, scoped to the acting user's visibility |
-| `create_lead` | POST | `data, allow_duplicate` (1 only after the person confirmed) | the lead (at least `name`); an email or phone another lead has is refused with DuplicateEntryError "Possible duplicate of <lead> (<owner>)" unless `allow_duplicate` |
+| `create_lead` | POST | `data, allow_duplicate` (1 only after the person confirmed) | the lead (at least `name`); an email another lead has is refused with DuplicateEntryError "Possible duplicate of <lead> (<owner>)" unless `allow_duplicate`; a number another lead has always ("... it already has the number <number>, and a number belongs to one lead.", [One lead per number](#one-lead-per-number)) |
 | `update_lead` | POST | `name, data` | the lead |
 | `set_stage` | POST | `name, stage, note` | the lead |
 | `add_note` | POST | `name, note` | the note |
@@ -208,12 +208,15 @@ on an older one; every hub proxy asks through `call_if_deployed`.
   `assignment`, or when there are no departments yet.
 - **Duplicates** (lead form): on leaving the Email or Mobile field (debounced 300 ms) the form
   calls `find_duplicate_leads` and lists matches under the fields: name (opens the lead in a
-  new tab), company, owner, stage and what matched. On a new lead, an email or phone match
-  turns the button into **Create anyway**, which sends `allow_duplicate=1`; a company-only
-  match is shown but doesn't block. Pressing Create lead before leaving the field checks
-  first and stops to show the match. If the ERP site still refuses ("Possible duplicate of
-  ..." about a lead the person can't see, so none was listed), the button also becomes Create
-  anyway. On an edit the matches are only shown (`exclude` is the lead itself).
+  new tab), company, owner, stage and what matched. On a new lead, an email match turns the
+  button into **Create anyway**, which sends `allow_duplicate=1`; a phone match stops the
+  form instead ([One lead per number](#one-lead-per-number)); a company-only match is shown
+  but doesn't block. Pressing Create lead before leaving the field checks first and stops to
+  show the match. If the ERP site still refuses ("Possible duplicate of ..." about a lead the
+  person can't see, so none was listed), the button becomes Create anyway, unless the refusal
+  is about the number ("... a number belongs to one lead."). On an edit the matches are only
+  shown (`exclude` is the lead itself), except a changed Mobile that another lead has, which
+  stops the save.
 - **No activity chip** (Leads list): `get_stale_leads` (cached 60 s per person, key part
   `stale`) gives the person's quiet leads; a row shows a warning-toned "No activity N days"
   chip with a clock icon. The hub asks the ERP site for the shortest department threshold
@@ -610,7 +613,9 @@ office's). A lead keeps all of them, and the old one is never lost. TBO Smart st
 - A number is wrong: pick **Wrong number** as the call's result. That number is greyed out and the
   next one becomes the main number; the lead is only a Wrong Number lead when none is left. Or use
   the **...** menu on a number: Make main, Not reachable, Wrong number, Old number, Back in use.
-- The same number on another lead? The form says whose lead it is. You can still save.
+- The number is already on another lead? The form says whose lead it is and won't save it: a
+  number belongs to one lead ([One lead per number](#one-lead-per-number)). Work that lead, or
+  ask a manager to merge the two.
 - Only managers remove a number (it is in the **...** menu for them); everyone else marks it Old
   or Wrong number.
 
@@ -628,11 +633,56 @@ office's). A lead keeps all of them, and the old one is never lost. TBO Smart st
 - *Calls without a result:* the pending call remembers the number that was dialled
   (`pending_calls.start_call`'s `number`), and the result sheet sends it with the outcome.
 - *Duplicates:* the Add number form and the lead form ask `find_duplicate_leads`, which now covers
-  every number of every lead (`DuplicateLeadsNotice.vue` shows the matches).
+  every number of every lead (`DuplicateLeadsNotice.vue` shows the matches); a phone match stops
+  the save ([One lead per number](#one-lead-per-number)).
 
 Hub endpoints: `add_lead_number`, `update_lead_number`, `remove_lead_number` (thin proxies; every
 write clears the person's cached reads), and a `number` argument on `log_call` and
 `record_call_outcome`. An ERP site without them answers "needs the latest TBO Smart".
+
+## One lead per number
+
+The same phone number never makes a second lead. Two leads with one number split the calls, the
+notes and the follow-ups between two people, so the ERP site (TBO Smart, `lead-departments.md` §6
+there) refuses it however the lead comes in: the hub, the mobile app, the desk, a Data Import, the
+website form, the Lead Bank, prospecting or Meta lead ads. A number is the same when its last 10
+digits are (`+91 98470 12345`, `098470-12345` and `9847012345` are one number), on any of a lead's
+numbers, old and wrong ones too.
+
+**What people see:**
+
+- *New lead (hub):* typing a mobile number that a lead has shows that lead under the field
+  ("This number is already on a lead: work that one instead") and the Create button is off. There
+  is no Create anyway for a number; an email match still has it.
+- *Edit lead:* changing the Mobile to a number another lead has stops the save the same way. The
+  lead's own number, even one it shares with an old duplicate, saves as before.
+- *Add number:* a number another lead has is shown with that lead and Save is off.
+- *A lead the person can't see:* nothing is listed before saving; the ERP site's refusal names
+  the lead and its owner ("Possible duplicate of LD-… (Anil): it already has the number …, and a
+  number belongs to one lead.").
+- *Website form and Meta lead ads:* the enquiry goes on the lead that has the number (or email) as
+  a note, and its owner (or the department's heads, when it has no owner) is notified. The Meta
+  Lead Log says Duplicate and links that lead.
+- *Mobile app:* the 409 comes even with *Create anyway*, with `number_taken: 1` so the app can
+  hide that button.
+
+**Numbers many businesses share.** A lead portal (IndiaMART, JustDial) sometimes gives every
+business it forwards the same virtual number. Such a number goes in TBO Smart Settings, section
+*One lead per number*, field *Numbers many businesses share* (one per line, on the ERP site);
+it may then be on any number of leads.
+
+**Duplicates made before the rule** stay as they are and can still be edited; merge them
+([Merge duplicate leads](#merge-duplicate-leads)). On 2026-11-13 ten numbers were on two leads
+each, nine of them the same number typed differently (`+91…` and `0…`). One of them,
+08047808605 on LD26101623 and LD26101628, looks like a portal's shared number: put it under
+*Numbers many businesses share* rather than merging. Two pairs include a Closed – Won lead
+(LD26101145 / LD26101210, LD26101020 / LD2610560): keep the won one.
+
+**How it is built.** The ERP site is the rule (`refuse_taken_numbers` on Lead validate, so no path
+can skip it); the hub only says it early. `LeadFormDialog.vue` and `AddNumberDialog.vue` check
+with `find_duplicate_leads` before saving and stop on a `phone` match (`blockedByPhone`,
+`numberTaken`); `create_lead` sends `allow_duplicate` only for an email match. A refusal
+mentioning "belongs to one lead" never turns into Create anyway.
 
 ## Merge duplicate leads
 
