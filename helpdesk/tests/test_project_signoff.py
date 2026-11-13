@@ -849,6 +849,24 @@ class TestProjectSignoff(FrappeTestCase):
         # the lead's owner hears too (who sent it and the project lead heard at signing)
         self.assertEqual(notify.call_args.args[0], [OUTSIDER[0]])
 
+    def test_a_link_sent_by_administrator_still_mails(self):
+        # Administrator is no email address: left out, or Frappe drops the whole mail
+        frappe.db.set_value("Project", self.project, "project_lead", "Administrator")
+        doc = self.signoff()
+        doc.send_link()
+        link_mail = self.sendmail.call_args.kwargs
+        self.assertEqual(doc.link_sent_by, "Administrator")
+        self.assertEqual(link_mail["reply_to"], TRAINER[0])
+        token = open_signoff_link(frappe.get_doc(doc.doctype, doc.name))
+        doc = self.answer_all_done(doc, token)
+        self.sign(doc, token)
+        signed_mail = next(
+            c.kwargs
+            for c in self.sendmail.call_args_list
+            if c.kwargs.get("attachments")
+        )
+        self.assertEqual(signed_mail["recipients"], sorted([SIGNATORY, TRAINER[0]]))
+
     # --- the lead page (docs/project-signoff.md, From the lead) ---
 
     def lead_project(self, owner: str, project: str | None = None):

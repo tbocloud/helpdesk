@@ -146,7 +146,10 @@ draft or reopened.
   one-time code works. A new link (Resend, a clarification, the reminder) is a new mail.
 - **To** is only the signatory. **CC** starts as the project lead and the person sending, plus
   the template's Always CC; any valid addresses can be added; the signatory is never copied on
-  their own mail. Replies go to whoever sent the link.
+  their own mail. Replies go to whoever sent the link, else the trainer.
+- A user that isn't an email address (Administrator) is left out of every sign-off mail's
+  reply-to and recipients (`mail_addresses`): one bad address and Frappe drops the whole mail,
+  so a link sent by Administrator would never reach the customer.
 - A sign-off made before mails were kept (no subject) still goes out with the earlier fixed
   words.
 

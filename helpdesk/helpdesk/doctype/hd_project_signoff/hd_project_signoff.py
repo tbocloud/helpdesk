@@ -210,6 +210,20 @@ class HDProjectSignoff(Document):
             found.append(email)
         return found
 
+    @staticmethod
+    def mail_addresses(*users: str | None) -> list[str]:
+        """Our people as mail addresses, without repeats. A user that isn't an email
+        (Administrator) is left out: one bad address and Frappe drops the whole mail."""
+        found = []
+        for user in users:
+            if user and user not in found and frappe.utils.validate_email_address(user):
+                found.append(user)
+        return found
+
+    def reply_to(self) -> str | None:
+        """Replies go to whoever sent the link, else the trainer."""
+        return next(iter(self.mail_addresses(self.link_sent_by, self.trainer)), None)
+
     def mail_body_text(self) -> str:
         return frappe.utils.strip_html(self.email_body or "").strip()
 
@@ -408,7 +422,7 @@ class HDProjectSignoff(Document):
             recipients=[self.signatory_email],
             subject=subject,
             message=message,
-            reply_to=self.trainer or None,
+            reply_to=self.reply_to(),
             reference_doctype=self.doctype,
             reference_name=self.name,
         )
@@ -423,7 +437,7 @@ class HDProjectSignoff(Document):
             cc=cc or None,
             subject=subject,
             message=message,
-            reply_to=self.link_sent_by or self.trainer or None,
+            reply_to=self.reply_to(),
             reference_doctype=self.doctype,
             reference_name=self.name,
         )
@@ -1175,14 +1189,11 @@ class HDProjectSignoff(Document):
 
     def email_signed_pdf(self, file_name: str, content: bytes):
         # the signer, and our people: who sent it, the trainer and the project lead
-        recipients = {
-            self.signatory_email,
-            self.link_sent_by,
-            self.trainer,
-            self.project_lead(),
-        }
+        recipients = self.mail_addresses(
+            self.signatory_email, self.link_sent_by, self.trainer, self.project_lead()
+        )
         frappe.sendmail(
-            recipients=sorted(r for r in recipients if r),
+            recipients=sorted(recipients),
             subject=(
                 _("{0} signed off") if self.is_uat() else _("{0} training signed off")
             ).format(self.module_title),
@@ -1265,11 +1276,11 @@ class HDProjectSignoff(Document):
         frappe.db.set_value(
             "Project", self.project, "custom_signoff_letter", letter.name
         )
-        recipients = {s.signatory_email for s in signoffs} | {
-            s.trainer for s in signoffs if s.trainer
-        }
-        if project.project_lead:
-            recipients.add(project.project_lead)
+        recipients = self.mail_addresses(
+            *(s.signatory_email for s in signoffs),
+            *(s.trainer for s in signoffs),
+            project.project_lead,
+        )
         frappe.sendmail(
             recipients=sorted(recipients),
             subject=_("{0}: all training signed off").format(
