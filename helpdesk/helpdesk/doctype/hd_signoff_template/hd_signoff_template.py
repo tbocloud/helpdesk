@@ -1,10 +1,12 @@
 # Copyright (c) 2026, Frappe Technologies and contributors
 # For license information, please see license.txt
 
-"""A training sign-off questionnaire for one module (Accounts, Stock, HR...).
+"""A sign-off template: a training questionnaire for one module (Accounts, Stock, HR...), or a
+UAT's mail (its tests come from the project's SRS), with the mail that asks the customer to sign.
 
-Each question is copied into a sign-off when it is created, so editing a
-template never changes a sign-off already sent. See docs/project-signoff.md.
+Each question is copied into a sign-off when it is created, so editing a template never changes
+a sign-off already sent; the mail is copied too, its placeholders filled in. See
+docs/project-signoff.md.
 """
 
 import frappe
@@ -16,6 +18,7 @@ class HDSignoffTemplate(Document):
     def validate(self):
         self.clean_items()
         self.validate_items()
+        self.validate_default_cc()
 
     def clean_items(self):
         """Blank rows are dropped; text is trimmed."""
@@ -29,9 +32,63 @@ class HDSignoffTemplate(Document):
         self.items = rows
 
     def validate_items(self):
-        if self.is_active and not self.items:
+        # a UAT's tests come from the project's SRS: its template is only the mail
+        if self.is_active and not self.items and self.signoff_type != "UAT":
             frappe.throw(_("Add at least one question, or make the template inactive."))
 
+    def validate_default_cc(self):
+        from helpdesk.helpdesk.doctype.hd_project_signoff.hd_project_signoff import (
+            HDProjectSignoff,
+        )
+
+        self.default_cc = ", ".join(HDProjectSignoff.clean_emails(self.default_cc))
+
+
+# The mail each kind of sign-off sends when its template has none (and the seeds' mail): the
+# wording of TBO's Sign-off requirements, with the customer signing on the page the link opens
+# rather than by replying. Data, like a template's own mail, so not translated.
+SIGNATURE = "<p>Regards,<br>{{ sender_name }}<br>{{ sender_designation }}<br>{{ company_name }}</p>"
+TRAINING_MAIL = {
+    "subject": "Training Sign-off – {{ modules }} – {{ project_name }}",
+    "body": "<p>Dear {{ contact_salutation }} {{ contact_name }},</p>"
+    "<p>I hope you are doing well.</p>"
+    "<p>We have completed the training on the {{ modules }} module(s) on {{ training_date }}, "
+    "conducted by {{ trainer_name }}.</p>"
+    "<p>We kindly request you to confirm that the training has been completed to your "
+    "satisfaction by completing the short sign-off form here: {{ sign_off_link }}</p>"
+    "<p>If any topic needs to be covered again, please let us know and we will arrange a "
+    "session.</p>" + SIGNATURE,
+}
+UAT_MAIL = {
+    "subject": "UAT Sign-off Request – {{ project_name }}",
+    "body": "<p>Dear {{ contact_salutation }} {{ contact_name }},</p>"
+    "<p>I hope you are doing well.</p>"
+    "<p>As agreed, we have completed the {{ project_name }} implementation on the UAT site, "
+    "covering the following modules: {{ modules }}.</p>"
+    "<p>This email serves as the official request for UAT sign-off. We kindly request you to "
+    "run each test on the sign-off page and confirm your acceptance there: {{ sign_off_link }}</p>"
+    "<p>Once we receive your confirmation, we will share the plan for the Go-Live.</p>"
+    "<p>If you have any questions or require further clarification, please feel free to "
+    "contact us.</p>" + SIGNATURE,
+}
+UAT_GO_LIVE_MAIL = {
+    "subject": "UAT Sign-off and Go-Live Confirmation – {{ project_name }}",
+    "body": "<p>Dear {{ contact_salutation }} {{ contact_name }},</p>"
+    "<p>I hope you are doing well.</p>"
+    "<p>As agreed, we have completed the {{ project_name }} implementation on the UAT site, "
+    "covering the requirements outlined in the SRS and the concerns raised by your team.</p>"
+    "<p>This email serves as the official request for UAT sign-off and confirmation to proceed "
+    "with the Go-Live process. We kindly request you to review the completed implementation and "
+    "confirm your acceptance on the sign-off page: {{ sign_off_link }}</p>"
+    "<p>As agreed, we will continue to provide support throughout the agreed support period. "
+    "Upon receiving your confirmation, we will proceed with the necessary activities to deploy "
+    "the completed setup to your live server at the earliest.</p>"
+    "<p>If you have any questions or require further clarification, please feel free to "
+    "contact us.</p>"
+    "<p>We look forward to receiving your confirmation and proceeding with the Go-Live.</p>"
+    + SIGNATURE,
+}
+DEFAULT_MAILS = {"Training": TRAINING_MAIL, "UAT": UAT_MAIL}
 
 # Seeded on install and by a patch, only when a template of that name is missing,
 # so a site's own edits are never overwritten.
@@ -39,6 +96,8 @@ DEFAULT_TEMPLATES = (
     {
         "template_name": "Accounts",
         "module": "Accounts",
+        "project_type": "ERP Implementation",
+        "mail": TRAINING_MAIL,
         "description": "Selling, buying, payments and the core accounting reports.",
         "sections": (
             (
@@ -87,6 +146,8 @@ DEFAULT_TEMPLATES = (
     {
         "template_name": "Stock / Inventory",
         "module": "Stock",
+        "project_type": "ERP Implementation",
+        "mail": TRAINING_MAIL,
         "description": "Items, warehouses, stock movements and the stock reports.",
         "sections": (
             (
@@ -130,6 +191,8 @@ DEFAULT_TEMPLATES = (
     {
         "template_name": "HR & Payroll",
         "module": "HR & Payroll",
+        "project_type": "ERP Implementation",
+        "mail": TRAINING_MAIL,
         "description": "Employee records, attendance, leave and the monthly payroll.",
         "sections": (
             (
@@ -163,6 +226,24 @@ DEFAULT_TEMPLATES = (
             ),
         ),
     },
+    {
+        "template_name": "UAT Sign-off",
+        "module": "",
+        "description": "Asks the client to accept the UAT; the tests come from the SRS.",
+        "signoff_type": "UAT",
+        "project_type": "ERP Implementation",
+        "sections": (),
+        "mail": UAT_MAIL,
+    },
+    {
+        "template_name": "UAT Sign-off and Go-Live",
+        "module": "",
+        "description": "Asks the client to accept the UAT and approve moving to the live server.",
+        "signoff_type": "UAT",
+        "project_type": "ERP Implementation",
+        "sections": (),
+        "mail": UAT_GO_LIVE_MAIL,
+    },
 )
 
 
@@ -178,6 +259,10 @@ def ensure_default_signoff_templates() -> list[str]:
                 "template_name": template["template_name"],
                 "module": template["module"],
                 "description": template["description"],
+                "signoff_type": template.get("signoff_type", "Training"),
+                "project_type": template.get("project_type"),
+                "email_subject": template["mail"]["subject"],
+                "email_body": template["mail"]["body"],
                 "is_active": 1,
                 "items": [
                     {"section": section, **seed_question(question)}

@@ -665,6 +665,10 @@ interface SignoffDetail {
   signatory_email: string;
   link_open: boolean;
   link_sent_on?: string | null;
+  /** the one reminder for the link sent last, when it went out */
+  reminder_sent_on?: string | null;
+  /** the status in the customer's terms (Viewed) */
+  customer_status?: string;
   link_expires_on?: string | null;
   signed_on?: string | null;
   signer_name?: string | null;
@@ -716,7 +720,10 @@ const notRecorded = computed(
     ["Signed", "Reopened"].includes(s.value?.status ?? "") &&
     s.value?.crm_recorded !== s.value?.status
 );
-const status = computed(() => signoffStatusMeta(s.value?.status ?? "Draft"));
+// in the customer's terms: Sent turns Viewed once they opened the link with their code
+const status = computed(() =>
+  signoffStatusMeta(s.value?.customer_status ?? s.value?.status ?? "Draft")
+);
 const groups = computed(() =>
   groupBySection(s.value?.items ?? [], __("General"))
 );
@@ -737,6 +744,15 @@ const linkLine = computed(() => {
     return {
       icon: LucideBadgeCheck,
       text: __("Signed {0}", dateFormat(d.signed_on, "D MMM YYYY, h:mm A")),
+    };
+  if (d.link_open && d.reminder_sent_on)
+    return {
+      icon: LucideLink,
+      text: __(
+        "Reminder sent {0} with a new link; works until {1}",
+        dateFormat(d.reminder_sent_on, "D MMM YYYY"),
+        dateFormat(d.link_expires_on, "D MMM YYYY")
+      ),
     };
   if (d.link_open)
     return {

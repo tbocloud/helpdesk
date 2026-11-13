@@ -4127,6 +4127,41 @@ def fake_pdf_renderer():
     return stack
 
 
+def forget_signoff_lead_access():
+    """Clears what the sign-off API cached of who may see which lead (ten minutes in
+    helpdesk.api.project_signoff._lead_access), so a test's fake ERP answers are read."""
+    frappe.cache.delete_keys("signoff_lead_access:")
+
+
+class EveryDayWorkCalendar:
+    """Stands in for helpdesk.follow_ups.WorkCalendar with every day a working day, so a
+    test counts working days without the site's weekly off and holidays."""
+
+    def __init__(self, today):
+        self.today = getdate(today)
+
+    def is_working_day(self, day) -> bool:
+        return True
+
+    def working_days_since(self, day) -> int:
+        return max((self.today - getdate(day)).days, 0)
+
+
+def crm_lead_detail(lead: str, project: str | None, owner: str) -> dict:
+    """The ERP site's get_lead answer for `lead`, owned by `owner`, whose document chain's
+    Project step is the hub's `project` (none yet: None)."""
+    return {
+        "lead": {"name": lead, "lead_owner": owner, "created_by": owner},
+        "documents": {
+            "steps": [
+                {"document_type": "Project", "name": project},
+                {"document_type": "UAT", "name": project},
+            ],
+            "next": None,
+        },
+    }
+
+
 def recurrence_rule(**values):
     """A recurring-task rule as plain values, for the date math in helpdesk.recurrence:
     monthly on the start date's day from 1 Jan 2026, never ending, no lead time and

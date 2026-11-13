@@ -90,6 +90,23 @@ export const PROJECT_ROLES = [
   "Motion Graphics Artist / Animator",
 ];
 export const PRIORITIES = ["Low", "Medium", "High", "Urgent"];
+// Project.project_type's options; a sign-off template may be for one of them
+export const PROJECT_TYPES = [
+  "ERP Implementation",
+  "Mobile App",
+  "Website",
+  "Content Calendar",
+  "Support",
+  "Other",
+];
+
+/** The project types to pick from, after `blank` (e.g. "Not set"). */
+export function projectTypeOptions(blank: string) {
+  return [
+    { label: blank, value: "" },
+    ...PROJECT_TYPES.map((t) => ({ label: __(t), value: t })),
+  ];
+}
 
 export function categoryOptions() {
   return CATEGORIES.map((c) => ({ label: __(c), value: c }));

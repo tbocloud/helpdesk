@@ -198,7 +198,10 @@ import { computed, reactive, ref, watch } from "vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideUserPlus from "~icons/lucide/user-plus";
 import LucideX from "~icons/lucide/x";
-import { PROJECT_ROLES } from "../taskMeta";
+import {
+  PROJECT_ROLES,
+  projectTypeOptions as projectTypeOptionsFor,
+} from "../taskMeta";
 
 const props = defineProps<{
   /** Set to edit an existing project; leave empty to create one. */
@@ -245,15 +248,7 @@ const userOptions = computed(() =>
   }))
 );
 
-const projectTypeOptions = computed(() => [
-  { label: __("Not set"), value: "" },
-  { label: __("ERP Implementation"), value: "ERP Implementation" },
-  { label: __("Mobile App"), value: "Mobile App" },
-  { label: __("Website"), value: "Website" },
-  { label: __("Content Calendar"), value: "Content Calendar" },
-  { label: __("Support"), value: "Support" },
-  { label: __("Other"), value: "Other" },
-]);
+const projectTypeOptions = computed(() => projectTypeOptionsFor(__("Not set")));
 
 const roleOptions = computed(() => [
   ...PROJECT_ROLES.map((role) => ({ label: __(role), value: role })),

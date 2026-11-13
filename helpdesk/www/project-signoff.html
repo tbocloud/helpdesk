@@ -19,6 +19,14 @@ page_title }} · {{ brand_name }}{% endblock %} {% block head %}
     color: var(--ink-9);
     font-weight: 600;
   }
+  /* the company's logo, so the customer knows whose page this is */
+  .brand-logo {
+    display: block;
+    height: 28px;
+    width: auto;
+    max-width: 140px;
+    object-fit: contain;
+  }
   .brandbar .grow + .link-btn {
     min-height: 44px;
   }
@@ -336,6 +344,15 @@ page_title }} · {{ brand_name }}{% endblock %} {% block head %}
     .choice span {
       width: 100%;
       justify-content: center;
+      min-height: 48px;
+      font-size: 15px;
+    }
+    /* on a phone the main buttons are full width and easy to hit */
+    .btn.primary {
+      width: 100%;
+      justify-content: center;
+      height: 48px;
+      font-size: 15px;
     }
   }
   @media (prefers-reduced-motion: reduce) {
@@ -357,6 +374,7 @@ page_title }} · {{ brand_name }}{% endblock %} {% block head %}
     const app = document.getElementById("app");
     const live = document.getElementById("live");
     const BRAND = {{ brand_name|tojson }};
+    const LOGO = {{ (brand_logo or "")|tojson }};
     const { esc, toast } = portalKit;
     const call = portalKit.api("/api/method/helpdesk.api.signoff_portal.", DATA.csrf_token);
     const icon = portalKit.iconSet({
@@ -396,7 +414,10 @@ page_title }} · {{ brand_name }}{% endblock %} {% block head %}
     }
 
     function brandBar(extra) {
-      return `<div class="brandbar"><b>${esc(BRAND)}</b><span class="grow">${esc(W.title)}</span>${extra || ""}</div>`;
+      const mark = LOGO
+        ? `<img class="brand-logo" src="${esc(LOGO)}" alt="${esc(BRAND)}">`
+        : `<b>${esc(BRAND)}</b>`;
+      return `<div class="brandbar">${mark}<span class="grow">${esc(W.title)}</span>${extra || ""}</div>`;
     }
 
     // ------------------------------------------------------------ states --
@@ -516,7 +537,7 @@ page_title }} · {{ brand_name }}{% endblock %} {% block head %}
         html += `<section class="card done-card" aria-labelledby="h-signed">
           <div class="head">${icon("badge")}<div>
             <h2 id="h-signed">${esc(W.signed_heading)}</h2>
-            <p class="muted">${esc({{ _("Signed by {0}, {1} on {2}. Thank you.")|tojson }}.replace("{0}", signed.name).replace("{1}", signed.designation).replace("{2}", signed.on))}</p>
+            <p class="muted">${esc({{ _("Signed by {0}, {1} on {2}. A copy is in your email.")|tojson }}.replace("{0}", signed.name).replace("{1}", signed.designation).replace("{2}", signed.on))}</p>
           </div></div>
           ${signed.has_pdf ? `<a class="btn" href="/api/method/helpdesk.api.signoff_portal.download_pdf?token=${encodeURIComponent(DATA.token)}">${icon("download")} {{ _("Download the signed record") }}</a>` : ""}
         </section>`;
@@ -777,7 +798,7 @@ page_title }} · {{ brand_name }}{% endblock %} {% block head %}
             view = await call("sign", { token: DATA.token, full_name: name, designation, confirm: 1 });
             render();
             window.scrollTo({ top: 0 });
-            say(W.signed_heading);
+            say(`${W.signed_heading}. ${ {{ _("A copy is in your email.")|tojson }} }`);
           } catch (err) {
             msg.textContent = err.message;
             submit.disabled = false;

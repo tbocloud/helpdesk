@@ -12,8 +12,46 @@
       <h2 :id="titleId" class="text-base-medium text-ink-gray-9">
         {{ __("Documents") }}
       </h2>
+      <!-- the UAT sign-off, sent and followed from here (docs/project-signoff.md, From the lead) -->
+      <template v-if="chain.next?.action === 'uat' && uat.data?.project">
+        <Button
+          v-if="!uat.data.signoff && uat.data.can_send"
+          class="ml-auto"
+          variant="solid"
+          :label="__('Send for sign-off')"
+          @click="showSend = true"
+        >
+          <template #prefix>
+            <LucideSend class="size-4" aria-hidden="true" />
+          </template>
+        </Button>
+        <Button
+          v-else-if="uat.data.signoff && uat.data.can_open"
+          class="ml-auto"
+          variant="solid"
+          :label="__('Open sign-off')"
+          :route="{
+            name: 'TaskySignoff',
+            params: {
+              projectId: uat.data.project,
+              signoffId: uat.data.signoff.name,
+            },
+          }"
+        >
+          <template #prefix>
+            <LucideArrowRight class="size-4" aria-hidden="true" />
+          </template>
+        </Button>
+        <p v-else class="ml-auto text-sm text-ink-gray-6">
+          {{
+            uat.data.signoff
+              ? __("UAT sign-off: {0}", uatLabel)
+              : __("The project team sends the UAT sign-off")
+          }}
+        </p>
+      </template>
       <Button
-        v-if="canWrite && chain.next && !deliveryStep(chain.next.action)"
+        v-else-if="canWrite && chain.next && !deliveryStep(chain.next.action)"
         class="ml-auto"
         variant="solid"
         :label="chain.next.label"
@@ -64,7 +102,7 @@
         >
           <span class="flex min-w-0 items-center gap-1.5">
             <LucideCircleCheck
-              v-if="step.done"
+              v-if="step.done || (step.document_type === 'UAT' && uatSigned)"
               class="size-4 shrink-0 text-success"
               :aria-label="__('Done')"
             />
@@ -80,7 +118,33 @@
               >{{ step.label }}</span
             >
           </span>
-          <span class="flex min-w-0 flex-wrap items-center gap-1.5">
+          <span
+            v-if="step.document_type === 'UAT' && uat.data?.signoff"
+            class="flex min-w-0 flex-col gap-1"
+          >
+            <TaskyBadge
+              :label="uatLabel"
+              :tone="uatMeta.tone"
+              :icon="uatMeta.icon"
+              class="self-start"
+            />
+            <span
+              v-if="uatSigned"
+              class="truncate text-xs text-ink-gray-6"
+              :title="uatSigner"
+              >{{ uatSigner }}</span
+            >
+            <a
+              v-if="uatSigned && uat.data.signoff.has_pdf"
+              :href="pdfUrl"
+              class="inline-flex min-h-[24px] items-center gap-1 self-start rounded text-xs font-medium text-ink-gray-8 underline decoration-outline-gray-3 underline-offset-2 hover:text-ink-gray-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+              @click.stop
+            >
+              <LucideDownload class="size-3.5" aria-hidden="true" />
+              {{ __("Signed PDF") }}
+            </a>
+          </span>
+          <span v-else class="flex min-w-0 flex-wrap items-center gap-1.5">
             <TaskyBadge
               :label="step.status_label || __('Not started')"
               :tone="step.status ? proposalTone(step.status) : 'neutral'"
@@ -95,6 +159,14 @@
       </li>
     </ol>
   </section>
+  <SignoffFormDialog
+    v-if="uat.data?.project && uat.data.can_send"
+    v-model:open="showSend"
+    :project-id="uat.data.project"
+    uat
+    :lead="leadId"
+    @saved="uat.reload()"
+  />
 </template>
 
 <script setup lang="ts">
@@ -102,12 +174,17 @@ import TaskyBadge from "@/components/TaskyBadge.vue";
 import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
+import SignoffFormDialog from "@/pages/tasky/components/SignoffFormDialog.vue";
+import { signoffStatusMeta } from "@/pages/tasky/signoffMeta";
+import { useDocumentVisibility, useIntervalFn } from "@vueuse/core";
 import { Button, createResource, toast } from "frappe-ui";
-import { computed, useId } from "vue";
+import { computed, ref, useId, watch } from "vue";
 import { useRouter } from "vue-router";
 import LucideArrowRight from "~icons/lucide/arrow-right";
 import LucideCircleCheck from "~icons/lucide/circle-check";
+import LucideDownload from "~icons/lucide/download";
 import LucidePlus from "~icons/lucide/plus";
+import LucideSend from "~icons/lucide/send";
 import {
   proposalTone,
   type DocumentChain,
@@ -134,6 +211,9 @@ function deliveryStep(action?: string) {
 }
 
 function opens(step: DocumentStep) {
+  // the UAT step holds its own Signed PDF link once the hub has its sign-off, and the
+  // header's Open sign-off opens it
+  if (step.document_type === "UAT" && uat.data?.signoff) return false;
   return (
     !!step.name &&
     !(authStore.isSalesEmployee && DELIVERY_TYPES.has(step.document_type))
@@ -157,6 +237,68 @@ function stepRoute(step: DocumentStep) {
     params: { leadId: props.leadId, proposalId: step.name },
   };
 }
+
+// ---------- the UAT sign-off, from the hub (helpdesk.api.project_signoff.get_lead_signoff) ----------
+
+interface LeadSignoff {
+  project: string | null;
+  signoff: null | {
+    name: string;
+    status: string;
+    /** Sent turns Viewed once the client opened the link with their code */
+    customer_status: string;
+    signer_name?: string | null;
+    signer_designation?: string | null;
+    has_pdf: boolean;
+  };
+  can_send: boolean;
+  can_open: boolean;
+}
+
+const hasUatStep = computed(
+  () => !!props.chain?.steps.some((s) => s.document_type === "UAT" && !!s.name)
+);
+const uat = createResource<LeadSignoff>({
+  url: "helpdesk.api.project_signoff.get_lead_signoff",
+  makeParams: () => ({ lead: props.leadId }),
+  onError() {},
+});
+watch(
+  () => [props.leadId, hasUatStep.value],
+  () => hasUatStep.value && uat.reload(),
+  { immediate: true }
+);
+
+const uatStatus = computed(() => uat.data?.signoff?.customer_status || "");
+const uatMeta = computed(() => signoffStatusMeta(uatStatus.value));
+const uatLabel = computed(() => __(uatMeta.value.label));
+const uatSigned = computed(() => uat.data?.signoff?.status === "Signed");
+const uatSigner = computed(() => {
+  const s = uat.data?.signoff;
+  return s?.signer_name
+    ? __("By {0}, {1}", s.signer_name, s.signer_designation || "")
+    : "";
+});
+const pdfUrl = computed(
+  () =>
+    `/api/method/helpdesk.api.project_signoff.download_lead_signoff_pdf?lead=${encodeURIComponent(
+      props.leadId
+    )}`
+);
+const showSend = ref(false);
+
+// live while the lead is on screen: the client answers and signs on their side
+const LIVE_EVERY = 30_000;
+const visibility = useDocumentVisibility();
+useIntervalFn(() => {
+  if (
+    visibility.value === "visible" &&
+    uat.data?.signoff &&
+    !uatSigned.value &&
+    !uat.loading
+  )
+    uat.reload();
+}, LIVE_EVERY);
 
 function isNext(step: DocumentStep) {
   return props.chain?.next?.document_type === step.document_type;
