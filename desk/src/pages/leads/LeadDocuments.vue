@@ -158,15 +158,16 @@
         </component>
       </li>
     </ol>
+    <!-- inside the one root, so the page's grid class (col-span) reaches the section -->
+    <SignoffFormDialog
+      v-if="uat.data?.project && uat.data.can_send"
+      v-model:open="showSend"
+      :project-id="uat.data.project"
+      uat
+      :lead="leadId"
+      @saved="uat.reload()"
+    />
   </section>
-  <SignoffFormDialog
-    v-if="uat.data?.project && uat.data.can_send"
-    v-model:open="showSend"
-    :project-id="uat.data.project"
-    uat
-    :lead="leadId"
-    @saved="uat.reload()"
-  />
 </template>
 
 <script setup lang="ts">
