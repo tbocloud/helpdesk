@@ -1,0 +1,321 @@
+{
+	"actions": [],
+	"autoname": "field:source_name",
+	"creation": "2026-11-12 12:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"source_name",
+		"enabled",
+		"column_break_name",
+		"company_label",
+		"connection_section",
+		"use_crm_connection",
+		"site_url",
+		"api_key",
+		"api_secret",
+		"column_break_connection",
+		"lead_doctype",
+		"currency",
+		"exchange_rate",
+		"mapping_section",
+		"company_field",
+		"branch_field",
+		"department_field",
+		"team_field",
+		"employee_field",
+		"owner_field",
+		"mapping_column",
+		"status_field",
+		"source_field",
+		"expected_revenue_field",
+		"won_value_field",
+		"created_field",
+		"closing_date_field",
+		"status_section",
+		"status_map",
+		"sync_section",
+		"sync_every",
+		"last_sync_status",
+		"last_synced_on",
+		"last_full_sync_on",
+		"column_break_sync",
+		"leads_synced",
+		"last_error",
+		"sync_cursor"
+	],
+	"fields": [
+		{
+			"description": "The company or site these leads come from, e.g. TBO India.",
+			"fieldname": "source_name",
+			"fieldtype": "Data",
+			"in_list_view": 1,
+			"label": "Name",
+			"reqd": 1,
+			"unique": 1
+		},
+		{
+			"default": "1",
+			"fieldname": "enabled",
+			"fieldtype": "Check",
+			"in_list_view": 1,
+			"label": "Enabled"
+		},
+		{
+			"fieldname": "column_break_name",
+			"fieldtype": "Column Break"
+		},
+		{
+			"description": "Leads with no company (or no company field mapped) are counted under this company.",
+			"fieldname": "company_label",
+			"fieldtype": "Data",
+			"label": "Company for leads without one"
+		},
+		{
+			"fieldname": "connection_section",
+			"fieldtype": "Section Break",
+			"label": "Connection"
+		},
+		{
+			"description": "Read the leads with the site URL and API key in Settings → CRM.",
+			"fieldname": "use_crm_connection",
+			"fieldtype": "Check",
+			"label": "Use the CRM connection"
+		},
+		{
+			"depends_on": "eval:!doc.use_crm_connection",
+			"fieldname": "site_url",
+			"fieldtype": "Data",
+			"label": "Site URL"
+		},
+		{
+			"depends_on": "eval:!doc.use_crm_connection",
+			"fieldname": "api_key",
+			"fieldtype": "Data",
+			"label": "API key"
+		},
+		{
+			"depends_on": "eval:!doc.use_crm_connection",
+			"fieldname": "api_secret",
+			"fieldtype": "Password",
+			"label": "API secret"
+		},
+		{
+			"fieldname": "column_break_connection",
+			"fieldtype": "Column Break"
+		},
+		{
+			"default": "Lead",
+			"description": "Lead on ERPNext, CRM Lead on Frappe CRM.",
+			"fieldname": "lead_doctype",
+			"fieldtype": "Data",
+			"label": "Lead document type",
+			"reqd": 1
+		},
+		{
+			"fieldname": "currency",
+			"fieldtype": "Link",
+			"label": "Currency",
+			"options": "Currency",
+			"reqd": 1
+		},
+		{
+			"default": "1",
+			"description": "What one of this currency is worth in the reporting currency.",
+			"fieldname": "exchange_rate",
+			"fieldtype": "Float",
+			"label": "Rate to the reporting currency"
+		},
+		{
+			"fieldname": "mapping_section",
+			"fieldtype": "Section Break",
+			"label": "Field mapping"
+		},
+		{
+			"description": "The lead field that holds the company.",
+			"fieldname": "company_field",
+			"fieldtype": "Data",
+			"label": "Company"
+		},
+		{
+			"description": "The lead field that holds the branch.",
+			"fieldname": "branch_field",
+			"fieldtype": "Data",
+			"label": "Branch"
+		},
+		{
+			"description": "The lead field that holds the department.",
+			"fieldname": "department_field",
+			"fieldtype": "Data",
+			"label": "Department"
+		},
+		{
+			"description": "The lead field that holds the team.",
+			"fieldname": "team_field",
+			"fieldtype": "Data",
+			"label": "Team"
+		},
+		{
+			"description": "The lead field that holds the employee.",
+			"fieldname": "employee_field",
+			"fieldtype": "Data",
+			"label": "Employee"
+		},
+		{
+			"default": "lead_owner",
+			"description": "The lead field that holds the lead owner.",
+			"fieldname": "owner_field",
+			"fieldtype": "Data",
+			"label": "Lead owner"
+		},
+		{
+			"fieldname": "mapping_column",
+			"fieldtype": "Column Break"
+		},
+		{
+			"default": "status",
+			"description": "The lead field that holds the lead status.",
+			"fieldname": "status_field",
+			"fieldtype": "Data",
+			"label": "Lead status",
+			"reqd": 1
+		},
+		{
+			"default": "source",
+			"description": "The lead field that holds the lead source.",
+			"fieldname": "source_field",
+			"fieldtype": "Data",
+			"label": "Lead source"
+		},
+		{
+			"description": "The lead field that holds the expected revenue.",
+			"fieldname": "expected_revenue_field",
+			"fieldtype": "Data",
+			"label": "Expected revenue"
+		},
+		{
+			"description": "The lead field that holds the won sales value.",
+			"fieldname": "won_value_field",
+			"fieldtype": "Data",
+			"label": "Won sales value"
+		},
+		{
+			"default": "creation",
+			"description": "The lead field that holds the lead creation date.",
+			"fieldname": "created_field",
+			"fieldtype": "Data",
+			"label": "Lead creation date",
+			"reqd": 1
+		},
+		{
+			"description": "The lead field that holds the closing date.",
+			"fieldname": "closing_date_field",
+			"fieldtype": "Data",
+			"label": "Closing date"
+		},
+		{
+			"fieldname": "status_section",
+			"fieldtype": "Section Break",
+			"label": "Status mapping"
+		},
+		{
+			"fieldname": "status_map",
+			"fieldtype": "Table",
+			"label": "Status mapping",
+			"options": "HD CRM Status Map"
+		},
+		{
+			"fieldname": "sync_section",
+			"fieldtype": "Section Break",
+			"label": "Sync"
+		},
+		{
+			"default": "Hourly",
+			"fieldname": "sync_every",
+			"fieldtype": "Select",
+			"label": "Sync every",
+			"options": "15 minutes\nHourly\nEvery 6 hours\nDaily"
+		},
+		{
+			"fieldname": "last_sync_status",
+			"fieldtype": "Select",
+			"label": "Last sync",
+			"options": "\nOK\nFailed",
+			"read_only": 1
+		},
+		{
+			"fieldname": "last_synced_on",
+			"fieldtype": "Datetime",
+			"label": "Last synced on",
+			"read_only": 1
+		},
+		{
+			"fieldname": "last_full_sync_on",
+			"fieldtype": "Datetime",
+			"label": "Last full sync on",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_sync",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "leads_synced",
+			"fieldtype": "Int",
+			"label": "Leads copied",
+			"read_only": 1
+		},
+		{
+			"fieldname": "last_error",
+			"fieldtype": "Small Text",
+			"label": "Last error",
+			"read_only": 1
+		},
+		{
+			"description": "The newest `modified` copied, on the source's clock.",
+			"fieldname": "sync_cursor",
+			"fieldtype": "Data",
+			"hidden": 1,
+			"label": "Sync cursor",
+			"read_only": 1
+		}
+	],
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-11-12 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD CRM Source",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "System Manager",
+			"share": 1,
+			"write": 1
+		},
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent Manager",
+			"share": 1,
+			"write": 1
+		}
+	],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": [],
+	"title_field": "source_name",
+	"track_changes": 1
+}

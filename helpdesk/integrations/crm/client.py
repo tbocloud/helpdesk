@@ -302,6 +302,54 @@ class CRMClient:
         )
         return (data or {}).get("data") or []
 
+    def get_page(
+        self,
+        doctype: str,
+        fields: list[str],
+        filters=None,
+        order_by: str = "modified asc, name asc",
+        start: int = 0,
+        page_length: int = 500,
+    ) -> list[dict]:
+        """One page of a list, in a fixed order, for reading a long list in parts. Unlike
+        `get_list`, a 404 raises: an empty page would read as "no records", and a sync
+        would then drop every copy it holds."""
+        data = self.request(
+            "GET",
+            f"/api/resource/{quote(doctype)}",
+            params={
+                "fields": json.dumps(fields),
+                "filters": json.dumps(filters or []),
+                "order_by": order_by,
+                "limit_start": start,
+                "limit_page_length": page_length,
+            },
+        )
+        if data is None:
+            raise CRMError(
+                _("The CRM site has no {0}, or its API user may not read it.").format(
+                    doctype
+                ),
+                404,
+            )
+        return data.get("data") or []
+
+    def doctype_fields(self, doctype: str) -> list[dict]:
+        """The fields of `doctype` on the CRM site, its custom fields included:
+        [{fieldname, label, fieldtype, options}]. Empty when the site has no such doctype."""
+        data = self.request(
+            "GET",
+            "/api/method/frappe.desk.form.load.getdoctype",
+            params={"doctype": doctype},
+        )
+        docs = (data or {}).get("docs") or []
+        meta = next((d for d in docs if d.get("name") == doctype), None)
+        return [
+            {k: f.get(k) for k in ("fieldname", "label", "fieldtype", "options")}
+            for f in (meta or {}).get("fields") or []
+            if f.get("fieldname")
+        ]
+
     def get_doc(self, doctype: str, name: str) -> dict | None:
         """The document, or None when it doesn't exist (404)."""
         data = self.request("GET", f"/api/resource/{quote(doctype)}/{quote(name)}")

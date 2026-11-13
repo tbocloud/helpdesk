@@ -14,6 +14,7 @@ from helpdesk.content_team import (
     is_sales_bd_role,
     is_sales_employee,
 )
+from helpdesk.crm_dashboard.report import open_dashboards
 from helpdesk.helpdesk.doctype.hd_customer.hd_customer import can_set_ticket_owner
 from helpdesk.integrations.crm.leads import can_use_lead_bank, can_use_leads
 from helpdesk.tasky.permissions import is_project_manager as tasky_is_project_manager
@@ -108,6 +109,8 @@ def get_user():
         "can_use_leads": can_use_leads(current_user),
         # Add a lead and My leads: every active agent while Leads is on (docs/lead-bank.md)
         "can_use_lead_bank": can_use_lead_bank(current_user),
+        # CRM dashboards: someone who may open at least one (docs/crm-dashboard.md)
+        "can_view_crm_dashboards": bool(open_dashboards(current_user)),
         # lets the frontend skip call-integration checks when telephony isn't installed
         "telephony_installed": "telephony" in frappe.get_installed_apps(),
         "user_image": user_image,

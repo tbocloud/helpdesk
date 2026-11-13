@@ -60,6 +60,8 @@ scheduler_events = {
             # the async stand-up: drafts, the reminder and the summaries (docs/standup.md)
             "helpdesk.standup.run",
             "helpdesk.helpdesk.doctype.hd_meeting.hd_meeting.sync_with_outlook",
+            # each CRM dashboard data source whose sync interval has passed (docs/crm-dashboard.md)
+            "helpdesk.crm_dashboard.sync.sync_due_sources",
         ],
         "*/5 * * * *": [
             # pauses every running timer once the work day (or the morning, with a lunch
@@ -132,6 +134,8 @@ scheduler_events = {
         "helpdesk.helpdesk.doctype.hd_recurring_task.hd_recurring_task.create_recurring_tasks",
         # nightly: the lead copy against the ERP's index of every lead
         "helpdesk.lead_mirror.check_drift",
+        # nightly: every lead of every CRM dashboard source, which drops deleted ones
+        "helpdesk.crm_dashboard.sync.full_sync_all",
     ],
     "hourly": [
         "helpdesk.triage.fail_stuck_triages",

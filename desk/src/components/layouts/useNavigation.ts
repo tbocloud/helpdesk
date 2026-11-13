@@ -99,6 +99,7 @@ export function useNavigation() {
       (!item.overviewOnly || authStore.canSeeOverview) &&
       (!item.adoptionOnly || authStore.canSeeAdoption) &&
       (!item.customerReportOnly || authStore.canSeeCustomerReport) &&
+      (!item.crmDashboardsOnly || authStore.canViewCrmDashboards) &&
       (!authStore.isContentTeam || CONTENT_TEAM_ROUTES.has(to))
     );
   }
