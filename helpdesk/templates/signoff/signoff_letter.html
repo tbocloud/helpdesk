@@ -1,24 +1,54 @@
 {% extends "helpdesk/templates/signoff/letter_base.html" %} {% block doc_type
-%}{{ kind_title|e }}<br />{{ doc.name|e }}{% endblock %} {% block body %} {%-
-set heading = _("{0}: sign-off") if doc.signoff_type == "UAT" else _("{0}
-training: sign-off") %}
-<h1>{{ heading.format(doc.module_title)|e }}</h1>
-<p class="lede">{{ lede|e }}</p>
+%}{{ kind_title|e }}<br />{{ (doc.name or "")|e }}<br />{{ date|e }}{% endblock
+%} {% block body %} {%- set heading = _("{0}: sign-off") if doc.signoff_type ==
+"UAT" else _("{0} training: sign-off") %}
+<h1>{{ heading.format(doc.label())|e }}</h1>
 
+<h2>{{ _("Customer") }}</h2>
 <table class="facts">
   <tr>
     <th>{{ _("Customer") }}</th>
     <td>{{ customer_name|e }}</td>
   </tr>
+  {% if address %}
+  <tr>
+    <th>{{ _("Address") }}</th>
+    <td>{{ address|e|replace("\n", "<br />"|safe) }}</td>
+  </tr>
+  {% endif %}
+  <tr>
+    <th>{{ _("Contact person") }}</th>
+    <td>{{ contact_name|e }}</td>
+  </tr>
+  {% if contact_designation %}
+  <tr>
+    <th>{{ _("Designation") }}</th>
+    <td>{{ contact_designation|e }}</td>
+  </tr>
+  {% endif %}
+  <tr>
+    <th>{{ _("Email") }}</th>
+    <td>{{ contact_email|e }}</td>
+  </tr>
+</table>
+
+<h2>{{ _("Project") }}</h2>
+<table class="facts">
   <tr>
     <th>{{ _("Project") }}</th>
     <td>{{ (doc.project_name or doc.project)|e }}</td>
   </tr>
+  {% if project_manager %}
+  <tr>
+    <th>{{ _("Project manager") }}</th>
+    <td>{{ project_manager|e }}</td>
+  </tr>
+  {% endif %} {% if doc.module_title %}
   <tr>
     <th>{{ _("Module") }}</th>
     <td>{{ doc.module_title|e }}</td>
   </tr>
-  {% if training_date %}
+  {% endif %} {% if training_date %}
   <tr>
     <th>{{ _("Training date") }}</th>
     <td>{{ training_date|e }}</td>
@@ -55,37 +85,49 @@ training: sign-off") %}
 </table>
 {% endfor %}
 
-<div class="signature">
-  <p>{{ confirmation|e }}</p>
-  <table class="facts" style="margin: 0">
-    <tr>
-      <th>{{ _("Signed by") }}</th>
-      <td>{{ doc.signer_name|e }}</td>
-    </tr>
-    <tr>
-      <th>{{ _("Designation") }}</th>
-      <td>{{ doc.signer_designation|e }}</td>
-    </tr>
-    <tr>
-      <th>{{ _("Email") }}</th>
-      <td>{{ doc.signer_email|e }}</td>
-    </tr>
-    <tr>
-      <th>{{ _("Date and time") }}</th>
-      <td>{{ signed_on|e }}</td>
-    </tr>
-    <tr>
-      <th>{{ _("Verified by") }}</th>
-      <td>
-        {{ _("Secure link and a one-time code emailed to the signatory") }}
-      </td>
-    </tr>
-  </table>
-</div>
+<h2>{{ _("Declaration") }}</h2>
+<p>{{ declaration|e }}</p>
 
-<p class="foot">
-  {{ _("Audit reference") }}: <span class="mono">{{ doc.audit_ref|e }}</span
-  ><br />
-  {{ _("Signed from IP address {0}.").format(doc.signer_ip or "-")|e }}
-</p>
+<table class="signatures">
+  <tr>
+    <td>
+      <div class="sig-head">{{ _("For the customer") }}</div>
+      <table class="facts">
+        <tr>
+          <th>{{ _("Name") }}</th>
+          <td>{{ (doc.signer_name if signed else "")|e }}</td>
+        </tr>
+        <tr>
+          <th>{{ _("Designation") }}</th>
+          <td>{{ (doc.signer_designation if signed else "")|e }}</td>
+        </tr>
+        <tr>
+          <th>{{ _("Date") }}</th>
+          <td>{{ signed_on|e }}</td>
+        </tr>
+        <tr>
+          <th>{{ _("Acceptance") }}</th>
+          <td>{{ acceptance|e }}</td>
+        </tr>
+      </table>
+    </td>
+    <td>
+      <div class="sig-head">{{ _("For {0}").format(brand.name)|e }}</div>
+      <table class="facts">
+        <tr>
+          <th>{{ _("Name") }}</th>
+          <td>{{ tbo_name|e }}</td>
+        </tr>
+        <tr>
+          <th>{{ _("Designation") }}</th>
+          <td>{{ tbo_designation|e }}</td>
+        </tr>
+        <tr>
+          <th>{{ _("Date") }}</th>
+          <td>{{ date|e }}</td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
 {% endblock %}

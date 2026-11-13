@@ -272,7 +272,7 @@ watch(
 const uatStatus = computed(() => uat.data?.signoff?.customer_status || "");
 const uatMeta = computed(() => signoffStatusMeta(uatStatus.value));
 const uatLabel = computed(() => __(uatMeta.value.label));
-const uatSigned = computed(() => uat.data?.signoff?.status === "Signed");
+const uatSigned = computed(() => uat.data?.signoff?.status === "Signed Off");
 const uatSigner = computed(() => {
   const s = uat.data?.signoff;
   return s?.signer_name

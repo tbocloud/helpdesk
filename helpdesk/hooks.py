@@ -254,7 +254,11 @@ doc_events = {
         ],
     },
     "Communication": {
-        "after_insert": "helpdesk.chatwoot_bridge.on_communication_insert",
+        "after_insert": [
+            "helpdesk.chatwoot_bridge.on_communication_insert",
+            # a customer's reply to a sign-off's mail (docs/project-signoff.md)
+            "helpdesk.helpdesk.doctype.hd_project_signoff.hd_project_signoff.on_communication_insert",
+        ],
     },
     # customer health (helpdesk/customer_health.py) is cached for 10 minutes; a
     # manager's change to these shows at once, tickets and tasks within the 10

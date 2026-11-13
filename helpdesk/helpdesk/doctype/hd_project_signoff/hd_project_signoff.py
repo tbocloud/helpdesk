@@ -1,22 +1,25 @@
 # Copyright (c) 2026, Frappe Technologies and contributors
 # For license information, please see license.txt
 
-"""A customer's sign-off that training on one module of a project is complete, or (a UAT
-sign-off) that they tested the system against its SRS and accept it.
+"""A customer's sign-off for one stage of a project: a module's training, or (a UAT sign-off)
+that they tested the system against its SRS and accept it.
 
-The customer opens a tokenised link, proves they are the named signatory with an
-emailed code, answers every question Done / Not clear / Escalate, and signs once
-everything is Done. Not clear and Escalate become clarification tasks for the
-trainer. Signing saves a PDF on the project; when every sign-off of a project is
-signed, a project completion letter is generated. A UAT's items are the SRS's test cases
-on the ERP site, answered Pass / Fail / Blocker; a Fail is an open issue (a task to fix it), and
-signing is recorded on the ERP site's plan, which starts the warranty. See
+The sign-off goes out as a mail from the app (a Communication on the sign-off, so the customer's
+reply lands in the same thread), with the sign-off document attached and, when it has questions,
+a link to the questions page. The customer accepts by replying; our coordinator then marks it
+signed off (or changes requested). Statuses follow TBO's Sign-off requirements: Draft, Sent,
+Changes Requested, Signed Off, Cancelled, set only by those actions.
+
+On the questions page the customer answers Done / Not clear / Escalate; Not clear and Escalate
+become clarification tasks for the trainer. A UAT's items are the SRS's test cases on the ERP
+site (Pass / Fail / Blocker), and its signing off is recorded on the ERP site's plan, which
+starts the warranty. Marking signed off saves the signed PDF on the project; when every training
+sign-off of a project is signed off, a project completion letter is generated. See
 docs/project-signoff.md.
 """
 
 import base64
 import hashlib
-import json
 import re
 import secrets
 import shutil
@@ -30,6 +33,7 @@ from frappe.utils import (
     format_datetime,
     formatdate,
     get_datetime,
+    get_formatted_email,
     get_fullname,
     get_url,
     getdate,
@@ -39,11 +43,9 @@ from frappe.utils import (
 
 DRAFT = "Draft"
 SENT = "Sent"
-IN_PROGRESS = "In progress"
-NEEDS_CLARIFICATION = "Needs clarification"
-READY_TO_SIGN = "Ready to sign"
-SIGNED = "Signed"
-REOPENED = "Reopened"
+CHANGES_REQUESTED = "Changes Requested"
+SIGNED_OFF = "Signed Off"
+CANCELLED = "Cancelled"
 
 PENDING = "Pending"
 DONE = "Done"
@@ -52,22 +54,38 @@ ESCALATED = "Escalated"
 CUSTOMER_RESPONSES = (DONE, NOT_CLEAR, ESCALATED)
 NEEDS_FOLLOW_UP = (NOT_CLEAR, ESCALATED)
 
-# questions can be added, removed and reordered only while nobody is answering them
-EDITABLE_STATUSES = (DRAFT, REOPENED)
+# details, mail and questions change only before the mail goes out, or after the customer
+# asked for changes
+EDITABLE_STATUSES = (DRAFT, CHANGES_REQUESTED)
+CLOSED_STATUSES = (SIGNED_OFF, CANCELLED)
+# what can't change while the customer has the mail (questions are checked on their own)
+LOCKED_FIELDS = (
+    "module_title",
+    "training_date",
+    "trainer",
+    "signatory_contact",
+    "customer_address",
+    "cc_emails",
+    "email_subject",
+    "email_body",
+    "attach_pdf",
+)
+# the words TBO Smart's record_uat knows for a UAT's state
+ERP_STATES = {SIGNED_OFF: "Signed", CANCELLED: "Reopened"}
 LINK_TTL_DAYS = 30
 TASK_DONE = ("Completed", "Cancelled")
 MAX_TEXT = 1000
-MAX_NAME = 140
 PORTAL_PATH = "/project-signoff"
 TRAINING = "Training"
 UAT = "UAT"
+DOCUMENT_TEMPLATE = "helpdesk/templates/signoff/signoff_letter.html"
 
 # a mail's placeholders, {{ name }}: filled from the sign-off, never run as a template, so a
 # template's text can't execute anything (docs/project-signoff.md, Mail)
 PLACEHOLDER = re.compile(r"{{\s*([a-zA-Z_]+)\s*}}")
 LINK_PLACEHOLDER = "sign_off_link"
-# left blank when unknown rather than holding the mail back
-OPTIONAL_PLACEHOLDERS = ("contact_salutation", "sender_designation")
+# left blank when unknown rather than holding the mail back (a missing address only warns)
+OPTIONAL_PLACEHOLDERS = ("sender_designation", "customer_address")
 REMINDER_AFTER_WORKING_DAYS = 2
 EMAIL_SPLIT = re.compile(r"[,;\s]+")
 
@@ -79,11 +97,16 @@ class HDProjectSignoff(Document):
 
     def validate(self):
         self.validate_project()
+        self.validate_module()
         self.validate_trainer()
         self.set_signatory()
+        self.validate_address()
         self.clean_items()
         self.clean_mail()
         self.prevent_locked_changes()
+
+    def on_trash(self):
+        self.prevent_deleting_signed_off()
 
     # --- validation ---
 
@@ -94,6 +117,12 @@ class HDProjectSignoff(Document):
                     "Set the customer on project {0} first; the signatory must be one of its contacts."
                 ).format(self.project_name or self.project)
             )
+
+    def validate_module(self):
+        """Only a training sign-off needs its module (TBO's Sign-off requirements, Record rules)."""
+        self.module_title = (self.module_title or "").strip()
+        if not self.is_uat() and not self.module_title:
+            frappe.throw(_("Name the module, e.g. Accounts."))
 
     def validate_trainer(self):
         from helpdesk.tasky.permissions import get_project_team
@@ -117,12 +146,7 @@ class HDProjectSignoff(Document):
             return
         if not self.signatory_contact:
             frappe.throw(_("Pick who signs off for the customer."))
-        contact = frappe.db.get_value(
-            "Contact",
-            self.signatory_contact,
-            ["full_name", "first_name", "last_name", "email_id"],
-            as_dict=True,
-        )
+        contact = self.contact_details(self.signatory_contact)
         if not contact or not self.is_customer_contact(self.signatory_contact):
             frappe.throw(
                 _("{0} isn't a contact of {1}. Add them to the customer first.").format(
@@ -132,15 +156,28 @@ class HDProjectSignoff(Document):
         if not contact.email_id:
             frappe.throw(
                 _(
-                    "{0} has no email address. Add one to the contact, so they can get the sign-off link."
+                    "{0} has no email address. Add one to the contact, so they can get the sign-off mail."
                 ).format(self.signatory_contact)
             )
         self.signatory_email = contact.email_id.strip().lower()
-        self.signatory_name = (
-            contact.full_name
-            or " ".join(n for n in (contact.first_name, contact.last_name) if n)
-            or self.signatory_email
+        self.signatory_name = contact.full_name
+
+    @staticmethod
+    def contact_details(contact: str) -> frappe._dict | None:
+        """A contact's full name, email and designation."""
+        row = frappe.db.get_value(
+            "Contact",
+            contact,
+            ["full_name", "first_name", "last_name", "email_id", "designation"],
+            as_dict=True,
         )
+        if row:
+            row.full_name = (
+                row.full_name
+                or " ".join(n for n in (row.first_name, row.last_name) if n)
+                or row.email_id
+            )
+        return row
 
     def is_customer_contact(self, contact: str) -> bool:
         return bool(
@@ -154,7 +191,27 @@ class HDProjectSignoff(Document):
             )
         )
 
+    def validate_address(self):
+        """The address is one of the customer's (linked to it, as Frappe's addresses are)."""
+        if not self.customer_address or not self.has_value_changed("customer_address"):
+            return
+        if not frappe.db.exists(
+            "Dynamic Link",
+            {
+                "parenttype": "Address",
+                "parent": self.customer_address,
+                "link_doctype": "HD Customer",
+                "link_name": self.customer,
+            },
+        ):
+            frappe.throw(
+                _("{0} isn't an address of {1}.").format(
+                    self.customer_address, self.customer
+                )
+            )
+
     def clean_items(self):
+        # questions are optional: a sign-off accepted by reply needs none
         rows = []
         for row in self.items:
             row.section = (row.section or "").strip()
@@ -163,24 +220,36 @@ class HDProjectSignoff(Document):
             row.response = row.response or PENDING
             if row.question:
                 rows.append(row)
-        # a draft made without a template starts empty; it needs questions before it is sent
-        if not rows and self.status != DRAFT:
-            frappe.throw(_("Add at least one question for the customer to answer."))
         self.items = rows
 
     def prevent_locked_changes(self):
-        """A signed sign-off only changes by being reopened; questions only change while editable."""
+        """Details, mail and questions change only in Draft or Changes Requested; a signed-off
+        or cancelled sign-off doesn't change at all. Actions pass `signoff_action`."""
         before = self.get_doc_before_save()
         if not before or self.flags.signoff_action:
             return
-        if before.status == SIGNED:
-            frappe.throw(_("This sign-off is signed. Reopen it to change it."))
-        if before.status not in EDITABLE_STATUSES and self.question_rows(
-            before
-        ) != self.question_rows(self):
+        if before.status in CLOSED_STATUSES:
+            frappe.throw(
+                _("This sign-off is {0}, so it can't be changed.").format(
+                    _(before.status).lower()
+                )
+            )
+        if before.status in EDITABLE_STATUSES:
+            return
+        if self.question_rows(before) != self.question_rows(self) or any(
+            before.get(field) != self.get(field) for field in LOCKED_FIELDS
+        ):
             frappe.throw(
                 _(
-                    "The customer is answering these questions, so they can't be changed now. Reopen the sign-off after it is signed, or revoke the link and start a new one."
+                    "The mail went out, so this sign-off is read-only. Mark changes requested to edit it again."
+                )
+            )
+
+    def prevent_deleting_signed_off(self):
+        if self.status == SIGNED_OFF:
+            frappe.throw(
+                _(
+                    "A signed-off sign-off can't be deleted. A System Manager can cancel it."
                 )
             )
 
@@ -250,9 +319,6 @@ class HDProjectSignoff(Document):
             "pending": responses.count(PENDING),
         }
 
-    def all_done(self) -> bool:
-        return bool(self.items) and all(row.response == DONE for row in self.items)
-
     def log_event(
         self,
         event: str,
@@ -279,27 +345,13 @@ class HDProjectSignoff(Document):
             },
         )
 
-    def refresh_status(self):
-        """Status follows the answers once the customer has the link; Draft and Signed are set explicitly."""
-        if self.status in (DRAFT, SIGNED):
-            return
-        responses = [row.response or PENDING for row in self.items]
-        if any(r in NEEDS_FOLLOW_UP for r in responses):
-            self.status = NEEDS_CLARIFICATION
-        elif self.all_done():
-            self.status = READY_TO_SIGN
-        elif any(r != PENDING for r in responses):
-            self.status = IN_PROGRESS
-        elif self.status != REOPENED:
-            self.status = SENT
-
     def project_lead(self) -> str | None:
         return frappe.db.get_value("Project", self.project, "project_lead")
 
     def helpdesk_path(self) -> str:
         return f"/projects/{self.project}/signoff/{self.name}"
 
-    # --- customer link ---
+    # --- customer link (the questions page) ---
 
     @staticmethod
     def hash_token(token: str) -> str:
@@ -314,130 +366,60 @@ class HDProjectSignoff(Document):
 
         Only the hash is stored; the token itself goes out in the email and nowhere else.
         """
-        if self.status == SIGNED:
-            frappe.throw(
-                _("This sign-off is signed. Reopen it to send the link again.")
-            )
-        if not self.items:
-            frappe.throw(
-                _("Add at least one question before sending it to the customer.")
-            )
+        if self.status in CLOSED_STATUSES:
+            frappe.throw(_("This sign-off is closed."))
         token = secrets.token_urlsafe(32)
         self.link_token_hash = self.hash_token(token)
         self.link_expires_on = add_days(now_datetime(), LINK_TTL_DAYS)
-        self.link_sent_on = now_datetime()
-        self.link_sent_by = (
-            frappe.session.user if frappe.session.user != "Guest" else None
-        )
-        if self.status == DRAFT:
-            self.status = SENT
         self.flags.signoff_action = True
         return token
 
-    def revoke_link(self):
+    def revoke_link(self, log: bool = True):
         if not self.link_token_hash:
-            frappe.throw(_("There is no open link to revoke."))
+            if log:
+                frappe.throw(_("There is no open link to revoke."))
+            return
         self.link_token_hash = None
         self.link_expires_on = None
         self.flags.signoff_action = True
-        self.log_event(_("Link revoked"))
+        if log:
+            self.log_event(_("Link revoked"))
 
     def link_is_open(self) -> bool:
         return bool(
             self.link_token_hash
-            and self.status != DRAFT
+            and self.status == SENT
             and self.link_expires_on
             and get_datetime(self.link_expires_on) > now_datetime()
         )
 
-    def send_link(self, resend: bool = False):
-        """Send (or resend) the link to the signatory; saves the sign-off. The sign-off's own
-        mail when it has one (its CC too), else the standard words. A link sent by hand starts
-        a new wait for the reminder."""
+    # --- sending (TBO's Sign-off requirements, Sending the sign-off mail) ---
+
+    def check_ready_to_send(self):
+        """Who it goes to, the mail and what the mail uses are complete."""
+        if not self.customer:
+            frappe.throw(_("This project has no customer."))
+        if not self.signatory_email:
+            frappe.throw(_("Pick who signs off for the customer."))
+        self.clean_emails(self.cc_emails)
+        if not self.email_subject or not self.mail_body_text():
+            frappe.throw(_("Write the mail's subject and message before sending it."))
         self.check_mail_ready()
-        token = self.issue_link()
-        self.reminder_sent_on = None
-        self.log_event(
-            _("Link resent") if resend else _("Link sent"),
-            detail=_("To {0}").format(self.signatory_email)
-            + (_("; CC {0}").format(self.cc_emails) if self.cc_emails else ""),
-        )
-        self.save(ignore_permissions=True)
-        if self.email_subject:
-            self.deliver(self.email_subject, self.mail_with_link(token), self.cc_list())
-            return
-        self.email_customer(
-            (
-                _("Please test and accept {0}")
-                if self.is_uat()
-                else _("Please confirm your {0} training")
-            ).format(self.module_title),
-            (
+        uses_link = LINK_PLACEHOLDER in PLACEHOLDER.findall(self.email_body or "")
+        if uses_link and not self.items:
+            frappe.throw(
                 _(
-                    "{0} has prepared {1} for {2}. Please run each test and tell us, one by one, whether it passes."
-                )
-                if self.is_uat()
-                else _(
-                    "{0} has finished your {1} training for {2}. Please go through the checklist and tell us, item by item, whether everything is clear."
-                )
-            ).format(
-                escape_html(
-                    get_fullname(self.trainer) if self.trainer else _("Your trainer")
-                ),
-                escape_html(self.module_title),
-                escape_html(self.project_name or self.project),
-            ),
-            token,
-        )
-
-    def email_customer(self, subject: str, intro: str, token: str):
-        days = LINK_TTL_DAYS
-        message = "".join(
-            [
-                f"<p>{_('Hello {0},').format(escape_html(self.signatory_name or ''))}</p>",
-                f"<p>{intro}</p>",
-                f'<p><a href="{self.link_url(token)}">{_("Open the sign-off")}</a></p>',
-                "<p>"
-                + _(
-                    "For your security we will email you a one-time code when you open it. The link works for {0} days and only for {1}."
-                ).format(days, escape_html(self.signatory_email))
-                + "</p>",
-            ]
-        )
-        frappe.sendmail(
-            recipients=[self.signatory_email],
-            subject=subject,
-            message=message,
-            reply_to=self.trainer or None,
-            reference_doctype=self.doctype,
-            reference_name=self.name,
-        )
-
-    # --- the mail (docs/project-signoff.md, Mail) ---
-
-    def deliver(self, subject: str, message: str, cc: list[str] | None = None):
-        """The sign-off's own mail to the signatory, in the thread of the sign-off; replies go
-        to whoever sent the link."""
-        frappe.sendmail(
-            recipients=[self.signatory_email],
-            cc=cc or None,
-            subject=subject,
-            message=message,
-            reply_to=self.link_sent_by or self.trainer or None,
-            reference_doctype=self.doctype,
-            reference_name=self.name,
-        )
-
-    def cc_list(self) -> list[str]:
-        return self.clean_emails(self.cc_emails)
+                    "The mail links to the questions page, but there are no questions. Add questions, or take {0} out of the mail."
+                ).format("{{ " + LINK_PLACEHOLDER + " }}")
+            )
 
     def check_mail_ready(self):
-        """A sign-off's own mail goes out only with every placeholder filled."""
-        if not self.email_subject:
-            return
+        """A mail goes out only with every placeholder filled."""
         left = {
             name
-            for name in PLACEHOLDER.findall(f"{self.email_subject} {self.email_body}")
+            for name in PLACEHOLDER.findall(
+                f"{self.email_subject or ''} {self.email_body or ''}"
+            )
             if name != LINK_PLACEHOLDER
         }
         if left:
@@ -447,28 +429,148 @@ class HDProjectSignoff(Document):
                 )
             )
 
-    def mail_with_link(self, token: str, reminder: bool = False) -> str:
-        """The mail's body with the customer's link where {{ sign_off_link }} is (or at the
-        end), and how the link works."""
-        url = self.link_url(token)
-        link = f'<a href="{url}">{escape_html(url)}</a>'
-        body = self.email_body or ""
-        if LINK_PLACEHOLDER in PLACEHOLDER.findall(body):
-            body = PLACEHOLDER.sub(
-                lambda m: link if m.group(1) == LINK_PLACEHOLDER else m.group(0), body
+    def snapshot_customer(self):
+        """What the mail and the document say about the customer, kept as it was when sent,
+        so a later change to the customer's records doesn't change what they got."""
+        contact = self.contact_details(self.signatory_contact)
+        self.signatory_name = contact.full_name if contact else self.signatory_name
+        self.signatory_designation = (contact.designation if contact else "") or ""
+        self.address_display = self.formatted_address()
+
+    def formatted_address(self) -> str:
+        if not self.customer_address:
+            return ""
+        from frappe.contacts.doctype.address.address import get_address_display
+
+        return get_address_display(self.customer_address) or ""
+
+    def send_mail(self, reminder: bool = False):
+        """Send the sign-off mail (or, `reminder`, the same mail again with "Reminder:"), save.
+
+        With questions, a new link to the questions page goes in (the old one stops working);
+        with Attach sign-off document, the document goes too. A reminder keeps the status
+        Sent; a first send (or one after changes were requested) makes it Sent."""
+        if self.status in CLOSED_STATUSES:
+            frappe.throw(_("This sign-off is closed."))
+        if reminder and self.status != SENT:
+            frappe.throw(_("Only a sent sign-off gets a reminder."))
+        if not reminder and self.status not in EDITABLE_STATUSES:
+            frappe.throw(
+                _(
+                    "The mail already went out. Send a reminder, or mark changes requested to change it."
+                )
             )
-        else:
-            body += f'<p><a href="{url}">{_("Open the sign-off")}</a></p>'
-        intro = (
-            "<p>"
-            + _(
-                "A gentle reminder: we haven't heard from you yet. The link below replaces the one we sent before."
-            )
-            + "</p>"
+        self.check_ready_to_send()
+        sender = (self.link_sent_by if reminder else None) or frappe.session.user
+        if not reminder:
+            self.snapshot_customer()
+        token = self.issue_link() if self.items else None
+        attachments = self.mail_attachments(fresh=not reminder)
+        self.record_sending(reminder, sender)
+        self.save(ignore_permissions=True)
+        subject = (
+            _("Reminder: {0}").format(self.email_subject)
             if reminder
-            else ""
+            else self.email_subject
         )
-        return intro + body + self.link_note()
+        self.deliver(
+            subject,
+            self.mail_with_link(token, reminder=reminder),
+            sender=sender,
+            cc=self.cc_list(),
+            attachments=attachments,
+        )
+
+    def record_sending(self, reminder: bool, sender: str):
+        resend = bool(self.link_sent_on)
+        self.flags.signoff_action = True
+        if reminder:
+            self.reminder_sent_on = now_datetime()
+            event = _("Reminder sent")
+        else:
+            self.status = SENT
+            self.link_sent_on = now_datetime()
+            self.link_sent_by = sender if sender != "Guest" else None
+            self.reminder_sent_on = None
+            self.remarks = None
+            event = _("Mail sent again") if resend else _("Mail sent")
+        self.log_event(
+            event,
+            detail=_("To {0}").format(self.signatory_email)
+            + (_("; CC {0}").format(self.cc_emails) if self.cc_emails else ""),
+        )
+
+    def mail_attachments(self, fresh: bool) -> list:
+        """The sign-off document as a File on the project: made anew for each send, the one
+        sent before for a reminder."""
+        if not self.attach_pdf:
+            return []
+        if fresh or not self.sent_pdf:
+            file_name, content = self.render_document(
+                self.document_context(), self.document_title()
+            )
+            self.sent_pdf = self.save_project_file(file_name, content).name
+        return [self.sent_pdf]
+
+    def deliver(
+        self,
+        subject: str,
+        message: str,
+        sender: str | None = None,
+        cc: list[str] | None = None,
+        attachments: list | None = None,
+    ):
+        """A mail to the signatory as a Communication on the sign-off, so it shows in the mail
+        history and the customer's reply lands in the same thread. It goes from the sender's
+        own email account when they have one, else the site's default."""
+        from frappe.core.doctype.communication.email import _make
+
+        sender = sender or self.link_sent_by or frappe.session.user
+        _make(
+            doctype=self.doctype,
+            name=self.name,
+            subject=subject,
+            content=message,
+            sender=get_formatted_email(sender),
+            sender_full_name=get_fullname(sender),
+            recipients=[self.signatory_email],
+            cc=cc or None,
+            attachments=attachments or None,
+            send_email=True,
+        )
+
+    def cc_list(self) -> list[str]:
+        return self.clean_emails(self.cc_emails)
+
+    def mail_with_link(self, token: str | None, reminder: bool = False) -> str:
+        """The mail's body with the questions page's link where {{ sign_off_link }} is (or at
+        the end) and how the link works; without questions, the body as written."""
+        body = self.email_body or ""
+        note = ""
+        if token:
+            url = self.link_url(token)
+            link = f'<a href="{url}">{escape_html(url)}</a>'
+            if LINK_PLACEHOLDER in PLACEHOLDER.findall(body):
+                body = PLACEHOLDER.sub(
+                    lambda m: link if m.group(1) == LINK_PLACEHOLDER else m.group(0),
+                    body,
+                )
+            else:
+                body += f'<p><a href="{url}">{_("Open the sign-off questions")}</a></p>'
+            note = self.link_note()
+        intro = ""
+        if reminder:
+            intro = (
+                "<p>"
+                + _("A gentle reminder: we haven't heard from you yet.")
+                + (
+                    " " + _("The link below replaces the one we sent before.")
+                    if token
+                    else ""
+                )
+                + "</p>"
+            )
+        return intro + body + note
 
     def link_note(self) -> str:
         return (
@@ -478,6 +580,8 @@ class HDProjectSignoff(Document):
             ).format(LINK_TTL_DAYS, escape_html(self.signatory_email))
             + "</p>"
         )
+
+    # --- the mail's words (docs/project-signoff.md, Mail) ---
 
     def template_mail(self) -> dict:
         """{subject, body, cc} of the sign-off's template, or the standard mail of its kind."""
@@ -535,7 +639,7 @@ class HDProjectSignoff(Document):
                 return "{{ " + LINK_PLACEHOLDER + " }}"
             value = values.get(name)
             if value:
-                return escape_html(value) if html else value
+                return escape_html(value).replace("\n", "<br>") if html else value
             if name in values and name in OPTIONAL_PLACEHOLDERS:
                 return ""
             missing.add(name)
@@ -554,11 +658,6 @@ class HDProjectSignoff(Document):
             if self.signatory_contact
             else None
         )
-        designation = None
-        if frappe.get_meta("Employee").has_field("designation"):
-            designation = frappe.db.get_value(
-                "Employee", {"user_id": sender, "status": "Active"}, "designation"
-            )
         if self.is_uat():
             # a UAT's modules are its tests' sections, from the SRS
             modules = ", ".join(
@@ -567,9 +666,12 @@ class HDProjectSignoff(Document):
         else:
             modules = self.module_title
         return {
-            "contact_salutation": contact.salutation if contact else "",
+            # "Dear Sir/Madam Asha Menon" when the salutation isn't known (the requirements)
+            "contact_salutation": (contact.salutation if contact else "")
+            or _("Sir/Madam"),
             "contact_name": self.signatory_name or "",
             "customer_name": self.customer_name() if self.customer else "",
+            "customer_address": self.formatted_address(),
             "project_name": self.project_name
             or frappe.db.get_value("Project", self.project, "project_name")
             or "",
@@ -579,9 +681,20 @@ class HDProjectSignoff(Document):
             else "",
             "trainer_name": get_fullname(self.trainer) if self.trainer else "",
             "sender_name": get_fullname(sender) if sender != "Guest" else "",
-            "sender_designation": designation or "",
+            "sender_designation": self.employee_designation(sender),
             "company_name": get_config().brand_name or "TBO",
         }
+
+    @staticmethod
+    def employee_designation(user: str | None) -> str:
+        if not user or not frappe.get_meta("Employee").has_field("designation"):
+            return ""
+        return (
+            frappe.db.get_value(
+                "Employee", {"user_id": user, "status": "Active"}, "designation"
+            )
+            or ""
+        )
 
     @classmethod
     def placeholder_label(cls, name: str) -> str:
@@ -594,6 +707,7 @@ class HDProjectSignoff(Document):
             "contact_salutation": _("the contact's salutation"),
             "contact_name": _("Signs off for the customer"),
             "customer_name": _("the project's customer"),
+            "customer_address": _("Address"),
             "project_name": _("the project's name"),
             "modules": _("Module"),
             "training_date": _("Training date"),
@@ -604,8 +718,8 @@ class HDProjectSignoff(Document):
         }
 
     def customer_status(self) -> str:
-        """The status in the customer's terms: Sent turns Viewed once they opened the link with
-        their code (since it was last sent)."""
+        """The status in the customer's terms: Sent turns Viewed once they opened the
+        questions link with their code (since it was last sent)."""
         if self.status != SENT or not self.link_sent_on:
             return self.status
         sent = get_datetime(self.link_sent_on)
@@ -618,60 +732,70 @@ class HDProjectSignoff(Document):
     # --- the reminder (docs/project-signoff.md, Reminders) ---
 
     def reminder_due(self, calendar) -> bool:
-        """Sent and still unanswered after two working days, with a link that works, and not
-        reminded since that link went out."""
+        """Sent two working days ago and not reminded since."""
         return bool(
             self.status == SENT
             and not self.reminder_sent_on
-            and self.link_is_open()
+            and self.link_sent_on
             and calendar.working_days_since(getdate(self.link_sent_on))
             >= REMINDER_AFTER_WORKING_DAYS
         )
 
-    def send_reminder(self):
-        """The one polite reminder: the same mail with a new link (the old one stops working),
-        in the name of whoever sent it; they are told."""
+    def send_reminder(self, automatic: bool = False):
+        """The same mail again with "Reminder:", in the name of whoever sent it; when the
+        daily job sends it, they are told."""
         from helpdesk.work_reminders import notify_users
 
-        sender = self.link_sent_by
-        token = self.issue_link()
-        self.link_sent_by = sender
-        self.reminder_sent_on = now_datetime()
+        self.send_mail(reminder=True)
+        if automatic:
+            notify_users(
+                [self.link_sent_by],
+                self.doctype,
+                self.name,
+                _(
+                    "{0} hasn't answered the {1} sign-off in two working days: a reminder went out."
+                ).format(self.signatory_name or self.signatory_email, self.label()),
+                link=self.helpdesk_path(),
+            )
+
+    def label(self) -> str:
+        """The sign-off in a sentence: its module, or its template's name."""
+        return self.module_title or self.template or self.name or _("Sign-off")
+
+    # --- the customer's reply ---
+
+    def note_reply(self, communication):
+        """A reply landed in the sign-off's thread: written on the history, and who sent the
+        mail and the project lead are told, so they can mark it signed off or changes
+        requested."""
+        from helpdesk.work_reminders import notify_users
+
+        self.flags.signoff_action = True
         self.log_event(
-            _("Reminder sent"), detail=_("To {0}").format(self.signatory_email)
+            _("Reply received"),
+            detail=communication.subject,
+            by_email=communication.sender,
+            by_name=communication.sender_full_name or communication.sender,
         )
         self.save(ignore_permissions=True)
-        if self.email_subject:
-            subject = _("Reminder: {0}").format(self.email_subject)
-            message = self.mail_with_link(token, reminder=True)
-        else:
-            subject = _("Reminder: please complete the {0} sign-off").format(
-                self.module_title
-            )
-            message = (
-                "<p>"
-                + _("Hello {0},").format(escape_html(self.signatory_name or ""))
-                + "</p>"
-                + self.mail_with_link(token, reminder=True)
-            )
-        self.deliver(subject, message)
         notify_users(
-            [sender],
+            [self.link_sent_by, self.project_lead()],
             self.doctype,
             self.name,
-            _(
-                "{0} hasn't answered the {1} sign-off in two working days: a reminder went out."
-            ).format(self.signatory_name or self.signatory_email, self.module_title),
+            _("{0} replied to the {1} sign-off").format(
+                communication.sender_full_name or communication.sender, self.label()
+            ),
             link=self.helpdesk_path(),
+            once=False,
         )
 
     # --- customer answers ---
 
     def ensure_open_for_customer(self):
-        if self.status == SIGNED:
-            frappe.throw(_("This sign-off is already signed."))
-        if self.status == DRAFT:
-            frappe.throw(_("This sign-off hasn't been sent yet."))
+        if self.status in CLOSED_STATUSES:
+            frappe.throw(_("This sign-off is closed."))
+        if self.status != SENT:
+            frappe.throw(_("This sign-off isn't open for answers right now."))
 
     def record_response(
         self,
@@ -712,7 +836,6 @@ class HDProjectSignoff(Document):
             by_name=self.signatory_name,
             ip_address=ip_address,
         )
-        self.refresh_status()
         return changed_response and response in NEEDS_FOLLOW_UP
 
     def follow_up(self, item: str):
@@ -820,8 +943,8 @@ class HDProjectSignoff(Document):
 
     def mark_clarified(self, item: str, note: str = "", from_task: bool = False):
         """The trainer explained the item: it goes back to Pending for the customer to answer again."""
-        if self.status == SIGNED:
-            frappe.throw(_("This sign-off is signed."))
+        if self.status in CLOSED_STATUSES:
+            frappe.throw(_("This sign-off is closed."))
         row = self.get_item(item)
         if row.response not in NEEDS_FOLLOW_UP:
             frappe.throw(_("This item isn't waiting for clarification."))
@@ -842,7 +965,6 @@ class HDProjectSignoff(Document):
         )
         if not from_task:
             self.close_clarification_task(row)
-        self.refresh_status()
 
     def close_clarification_task(self, row):
         task = self.open_clarification_task(row)
@@ -856,103 +978,117 @@ class HDProjectSignoff(Document):
     def clarify(self, item: str, note: str = "", from_task: bool = False):
         """Mark an item clarified, save, and send the customer a fresh link to answer it again."""
         self.mark_clarified(item, note, from_task=from_task)
-        token = self.issue_link() if self.link_token_hash else None
+        token = self.issue_link() if self.link_is_open() else None
         self.save(ignore_permissions=True)
         if not token:
             return
         pending = sum(
             1 for row in self.items if row.response == PENDING and row.clarified_on
         )
-        self.email_customer(
-            _("{0} sign-off: ready for you to review again").format(self.module_title),
-            (
-                _("1 item is ready for you to review again.")
-                if pending == 1
-                else _("{0} items are ready for you to review again.").format(pending)
+        intro = (
+            _("1 item is ready for you to review again.")
+            if pending == 1
+            else _("{0} items are ready for you to review again.").format(pending)
+        ) + " "
+        intro += (
+            _(
+                "Our team fixed what failed: please test it again. This link replaces the one we sent before."
             )
-            + " "
-            + (
-                _(
-                    "Our team fixed what failed: please test it again. This link replaces the one we sent before."
-                )
-                if self.is_uat()
-                else _(
-                    "Your trainer has followed up on what wasn't clear. This link replaces the one we sent before."
-                )
+            if self.is_uat()
+            else _(
+                "Your trainer has followed up on what wasn't clear. This link replaces the one we sent before."
+            )
+        )
+        url = self.link_url(token)
+        self.deliver(
+            _("{0} sign-off: ready for you to review again").format(self.label()),
+            "".join(
+                [
+                    f"<p>{_('Hello {0},').format(escape_html(self.signatory_name or ''))}</p>",
+                    f"<p>{intro}</p>",
+                    f'<p><a href="{url}">{_("Open the sign-off questions")}</a></p>',
+                    self.link_note(),
+                ]
             ),
-            token,
         )
 
-    # --- signing ---
+    # --- signed off, changes requested, cancelled ---
 
-    def sign(
+    def mark_signed_off(
         self,
-        full_name: str,
-        designation: str,
-        email: str,
-        ip_address: str | None,
-        user_agent: str | None,
+        acceptance_reference: str | None = None,
+        signed_on: str | None = None,
+        signed_off_by: str | None = None,
     ):
-        self.ensure_open_for_customer()
-        if (email or "").lower() != (self.signatory_email or "").lower():
+        """The customer accepted (by replying): who for the customer, when, and the reply as
+        evidence (the one picked; none when it came to another mailbox). In memory; `sign_off`
+        saves and does the rest."""
+        if self.status != SENT:
+            frappe.throw(_("Only a sent sign-off can be marked signed off."))
+        contact_name = signed_off_by or self.signatory_contact
+        if contact_name != self.signatory_contact and not self.is_customer_contact(
+            contact_name
+        ):
             frappe.throw(
-                _("Only {0} can sign this off.").format(self.signatory_email),
-                frappe.PermissionError,
+                _("{0} isn't a contact of {1}.").format(contact_name, self.customer)
             )
-        if not self.all_done():
-            frappe.throw(
-                _("Every test must pass before signing.")
-                if self.is_uat()
-                else _("Mark every item Done before signing.")
-            )
-        full_name = (full_name or "").strip()[:MAX_NAME]
-        designation = (designation or "").strip()[:MAX_NAME]
-        if not full_name or not designation:
-            frappe.throw(_("Enter your full name and designation to sign."))
-        self.signed_on = now_datetime()
-        self.signer_name = full_name
-        self.signer_designation = designation
-        self.signer_email = self.signatory_email
-        self.signer_ip = ip_address
-        self.signer_user_agent = (user_agent or "")[:500]
-        self.status = SIGNED
-        self.audit_ref = self.compute_audit_ref()
+        contact = self.contact_details(contact_name)
+        reply = self.check_reply(acceptance_reference)
+        when = get_datetime(signed_on) if signed_on else None
+        when = when or (get_datetime(reply.communication_date) if reply else None)
+        when = when or now_datetime()
+        if getdate(when) > getdate(nowdate()):
+            frappe.throw(_("The sign-off date can't be in the future."))
+        self.signed_off_by = contact_name
+        self.signer_name = contact.full_name
+        self.signer_designation = contact.designation or ""
+        self.signer_email = (contact.email_id or "").strip().lower()
+        self.signed_on = when
+        self.acceptance_reference = reply.name if reply else None
+        self.status = SIGNED_OFF
+        self.revoke_link(log=False)
         self.flags.signoff_action = True
         self.log_event(
-            _("Signed"),
-            detail=_("{0}, {1}").format(full_name, designation),
-            by_email=email,
-            by_name=full_name,
-            ip_address=ip_address,
+            _("Marked signed off"),
+            detail=_("{0}, {1}").format(self.signer_name, self.signer_designation)
+            if self.signer_designation
+            else self.signer_name,
         )
 
-    def compute_audit_ref(self) -> str:
-        payload = {
-            "signoff": self.name,
-            "project": self.project,
-            "module": self.module_title,
-            "items": [
-                [r.section, r.question, r.response, r.customer_comment or ""]
-                for r in self.items
+    def check_reply(self, communication: str | None) -> frappe._dict | None:
+        """The customer's reply: a mail received in this sign-off's thread."""
+        if not communication:
+            return None
+        reply = frappe.db.get_value(
+            "Communication",
+            communication,
+            [
+                "name",
+                "reference_doctype",
+                "reference_name",
+                "sent_or_received",
+                "communication_date",
             ],
-            "signer": [self.signer_name, self.signer_designation, self.signer_email],
-            "signed_on": str(self.signed_on),
-        }
-        return hashlib.sha256(
-            json.dumps(payload, sort_keys=True, ensure_ascii=False).encode()
-        ).hexdigest()
+            as_dict=True,
+        )
+        if (
+            not reply
+            or (reply.reference_doctype, reply.reference_name)
+            != (self.doctype, self.name)
+            or reply.sent_or_received != "Received"
+        ):
+            frappe.throw(_("Pick the customer's reply to this sign-off's mail."))
+        return reply
 
     def sign_off(
         self,
-        full_name: str,
-        designation: str,
-        email: str,
-        ip_address: str | None,
-        user_agent: str | None,
+        acceptance_reference: str | None = None,
+        signed_on: str | None = None,
+        signed_off_by: str | None = None,
     ):
-        """Sign, save the PDF on the project, email it, tell our people and the lead's timeline,
-        and complete the project if this was the last one."""
-        self.sign(full_name, designation, email, ip_address, user_agent)
+        """Mark signed off, save the signed PDF on the project, send it, tell our people and the
+        lead's timeline, and complete the project if this was the last training sign-off."""
+        self.mark_signed_off(acceptance_reference, signed_on, signed_off_by)
         pdf, content = self.make_signed_pdf()
         self.signed_pdf = pdf.name
         self.save(ignore_permissions=True)
@@ -962,50 +1098,50 @@ class HDProjectSignoff(Document):
         self.tell_erp_site()
         self.tell_crm_lead()
 
-    def reopen(self, reason: str):
-        if self.status != SIGNED:
-            frappe.throw(_("Only a signed sign-off can be reopened."))
+    def mark_changes_requested(self, remarks: str):
+        """The customer asked for changes: the sign-off can be edited and sent again; the
+        questions link stops, so nobody answers what is about to change."""
+        if self.status != SENT:
+            frappe.throw(_("Only a sent sign-off can be marked changes requested."))
+        remarks = (remarks or "").strip()[:MAX_TEXT]
+        if not remarks:
+            frappe.throw(_("Write what the customer asked to change."))
+        self.status = CHANGES_REQUESTED
+        self.remarks = remarks
+        self.revoke_link(log=False)
+        self.flags.signoff_action = True
+        self.log_event(_("Changes requested"), detail=remarks)
+
+    def cancel(self, reason: str):
+        """Withdrawn (a System Manager, checked by the API): a signed-off training is no
+        longer in the project's completion letter, and a UAT's plan on the ERP site hears."""
+        if self.status == CANCELLED:
+            frappe.throw(_("This sign-off is already cancelled."))
         reason = (reason or "").strip()[:MAX_TEXT]
         if not reason:
-            frappe.throw(
-                _(
-                    "Say why it is being reopened; the customer's signature is withdrawn."
-                )
-            )
-        self.log_event(
-            _("Reopened"),
-            detail=_("{0} (was signed by {1} on {2}; PDF {3})").format(
-                reason,
-                self.signer_name,
-                format_datetime(self.signed_on),
-                self.signed_pdf or "-",
-            ),
-        )
-        for field in (
-            "signed_on",
-            "signer_name",
-            "signer_designation",
-            "signer_email",
-            "signer_ip",
-            "signer_user_agent",
-            "audit_ref",
-            "signed_pdf",
-        ):
-            self.set(field, None)
-        self.status = REOPENED
+            frappe.throw(_("Say why it is being cancelled."))
+        was_signed_off = self.status == SIGNED_OFF
+        self.status = CANCELLED
+        self.remarks = reason
+        self.revoke_link(log=False)
         self.flags.signoff_action = True
-        if not self.is_uat():
-            # the project's training is no longer fully signed off (a UAT isn't in the letter)
+        self.log_event(_("Cancelled"), detail=reason)
+        if was_signed_off and not self.is_uat():
             frappe.db.set_value("Project", self.project, "custom_signoff_letter", None)
-        self.tell_erp_site()
+        if was_signed_off:
+            self.tell_erp_site()
 
     def signed_line(self) -> str:
-        """How the signature reads on the lead's timeline and in the notification."""
-        who = _("{0}, {1}").format(self.signer_name, self.signer_designation)
+        """How the sign-off reads on the lead's timeline and in the notification."""
+        who = (
+            _("{0}, {1}").format(self.signer_name, self.signer_designation)
+            if self.signer_designation
+            else self.signer_name
+        )
         return (
-            _("UAT signed by {0}").format(who)
+            _("UAT signed off by {0}").format(who)
             if self.is_uat()
-            else _("{0} training signed off by {1}").format(self.module_title, who)
+            else _("{0} signed off by {1}").format(self.label(), who)
         )
 
     def notify_signed(self):
@@ -1025,8 +1161,8 @@ class HDProjectSignoff(Document):
         )
 
     def tell_crm_lead(self):
-        """A project made for a lead: the signature goes on the lead's timeline on the ERP site
-        and its owner is told, after the commit, so a slow ERP site never holds up the customer."""
+        """A project made for a lead: the sign-off goes on the lead's timeline on the ERP site
+        and its owner is told, after the commit, so a slow ERP site never holds anyone up."""
         if frappe.db.get_value("Project", self.project, "custom_crm_lead"):
             frappe.enqueue(
                 "helpdesk.api.project_signoff.note_signed_on_crm_lead",
@@ -1040,16 +1176,20 @@ class HDProjectSignoff(Document):
     def is_uat(self) -> bool:
         return self.signoff_type == UAT
 
+    def erp_state(self) -> str | None:
+        """The UAT's state in the ERP site's words (Signed, Reopened), None for the others."""
+        return ERP_STATES.get(self.status)
+
     def tell_erp_site(self):
-        """A UAT's state (Signed, Reopened) goes to its plan on the ERP site, after the
-        commit, so a slow or failing ERP site never holds up the customer."""
-        if self.is_uat() and self.crm_plan:
-            # the state as of now: a reopen before the job runs mustn't replace the signature
+        """A UAT's state (signed off, cancelled) goes to its plan on the ERP site, after the
+        commit, so a slow or failing ERP site never holds anyone up."""
+        if self.is_uat() and self.crm_plan and self.erp_state():
+            # the state as of now: a cancel before the job runs mustn't replace the signature
             frappe.enqueue(
                 "helpdesk.api.project_signoff.record_uat_on_erp",
                 signoff=self.name,
-                status=self.status,
-                signed_by=self.signer_name if self.status == SIGNED else None,
+                status=self.erp_state(),
+                signed_by=self.signer_name if self.status == SIGNED_OFF else None,
                 enqueue_after_commit=True,
             )
 
@@ -1084,21 +1224,6 @@ class HDProjectSignoff(Document):
         )
         return f"data:{mime};base64,{base64.b64encode(content).decode()}"
 
-    def render_document(
-        self, template: str, context: dict, title: str
-    ) -> tuple[str, bytes]:
-        """(file name, content): a PDF, or a print-ready HTML page where wkhtmltopdf isn't installed."""
-        html = frappe.render_template(  # the app's own fixed template, not user input - nosemgrep
-            template,
-            {"brand": self.brand(), "title": title, **context},
-        )
-        safe_title = re.sub(r'[\\/:*?"<>|]+', "-", title).strip()
-        if shutil.which("wkhtmltopdf"):
-            from frappe.utils.pdf import get_pdf
-
-            return f"{safe_title}.pdf", get_pdf(html, {"page-size": "A4"})
-        return f"{safe_title}.html", html.encode()
-
     def save_project_file(self, file_name: str, content: bytes):
         """A private File on the project, so it shows in the project's Files tab."""
         return frappe.get_doc(
@@ -1112,36 +1237,88 @@ class HDProjectSignoff(Document):
             }
         ).insert(ignore_permissions=True)
 
-    def pdf_context(self) -> dict:
+    def render_html(
+        self, context: dict, title: str, template: str = DOCUMENT_TEMPLATE
+    ) -> str:
+        """A document of the sign-off as HTML: the sign-off document (what goes out with the
+        mail, previewed on the full page, and once signed off the signed record) or the
+        project's completion letter."""
+        return frappe.render_template(  # the app's own fixed template, not user input - nosemgrep
+            template,
+            {"brand": self.brand(), "title": title, **context},
+        )
+
+    def render_document(
+        self, context: dict, title: str, template: str = DOCUMENT_TEMPLATE
+    ) -> tuple[str, bytes]:
+        """(file name, content): a PDF, or a print-ready HTML page where wkhtmltopdf isn't installed."""
+        html = self.render_html(context, title, template)
+        safe_title = re.sub(r'[\\/:*?"<>|]+', "-", title).strip()
+        if shutil.which("wkhtmltopdf"):
+            from frappe.utils.pdf import get_pdf
+
+            return f"{safe_title}.pdf", get_pdf(html, {"page-size": "A4"})
+        return f"{safe_title}.html", html.encode()
+
+    def document_title(self) -> str:
+        return (
+            _("UAT sign-off - {0}") if self.is_uat() else _("Sign-off - {0} - {1}")
+        ).format(self.label(), self.name or _("New"))
+
+    def document_context(self) -> dict:
+        """What the document shows: customer (as sent), project, the questions with their
+        answers, the declaration, and both signatures once signed off."""
         sections: dict[str, list] = {}
         for row in self.items:
             sections.setdefault(row.section or _("General"), []).append(row)
         customer_name = self.customer_name()
+        contact = (
+            self.contact_details(self.signatory_contact)
+            if self.signatory_contact
+            else None
+        )
+        signed = self.status == SIGNED_OFF
+        reply_on = (
+            frappe.db.get_value(
+                "Communication", self.acceptance_reference, "communication_date"
+            )
+            if self.acceptance_reference
+            else None
+        )
+        tbo_signer = self.link_sent_by or frappe.session.user
         return {
             "doc": self,
             "sections": sections,
             "customer_name": customer_name,
+            "address": self.address_display or self.formatted_address(),
+            "contact_name": self.signatory_name
+            or (contact.full_name if contact else ""),
+            "contact_designation": self.signatory_designation
+            or (contact.designation if contact else "")
+            or "",
+            "contact_email": self.signatory_email or "",
+            "project_manager": get_fullname(self.project_lead())
+            if self.project_lead()
+            else "",
             "trainer_name": get_fullname(self.trainer) if self.trainer else "",
             "training_date": formatdate(self.training_date)
             if self.training_date
             else "",
-            "signed_on": format_datetime(self.signed_on),
+            "date": formatdate(self.link_sent_on or nowdate()),
+            "signed": signed,
+            "signed_on": formatdate(self.signed_on) if signed else "",
+            "acceptance": _("Email reply of {0}").format(format_datetime(reply_on))
+            if reply_on
+            else "",
+            "tbo_name": get_fullname(tbo_signer) if tbo_signer != "Guest" else "",
+            "tbo_designation": self.employee_designation(tbo_signer),
             # long sentences live here: an HTML formatter would wrap them inside _()
-            "lede": (
-                _(
-                    "{0} confirms that it tested the system as listed below and accepts it."
-                )
-                if self.is_uat()
-                else _(
-                    "{0} confirms that the training listed below has been completed."
-                )
-            ).format(customer_name),
-            "confirmation": _(
-                "I confirm that we tested the system as listed above and accept it."
+            "declaration": _(
+                "We confirm that we tested the system as listed above and accept it."
             )
             if self.is_uat()
             else _(
-                "I confirm that the training listed above has been completed to our satisfaction."
+                "We confirm that the training listed above has been completed to our satisfaction."
             ),
             "kind_title": _("User acceptance sign-off")
             if self.is_uat()
@@ -1163,58 +1340,50 @@ class HDProjectSignoff(Document):
 
     def make_signed_pdf(self):
         file_name, content = self.render_document(
-            "helpdesk/templates/signoff/signoff_letter.html",
-            self.pdf_context(),
+            self.document_context(),
             (
-                _("UAT sign-off - {0} - {1}")
+                _("UAT signed off - {0} - {1}")
                 if self.is_uat()
-                else _("Training sign-off - {0} - {1}")
-            ).format(self.module_title, self.name),
+                else _("Signed off - {0} - {1}")
+            ).format(self.label(), self.name),
         )
         return self.save_project_file(file_name, content), content
 
     def email_signed_pdf(self, file_name: str, content: bytes):
-        # the signer, and our people: who sent it, the trainer and the project lead
-        recipients = {
-            self.signatory_email,
-            self.link_sent_by,
-            self.trainer,
-            self.project_lead(),
-        }
-        frappe.sendmail(
-            recipients=sorted(r for r in recipients if r),
-            subject=(
+        """The signed record to the signatory, copied to our people (who sent it, the trainer
+        and the project lead), in the sign-off's thread."""
+        ours = {self.link_sent_by, self.trainer, self.project_lead()}
+        self.deliver(
+            (
                 _("{0} signed off") if self.is_uat() else _("{0} training signed off")
-            ).format(self.module_title),
-            message="<p>"
-            + (
-                _(
-                    "{0} ({1}) accepted {2} for {3} on {4}. The signed record is attached."
-                )
-                if self.is_uat()
-                else _(
-                    "{0} ({1}) signed off the {2} training for {3} on {4}. The signed record is attached."
-                )
+            ).format(self.label()),
+            "<p>"
+            + _(
+                "{0} ({1}) signed off {2} for {3} on {4}. The signed record is attached."
             ).format(
-                escape_html(self.signer_name),
-                escape_html(self.signer_designation),
-                escape_html(self.module_title),
+                escape_html(self.signer_name or ""),
+                escape_html(self.signer_designation or "-"),
+                escape_html(self.label()),
                 escape_html(self.project_name or self.project),
-                format_datetime(self.signed_on),
+                formatdate(self.signed_on),
             )
             + "</p>",
+            cc=sorted(r for r in ours if r and r != self.signatory_email),
             attachments=[{"fname": file_name, "fcontent": content}],
-            reference_doctype=self.doctype,
-            reference_name=self.name,
         )
 
     # --- project roll-up ---
 
     def project_signoffs(self) -> list[dict]:
-        """The project's training sign-offs (the completion letter's; a UAT isn't one)."""
+        """The project's training sign-offs that count (the completion letter's; a UAT or a
+        cancelled one doesn't)."""
         return frappe.get_all(
             "HD Project Signoff",
-            filters={"project": self.project, "signoff_type": ("!=", UAT)},
+            filters={
+                "project": self.project,
+                "signoff_type": ("!=", UAT),
+                "status": ("!=", CANCELLED),
+            },
             fields=[
                 "name",
                 "module_title",
@@ -1225,18 +1394,18 @@ class HDProjectSignoff(Document):
                 "signer_designation",
                 "signatory_email",
                 "signed_on",
-                "audit_ref",
+                "acceptance_reference",
             ],
             order_by="signed_on asc, creation asc",
             limit_page_length=0,
         )
 
     def complete_project_if_all_signed(self):
-        """Every training sign-off of the project signed: the completion letter goes on the project and out by email."""
+        """Every training sign-off of the project signed off: the completion letter goes on the project and out by email."""
         if self.is_uat():
             return
         signoffs = self.project_signoffs()
-        if not signoffs or any(s.status != SIGNED for s in signoffs):
+        if not signoffs or any(s.status != SIGNED_OFF for s in signoffs):
             return
         project = frappe.db.get_value(
             "Project", self.project, ["project_name", "project_lead"], as_dict=True
@@ -1244,9 +1413,8 @@ class HDProjectSignoff(Document):
         for s in signoffs:
             s.trainer_name = get_fullname(s.trainer) if s.trainer else ""
             s.training_date = formatdate(s.training_date) if s.training_date else ""
-            s.signed_on = format_datetime(s.signed_on)
+            s.signed_on = formatdate(s.signed_on)
         file_name, content = self.render_document(
-            "helpdesk/templates/signoff/completion_letter.html",
             {
                 "project_name": project.project_name or self.project,
                 "customer_name": self.customer_name(),
@@ -1256,10 +1424,11 @@ class HDProjectSignoff(Document):
                     "Every training module of this project has been signed off by {0}."
                 ).format(self.customer_name()),
                 "foot": _(
-                    "Each module's signed record, with every question and answer, is kept on the project. Generated {0}."
+                    "Each module's signed record is kept on the project. Generated {0}."
                 ).format(format_datetime(now_datetime())),
             },
             _("Project completion - {0}").format(project.project_name or self.project),
+            template="helpdesk/templates/signoff/completion_letter.html",
         )
         letter = self.save_project_file(file_name, content)
         frappe.db.set_value(
@@ -1285,7 +1454,7 @@ class HDProjectSignoff(Document):
 
 
 def send_signoff_reminders():
-    """Scheduler, daily: on a working day, the one reminder for each sign-off its signatory
+    """Scheduler, daily: on a working day, the one reminder for each sign-off its customer
     hasn't answered in two working days (docs/project-signoff.md, Reminders). One that fails
     is logged and leaves the others alone."""
     from helpdesk.follow_ups import WorkCalendar
@@ -1295,11 +1464,7 @@ def send_signoff_reminders():
         return
     for name in frappe.get_all(
         "HD Project Signoff",
-        filters={
-            "status": SENT,
-            "reminder_sent_on": ("is", "not set"),
-            "link_token_hash": ("is", "set"),
-        },
+        filters={"status": SENT, "reminder_sent_on": ("is", "not set")},
         pluck="name",
     ):
         doc = frappe.get_doc("HD Project Signoff", name)
@@ -1307,7 +1472,19 @@ def send_signoff_reminders():
             continue
         frappe.db.savepoint("signoff_reminder")
         try:
-            doc.send_reminder()
+            doc.send_reminder(automatic=True)
         except Exception:
             frappe.db.rollback(save_point="signoff_reminder")
             frappe.log_error(title=f"Sign-off reminder failed: {name}")
+
+
+def on_communication_insert(doc, method=None):
+    """Communication hook: the customer's reply to a sign-off's mail goes on its history and
+    its sender hears (TBO's Sign-off requirements, Sending the sign-off mail, step 7)."""
+    if (
+        doc.reference_doctype != "HD Project Signoff"
+        or doc.sent_or_received != "Received"
+    ):
+        return
+    if frappe.db.exists("HD Project Signoff", doc.reference_name):
+        frappe.get_doc("HD Project Signoff", doc.reference_name).note_reply(doc)

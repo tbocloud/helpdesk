@@ -1,7 +1,7 @@
 {
 	"actions": [],
-	"autoname": "SO-.#####",
-	"description": "A customer's sign-off that training on one module of a project is complete.",
+	"autoname": "SO-.YYYY.-.####",
+	"description": "A customer's sign-off for one stage of a project (a module's training, UAT, go-live...), sent by mail and marked signed off from their reply.",
 	"creation": "2026-10-08 10:00:00.000000",
 	"doctype": "DocType",
 	"engine": "InnoDB",
@@ -9,6 +9,7 @@
 		"project",
 		"project_name",
 		"customer",
+		"project_type",
 		"module_title",
 		"template",
 		"signoff_type",
@@ -22,10 +23,15 @@
 		"signatory_contact",
 		"signatory_name",
 		"signatory_email",
+		"signatory_designation",
+		"customer_address",
+		"address_display",
 		"mail_section",
 		"cc_emails",
 		"email_subject",
 		"email_body",
+		"attach_pdf",
+		"sent_pdf",
 		"items_section",
 		"items",
 		"link_section",
@@ -40,10 +46,10 @@
 		"signer_name",
 		"signer_designation",
 		"signer_email",
+		"signed_off_by",
+		"acceptance_reference",
+		"remarks",
 		"column_break_3",
-		"signer_ip",
-		"signer_user_agent",
-		"audit_ref",
 		"signed_pdf",
 		"log_section",
 		"log"
@@ -76,11 +82,18 @@
 			"read_only": 1
 		},
 		{
+			"fieldname": "project_type",
+			"fieldtype": "Data",
+			"label": "Project Type",
+			"fetch_from": "project.project_type",
+			"read_only": 1
+		},
+		{
 			"fieldname": "module_title",
 			"fieldtype": "Data",
 			"label": "Module",
-			"reqd": 1,
-			"in_list_view": 1
+			"in_list_view": 1,
+			"description": "Required for a training sign-off."
 		},
 		{
 			"fieldname": "template",
@@ -127,7 +140,7 @@
 			"fieldname": "status",
 			"fieldtype": "Select",
 			"label": "Status",
-			"options": "Draft\nSent\nIn progress\nNeeds clarification\nReady to sign\nSigned\nReopened",
+			"options": "Draft\nSent\nChanges Requested\nSigned Off\nCancelled",
 			"default": "Draft",
 			"read_only": 1,
 			"in_list_view": 1,
@@ -168,6 +181,25 @@
 			"reqd": 1
 		},
 		{
+			"fieldname": "signatory_designation",
+			"fieldtype": "Data",
+			"label": "Signatory Designation",
+			"read_only": 1
+		},
+		{
+			"fieldname": "customer_address",
+			"fieldtype": "Link",
+			"label": "Customer Address",
+			"options": "Address"
+		},
+		{
+			"fieldname": "address_display",
+			"fieldtype": "Small Text",
+			"label": "Address",
+			"read_only": 1,
+			"description": "The address as it was when the mail went out."
+		},
+		{
 			"fieldname": "mail_section",
 			"fieldtype": "Section Break",
 			"label": "Mail"
@@ -188,6 +220,20 @@
 			"fieldname": "email_body",
 			"fieldtype": "Text Editor",
 			"label": "Body"
+		},
+		{
+			"fieldname": "attach_pdf",
+			"fieldtype": "Check",
+			"label": "Attach sign-off document (PDF)",
+			"default": "1"
+		},
+		{
+			"fieldname": "sent_pdf",
+			"fieldtype": "Link",
+			"label": "Sent Document",
+			"options": "File",
+			"read_only": 1,
+			"no_copy": 1
 		},
 		{
 			"fieldname": "items_section",
@@ -247,55 +293,61 @@
 		{
 			"fieldname": "signature_section",
 			"fieldtype": "Section Break",
-			"label": "Signature"
+			"label": "Signed Off"
 		},
 		{
 			"fieldname": "signed_on",
 			"fieldtype": "Datetime",
-			"label": "Signed On",
+			"label": "Signed Off On",
 			"read_only": 1
 		},
 		{
 			"fieldname": "signer_name",
 			"fieldtype": "Data",
-			"label": "Signer Name",
+			"label": "Signed Off By (Name)",
 			"read_only": 1
 		},
 		{
 			"fieldname": "signer_designation",
 			"fieldtype": "Data",
-			"label": "Signer Designation",
+			"label": "Signed Off By (Designation)",
 			"read_only": 1
 		},
 		{
 			"fieldname": "signer_email",
 			"fieldtype": "Data",
-			"label": "Signer Email",
+			"label": "Signed Off By (Email)",
 			"options": "Email",
 			"read_only": 1
 		},
 		{
+			"fieldname": "signed_off_by",
+			"fieldtype": "Link",
+			"label": "Signed Off By",
+			"options": "Contact",
+			"read_only": 1,
+			"no_copy": 1
+		},
+		{
+			"fieldname": "acceptance_reference",
+			"fieldtype": "Link",
+			"label": "Acceptance Reference",
+			"options": "Communication",
+			"read_only": 1,
+			"no_copy": 1,
+			"description": "The customer's reply that accepts the sign-off."
+		},
+		{
+			"fieldname": "remarks",
+			"fieldtype": "Small Text",
+			"label": "Remarks",
+			"read_only": 1,
+			"no_copy": 1,
+			"description": "Why the customer asked for changes, or why it was cancelled."
+		},
+		{
 			"fieldname": "column_break_3",
 			"fieldtype": "Column Break"
-		},
-		{
-			"fieldname": "signer_ip",
-			"fieldtype": "Data",
-			"label": "Signer IP",
-			"read_only": 1
-		},
-		{
-			"fieldname": "signer_user_agent",
-			"fieldtype": "Small Text",
-			"label": "Signer User Agent",
-			"read_only": 1
-		},
-		{
-			"fieldname": "audit_ref",
-			"fieldtype": "Data",
-			"label": "Audit Reference",
-			"read_only": 1,
-			"description": "SHA-256 of the signed questions and answers, printed on the PDF."
 		},
 		{
 			"fieldname": "signed_pdf",
@@ -319,7 +371,7 @@
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-11-13 12:00:00.000000",
+	"modified": "2026-11-13 14:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Project Signoff",

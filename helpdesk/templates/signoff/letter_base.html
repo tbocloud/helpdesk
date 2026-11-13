@@ -101,14 +101,27 @@
         color: #5d6472;
         margin-top: 2px;
       }
-      .signature {
+      /* the customer's and our signature, side by side */
+      table.signatures {
+        width: 100%;
         margin-top: 22px;
-        padding: 12px 14px;
-        border: 1px solid #c9cdd6;
+        border-collapse: separate;
+        border-spacing: 10px 0;
         page-break-inside: avoid;
       }
-      .signature p {
-        margin: 0 0 6px;
+      table.signatures > tbody > tr > td,
+      table.signatures > tr > td {
+        width: 50%;
+        vertical-align: top;
+        padding: 10px 12px;
+        border: 1px solid #c9cdd6;
+      }
+      table.signatures table.facts {
+        margin: 0;
+      }
+      .sig-head {
+        font-weight: 600;
+        margin-bottom: 6px;
       }
       .mono {
         font-family: "SF Mono", Menlo, Consolas, monospace;

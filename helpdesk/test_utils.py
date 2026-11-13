@@ -4127,6 +4127,41 @@ def fake_pdf_renderer():
     return stack
 
 
+def make_customer_address(customer: str, title: str, is_primary: bool = True):
+    """An Address linked to the HD Customer `customer` (the sign-off's customer address)."""
+    return frappe.get_doc(
+        {
+            "doctype": "Address",
+            "address_title": title,
+            "address_type": "Billing",
+            "address_line1": "12 Spice Market Road",
+            "city": "Kochi",
+            "country": frappe.db.get_value("Country", {}, "name") or "India",
+            "is_primary_address": 1 if is_primary else 0,
+            "links": [{"link_doctype": "HD Customer", "link_name": customer}],
+        }
+    ).insert(ignore_permissions=True)
+
+
+def receive_signoff_reply(signoff, sender: str, subject: str = "Re: sign-off"):
+    """The customer's reply landing in a sign-off's mail thread, as an incoming email
+    account files it: a received Communication referencing the sign-off."""
+    return frappe.get_doc(
+        {
+            "doctype": "Communication",
+            "communication_medium": "Email",
+            "communication_type": "Communication",
+            "sent_or_received": "Received",
+            "subject": subject,
+            "content": "<p>We accept. Please go ahead.</p>",
+            "sender": sender,
+            "sender_full_name": sender.split("@")[0],
+            "reference_doctype": signoff.doctype,
+            "reference_name": signoff.name,
+        }
+    ).insert(ignore_permissions=True)
+
+
 def forget_signoff_lead_access():
     """Clears what the sign-off API cached of who may see which lead (ten minutes in
     helpdesk.api.project_signoff._lead_access), so a test's fake ERP answers are read."""

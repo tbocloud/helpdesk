@@ -98,7 +98,7 @@ the proposal isn't the quotation) / *Create BRD* / *Create SRS* /
 warnings shown), *Create project* (below), *Send for sign-off* (the UAT sign-off, made and sent
 from here in one dialog) or *Open sign-off* once it exists, or *Continue the …* for the one in
 progress; the Project step opens the project. The **UAT step** shows the hub's sign-off live
-(Sent, Viewed, In progress, Needs clarification, Ready to sign, Signed with who signed and a
+(Sent, Viewed, Changes Requested, Signed Off with who signed off and a
 **Signed PDF** link), read every 30 seconds while the page is in view; people who can't send it
 see its status in words ([project-signoff.md](project-signoff.md), From the lead). "Every
 document is accepted" when the chain is done. The step it points at is
