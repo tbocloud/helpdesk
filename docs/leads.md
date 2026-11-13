@@ -377,7 +377,8 @@ wide screen, under it on a phone) has the product, one number per slot, the day'
 calls a day each, 300 together"), how many unassigned leads of that product are ready (with a
 warning icon and words when it is fewer than the plan; each batch starts with the person's own
 leads anyway), one primary **Assign leads** button and, for people who have a plan, **Back to
-department sizes**. A department's campaign product is the only product (the picker is locked
+department sizes**. On a wide screen the panel scrolls in itself and its buttons stay pinned to
+its bottom, so Assign leads is always in view. A department's campaign product is the only product (the picker is locked
 and says why).
 
 **A department without products gives leads by industry.** When a department has no products
@@ -391,9 +392,10 @@ follow it). The leads window filters and gives by industry too and hides Set pro
 TBO Smart sends no industries, so the page stays as it was.
 
 **A district narrows it all.** When the ERP site sends a department's districts (those its open
-leads are in; `callPlans.hasDistricts`), the Assign panel has a **District** under Product (or
-Industry): *Any district* or one district, each with its unassigned leads of the product chosen
-(*Malappuram · 40 unassigned*), and the product's counts follow the district chosen. The box says
+leads are in; `callPlans.hasDistricts`), the Assign panel has a **District** list under Product
+(or Industry) that shows each district's balance: *Any district* with the total, then every
+district with its unassigned leads of the product (or industry) chosen, the fullest first
+(*Malappuram 40*). Picking a row chooses that district, and the product's counts follow it. The box says
 *40 unassigned PhoebiX leads in Malappuram*; **See leads** opens the Unassigned window on that
 product and district, **Give now** gives the next leads of both, and **Assign leads** saves the
 district with the plan, so the batches, *Calling for* and the 11:00 auto-assign take only that
@@ -411,7 +413,9 @@ people picked, a box under it says *120 unassigned PhoebiX leads* with **See lea
 Unassigned window, already on that product; with one person picked it opens on their pool, ready
 to give picked leads to them) and **Give now** (*Give each now* for several people): that many of
 the next unassigned leads of the product go to each person at once (`assign_leads` with `count`
-and `product`, one call per person, as *Give the next 25* in the window). Given leads are theirs
+and `product`, one call per person, as *Give the next 25* in the window). Give now is always
+there; with nothing to give it is disabled and says to pick a district with a balance or another
+product. Given leads are theirs
 straight away and their next batch can call them; the plan below still sets the calls a day.
 
 **Auto-assign when nobody did.** Under the panel, a clock line says when the department hands
