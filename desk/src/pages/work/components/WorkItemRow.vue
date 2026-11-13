@@ -17,8 +17,18 @@
     ]"
   >
     <div class="flex min-w-0 items-start gap-3">
+      <!-- the row's checkbox finishes the task: it opens the Complete step for hours and notes -->
+      <input
+        v-if="checkable && item.kind === 'task'"
+        type="checkbox"
+        class="relative z-10 mt-0.5 size-4 shrink-0 cursor-pointer rounded border-outline-gray-3 text-brand focus-visible:ring-2 focus-visible:ring-highlight"
+        :checked="false"
+        :aria-label="__('Complete: {0}', item.title)"
+        @change="onCheck"
+      />
       <component
         :is="item.kind === 'ticket' ? LucideTicket : LucideSquareCheck"
+        v-else
         class="mt-0.5 size-4 shrink-0 text-ink-gray-6"
         aria-hidden="true"
       />
@@ -51,7 +61,8 @@
             v-if="item.kind === 'task' && item.assignment_state"
             :state="item.assignment_state"
           />
-          <template v-if="item.is_key">
+          <KeyTag v-if="card && item.is_key" />
+          <template v-else-if="item.is_key">
             <LucideStar
               class="size-3.5 shrink-0 fill-current text-warning"
               aria-hidden="true"
@@ -233,14 +244,27 @@
       <div
         v-else
         class="flex items-center justify-end gap-1 whitespace-nowrap text-sm tabular-nums"
-        :class="
-          deadline.overdue ? 'font-medium text-danger' : 'text-ink-gray-5'
-        "
+        :class="[
+          card
+            ? `rounded-full px-2 py-0.5 text-xs font-medium ${
+                TONE_CLASSES[
+                  deadline.overdue ? 'danger' : dueToday ? 'warning' : 'neutral'
+                ]
+              }`
+            : deadline.overdue
+            ? 'font-medium text-danger'
+            : 'text-ink-gray-5',
+        ]"
         :title="deadlineTitle"
       >
         <LucideAlarmClock
           v-if="deadline.overdue"
           class="size-3.5 shrink-0"
+          aria-hidden="true"
+        />
+        <span
+          v-else-if="card"
+          class="size-1.5 rounded-full bg-current"
           aria-hidden="true"
         />
         {{ deadline.label }}
@@ -257,7 +281,7 @@
 </template>
 
 <script setup lang="ts">
-import type { Tone } from "@/components/tone";
+import { TONE_CLASSES, type Tone } from "@/components/tone";
 import { useUserStore } from "@/stores/user";
 import { __ } from "@/translation";
 import { Avatar, dayjs } from "frappe-ui";
@@ -276,6 +300,7 @@ import MilestoneMark from "@/pages/tasky/components/MilestoneMark.vue";
 import NewTaskBadge from "@/pages/tasky/components/NewTaskBadge.vue";
 import PullRequestChip from "@/pages/tasky/components/PullRequestChip.vue";
 import SlipBadge from "@/pages/tasky/components/SlipBadge.vue";
+import KeyTag from "./KeyTag.vue";
 import EscalationBadge from "@/components/EscalationBadge.vue";
 import TaskStatusBadge from "@/pages/tasky/components/TaskStatusBadge.vue";
 import TaskyBadge from "@/components/TaskyBadge.vue";
@@ -294,9 +319,13 @@ const props = defineProps<{
   showAssignees?: boolean;
   /** The row opens the item in place (emits `open`) instead of linking to its page. */
   opens?: boolean;
+  /** My Work's look: a KEY tag and the deadline as a pill. */
+  card?: boolean;
+  /** Tasks get a checkbox that emits `complete` (the caller opens the Complete step). */
+  checkable?: boolean;
 }>();
 
-const emit = defineEmits<{ open: [] }>();
+const emit = defineEmits<{ open: []; complete: [] }>();
 
 defineSlots<{
   /** Buttons for the item, kept clickable above the row's link. */
@@ -315,6 +344,16 @@ const severalRepos = computed(
 );
 const risks = computed(() => props.item.risks ?? []);
 const deadline = computed(() => deadlineInfo(props.item));
+const dueToday = computed(
+  () =>
+    !!props.item.deadline && dayjs(props.item.deadline).isSame(dayjs(), "day")
+);
+
+function onCheck(event: Event) {
+  // the task stays open until the Complete step is done
+  (event.target as HTMLInputElement).checked = false;
+  emit("complete");
+}
 
 const onHold = computed(() => isHeldTask(props.item));
 // a held task's row already says how long it has been paused

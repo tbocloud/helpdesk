@@ -167,7 +167,9 @@ class TestTokenTest(GitHubSettingsCase):
     def test_a_working_token_shows_its_account_and_repository(self):
         user = github_response(
             body={"login": "tbo-merge-bot"},
-            headers={"GitHub-Authentication-Token-Expiration": "2027-01-01 00:00:00 UTC"},
+            headers={
+                "GitHub-Authentication-Token-Expiration": "2027-01-01 00:00:00 UTC"
+            },
         )
         with patch(GET, side_effect=[user, github_response()]) as get:
             result = self.check()
@@ -199,9 +201,7 @@ class TestTokenTest(GitHubSettingsCase):
 
         self.assertTrue(result["ok"])
         self.assertEqual(get.call_count, 1)
-        self.assertIn(
-            {"label": "Scopes", "value": "repo, workflow"}, result["details"]
-        )
+        self.assertIn({"label": "Scopes", "value": "repo, workflow"}, result["details"])
 
     def test_a_rejected_token_says_to_replace_it(self):
         with patch(GET, return_value=github_response(401)):

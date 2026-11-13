@@ -92,6 +92,10 @@ export const useAuthStore = defineStore("auth", () => {
   const canUseLeadBank: ComputedRef<boolean> = computed(
     () => !!user__.value.can_use_lead_bank
   );
+  // CRM dashboards: someone who may open at least one (docs/crm-dashboard.md)
+  const canViewCrmDashboards: ComputedRef<boolean> = computed(
+    () => !!user__.value.can_view_crm_dashboards
+  );
   const canSeeCustomerReport: ComputedRef<boolean> = computed(
     () => !!(user__.value.is_manager || user__.value.is_project_manager)
   );
@@ -196,6 +200,7 @@ export const useAuthStore = defineStore("auth", () => {
     canWorkTickets,
     canUseLeads,
     canUseLeadBank,
+    canViewCrmDashboards,
     telephonyInstalled,
     canOpenChat,
     isLoggedIn,

@@ -45,7 +45,7 @@
       <template v-else-if="mode === 'Call back'">
         <fieldset class="flex flex-col gap-2">
           <legend class="mb-1 text-xs text-ink-gray-5">
-            {{ __("Call back") }}
+            {{ __("Call back at") }}
           </legend>
           <div class="flex flex-wrap gap-2">
             <Button
@@ -154,6 +154,8 @@ const props = defineProps<{
   mode: "Connected" | "Call back" | "Not interested" | null;
   call: QueueCall | null;
   stages: LeadStage[];
+  /** what was already typed on the call card */
+  startNote?: string;
 }>();
 const emit = defineEmits<{
   (e: "update:open", value: boolean): void;
@@ -194,9 +196,9 @@ const errorMessage = ref("");
 const title = computed(
   () =>
     ({
-      Connected: __("They picked up"),
-      "Call back": __("Call back later"),
-      "Not interested": __("Not interested"),
+      Connected: __("Contacted: they picked up"),
+      "Call back": __("Follow-up Required: call back later"),
+      "Not interested": __("Not Interested"),
     }[props.mode || "Connected"])
 );
 
@@ -213,12 +215,13 @@ function nowLocal() {
   return dayjs().format(LOCAL);
 }
 
-// each time it opens it starts empty, on the lead's own stage
+// each time it opens it starts with the card's note, on the lead's own stage
 watch(
   () => props.open,
   (open) => {
     if (!open) return;
-    note.value = followUp.value = callbackAt.value = errorMessage.value = "";
+    followUp.value = callbackAt.value = errorMessage.value = "";
+    note.value = props.startNote ?? "";
     stage.value = props.call?.summary.stage || "";
   }
 );

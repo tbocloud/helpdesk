@@ -75,6 +75,8 @@ export interface LeadDepartmentOption {
   lead_type?: string;
   is_active?: boolean | number;
   is_head?: boolean | number;
+  /** may watch the department on Assign leads, read-only */
+  is_viewer?: boolean | number;
   is_member?: boolean | number;
   /** members get daily call batches (Today's calls); absent from an older TBO Smart */
   call_batches_enabled?: boolean | number;
@@ -98,6 +100,8 @@ export interface LeadDepartment {
   /** days without activity before a lead is chased (absent from an older TBO Smart) */
   stale_after_days?: number;
   heads: { user: string; full_name?: string }[];
+  /** watch Assign leads read-only; absent from an older TBO Smart */
+  viewers?: { user: string; full_name?: string }[];
   members: { user: string; full_name?: string }[];
   /** every product / brand, switched-off ones too (absent from an older TBO Smart) */
   products?: LeadProduct[];
@@ -116,6 +120,34 @@ export interface DuplicateLead {
   owner_name?: string | null;
   tbo_stage?: string;
   matched_on: ("email" | "phone" | "company")[];
+}
+
+/** What sits on a lead that a merge moves to the lead that is kept. */
+export type MergeCount =
+  | "notes"
+  | "calls"
+  | "follow_ups"
+  | "meetings"
+  | "proposals"
+  | "quotations"
+  | "deals"
+  | "files";
+
+/** One lead in the Merge dialog (TBO Smart's hub-leads-api.md §2.26). */
+export interface MergeLead {
+  name: string;
+  lead_name?: string;
+  company_name?: string;
+  email_id?: string;
+  mobile_no?: string;
+  tbo_stage?: string;
+  lead_owner?: string;
+  owner_name?: string | null;
+  creation: string;
+  numbers: LeadNumber[];
+  /** how many of its numbers the other lead lacks */
+  new_numbers: number;
+  counts: Record<MergeCount, number>;
 }
 
 /** A lead with no activity for longer than its department allows. */
@@ -165,6 +197,10 @@ export interface LeadRow {
   segment?: string;
   lead_owner?: string;
   owner_name?: string;
+  /** who created it: a salesperson also reads the leads they created (absent from an older TBO Smart) */
+  created_by?: string | null;
+  /** calls the lead has had (absent from an older TBO Smart) */
+  call_count?: number;
   tbo_department?: string | null;
   tbo_lead_type?: string | null;
   /** the product / brand it belongs to under its department (absent from an older TBO Smart) */
@@ -263,13 +299,14 @@ const QUOTE_STATUS: Record<string, StatusLook> = {
   Expired: { label: __("Expired"), tone: "danger" },
 };
 
-export type LeadView = "all" | "mine" | "call_today" | "follow_up";
+export type LeadView = "all" | "mine" | "call_today" | "follow_up" | "called";
 
 export const LEAD_VIEWS: { value: LeadView; label: string }[] = [
   { value: "all", label: __("All") },
   { value: "mine", label: __("My leads") },
   { value: "call_today", label: __("Call today") },
   { value: "follow_up", label: __("Follow-up") },
+  { value: "called", label: __("Called") },
 ];
 
 /** What the New lead and Edit lead dialog sends as `data`. */
@@ -391,10 +428,56 @@ export interface LeadWhatsAppBox {
   hint: string;
 }
 
+export type NumberLabel =
+  | "Mobile"
+  | "Office"
+  | "WhatsApp"
+  | "Decision-maker"
+  | "Other";
+export type NumberStatus = "Active" | "Not reachable" | "Wrong number" | "Old";
+
+/** One contact number of a lead (TBO Smart's hub-leads-api.md §2.24); the main one first. */
+export interface LeadNumber {
+  id: string;
+  number: string;
+  e164: string | null;
+  label: NumberLabel;
+  person: string;
+  designation: string;
+  is_primary: number;
+  status: NumberStatus;
+  note: string;
+  source: string;
+  added_by?: string;
+  added_by_name?: string | null;
+  added_on?: string;
+  tel: string | null;
+  whatsapp: string | null;
+}
+
+/** The labels the number form offers, in the order a caller is likely to need them. */
+export const NUMBER_LABELS: { value: NumberLabel; label: string }[] = [
+  { value: "Mobile", label: __("Mobile") },
+  { value: "Decision-maker", label: __("Decision-maker") },
+  { value: "Office", label: __("Office") },
+  { value: "WhatsApp", label: __("WhatsApp") },
+  { value: "Other", label: __("Other") },
+];
+
+/** Active and Not reachable numbers can still be called; Old and Wrong ones are kept for the record. */
+export function isUsable(n: LeadNumber) {
+  return n.status === "Active" || n.status === "Not reachable";
+}
+
 export interface LeadDetail {
   lead: LeadRow &
     Partial<LeadForm> &
     Record<string, unknown> & {
+      /** every number of the lead; absent from an older TBO Smart */
+      numbers?: LeadNumber[];
+      can_remove_numbers?: boolean;
+      /** a manager or the head of the lead's department may merge duplicates into it */
+      can_merge?: boolean;
       /** absent from an older TBO Smart */
       place?: LeadPlace;
       photo_count?: number;
@@ -606,12 +689,34 @@ export function stageIcon(stage?: string): Component | undefined {
   return stage ? CALL_STAGES[stage] : undefined;
 }
 
+/** The way a lead usually goes, as the lead page's steps: every stage in one row left no
+ * room to read them. Scheduling and the three meetings are one step. A stage the ERP site
+ * doesn't have is left out, and every stage off the path (Not Responding, On Hold, Closed –
+ * Lost…) is a side stage, reached from the Move to menu. */
+export const STAGE_PATH: { stages: string[]; label?: string }[] = [
+  { stages: ["New Lead"] },
+  { stages: ["Contacted"] },
+  {
+    label: __("Meeting"),
+    stages: [
+      "Meeting Scheduled",
+      "First Meeting Completed",
+      "Second Meeting Completed",
+      "Third Meeting Completed",
+    ],
+  },
+  { stages: ["Proposal Sent"] },
+  { stages: ["Negotiation"] },
+  { stages: ["Closed – Won"] },
+];
+
 /** "5m", "3h", "2d": how long ago, compactly, for a chip. */
 export function shortAgo(when?: string | null) {
   if (!when) return "";
   const minutes = Math.max(0, dayjs().diff(dayjs(when), "minute"));
   if (minutes < 60) return __("{0}m ago", String(minutes));
-  if (minutes < 60 * 24) return __("{0}h ago", String(Math.floor(minutes / 60)));
+  if (minutes < 60 * 24)
+    return __("{0}h ago", String(Math.floor(minutes / 60)));
   return __("{0}d ago", String(Math.floor(minutes / 60 / 24)));
 }
 
@@ -1007,13 +1112,66 @@ export interface ProposalMoney {
   splits_total?: number;
 }
 
-/** helpdesk.api.leads.get_overview_page: the Overview, its money and the intake in one
- * request; a part that failed is null with its message in `errors`. */
+export type QualityGroup =
+  | "source"
+  | "industry"
+  | "district"
+  | "department"
+  | "product";
+
+export interface CallingRow {
+  user: string;
+  full_name: string;
+  given: number;
+  called: number;
+  /** % of the leads handed in batches that were called */
+  completion: number;
+  reached: number;
+  /** % of the leads called that picked up */
+  reach_rate: number;
+  overdue: number;
+  calls: number;
+  missed: number;
+  talk_seconds: number;
+}
+
+export interface QualityRow {
+  /** null: the lead has no value for it */
+  value: string | null;
+  leads: number;
+  called: number;
+  called_rate: number;
+  reached: number;
+  reach_rate: number;
+  wrong_rate: number;
+  not_interested_rate: number;
+  moved_on: number;
+  moved_rate: number;
+  won: number;
+}
+
+/** helpdesk.api.leads.get_overview_page's `analysis`: the Overview's Calling performance
+ * and Lead quality. `available` is false while the ERP site's TBO Smart is older. */
+export interface LeadAnalysis {
+  available: boolean;
+  min_called?: number;
+  calling?: CallingRow[];
+  quality?: Partial<
+    Record<
+      QualityGroup,
+      { rows: QualityRow[]; best: string | null; worst: string | null }
+    >
+  >;
+}
+
+/** helpdesk.api.leads.get_overview_page: the Overview, its money, the intake and the
+ * analysis in one request; a part that failed is null with its message in `errors`. */
 export interface OverviewPage {
   overview: LeadOverview;
   money: ProposalMoney | null;
   intake: LeadIntake | null;
-  errors: { money?: string; intake?: string };
+  analysis: LeadAnalysis | null;
+  errors: { money?: string; intake?: string; analysis?: string };
 }
 
 export type BusinessPeriod =

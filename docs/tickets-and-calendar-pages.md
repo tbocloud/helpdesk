@@ -2,29 +2,29 @@
 
 Phase 2B of the UI work in [ui-guidelines.md](ui-guidelines.md): the agent tickets list and the
 work calendar. Both keep every route, URL parameter, permission and feature they had; the
-changes are the summary strip, row readability, states and the phone layouts. Shared blocks
+changes are the view tabs, row readability, states and the phone layouts. Shared blocks
 (`StatTile`, `TaskyState`, `TaskyBadge`) are described in [workspace-pages.md](workspace-pages.md).
 
 ## Tickets (`/tickets`, agents)
 
 `desk/src/pages/ticket/Tickets.vue` on top of the shared `components/ListViewBuilder.vue`.
 **The customer portal (`/my-tickets`) renders the same `Tickets.vue`**, so every agent-only
-change is behind `isCustomerPortal`: the portal has no summary strip, and its status, SLA cells,
+change is behind `isCustomerPortal`: the portal has no view tabs, and its status, SLA cells,
 phone rows and empty state are its own (see [customer-portal-and-kb.md](customer-portal-and-kb.md)).
 
-- **Summary strip** (`components/ticket-agent/TicketSummaryStrip.vue`): five compact
-  `StatTile` toggles: Open, Unassigned, First reply overdue, SLA breached, Waiting on customer.
-  Each count is `frappe.client.get_count` on HD Ticket with the same conditions the tile
-  applies, so the number and the list agree, and the count only includes tickets the agent may
-  read (it goes through `get_list`). A tile sets `?filters=` on `/tickets` (dropping `view`,
-  since the counts are across all tickets); pressing the active tile removes it. The pressed
-  state is read back from the URL (`matchTicketFilter`), ignoring the "now" inside the deadline
-  filters. Counts reload with the list on a new ticket (`helpdesk:new-ticket`); each tile keeps
-  only its latest request's answer, so a slow older reply can't overwrite a newer count. A count
-  that fails shows "—" and "Couldn't count. Select to retry."; selecting that tile counts again
-  instead of filtering.
+- **View tabs** (`components/ticket-agent/TicketViewTabs.vue`): All open, Mine, Unassigned,
+  Past SLA and Closed, each a tab under the header. All but Closed show a count:
+  `frappe.client.get_count` on HD Ticket with the same conditions the tab applies, so the number
+  and the list agree, and the count only includes tickets the agent may read (it goes through
+  `get_list`). Past SLA is red when it isn't zero. A tab sets `?filters=` on `/tickets` (dropping
+  `view`, since the counts are across all tickets); selecting the active tab removes it. The
+  active tab is read back from the URL (`matchTicketFilter`), ignoring the "now" inside the
+  deadline filters. Counts reload with the list on a new ticket (`helpdesk:new-ticket`); each tab
+  keeps only its latest request's answer, so a slow older reply can't overwrite a newer count. A
+  count that fails shows "—" and selecting the tab counts again instead of filtering. "First reply
+  overdue" and "Waiting on customer" are no longer tabs; they stay available as filters.
 - **Filters in one place**: `pages/ticket/ticketFilters.ts` holds the conditions (`open`,
-  `newToday`, `unassigned`, `slaBreached`, `firstReplyOverdue`, `waitingOnCustomer`, `rated`) and
+  `mine`, `closed`, `newToday`, `unassigned`, `slaBreached`, `firstReplyOverdue`, `waitingOnCustomer`, `rated`) and
   `ticketsLink()`. Home's `ticketLinks` (in `pages/home/homeMeta.ts`) are built from it.
 - **`?filters=` support in `ListViewBuilder`** (all lists): the list now re-reads `?filters=`
   when it changes while the page stays open (a view switch is still handled by the view
@@ -37,7 +37,8 @@ phone rows and empty state are its own (see [customer-portal-and-kb.md](customer
 - **Default columns** (`HDTicket.default_list_data`, agents without a saved default view): ID,
   Subject, Customer, Status, Priority, First response, Resolution, Assigned to, then Type, Team,
   Contact, Rating, Created. Saved views keep their own columns.
-- **Cells** (agents): Priority is a `TaskyBadge` with the signal icon (Urgent red, High amber,
+- **Cells** (agents): ID and Updated are mono, tabular and quiet; Status is a neutral pill with
+  its colour dot and label; Priority is a `TaskyBadge` with the signal icon (Urgent red, High amber,
   others neutral). First response and Resolution are `TaskyBadge`s: Failed (red, alert icon),
   Fulfilled (neutral, check), Paused (neutral, pause), or, while the clock runs, **when the
   deadline falls** with a clock: "10:30 AM" today, "Tomorrow 10:30 AM", "Tue 2:30 PM" within six
@@ -69,8 +70,8 @@ phone rows and empty state are its own (see [customer-portal-and-kb.md](customer
   shows `EscalationBadge` ("Escalated to lead / head / managers") after its subject (agents
   only; `custom_escalation_level` is one of the list's rows). The SLA reminders themselves are in
   [follow-ups.md](follow-ups.md).
-- **Summary strip and tones agree**: "SLA breached" and "First reply overdue" count tickets
-  whose deadline has passed, which is exactly when a cell shows Failed; neither uses an "at
+- **Tabs and tones agree**: "Past SLA" counts tickets
+  whose deadline has passed, which is exactly when a cell shows Failed; it uses no "at
   risk" window, so the working-time warning changes no count.
 - **Phones** (below 640px): `ListViewBuilder` renders a page's `#mobile-row` slot as a stacked
   list instead of the table. Tickets' row: subject (bold when unseen) with the resolution SLA

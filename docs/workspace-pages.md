@@ -14,7 +14,7 @@ Shared building blocks, in `desk/src/components/`:
   `valueTone` colours the number the same way; `delta`, `deltaText` and `deltaTone` add a
   change line with an up/down arrow; `compact` tightens it for a strip above a list (an
   inline icon, no circle). Used by Overview, Team, the By project view, Performance, the
-  tickets summary strip ([tickets-and-calendar-pages.md](tickets-and-calendar-pages.md)), and
+  tickets view tabs ([tickets-and-calendar-pages.md](tickets-and-calendar-pages.md)), and
   the customer report and the customer and contact pages ([customer-pages.md](customer-pages.md)).
 - **`DirectoryList`**: the Customers and Contacts list (link rows, bulk delete, paging and
   every state), with `useDirectory()` keeping search and sort in the URL
@@ -34,30 +34,82 @@ A failed call's message comes from `errorText(error, fallback)` in `desk/src/uti
 
 ## Sidebar
 
-The app sidebar (`AppSidebar.vue`, state in `stores/sidebar.ts`). On desktop it **auto-hides**
-by default, like the Mac Dock: it rests as the icon rail and opens only when you go to it.
+Two levels, a **rail** and a **panel** (`AppSidebar.vue` holds them; `NavRail.vue`,
+`NavPanel.vue`, the nav data in `navigation.ts`, the role rules and the active-page logic
+in `useNavigation.ts`, state in `stores/sidebar.ts`).
 
-- **Expands** over the page, never pushing it: the rail keeps its 3rem in the layout and the
-  full sidebar opens above the content with a shadow, in 200ms (instant with reduced motion).
-  It opens after 120ms of hover, so a pointer passing across doesn't open it, and closes
-  250ms after the pointer leaves.
-- **Keyboard:** Tab into it and it opens (only keyboard focus, so a mouse click doesn't hold
-  it open). Tabbing out closes it. Escape closes it and returns focus to where it came from,
-  or to the page.
-- **Touch:** the first tap on the rail opens it without acting; the next tap picks an item.
-  A tap outside, or picking an item, closes it. Hover is never needed.
-- **Stays open** while something it opened is still open: the workspace switcher, a view's
-  options menu (any `aria-haspopup` trigger inside it) or the Notifications panel.
-- **Pin:** the bottom control toggles "Keep sidebar open" and "Auto-hide sidebar". Pinned is
-  the old expanded sidebar, with the page laid out beside it. The choice is kept per browser
-  in localStorage (`sidebar_is_pinned`, default off, so everyone starts on auto-hide);
-  `useStorage` falls back to memory when storage is blocked.
-- **In the rail:** the unread dot on Notifications, Search and the theme toggle as their own
-  items, and the follow-ups strip as a bell with a count (`FollowUpStrip` with `rail`).
-- **Tooltips:** frappe-ui's rail tooltips stay as they are (no extra code). They wait 500ms,
-  and hover, focus and tap all open the sidebar sooner, so in practice they don't show; the
-  items keep their accessible names either way.
-- The mobile drawer is unchanged.
+- **Rail** (3.5rem, always visible on desktop, dark in both themes): the panel's collapse
+  button, one icon per area, Notifications, Settings and the avatar with the account menu at the bottom. Icons are
+  neutral and lighten on hover (contrast 9:1 idle, 10:1 hovered, both on the dark rail); the
+  selected area is filled with `brand` (3.3:1 against the rail) and carries a marker on the
+  rail's edge, which also marks the area holding the open page while another is selected.
+  Tooltips carry the labels: they open with no delay on hover and on keyboard focus, and
+  the button has its own `aria-label`, so the tooltip never has to be reached.
+- **Panel** (15rem): a compact workspace card (logo, "Team Back Office", the person's
+  department), Search (opens the command palette, Ctrl/Cmd+K), the selected area's name as a
+  heading, its groups under small uppercase headings, then the follow-ups strip, the
+  onboarding/permission banners and "Help & docs". Only the items list scrolls: the card,
+  Search and the area name stay at the top, the strip and Help & docs at the bottom.
+  The current page is tinted `brand-soft` with `aria-current="page"`. Raising a ticket is
+  on the Tickets page (there is no separate help card).
+- **Collapsed panel** (`NavPanelCollapsed.vue`, 3.5rem): the rail's top button (Collapse /
+  Expand menu) folds the panel to an icon-only column instead of hiding it, so the pages
+  stay one click away. It shows Search (opens the command palette), the selected area's
+  items as icons in the same order (groups split by a thin rule), the follow-ups bell with
+  its count and Help & docs. The current page is tinted `brand-soft` with
+  `aria-current="page"`; names show in a tooltip with no delay on hover and focus, and each
+  icon also has an `aria-label`. A count (My Work, Tickets) is a small badge on the icon and
+  is part of the label. A tree (Saved views) shows its icon and **opens a small menu beside
+  it** with the saved views (keyboard and Esc work; the menu is frappe-ui's Dropdown) rather
+  than expanding the panel, so the person keeps their place and the page does not shift. The
+  width animates (200 ms, none under `prefers-reduced-motion`). The choice is remembered per
+  person (`nav_panel_open:<user>`) and changes only when the button is pressed; picking
+  another area on the rail swaps the icons and leaves the column folded. The mobile drawer
+  always shows the full panel.
+- **Areas**, mapped from the old menu (every item keeps the role rule it had; an area with
+  no page a person can use never shows):
+
+  | Area | Items |
+  | --- | --- |
+  | Home | Home, Stand-up, Scoreboard |
+  | Work | My work: My Work (count), Board, In progress, Calendar, Timesheets. Projects: Projects, Project status, Templates. Team: Overview, Team, Adoption |
+  | Support | Tickets (count), Saved views (a tree), Knowledge base |
+  | Sales | Today's calls, Leads, Add a lead, My leads, Commission. Team: Overview, Business |
+  | Content | Content, Performance |
+  | People | Customers, Contacts |
+  | Reports | Summaries, Customer report, Support hours |
+
+  The customer portal has one area, Support (Tickets, Knowledge base). The project's own
+  Commission is a project tab, not a sidebar page, so it stays in its project; the Sales
+  Commission is the Leads page's tab. Saved replies have no page of their own (they live in
+  Settings), so Support has no item for them.
+- **Sales items are tabs of the Leads page** (`?view=today|all|overview|business|commission`),
+  shown by the page's own rules (`useNavigation.ts`, from the CRM options): Today's calls only
+  where a department hands out call batches; Overview for everyone who is not a BD; Business
+  only where the CRM site allows it; Commission for everyone with Leads (a BD sees their own).
+  A BD with call batches sees Today's calls in place of Leads (their other tabs sit on that
+  page), and the Sales Employee allow list is unchanged. The Leads page drops the tab from the
+  URL when it is the one it opens on, so the active item is worked out from that default.
+- **Tree:** Saved views (the pinned ticket views) fold open to a tree with a guide line and
+  a dot per view; each view keeps its options menu. Its chevron is `aria-expanded`.
+- **Deep links:** the area and item for the open page are selected on every navigation, and
+  detail pages (a ticket, a project tab, a lead) keep their list page highlighted (`also` in
+  `navigation.ts`). On a desktop, choosing another rail icon opens that area's first page, so
+  a click always changes the screen (with the panel folded to icons, swapping only the links
+  looked like nothing happened). On a phone the drawer lists the area's pages instead, and only
+  an area with a single page goes straight to it. The rail icon of the area already open only
+  shows its pages.
+- **Never collapses by itself.** The panel closes only when the person presses the button at
+  the top of the rail (aria-expanded), not on navigation, on pointer leave or when the window
+  is resized on desktop. It defaults to open; picking a rail icon leaves it open or folded as it was.
+  Trees stay as the person left them and one opening never closes another. The choice is kept
+  per person in localStorage (`nav_panel_open:<user>`, `nav_trees:<user>`); `useStorage`
+  falls back to memory when storage is blocked.
+- **Mobile:** the hamburger opens a drawer with the rail and the panel side by side; it
+  closes when a page is picked (the only place the menu closes itself). There is no bottom
+  navigation, so nothing is duplicated.
+- **Roles:** Sales Employees get no Search (as before) and see only their sales pages; the
+  content team, DM and ERP employees see the same items as before, regrouped.
 
 ## Who sees which tasks
 
@@ -155,6 +207,18 @@ counts only on the project where the person holds it.
 | Recurring schedules, Sign-off, Generate checklist | No | `can_manage_project`, project write permission |
 | Invoicing | No | admins only (`helpdesk/api/invoices.py`) |
 | Move a task to another project | Only one they assigned, as anyone may | `can_move_task`, also on a plain form save (`Task.check_project_move`) |
+
+**A task needs a due date or an estimate.** Every task a person creates needs at least one of
+the two, so it can be planned (with only an estimate the AI dates it, `task_estimates`): New task
+(`add_task`), Create task on a ticket (`create_task_from_ticket`; an approved customization
+estimate fills both in, and its dialog starts from them), Ask for help (`request_help`), a
+stand-up blocker's task (`create_task_from_blocker`), a repeat issue's root-cause task
+(`create_root_cause_task`) and the app's quick add (`mobile.quick_add_task`). The server refuses
+one with neither (*Give the task a due date or an estimate.*, `tasky.require_due_or_estimate`);
+each form has an Estimate (`EstimateInput.vue`) next to the date, marks both labels with the red * of a required field (`RequiredMark.vue`, read out as *a due date or an estimate is required*; not the browser's required check, since either one is enough), says so under them while both
+are empty, and keeps Create disabled until one is set (`taskMeta.hasDueOrEstimate`). Tasks the
+hub makes itself (content posts, recurring tasks, proposal plans, GitHub, sign-off
+clarifications) set their own dates.
 
 ## Overview (`/overview`)
 
@@ -471,6 +535,18 @@ from the tasks the viewer can see, so a plain member's card counts their own tas
 `desk/src/pages/work/MyWork.vue`; API `helpdesk.api.work.get_my_work(user)`. `?user=` opens a
 team member's work, for leads and managers of their projects (the Team page links here).
 
+- **Layout**: the header bar shows the title, "N open · M due today" and the one primary
+  action, **New task** (`NewTaskDialog`, which asks for the project; hidden on someone else's
+  work), next to the person picker and refresh. On wide screens a right column holds
+  **Working on now** (`components/WorkingNow.vue`: the first task in progress, its running
+  stretch ticking from `get_timer`, **Pause** / **Resume** through `stop_timer` / `start_timer`
+  (one running timer per person, the 8 h daily cap and work hours stay on the server) and
+  **Complete**, which opens the same Complete step with hours and notes) and **This week**
+  (done since Monday from Completed, tasks due this week, tasks whose due date has slipped).
+  On phones Working on now comes first and This week after the list. Task rows
+  (`WorkItemRow` with `card` and `checkable`) have a checkbox that opens the Complete step
+  (the task stays open until it is done), a **KEY** tag (`components/KeyTag.vue`) and the
+  deadline as a pill. There is no Group by: the groups below are the only grouping.
 - **Groups**, in this order, each with its count, from `dueGroup()` in `workMeta.ts`: Overdue
   (past the due date or SLA), Today, This week (the next 7 days, as on the Team page), Later
   (further out, no date, or a ticket whose SLA is paused), On hold, In review. Held and
@@ -578,6 +654,12 @@ the timer, hold/resume, complete, edit, ask for help and hand over work as on a 
 each using the task's own project; project-level actions (Plan, Approve/Send back, Make
 recurring) stay on the project's board.
 
+**Move to** in a card's ••• menu (every board, `cardActions` in `Kanban.vue`) lists the other
+columns, in the person's column order, and moves the card as dropping it there does
+(`changeStatus`): On hold asks why, Completed and In review open the Complete dialog, a blocked
+task is refused, and the timer pauses. It is there because a far column, such as Cancelled,
+was hard to drag a card to. A completed card has no Move to, as it can't be dragged.
+
 **Column order** is each person's own: dragging a column by its header moves it (a brand line
 shows where it lands), and the grip button in the header does the same from the keyboard with
 the left and right arrow keys. The order is kept in this browser per person
@@ -618,6 +700,18 @@ assigning it later, who shows as "Assigned by" instead. `createdByName()` in `ta
 shows it as a "Created by" row in the task details and in Edit task, and as "Created by …"
 before "Assigned by …" on board cards and My Work rows, where it is left out when the same
 person did both. Editing the post later doesn't change either: the task isn't recreated.
+
+### Estimate
+
+A task's estimate is typed as **hours and minutes** (`EstimateInput.vue` in
+`pages/tasky/components`), in New task, Edit task, the recurring task dialog and each template
+task on Templates. It is stored in hours as before (`custom_estimated_hours`,
+`HD Recurring Task.estimated_hours`, `HD Task Template Task.estimated_hours`): 1 h 30 min is
+1.5 and 20 min is 0.333, so workload, overdue and timesheet sums are unchanged. Minutes over 59
+carry into hours (90 min is 1 h 30 min). Once the timer passes the estimate the task is
+overdue, whatever its due date (see [When a task is overdue](#when-a-task-is-overdue)). Task details and Edit task show it the same way
+(`formatEstimate()` in `taskMeta.ts`: "1 h 30 min", "45 min", "2 h"). The content calendar's
+per-role hours are still typed in hours.
 
 ### New tasks
 
@@ -769,19 +863,10 @@ in `custom_timer_elapsed`. The server is the only record: the board derives each
 from those fields (`taskTimer()` in `taskMeta.ts`) and replaces its local state on every load.
 Pause calls `stop_timer` (banks the time, the task stays In progress) and Resume calls
 `start_timer`, which only works on a task In progress; resuming a card that left In progress
-moves it back there like a drop. Nothing else starts a paused timer. A person may run timers on
-several tasks at once (owner's request, 2026-11-03): starting one (Resume, moving a task to In
-progress, resuming from hold) leaves their other running timers alone (`begin_timer` in
-`helpdesk/tasky/time_sessions.py`), and pausing one pauses only that one. The daily cap still
-holds a day to its work hours across all of them (`record_session` keeps no more than
-`day_left`). Before this, Pause only changed the board's local state, so the server
-timer kept running and the next load (moving or editing another task, or coming back to the
-board) showed the paused task running again.
-
-Every task In progress shows its timer, Paused at 0 when nothing is banked yet, with Resume.
-A stretch of a few seconds banks 0 h (sessions keep two decimals), and `taskTimer()` used to
-return no timer for a paused task with nothing banked, so a task paused that way showed no
-timer and no way to resume it.
+moves it back there like a drop. Nothing else starts a paused timer, and starting one task never
+touches another's: there is no one-running-task rule. Before this, Pause only changed the
+board's local state, so the server timer kept running and the next load (moving or editing
+another task, or coming back to the board) showed the paused task running again.
 
 ### Dropping a card on In review or Completed
 
@@ -868,22 +953,33 @@ dialog and the reports (`helpdesk/work_hours.py`):
   resume." A run missed at the close (the scheduler down overnight) still stops it at that close
   once it runs, even inside the next window, so a timer never carries on into the next days and
   they aren't counted as worked; a timer still in the window it started in keeps running.
-- **Several timers per person:** the task records whose timer runs (`custom_timer_user`), the
-  person its stretches are saved for. Starting a timer (Start, moving a task to In progress,
-  resuming from hold) doesn't touch the person's other running timers; it used to pause them
-  (one at a time) until the owner asked for several at once. Start is refused outside a window;
-  moving a task to In progress then leaves its timer paused.
+- **One timer per person:** the task records whose timer runs (`custom_timer_user`). Starting a
+  timer (Start, moving a task to In progress, resuming from hold) pauses the person's other
+  running timer first and saves its session. Start is refused outside a window; moving a task to
+  In progress then leaves its timer paused.
 - **Daily cap:** per person per day, timesheet hours plus not-yet-logged sessions can't pass
   `max_hours(day)`. `complete_task` checks every day's hours against what is left (the task's own
   sessions are replaced by the dialog's rows, so they don't count against it). Typed-in hours
-  are for today and the working day before it only (`last_working_day`: the latest earlier day
-  with work hours, as the cap counts them, so Friday on a Monday even when Saturday is a working
-  day without SLA hours, and the day before a holiday after it; it looks back as far as the
-  task's creation, the earliest day hours can go on, and with no such day only today takes
-  typed-in hours); an
-  older day takes only what the task's timer recorded on it, the stretch still running included,
+  are for today and the last **N working days** (HD Work Settings → Days Hours Can Be Typed
+  In, `hand_entry_days`, 7 by default, 1 to 60; owner's request, 2026-11-03, as staff found
+  older tasks hard to complete when it was the day before only). The days are counted as the
+  cap counts them, by their work hours (`working_days_before`, `oldest_hand_entry_day`): a
+  Saturday without SLA hours and holidays are skipped, and the search stops at the task's
+  creation, the earliest day hours can go on. `get_completion_days` returns the earliest
+  allowed day as `oldest` (and the working day before today as `yesterday`, as before), and
+  `left` for each day in the window. An older day takes only what the task's timer recorded on it, the stretch still running included,
   rounded to the nearest quarter hour as the dialog offers it (`timer_allowance`: 7.13 h may be
-  logged as 7.25), unless a System Manager passes `backdate_reason`.
+  logged as 7.25), unless a System Manager passes `backdate_reason`. The refusal says what the
+  timer recorded on that day and the most it allows ("…the timer recorded 0.24 h on it, so you
+  can log at most 0.25 h"), or that it recorded nothing, and from which day hours can be typed
+  in. The Complete task dialog keeps the
+  timer's hours by date (`timerByDay` in `CompleteTaskDialog.vue`), not on the row they first
+  filled: a row moved to another day shows that day's "From the timer" hours (none if the timer
+  didn't run then) and is checked against them with the same rounding (`timerAllowance`), so the
+  dialog never passes a day the server then refuses. Complete is never disabled: pressing it
+  shows what is wrong with the days or the notes (the problems show only once it is pressed),
+  and nothing is sent until they are fixed. It used to be disabled while anything was invalid,
+  so a too-old day left a greyed-out button and no message.
 - **Reports:** hours per person per day come from timesheets (one per day worked, see above) and
   sessions, never from a completed task's `custom_actual_hours`. The Scoreboard's and the
   stand-up's hours (`team_dashboard.logged_hours`) scale a person's day down to `max_hours` for
@@ -925,15 +1021,21 @@ browser (`isOverdue()` / `isOverEstimate()` in `taskMeta.ts`). A task that isn't
 Cancelled or On Hold is overdue when:
 
 - its due date (`exp_end_date`) has passed, or
-- **it is due today and has been worked longer than its estimate**: the timer's banked time plus
-  its running stretch (`custom_timer_elapsed` + now − `custom_timer_start`) exceeds
-  `custom_estimated_hours`. E.g. due today with 2 hours, moved to In progress at 10:00 and still
-  open at 12:01: overdue.
+- **it has been worked longer than its estimate**, whatever its due date and with none
+  (owner's request, 2026-11-03): the timer's banked time plus its running stretch
+  (`custom_timer_elapsed` + now − `custom_timer_start`) exceeds `custom_estimated_hours`. E.g. a
+  30 min task (see [Estimate](#estimate)) moved to In progress at 10:00 and still open at 10:31
+  is overdue, even if it's due next week. Until 2026-11-03 this counted only on the due date.
 
 The hours clock is the board timer, so it starts when the task moves to In progress (not when it
 was created or assigned), stops while the timer is paused, and counts work-day hours only (the
-timer stops at the end of the day and lunch, see "The work day"). Tasks due on a later day only go overdue when their date passes; a
-task with no estimate only by date. An overdue task carries no "at risk" reasons, so it's counted once (overdue), not in both buckets.
+timer stops at the end of the day and lunch, see "The work day"). A task with no estimate is
+overdue only by date. The board card says "Overdue" even when the task has no due date, and
+My tasks and the Overdue page say "Past its estimate". **Escalation still goes by the date:**
+the follow-ups' overdue ladder counts working days past the due date, so a task over its
+estimate before it (or with none) shows as overdue but isn't escalated until it is due
+(`FollowUpRules.overdue` in `helpdesk/follow_ups.py`). Home's "given out" list fetches tasks
+over their estimate whatever their date. An overdue task carries no "at risk" reasons, so it's counted once (overdue), not in both buckets.
 My tasks and the phase checklist load the timer fields for this. Where it shows: My Work
 (Overdue group and tab; the label
 reads "Overdue · past its estimate"), Overview buckets, Team and Projects counts, the

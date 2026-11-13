@@ -197,6 +197,7 @@ import {
   assignedByName,
   createdByName,
   formatElapsed,
+  formatEstimate,
   holdByLabel,
   holdDays,
   holdDurationLabel,
@@ -455,7 +456,7 @@ const detailRows = computed(() => {
     },
     {
       label: __("Estimate"),
-      value: d.estimated_hours ? __("{0} hrs", String(d.estimated_hours)) : "—",
+      value: formatEstimate(d.estimated_hours),
     },
     {
       label: __("Timer"),

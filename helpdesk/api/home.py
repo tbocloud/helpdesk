@@ -290,10 +290,18 @@ def _given_out(user: str, skip: set[str]) -> list[dict]:
     rows = (
         given_out_query(user)
         .where(
-            # due today is overdue only past its estimate; is_task_overdue decides below
+            # due today or later (or with no date) is overdue only past its estimate;
+            # is_task_overdue decides below
             (
                 (task.status == PENDING_REVIEW)
                 | (task.exp_end_date <= getdate(nowdate()))
+                | (
+                    (task.custom_estimated_hours > 0)
+                    & (
+                        task.custom_timer_start.isnotnull()
+                        | (task.custom_timer_elapsed > task.custom_estimated_hours)
+                    )
+                )
             )
             & task.status.notin(["Completed", "Cancelled", "Template", ON_HOLD])
         )

@@ -413,6 +413,13 @@
                     {{ shortDate(task.due_date) }}
                     <span v-if="isOverdue(task)">· {{ __("Overdue") }}</span>
                   </span>
+                  <span
+                    v-else-if="isOverdue(task)"
+                    class="flex shrink-0 items-center gap-1 text-xs font-medium text-danger"
+                  >
+                    <LucideAlarmClock class="size-3.5" aria-hidden="true" />
+                    {{ __("Overdue") }}
+                  </span>
                   <SlipBadge
                     v-if="task.slip_count && !isClosed(task)"
                     :count="task.slip_count"
@@ -572,6 +579,7 @@ import { Button, Dropdown, call, createResource, toast } from "frappe-ui";
 import { computed, onUnmounted, ref, watch } from "vue";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
 import LucideArrowRight from "~icons/lucide/arrow-right";
+import LucideArrowRightLeft from "~icons/lucide/arrow-right-left";
 import LucideCalendar from "~icons/lucide/calendar";
 import LucideCalendarClock from "~icons/lucide/calendar-clock";
 import LucideCheckCheck from "~icons/lucide/check-check";
@@ -770,6 +778,20 @@ function cardActions(task: Task) {
       label: __("Edit"),
       icon: LucidePencil,
       onClick: () => (editingTask.value = task),
+    });
+  // the menu's way to move a card, as dropping it on a column does (a far column, such as
+  // Cancelled, is hard to drag to); a completed card doesn't move, as when dragged
+  if (task.status !== "Completed")
+    actions.push({
+      label: __("Move to"),
+      icon: LucideArrowRightLeft,
+      submenu: orderedColumns.value
+        .filter((key) => key !== task.status)
+        .map((key) => ({
+          label: __(taskStatusMeta(key).label),
+          icon: taskStatusMeta(key).icon,
+          onClick: () => changeStatus(task, key),
+        })),
     });
   if (canEdit(task) && !isClosed(task)) {
     // a task waits on one other task, so asking for help needs it free

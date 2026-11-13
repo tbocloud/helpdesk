@@ -67,8 +67,6 @@
             </Button>
           </template>
         </Dropdown>
-        <!-- who has it (Phase 12): pick someone working today -->
-        <AssignTo hide-label quiet class="hidden w-48 sm:flex" />
         <!-- the side panel is a sheet below lg -->
         <Button
           class="lg:hidden"
@@ -80,14 +78,38 @@
             <LucidePanelRight class="size-4" aria-hidden="true" />
           </template>
         </Button>
-        <!-- Reply (R): the customer tab with the composer open -->
+        <!-- Assign and Merge stay one click away; the rest of the actions are in More -->
+        <div class="hidden w-40 lg:block">
+          <AssignTo hide-label />
+        </div>
         <Button
+          v-if="showMergeOption"
+          :label="__('Merge')"
+          @click="showMergeModal = true"
+        >
+          <template #prefix>
+            <LucideMerge class="size-4" aria-hidden="true" />
+          </template>
+        </Button>
+        <Button
+          :variant="canResolve ? 'subtle' : 'solid'"
           :label="__('Reply')"
           aria-keyshortcuts="r"
           @click="openReplyBox()"
         >
           <template #prefix>
             <LucideReply class="size-4" aria-hidden="true" />
+          </template>
+        </Button>
+        <!-- Primary action: the ticket is done -->
+        <Button
+          v-if="canResolve"
+          variant="solid"
+          :label="resolveStatus.label_agent"
+          @click="setStatus(resolveStatus.label_agent)"
+        >
+          <template #prefix>
+            <LucideCircleCheck class="size-4" aria-hidden="true" />
           </template>
         </Button>
         <!-- Secondary, core and custom actions -->
@@ -158,6 +180,7 @@ import {
 } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LucideChevronDown from "~icons/lucide/chevron-down";
+import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideListPlus from "~icons/lucide/list-plus";
 import LucideVideo from "~icons/lucide/video";
 import {
@@ -209,24 +232,43 @@ function onMeetingScheduled() {
 }
 
 const { notifyTicketUpdate } = useNotifyTicketUpdate(ticket.value?.name);
+function setStatus(status: string) {
+  notifyTicketUpdate("Status", status);
+  if (ticket.value.doc.status === status) return;
+  ticket.value.setValue.submit(
+    { status },
+    {
+      onSuccess() {
+        activities.value.reload();
+      },
+    }
+  );
+}
+
+// "Resolved" when the site has it, otherwise the first enabled status that stops the SLA clock
+const resolveStatus = computed(() => {
+  const resolved = (ticketStatusStore.statuses.data || []).filter(
+    (s: HDTicketStatus) => s.enabled && s.category === "Resolved"
+  );
+  return (
+    resolved.find((s: HDTicketStatus) => s.label_agent === "Resolved") ??
+    resolved[0]
+  );
+});
+const canResolve = computed(
+  () =>
+    resolveStatus.value &&
+    ticket.value.doc.status_category !== "Resolved" &&
+    ticket.value.doc.status !== resolveStatus.value.label_agent
+);
+
 const statusDropdown = computed(() => {
   const statuses =
     ticketStatusStore.statuses.data?.filter((s) => s.enabled) || [];
   return statuses.map((o: HDTicketStatus) => ({
     label: o.label_agent,
     value: o.label_agent,
-    onClick: () => {
-      notifyTicketUpdate("Status", o.label_agent);
-      if (ticket.value.doc.status === o.label_agent) return;
-      ticket.value.setValue.submit(
-        { status: o.label_agent },
-        {
-          onSuccess() {
-            activities.value.reload();
-          },
-        }
-      );
-    },
+    onClick: () => setStatus(o.label_agent),
     icon: () =>
       h(IndicatorIcon, {
         class: o.parsed_color,
@@ -332,31 +374,34 @@ const defaultActions = computed(() => {
     });
   }
 
-  if (showMergeOption.value) {
-    items.push({
-      label: __("Merge Ticket"),
-      icon: LucideMerge,
-      condition: () => !ticket.value.doc.is_merged,
-      onClick: () => (showMergeModal.value = true),
-    });
-  }
-
-  return items;
+  return [
+    {
+      group: __("Default actions"),
+      hideLabel: true,
+      items,
+    },
+  ];
 });
 
 const deleteAction = computed(() => {
   if (!isAdmin) return [];
   return [
     {
-      label: __("Delete"),
-      component: h(Button, {
-        label: __("Delete"),
-        variant: "ghost",
-        iconLeft: "trash-2",
-        theme: "red",
-        style: "width: 100%; justify-content: flex-start;",
-        onClick: handleDeleteTicket,
-      }),
+      group: __("Default actions"),
+      hideLabel: true,
+      items: [
+        {
+          label: __("Delete"),
+          component: h(Button, {
+            label: __("Delete"),
+            variant: "ghost",
+            iconLeft: "trash-2",
+            theme: "red",
+            style: "width: 100%; justify-content: flex-start;",
+            onClick: handleDeleteTicket,
+          }),
+        },
+      ],
     },
   ];
 });
@@ -387,15 +432,15 @@ const groupedWithLabelActions = computed(() => {
   return _actions;
 });
 
-// the ⋯ menu (Phase 12): the form scripts' groups (Customer site, Copilot and AI) first,
-// then the ticket's own actions
-const groupedActions = computed(() => [
-  ...actions.value.filter((action) => action.group && !action.buttonLabel),
-  {
-    group: __("Ticket"),
-    items: [...defaultActions.value, ...deleteAction.value],
-  },
-]);
+const groupedActions = computed(() => {
+  let _actions = [];
+  _actions = _actions.concat(defaultActions.value);
+  _actions = _actions.concat(
+    actions.value.filter((action) => action.group && !action.buttonLabel)
+  );
+  _actions = _actions.concat(deleteAction.value);
+  return _actions;
+});
 
 const customizationCtx = computed(() => ({
   doc: ticket?.value?.doc,

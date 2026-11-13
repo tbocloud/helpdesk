@@ -1,0 +1,70 @@
+{
+	"actions": [],
+	"creation": "2026-11-12 12:00:00.000000",
+	"doctype": "DocType",
+	"editable_grid": 1,
+	"engine": "InnoDB",
+	"field_order": [
+		"metric",
+		"enabled",
+		"label",
+		"period",
+		"basis",
+		"aggregation"
+	],
+	"fields": [
+		{
+			"fieldname": "metric",
+			"fieldtype": "Select",
+			"in_list_view": 1,
+			"label": "Metric",
+			"options": "total_leads\nopen_leads\nwon_leads\nlost_leads\nconverted_leads\nconversion_rate\nwon_value\nexpected_revenue\npending_value\naverage_deal_value\navg_closing_days",
+			"reqd": 1
+		},
+		{
+			"default": "1",
+			"fieldname": "enabled",
+			"fieldtype": "Check",
+			"in_list_view": 1,
+			"label": "Show"
+		},
+		{
+			"fieldname": "label",
+			"fieldtype": "Data",
+			"in_list_view": 1,
+			"label": "Label"
+		},
+		{
+			"default": "dashboard",
+			"fieldname": "period",
+			"fieldtype": "Select",
+			"in_list_view": 1,
+			"label": "Period",
+			"options": "dashboard\nthis_month\nlast_month\nthis_quarter\nthis_year\nlast_30_days\nlast_90_days\nlast_12_months\nall_time"
+		},
+		{
+			"description": "One of the metric's calculation sources; empty for its default.",
+			"fieldname": "basis",
+			"fieldtype": "Data",
+			"label": "Calculated from"
+		},
+		{
+			"fieldname": "aggregation",
+			"fieldtype": "Select",
+			"label": "Aggregation",
+			"options": "\nsum\naverage"
+		}
+	],
+	"index_web_pages_for_search": 0,
+	"istable": 1,
+	"links": [],
+	"modified": "2026-11-12 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD CRM Dashboard KPI",
+	"owner": "Administrator",
+	"permissions": [],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": []
+}

@@ -73,8 +73,8 @@ function taskDeadline(item: WorkItem): DeadlineInfo {
   const days = dayjs(item.deadline)
     .startOf("day")
     .diff(dayjs().startOf("day"), "day");
-  // due today and already worked longer than its estimate (server: is_task_overdue)
-  if (item.is_overdue && days === 0)
+  // not yet past its date but worked longer than its estimate (server: is_task_overdue)
+  if (item.is_overdue && days >= 0)
     return { label: __("Overdue · past its estimate"), overdue: true };
   if (item.is_overdue || days < 0) {
     const late = Math.max(-days, 1);
@@ -115,7 +115,10 @@ function ticketDeadline(item: WorkItem): DeadlineInfo {
 
 /** Deadline in plain language: "Due tomorrow", "3 days overdue", "SLA in 4h". */
 export function deadlineInfo(item: WorkItem): DeadlineInfo {
-  if (!item.deadline) return { label: __("No deadline"), overdue: false };
+  if (!item.deadline)
+    return item.is_overdue
+      ? { label: __("Overdue · past its estimate"), overdue: true }
+      : { label: __("No deadline"), overdue: false };
   return item.kind === "ticket" ? ticketDeadline(item) : taskDeadline(item);
 }
 

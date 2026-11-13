@@ -1,19 +1,22 @@
 <template>
-  <section
-    :aria-labelledby="id"
-    class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-3"
-  >
-    <div class="flex min-w-0 flex-col">
-      <h2 :id="id" class="text-xs text-ink-gray-6">{{ __("Calling for") }}</h2>
-      <p class="truncate text-base-medium text-ink-gray-9">
-        {{ focusLabel(focus) }}
-      </p>
-    </div>
-    <Button v-if="canSwitch(options)" :label="__('Change')" @click="openPicker">
-      <template #prefix>
-        <LucideArrowLeftRight class="size-4" aria-hidden="true" />
+  <section :aria-labelledby="id" class="flex min-w-0 items-center gap-2">
+    <h2 :id="id" class="text-sm text-ink-gray-6">{{ __("Calling for") }}</h2>
+    <Button
+      v-if="canSwitch(options)"
+      class="max-w-full"
+      :aria-label="
+        __('Change what you are calling for: {0}', focusLabel(focus))
+      "
+      @click="openPicker"
+    >
+      <span class="truncate">{{ focusLabel(focus) }}</span>
+      <template #suffix>
+        <LucideChevronDown class="size-4" aria-hidden="true" />
       </template>
     </Button>
+    <p v-else class="truncate text-base-medium text-ink-gray-9">
+      {{ focusLabel(focus) }}
+    </p>
 
     <Dialog
       v-model:open="show"
@@ -101,7 +104,7 @@ import { __ } from "@/translation";
 import { errorText } from "@/utils";
 import { Button, Dialog, FormControl, toast } from "frappe-ui";
 import { computed, ref, useId } from "vue";
-import LucideArrowLeftRight from "~icons/lucide/arrow-left-right";
+import LucideChevronDown from "~icons/lucide/chevron-down";
 import {
   canSwitch,
   focusChoices,

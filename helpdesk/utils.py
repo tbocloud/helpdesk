@@ -19,6 +19,26 @@ from pypika.functions import Replace
 
 from helpdesk.consts import CHAT_PLACEHOLDER_DOMAIN
 
+# a space (or &nbsp;) left between a Malayalam letter and its vowel sign, virama or
+# anusvara; PDFs copy "പോയി" as "പ ോയി". Valid Malayalam never has one there.
+MALAYALAM_SPLIT_SIGN = re.compile(
+    r"([\u0D00-\u0D7F])(?:\s|&nbsp;)+([\u0D02\u0D03\u0D3E-\u0D4D\u0D57\u0D62\u0D63])"
+)
+
+
+# the plural ending on an English word, "campaign-ുകൾ", copied as "campaign-ു കൾ"; a
+# "-ു" standing alone means nothing, so this space is never meant either
+MALAYALAM_SPLIT_PLURAL = re.compile(
+    r"-\u0D41(?:\s|&nbsp;)+(\u0D15(?:\u0D7E|\u0D33\u0D4D))"
+)
+
+
+def join_malayalam_signs(text: str) -> str:
+    """Joins the Malayalam vowel signs that a copy from a PDF splits off their letters
+    (desk: content/constants.ts joinMalayalamSigns)."""
+    text = MALAYALAM_SPLIT_SIGN.sub(r"\1\2", text)
+    return MALAYALAM_SPLIT_PLURAL.sub("-\u0D41\\1", text)
+
 
 def add_assignment(args: dict, ignore_permissions: bool = False):
     """Assign a document, skipping the caller's permission check when asked.

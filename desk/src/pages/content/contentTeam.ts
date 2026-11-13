@@ -46,6 +46,8 @@ export const SALES_EMPLOYEE_ROUTES = new Set([
   "Lead",
   "LeadProposal",
   "LeadNewProposal",
+  "AssignLeads",
+  "CrmDashboard",
   "TeamDashboard",
   "Notifications",
   "Invalid Page",

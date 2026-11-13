@@ -187,6 +187,10 @@ Sales leads are created and worked in the hub and live only in ERPNext on the CR
 read and written as the signed-in person through TBO Smart's hub leads API. Settings → CRM →
 **Leads** turns it on (off by default) and picks the teams. Details: [leads.md](leads.md).
 
+**Local copy (phase 1):** while Settings → CRM → *Local copy of leads* is on, the hub also keeps a
+read-only mirror of the ERP's leads, filled from the ERP's change feed. Nothing reads it yet; see
+[lead-mirror.md](lead-mirror.md).
+
 ## When it runs
 
 Every hour (users, then customers), soon after an agent is added, re-activated or

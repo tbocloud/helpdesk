@@ -399,6 +399,25 @@ same labels and fields:
 
 The Desk form uses the same labels (Copy, Sub Copy, Description).
 
+### Malayalam pasted from a PDF
+
+Copying Malayalam out of a PDF splits each vowel sign off its letter with a space, so
+"പോയി" pastes as "പ ോയി". Valid Malayalam never has a space there, so the space (or
+`&nbsp;`) between a Malayalam letter and a vowel sign, virama or anusvara is removed; typed
+text is never changed and spaces between words stay. The plural ending on an English word
+is split the same way ("campaign-ു കൾ" for "campaign-ുകൾ"), so a space between `-ു` and `കൾ`
+goes too; any other space after a vowel sign stays, since it usually sits between two words.
+The rule is `helpdesk.utils.join_malayalam_signs` (the desk's `joinMalayalamSigns` in
+`content/constants.ts` is the same):
+
+- the post dialog joins the Copy, Sub Copy, Description and Hashtags as they are pasted or typed;
+- every save of a post (`HDContentPost.mend_pasted_malayalam`, those four fields) and of a
+  task (`Task.mend_pasted_malayalam`, subject and description) joins them again, so the
+  mobile app and the Desk form are covered and a post's tasks never carry the broken copy;
+- the patch `mend_pasted_malayalam` mends the posts and tasks saved before this, straight in
+  the table (no save hooks, `modified` kept). It replaced `join_pasted_malayalam`, which a
+  test site ran before it covered tasks and the plural ending.
+
 ### Campaign is free text
 
 `campaign` used to link to `HD Content Campaign`; it is now a plain Data field, because the team
@@ -455,7 +474,7 @@ reopened task joins the current customer's content project (`is_customers_projec
 reopening needs that project like adding people does (`require_content_project` →
 `reopens_tasks`, from the same `parts_to_reopen` that `sync_tasks` uses).
 
-When a task counts as overdue (past its date, or due today and past its estimated hours) is
+When a task counts as overdue (past its date, or worked past its estimated hours, whatever its date) is
 described in [workspace-pages.md](workspace-pages.md#when-a-task-is-overdue), and who hears
 about it in [follow-ups.md](follow-ups.md).
 

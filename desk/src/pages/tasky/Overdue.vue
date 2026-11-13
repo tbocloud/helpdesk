@@ -225,8 +225,10 @@ const phaseNames = computed(() =>
   allTasks.value.map((t) => t.phase || "").filter(Boolean)
 );
 
-const byDue = (a: Task, b: Task) =>
-  dayjs(a.due_date).valueOf() - dayjs(b.due_date).valueOf();
+// a task overdue by its estimate may have no due date: it goes last
+const dueValue = (t: Task) =>
+  t.due_date ? dayjs(t.due_date).valueOf() : Number.MAX_SAFE_INTEGER;
+const byDue = (a: Task, b: Task) => dueValue(a) - dueValue(b);
 
 const overdue = computed(() =>
   allTasks.value.filter((t) => isOverdue(t)).sort(byDue)
@@ -300,14 +302,15 @@ const sections = computed(() =>
 );
 
 function dueLabel(task: Task) {
-  if (!task.due_date) return "—";
+  if (!task.due_date) return isOverdue(task) ? __("Past its estimate") : "—";
   const days = daysUntil(task.due_date);
   if (days < 0)
     return days === -1
       ? __("1 day overdue")
       : __("{0} days overdue", String(-days));
-  if (days === 0)
-    return isOverdue(task) ? __("Past its estimate") : __("Due today");
+  // worked past its estimate before its due date: overdue already
+  if (isOverdue(task)) return __("Past its estimate");
+  if (days === 0) return __("Due today");
   if (days === 1) return __("Due tomorrow");
   return __("Due {0}", dayjs(task.due_date).format("ddd D MMM"));
 }

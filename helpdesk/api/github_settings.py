@@ -82,7 +82,9 @@ def get_status() -> dict:
         .run(as_dict=True)
     )
     return {
-        "last_dispatch": frappe.db.get_single_value(SETTINGS, "merge_bot_last_dispatch"),
+        "last_dispatch": frappe.db.get_single_value(
+            SETTINGS, "merge_bot_last_dispatch"
+        ),
         "last_result": frappe.db.get_single_value(SETTINGS, "merge_bot_last_result"),
         # "Dispatched" or "Failed"; empty for results recorded before it existed
         "last_outcome": frappe.db.get_single_value(SETTINGS, "merge_bot_last_outcome"),
@@ -115,7 +117,10 @@ def test_token(field: str) -> dict:
     doc = frappe.get_doc(SETTINGS)
     token = doc.get_password(field, raise_exception=False)
     if not token:
-        return {"ok": False, "message": _("No token saved yet: add it, save, then test.")}
+        return {
+            "ok": False,
+            "message": _("No token saved yet: add it, save, then test."),
+        }
     try:
         user = github_get("/user", token)
         if not user.ok:

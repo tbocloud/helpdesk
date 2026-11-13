@@ -10,7 +10,7 @@
     :title="__('Sign-off templates')"
     :description="
       __(
-        'The questions a customer answers to confirm a training is complete. A new sign-off copies a template\'s questions, so editing a template never changes a sign-off already sent.'
+        'The questions a customer answers to confirm a training is complete, and the mail that asks them to sign (a UAT\'s template is only the mail: its tests come from the SRS). A new sign-off copies a template\'s questions and mail, so editing a template never changes a sign-off already sent.'
       )
     "
   >
@@ -42,6 +42,10 @@
             @open="editing = item.name"
           >
             <template #badges>
+              <TaskyBadge
+                v-if="item.signoff_type === 'UAT'"
+                :label="__('UAT')"
+              />
               <TaskyBadge v-if="!item.is_active" :label="__('Inactive')" />
             </template>
           </SettingsListItem>
@@ -69,6 +73,8 @@ interface TemplateRow {
   module?: string | null;
   is_active: number;
   question_count: number;
+  signoff_type?: "Training" | "UAT";
+  project_type?: string | null;
 }
 
 /** null: the list; "": a new template; a name: that template. */
@@ -81,11 +87,16 @@ const templates = createResource({
 });
 
 function subtitle(t: TemplateRow) {
+  // a UAT's tests come from the SRS: its question count says nothing
   const count =
-    t.question_count === 1
+    t.signoff_type === "UAT"
+      ? __("Tests from the SRS")
+      : t.question_count === 1
       ? __("1 question")
       : __("{0} questions", String(t.question_count));
-  return t.module ? `${t.module} · ${count}` : count;
+  return [t.module, t.project_type ? __(t.project_type) : null, count]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 function closeEditor() {

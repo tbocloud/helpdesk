@@ -87,7 +87,7 @@ All thresholds are in HD Follow Up Settings (**Settings → Follow-ups**). Defau
 | --- | --- | --- | --- |
 | **Due next working day** (`due_tomorrow`) | Due on the next working day, not held or in review | Assignee | Due now |
 | **Due today, not started** (`due_today`) | Due today, still Open, no timer ever run | Assignee in the morning, again from 14:00 (`afternoon_nudge_at`) | Due now |
-| **Overdue** (`overdue`) | Past its due date (or due today and past its estimated hours, `is_task_overdue`), not held or in review | The ladder below, every working day until Completed, Cancelled or On hold | Overdue; Escalated from L2 |
+| **Overdue** (`overdue`) | Past its due date (or due today and past its estimated hours, `is_task_overdue`), not held or in review. A task over its estimate before its due date, or with none, is overdue on the board but isn't escalated: the ladder counts days past the date | The ladder below, every working day until Completed, Cancelled or On hold | Overdue; Escalated from L2 |
 | **Assigned, untouched** (`untouched`) | Open, no timer, no comment since the latest assignment, for 2 working days | Assignee; a day later also the assigner | Waiting on you |
 | **Waiting for review** (`review`) | Pending Review for 1 working day (since the change to Pending Review in the task's history) | The coordinators (else the lead); a day later also the lead (else the project managers) | Waiting on you |
 | **On hold** (`hold`) | On hold for 3 working days | Whoever put it on hold, to resume it or update the note; *Waiting on customer* also asks the assignees to follow up with the customer; at twice the days also the lead | Waiting on you |

@@ -90,6 +90,23 @@ export const PROJECT_ROLES = [
   "Motion Graphics Artist / Animator",
 ];
 export const PRIORITIES = ["Low", "Medium", "High", "Urgent"];
+// Project.project_type's options; a sign-off template may be for one of them
+export const PROJECT_TYPES = [
+  "ERP Implementation",
+  "Mobile App",
+  "Website",
+  "Content Calendar",
+  "Support",
+  "Other",
+];
+
+/** The project types to pick from, after `blank` (e.g. "Not set"). */
+export function projectTypeOptions(blank: string) {
+  return [
+    { label: blank, value: "" },
+    ...PROJECT_TYPES.map((t) => ({ label: __(t), value: t })),
+  ];
+}
 
 export function categoryOptions() {
   return CATEGORIES.map((c) => ({ label: __(c), value: c }));
@@ -166,8 +183,9 @@ export function holdByLabel(task: {
     : __("Put on hold by {0}", task.hold_by_name);
 }
 
-// Due dates are date-only, so a task is overdue from the day after it's due, or on
-// its due day once it has been worked longer than its estimate (server: is_task_overdue).
+// Due dates are date-only, so a task is overdue from the day after it's due, or as soon
+// as it has been worked longer than its estimate, whatever its due date and with none
+// (server: is_task_overdue).
 // A task on hold is never overdue: its due date moves out when it resumes.
 export function isOverdue(
   task: {
@@ -179,10 +197,9 @@ export function isOverdue(
   },
   now = dayjs()
 ) {
-  if (!task.due_date || isClosed(task) || isOnHold(task)) return false;
-  const due = dayjs(task.due_date);
-  if (due.isBefore(now, "day")) return true;
-  return due.isSame(now, "day") && isOverEstimate(task, now);
+  if (isClosed(task) || isOnHold(task)) return false;
+  if (task.due_date && dayjs(task.due_date).isBefore(now, "day")) return true;
+  return isOverEstimate(task, now);
 }
 
 /**
@@ -390,4 +407,32 @@ export function taskTimer(
   return banked > 0 || task.status === "Working"
     ? { running: false, paused: true, elapsed: banked }
     : null;
+}
+
+/** A task a person creates needs a due date or an estimate (the server checks it too). */
+export function hasDueOrEstimate(
+  due: string | null | undefined,
+  hours: number | string | null | undefined
+) {
+  return !!due || Number(hours) > 0;
+}
+
+/** Under a task form's Estimate and Due date while both are empty. */
+export function dueOrEstimateHint() {
+  return __("Give a due date or an estimate.");
+}
+
+/** Hours as whole hours and minutes: 1.5 is {hours: 1, minutes: 30}. */
+export function splitHours(value: number) {
+  const total = Math.max(Math.round((Number(value) || 0) * 60), 0);
+  return { hours: Math.floor(total / 60), minutes: total % 60 };
+}
+
+/** An estimate as people say it: "1 h 30 min", "45 min", "2 h"; "—" when there's none. */
+export function formatEstimate(value?: number | null) {
+  const { hours, minutes } = splitHours(Number(value) || 0);
+  if (!hours && !minutes) return "—";
+  if (!minutes) return __("{0} h", String(hours));
+  if (!hours) return __("{0} min", String(minutes));
+  return __("{0} h {1} min", String(hours), String(minutes));
 }

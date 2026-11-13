@@ -7,9 +7,10 @@ what each person may do, and a collector gets back only the leads they added.
 
 import frappe
 from frappe import _
+from frappe.utils import cint
 
 from helpdesk import lead_bank
-from helpdesk.api.leads import parse_data
+from helpdesk.api.leads import MAX_PAGE, parse_data
 from helpdesk.integrations.crm.leads import (
     LeadsUnavailableError,
     call_if_deployed,
@@ -95,18 +96,25 @@ def check_duplicate(
 def submit_lead(data: dict | str, photos: list | str) -> dict:
     """Add the lead: {created, duplicate, mine, lead, region, department, in_pool, message}. A
     business the team already has is not made again; the first collector keeps the credit."""
+    photos = frappe.parse_json(photos) if isinstance(photos, str) else photos
+    if photos:
+        lead_bank.photo_images(photos)
     return ask(
         "submit_lead",
         post=True,
         data=parse_data(data),
-        photos=frappe.parse_json(photos) if isinstance(photos, str) else photos,
+        photos=photos,
     )
 
 
 @frappe.whitelist()
 def get_my_leads(start: int | str = 0, page_length: int | str = 50) -> dict:
     """The leads the person added, with where each stands and what they earned or will earn."""
-    return ask("get_my_leads", start=start, page_length=page_length)
+    return ask(
+        "get_my_leads",
+        start=max(cint(start), 0),
+        page_length=min(max(cint(page_length) or 50, 1), MAX_PAGE),
+    )
 
 
 @frappe.whitelist()

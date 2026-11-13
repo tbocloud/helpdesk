@@ -721,6 +721,17 @@ class TestBlockerActions(StandupCase):
                 helper=HELPER[0],
             )
 
+    def test_a_blocker_task_needs_a_due_date_or_an_estimate(self):
+        with self.assertRaises(frappe.ValidationError):
+            call_as_user(
+                LEAD[0],
+                "helpdesk.api.standup.create_task_from_blocker",
+                name=self.mine.name,
+                row=self.note_row,
+                project=self.project,
+                subject="Get VPN access for Anu",
+            )
+
     def test_create_task_from_blocker(self):
         result = call_as_user(
             LEAD[0],
@@ -730,6 +741,7 @@ class TestBlockerActions(StandupCase):
             project=self.project,
             subject="Get VPN access for Anu",
             assigned_to=HELPER[0],
+            estimated_hours=1,
         )
         task = frappe.get_doc("Task", result["task"])
         self.assertEqual(task.subject, "Get VPN access for Anu")

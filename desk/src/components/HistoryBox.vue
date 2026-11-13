@@ -1,67 +1,53 @@
 <template>
-  <div class="flex-1">
-    <div
-      class="mt-0.5 flex justify-between text-base items-start md:items-center"
-    >
-      <div
-        v-if="relatedActivities.length > 1"
-        class="inline-flex flex-wrap gap-1.5 text-ink-gray-8 font-medium w-4/5"
+  <div class="text-center text-sm text-ink-gray-5">
+    <template v-if="relatedActivities.length > 1">
+      <button
+        type="button"
+        class="inline-flex items-center gap-1 rounded font-medium text-ink-gray-7 hover:text-ink-gray-9"
+        :aria-expanded="show_others"
+        @click="show_others = !show_others"
       >
-        <span>{{ `${show_others ? "Hide " : "Show "}` }}</span>
-        <span>+{{ relatedActivities.length }} </span>
-        <span>changes from </span>
-        <span>{{ user }}</span>
-
-        <Button
-          class="!size-4"
-          variant="ghost"
-          @click="show_others = !show_others"
+        {{ groupLabel }}
+        <SelectIcon aria-hidden="true" />
+      </button>
+      <Tooltip :text="dateFormat(creation, dateTooltipFormat)">
+        <span class="ms-2 font-mono tabular-nums">{{ timeAgo(creation) }}</span>
+      </Tooltip>
+    </template>
+    <template v-else>
+      <span class="font-medium text-ink-gray-7">{{ user }}</span>
+      {{ content }}
+      <Tooltip :text="dateFormat(creation, dateTooltipFormat)">
+        <span class="ms-1 font-mono tabular-nums"
+          >· {{ timeAgo(creation) }}</span
         >
-          <template #icon>
-            <SelectIcon />
-          </template>
-        </Button>
-      </div>
-      <div class="text-ink-gray-5 w-4/6 text-p-base" v-else>
-        <span class="font-medium text-ink-gray-8">
-          {{ user }}
-        </span>
-        <span> {{ content }}</span>
-      </div>
-
-      <div class="text-ink-gray-5 text-sm w-2/6 flex justify-end">
-        <Tooltip :text="dateFormat(creation, dateTooltipFormat)">
-          <span>{{ timeAgo(creation) }}</span>
-        </Tooltip>
-      </div>
-    </div>
-    <div v-if="show_others">
-      <div
+      </Tooltip>
+    </template>
+    <ul v-if="show_others" class="mt-1 space-y-1">
+      <li
         v-for="relatedActivity in relatedActivities"
         :key="relatedActivity.creation"
-        class="mt-2 flex justify-between text-base"
       >
-        <div class="text-ink-gray-5 w-4/6">
-          <span class="font-medium text-ink-gray-8">
-            {{ relatedActivity.user }}
-          </span>
-          <span> {{ relatedActivity.content }}</span>
-        </div>
+        <span class="font-medium text-ink-gray-7">{{
+          relatedActivity.user
+        }}</span>
+        {{ relatedActivity.content }}
         <Tooltip
           :text="dateFormat(relatedActivity.creation, dateTooltipFormat)"
         >
-          <div class="text-ink-gray-5 text-sm w-2/6 flex justify-end">
-            {{ timeAgo(relatedActivity.creation) }}
-          </div>
+          <span class="ms-1 font-mono tabular-nums">
+            · {{ timeAgo(relatedActivity.creation) }}
+          </span>
         </Tooltip>
-      </div>
-    </div>
+      </li>
+    </ul>
   </div>
 </template>
 
 <script setup lang="ts">
 import { SelectIcon } from "@/components/icons";
 import { dateFormat, dateTooltipFormat, timeAgo } from "@/utils";
+import { __ } from "@/translation";
 import { computed, ref } from "vue";
 const props = defineProps({
   activity: {
@@ -74,4 +60,13 @@ const { user, content, creation } = props.activity;
 const relatedActivities = computed(() => props.activity.relatedActivities);
 
 let show_others = ref(false);
+
+const groupLabel = computed(() =>
+  __(
+    show_others.value
+      ? "Hide {0} changes from {1}"
+      : "Show {0} changes from {1}",
+    [String(relatedActivities.value.length), user]
+  )
+);
 </script>

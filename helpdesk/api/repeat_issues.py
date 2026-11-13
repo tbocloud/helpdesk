@@ -100,10 +100,15 @@ def create_root_cause_task(
     department: str | None = None,
     group: str | None = None,
     day: str | None = None,
+    due_date: str | None = None,
+    estimated_hours: float | str | None = None,
 ) -> dict:
     """A key task in the customer's project to fix what keeps coming back, listing
-    the cluster's tickets and tasks."""
+    the cluster's tickets and tasks; it needs a due date or an estimate, as any task."""
+    from helpdesk.tasky.api import require_due_or_estimate
+
     check_can_act()
+    require_due_or_estimate(due_date, estimated_hours)
     found = find(period, cluster, department, group, day)
     check_project(project, found["customer"])
     # two managers (or a double click) must not both create one: the second waits
@@ -127,6 +132,8 @@ def create_root_cause_task(
             "is_key": 1,
             "custom_category": "Support",
             "description": task_description(found),
+            "exp_end_date": due_date if due_date and due_date != "null" else None,
+            "custom_estimated_hours": frappe.utils.flt(estimated_hours) or 0,
         }
     ).insert(ignore_permissions=True)
     doc = ri.save_decision(found, "Root-cause task", task=task.name)

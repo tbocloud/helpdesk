@@ -513,7 +513,9 @@ const departmentOptions = computed(() => {
     : [];
 });
 
-function pageParams(fresh: boolean) {
+// set only while Refresh fetches: makeParams overrides whatever is submitted
+let fresh = false;
+function pageParams() {
   return {
     period: period.value,
     from_date: period.value === "custom" ? custom.from : null,
@@ -526,12 +528,14 @@ function pageParams(fresh: boolean) {
 
 const page = createResource({
   url: "helpdesk.api.leads.get_business_overview",
-  makeParams: () => pageParams(false),
+  makeParams: pageParams,
 });
 
 // the refresh button and "Try again" ask the ERP site again instead of the 60-second copy
 function refresh() {
-  page.submit(pageParams(true));
+  fresh = true;
+  page.reload();
+  fresh = false;
 }
 watch(
   [

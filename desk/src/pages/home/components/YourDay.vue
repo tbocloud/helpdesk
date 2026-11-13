@@ -1,12 +1,13 @@
 <template>
   <SectionCard
+    v-if="sections.length || !hide?.size"
     :title="__('Your day')"
     :description="__('Your open work in the order to tackle it.')"
     :to="{ name: 'MyWork' }"
     :link-label="__('My work')"
   >
     <p
-      v-if="!sections.length"
+      v-if="!sections.length && !hide?.size"
       class="flex items-center gap-2 px-4 py-5 text-p-sm text-ink-gray-6"
     >
       <LucideCoffee
@@ -124,37 +125,33 @@
 <script setup lang="ts">
 import SectionCard from "@/components/SectionCard.vue";
 import HoldNote from "@/pages/tasky/components/HoldNote.vue";
-import TaskDetailDialog, {
-  type TaskAction,
-  type TaskRef,
-} from "@/pages/tasky/components/TaskDetailDialog.vue";
-import { useApproveTask } from "@/pages/tasky/useApproveTask";
-import { itemKey, type WorkItem } from "@/pages/work/workMeta";
+import TaskDetailDialog from "@/pages/tasky/components/TaskDetailDialog.vue";
+import { itemKey } from "@/pages/work/workMeta";
 import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
-import { errorText } from "@/utils";
-import { Button, createResource, dayjs, toast } from "frappe-ui";
-import { computed, ref, useId, watch, type Component } from "vue";
+import { Button, dayjs } from "frappe-ui";
+import { computed, useId, type Component } from "vue";
 import { RouterLink, type RouteLocationRaw } from "vue-router";
-import LucideCalendarClock from "~icons/lucide/calendar-clock";
 import LucideCalendarDays from "~icons/lucide/calendar-days";
 import LucideCalendarX from "~icons/lucide/calendar-x";
-import LucideCheck from "~icons/lucide/check";
-import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideClipboardCheck from "~icons/lucide/clipboard-check";
 import LucideCoffee from "~icons/lucide/coffee";
 import LucideFileText from "~icons/lucide/file-text";
 import LucideFlame from "~icons/lucide/flame";
 import LucidePaperclip from "~icons/lucide/paperclip";
 import LucidePause from "~icons/lucide/pause";
-import LucidePlay from "~icons/lucide/play";
 import LucideReply from "~icons/lucide/reply";
 import LucideSend from "~icons/lucide/send";
 import LucideTimer from "~icons/lucide/timer";
 import type { DayTask, YourDay } from "../homeMeta";
+import { useDaySteps, type DayStep } from "../useDaySteps";
 import HomeItemRow from "./HomeItemRow.vue";
 
-const props = defineProps<{ day: YourDay }>();
+const props = defineProps<{
+  day: YourDay;
+  /** Items "Do next" already lists (by itemKey), so they aren't shown twice. */
+  hide?: Set<string>;
+}>();
 const emit = defineEmits<{ changed: [] }>();
 
 const uid = useId();
@@ -190,11 +187,13 @@ const myWork = (tab?: string): RouteLocationRaw => ({
 
 const sections = computed<Section[]>(() => {
   const d = props.day;
-  const part = (key: Exclude<SectionKey, "files">) => ({
-    count: d[key].count,
-    shown: d[key].items.length,
-    items: d[key].items as DayTask[],
-  });
+  const part = (key: Exclude<SectionKey, "files">) => {
+    const items = (d[key].items as DayTask[]).filter(
+      (item) => !props.hide?.has(itemKey(item))
+    );
+    const hidden = d[key].items.length - items.length;
+    return { count: d[key].count - hidden, shown: items.length, items };
+  };
   const all: Section[] = [
     {
       key: "close_first",
@@ -274,122 +273,12 @@ const sections = computed<Section[]>(() => {
   return all.filter((s) => s.count > 0);
 });
 
-// the task whose button shows a spinner while its step loads
-const busy = ref<string | null>(null);
+const { busy, detailTask, detailAction, stepFor } = useDaySteps(() =>
+  emit("changed")
+);
 
-const detailTask = ref<TaskRef | null>(null);
-const detailAction = ref<TaskAction | null>(null);
-
-// the dialog closes itself once its step is done, so the spinner can stop
-watch(detailTask, (task) => {
-  if (task) return;
-  detailAction.value = null;
-  busy.value = null;
-});
-
-function openStep(item: WorkItem, action: TaskAction) {
-  busy.value = item.name;
-  detailAction.value = action;
-  detailTask.value = {
-    name: item.name,
-    subject: item.title,
-    project: item.project,
-    project_name: item.project_name,
-  };
-}
-
-function done(message: string) {
-  toast.success(message);
-  busy.value = null;
-  emit("changed");
-}
-
-function failed(e: unknown, fallback: string) {
-  toast.error(errorText(e, fallback));
-  busy.value = null;
-}
-
-const start = createResource({
-  url: "helpdesk.tasky.api.update_task_status",
-  onSuccess: () => done(__("Started")),
-  onError: (e: unknown) => failed(e, __("Couldn't start the task.")),
-});
-
-const resumeTimer = createResource({
-  url: "helpdesk.tasky.api.start_timer",
-  onSuccess: () => done(__("Timer resumed")),
-  onError: (e: unknown) => failed(e, __("Couldn't resume the timer.")),
-});
-
-const { approve } = useApproveTask(() => {
-  busy.value = null;
-  emit("changed");
-});
-
-interface Action {
-  label: string;
-  icon: Component;
-  run: (item: DayTask) => void;
-}
-
-/** One next step per task: sign it off, date it, pick it back up, start or finish it. */
-function actionFor(item: DayTask, section: SectionKey): Action | null {
-  if (item.kind !== "task" || section === "given_out") return null;
-  if (item.status === "Pending Review") {
-    return item.can_approve
-      ? {
-          label: __("Approve"),
-          icon: LucideCheck,
-          run: (task) => {
-            busy.value = task.name;
-            if (!approve({ name: task.name })) busy.value = null;
-          },
-        }
-      : null;
-  }
-  if (item.status === "On Hold") {
-    return {
-      label: __("Resume"),
-      icon: LucidePlay,
-      run: (task) => openStep(task, "resume"),
-    };
-  }
-  if (section === "no_date" && item.can_plan) {
-    return {
-      label: __("Set date"),
-      icon: LucideCalendarClock,
-      run: (task) => openStep(task, "plan"),
-    };
-  }
-  if (item.timer === "paused") {
-    return {
-      label: __("Resume timer"),
-      icon: LucidePlay,
-      run: (task) => {
-        busy.value = task.name;
-        resumeTimer.submit({ task: task.name });
-      },
-    };
-  }
-  // the server refuses to start or finish a task while its dependency is open
-  if (item.waiting_on) return null;
-  if (item.status === "Open") {
-    return {
-      label: __("Start"),
-      icon: LucidePlay,
-      run: (task) => {
-        busy.value = task.name;
-        start.submit({ task: task.name, status: "Working" });
-      },
-    };
-  }
-  if (item.status === "Working" || item.status === "Overdue") {
-    return {
-      label: __("Complete"),
-      icon: LucideCircleCheck,
-      run: (task) => openStep(task, "complete"),
-    };
-  }
-  return null;
+function actionFor(item: DayTask, section: SectionKey): DayStep | null {
+  if (section === "given_out") return null;
+  return stepFor(item, section === "no_date");
 }
 </script>

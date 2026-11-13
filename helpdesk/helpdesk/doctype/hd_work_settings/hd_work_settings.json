@@ -12,6 +12,7 @@
 		"dev_hours_per_day",
 		"work_day_section",
 		"max_hours_per_day",
+		"hand_entry_days",
 		"lunch_start",
 		"lunch_end",
 		"support_hours_section",
@@ -77,6 +78,14 @@
 			"description": "The most time one person can record in a day, by timer and by hand together. Work hours come from the default SLA."
 		},
 		{
+			"fieldname": "hand_entry_days",
+			"fieldtype": "Int",
+			"label": "Days Hours Can Be Typed In",
+			"default": "7",
+			"non_negative": 1,
+			"description": "How many working days back people can type in hours when completing a task (today counts as well). Older days take only what the timer recorded, unless a System Manager gives a reason."
+		},
+		{
 			"fieldname": "lunch_start",
 			"fieldtype": "Time",
 			"label": "Lunch Starts",
@@ -115,7 +124,7 @@
 	"index_web_pages_for_search": 0,
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-10-10 09:00:00.000000",
+	"modified": "2026-11-03 18:30:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Work Settings",

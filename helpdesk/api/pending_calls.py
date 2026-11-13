@@ -52,9 +52,11 @@ def start_call(
     phone: str | None = None,
     item: str | None = None,
     via: str = "phone",
+    number: str | None = None,
 ) -> dict:
     """The person tapped Call on `lead` (`item`: the call in Today's calls it belongs to).
-    Remembered until a result is recorded. Tapping Call again keeps one entry per lead."""
+    Remembered until a result is recorded. Tapping Call again keeps one entry per lead.
+    `number` is the lead's number that was dialled (blank: its main number)."""
     require_leads()
     lead = short(lead)
     if not lead:
@@ -72,6 +74,7 @@ def start_call(
             "lead": lead,
             "lead_name": short(lead_name) or lead,
             "phone": short(phone),
+            "number": short(number) or None,
             "item": short(item) or None,
             "via": via if via in VIAS else "phone",
             "at": str(now_datetime()),
@@ -82,7 +85,7 @@ def start_call(
 
 @frappe.whitelist()
 def get_pending_calls() -> dict:
-    """{count, calls: [{lead, lead_name, phone, item, via, at}]} oldest first. Never cached
+    """{count, calls: [{lead, lead_name, phone, number, item, via, at}]} oldest first. Never cached
     by the browser: it changes with every call."""
     require_leads()
     calls = entries()

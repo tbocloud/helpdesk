@@ -153,7 +153,7 @@ class TestMyWorkAndOverview(WorkControlCase):
         result = self.as_user(
             SUPPORT,
             lambda: work.create_task_from_ticket(
-                ticket.name, internal, task_name="Build the report"
+                ticket.name, internal, task_name="Build the report", estimated_hours=2
             ),
         )
         self.assertEqual(
@@ -289,7 +289,8 @@ class TestMyWorkAndOverview(WorkControlCase):
 
 
 class TestOverEstimate(WorkControlCase):
-    """A task due today is overdue once it has been worked longer than its estimate."""
+    """A task is overdue once it has been worked longer than its estimate, whatever its
+    due date."""
 
     def my_item(self, task):
         items = self.as_user(DEV, work.get_my_work)["items"]
@@ -307,9 +308,35 @@ class TestOverEstimate(WorkControlCase):
 
         self.assertFalse(self.my_item(task)["is_overdue"])
 
-    def test_due_later_waits_for_its_due_date(self):
-        task = self.make_task("Bank reconciliation", add_days(nowdate(), 1))
+    def test_due_later_and_past_its_hours_is_overdue_already(self):
+        task = self.make_task("Bank reconciliation", add_days(nowdate(), 3))
         start_task_timer(task, hours_ago=3, estimated_hours=2)
+
+        self.assertTrue(self.my_item(task)["is_overdue"])
+
+    def test_a_minute_estimate_is_overdue_once_the_minute_has_passed(self):
+        # 1 min estimate, typed as minutes and stored in hours
+        task = self.make_task("Bank reconciliation", add_days(nowdate(), 3))
+        start_task_timer(task, hours_ago=2 / 60, estimated_hours=round(1 / 60, 3))
+
+        self.assertTrue(self.my_item(task)["is_overdue"])
+
+    def test_a_task_in_review_is_not_overdue_for_being_past_its_hours(self):
+        task = self.make_task("Bank reconciliation", add_days(nowdate(), 3))
+        start_task_timer(task, hours_ago=3, estimated_hours=2)
+        frappe.db.set_value("Task", task, "status", "Pending Review")
+
+        self.assertFalse(self.my_item(task)["is_overdue"])
+
+    def test_no_due_date_and_past_its_hours_is_overdue(self):
+        task = self.make_task("Bank reconciliation", None)
+        start_task_timer(task, hours_ago=3, estimated_hours=2)
+
+        self.assertTrue(self.my_item(task)["is_overdue"])
+
+    def test_due_later_within_its_hours_is_not(self):
+        task = self.make_task("Bank reconciliation", add_days(nowdate(), 3))
+        start_task_timer(task, hours_ago=1, estimated_hours=2)
 
         self.assertFalse(self.my_item(task)["is_overdue"])
 
@@ -745,6 +772,7 @@ class TestTicketToTask(WorkControlCase):
                 project=self.project,
                 assigned_to=DEV[0],
                 is_key=True,
+                estimated_hours=2,
             ),
         )
         task = frappe.get_doc("Task", result["task"]["name"])
@@ -771,7 +799,10 @@ class TestTicketToTask(WorkControlCase):
             self.as_user(
                 SUPPORT,
                 lambda: work.create_task_from_ticket(
-                    ticket=ticket.name, project=self.project, assigned_to=SUPPORT[0]
+                    ticket=ticket.name,
+                    project=self.project,
+                    assigned_to=SUPPORT[0],
+                    estimated_hours=2,
                 ),
             )
 
@@ -780,7 +811,10 @@ class TestTicketToTask(WorkControlCase):
         task = self.as_user(
             SUPPORT,
             lambda: work.create_task_from_ticket(
-                ticket=ticket.name, project=self.project, assigned_to=DEV[0]
+                ticket=ticket.name,
+                project=self.project,
+                assigned_to=DEV[0],
+                estimated_hours=2,
             ),
         )["task"]["name"]
 
@@ -803,7 +837,7 @@ class TestTicketToTask(WorkControlCase):
         self.as_user(
             SUPPORT,
             lambda: work.create_task_from_ticket(
-                ticket=ticket.name, project=self.project
+                ticket=ticket.name, project=self.project, estimated_hours=2
             ),
         )
         context = self.as_user(
@@ -818,7 +852,10 @@ class TestTicketToTask(WorkControlCase):
         task = self.as_user(
             SUPPORT,
             lambda: work.create_task_from_ticket(
-                ticket=ticket.name, project=self.project, assigned_to=DEV[0]
+                ticket=ticket.name,
+                project=self.project,
+                assigned_to=DEV[0],
+                estimated_hours=2,
             ),
         )["task"]["name"]
         make_pull_request(task, 7, state="Merged")
@@ -1113,7 +1150,10 @@ class TestReviewBeforeDone(WorkControlCase):
         task = self.as_user(
             SUPPORT,
             lambda: work.create_task_from_ticket(
-                ticket=ticket.name, project=self.project, assigned_to=DEV[0]
+                ticket=ticket.name,
+                project=self.project,
+                assigned_to=DEV[0],
+                estimated_hours=2,
             ),
         )["task"]["name"]
 
@@ -1383,7 +1423,8 @@ class TestHelpAndHandOver(WorkControlCase):
         project.append("users", {"user": TEAMMATE[0], "custom_role": "Developer"})
         project.save(ignore_permissions=True)
 
-    def ask(self, task, teammate=TEAMMATE, due=None, user=DEV):
+    def ask(self, task, teammate=TEAMMATE, due=None, user=DEV, hours=None):
+        # a help task needs a due date or an estimate: an hour when no date is given
         return self.as_user(
             user,
             lambda: tasky.request_help(
@@ -1392,6 +1433,7 @@ class TestHelpAndHandOver(WorkControlCase):
                 task_name="Share the customer's chart of accounts",
                 description="Needed to map the opening balances",
                 due_date=due,
+                estimated_hours=hours if hours is not None else (0 if due else 1),
             ),
         )
 
@@ -1431,6 +1473,12 @@ class TestHelpAndHandOver(WorkControlCase):
             self.ask(task, due=add_days(nowdate(), 4))
         with self.assertRaises(frappe.ValidationError):
             self.ask(task, due=add_days(nowdate(), -1))
+
+    def test_help_needs_a_due_date_or_an_estimate(self):
+        task = self.make_task("Import opening balances", add_days(nowdate(), 3))
+        with self.assertRaises(frappe.ValidationError):
+            self.ask(task, hours=0)
+        self.assertTrue(self.ask(task, hours=2))
 
     def test_an_open_dependency_is_not_replaced(self):
         first = self.make_task("Install server", add_days(nowdate(), 2), assignee=LEAD)

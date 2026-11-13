@@ -1,0 +1,179 @@
+{
+	"actions": [],
+	"autoname": "hash",
+	"creation": "2026-11-12 12:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"dashboard_name",
+		"is_active",
+		"is_default",
+		"description",
+		"template",
+		"access_section",
+		"roles",
+		"scope",
+		"coverage_section",
+		"units",
+		"default_period",
+		"value_format",
+		"filters_section",
+		"filters",
+		"kpis_section",
+		"kpis",
+		"charts_section",
+		"charts"
+	],
+	"fields": [
+		{
+			"fieldname": "dashboard_name",
+			"fieldtype": "Data",
+			"in_list_view": 1,
+			"label": "Name",
+			"reqd": 1
+		},
+		{
+			"default": "1",
+			"fieldname": "is_active",
+			"fieldtype": "Check",
+			"in_list_view": 1,
+			"label": "Active"
+		},
+		{
+			"description": "Opens first for people who can see more than one dashboard.",
+			"fieldname": "is_default",
+			"fieldtype": "Check",
+			"label": "Default"
+		},
+		{
+			"fieldname": "description",
+			"fieldtype": "Small Text",
+			"label": "Description"
+		},
+		{
+			"fieldname": "template",
+			"fieldtype": "Data",
+			"label": "Started from",
+			"read_only": 1
+		},
+		{
+			"fieldname": "access_section",
+			"fieldtype": "Section Break",
+			"label": "Who sees it"
+		},
+		{
+			"description": "Besides System Managers and Agent Managers, who always see every dashboard.",
+			"fieldname": "roles",
+			"fieldtype": "Table MultiSelect",
+			"label": "Roles",
+			"options": "HD CRM Dashboard Role"
+		},
+		{
+			"default": "all",
+			"fieldname": "scope",
+			"fieldtype": "Select",
+			"label": "Each viewer sees",
+			"options": "all\ncompany\nbranch\ndepartment\nteam\nown",
+			"reqd": 1
+		},
+		{
+			"fieldname": "coverage_section",
+			"fieldtype": "Section Break",
+			"label": "What it covers"
+		},
+		{
+			"description": "Companies, branches, departments, teams or employees; empty covers every one.",
+			"fieldname": "units",
+			"fieldtype": "Table MultiSelect",
+			"label": "Only these units",
+			"options": "HD CRM Dashboard Unit"
+		},
+		{
+			"default": "this_month",
+			"fieldname": "default_period",
+			"fieldtype": "Select",
+			"label": "Default period",
+			"options": "this_month\nlast_month\nthis_quarter\nthis_year\nlast_30_days\nlast_90_days\nlast_12_months\nall_time",
+			"reqd": 1
+		},
+		{
+			"default": "short",
+			"fieldname": "value_format",
+			"fieldtype": "Select",
+			"label": "Money shown as",
+			"options": "full\nshort"
+		},
+		{
+			"fieldname": "filters_section",
+			"fieldtype": "Section Break",
+			"label": "Filters"
+		},
+		{
+			"fieldname": "filters",
+			"fieldtype": "Table",
+			"label": "Filters",
+			"options": "HD CRM Dashboard Filter"
+		},
+		{
+			"fieldname": "kpis_section",
+			"fieldtype": "Section Break",
+			"label": "KPI cards"
+		},
+		{
+			"fieldname": "kpis",
+			"fieldtype": "Table",
+			"label": "KPI cards",
+			"options": "HD CRM Dashboard KPI"
+		},
+		{
+			"fieldname": "charts_section",
+			"fieldtype": "Section Break",
+			"label": "Charts and reports"
+		},
+		{
+			"fieldname": "charts",
+			"fieldtype": "Table",
+			"label": "Charts",
+			"options": "HD CRM Dashboard Chart"
+		}
+	],
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-11-12 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD CRM Dashboard",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "System Manager",
+			"share": 1,
+			"write": 1
+		},
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent Manager",
+			"share": 1,
+			"write": 1
+		}
+	],
+	"show_title_field_in_link": 1,
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": [],
+	"title_field": "dashboard_name",
+	"track_changes": 1
+}

@@ -1,0 +1,153 @@
+{
+	"actions": [],
+	"autoname": "hash",
+	"creation": "2026-11-12 12:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"source",
+		"unit_type",
+		"unit_name",
+		"label",
+		"is_active",
+		"origin",
+		"column_break_parents",
+		"company",
+		"branch",
+		"department",
+		"team",
+		"user",
+		"leader"
+	],
+	"fields": [
+		{
+			"fieldname": "source",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"label": "Source",
+			"options": "HD CRM Source",
+			"reqd": 1,
+			"search_index": 1
+		},
+		{
+			"fieldname": "unit_type",
+			"fieldtype": "Select",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"label": "Type",
+			"options": "Company\nBranch\nDepartment\nTeam\nEmployee",
+			"reqd": 1
+		},
+		{
+			"description": "The value exactly as the source's leads carry it.",
+			"fieldname": "unit_name",
+			"fieldtype": "Data",
+			"in_list_view": 1,
+			"label": "Name on the leads",
+			"reqd": 1
+		},
+		{
+			"fieldname": "label",
+			"fieldtype": "Data",
+			"label": "Display name"
+		},
+		{
+			"default": "1",
+			"fieldname": "is_active",
+			"fieldtype": "Check",
+			"in_list_view": 1,
+			"label": "Active"
+		},
+		{
+			"default": "Added here",
+			"fieldname": "origin",
+			"fieldtype": "Select",
+			"label": "Origin",
+			"options": "Added here\nSynced",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_parents",
+			"fieldtype": "Column Break"
+		},
+		{
+			"depends_on": "eval:doc.unit_type!='Company'",
+			"fieldname": "company",
+			"fieldtype": "Data",
+			"label": "Company"
+		},
+		{
+			"depends_on": "eval:['Department','Team','Employee'].includes(doc.unit_type)",
+			"fieldname": "branch",
+			"fieldtype": "Data",
+			"label": "Branch"
+		},
+		{
+			"depends_on": "eval:['Team','Employee'].includes(doc.unit_type)",
+			"fieldname": "department",
+			"fieldtype": "Data",
+			"label": "Department"
+		},
+		{
+			"depends_on": "eval:doc.unit_type=='Employee'",
+			"fieldname": "team",
+			"fieldtype": "Data",
+			"label": "Team"
+		},
+		{
+			"depends_on": "eval:doc.unit_type=='Employee'",
+			"description": "The person, so they can be shown their own part of a dashboard.",
+			"fieldname": "user",
+			"fieldtype": "Link",
+			"label": "User",
+			"options": "User"
+		},
+		{
+			"depends_on": "eval:doc.unit_type=='Team'",
+			"fieldname": "leader",
+			"fieldtype": "Link",
+			"label": "Team leader",
+			"options": "User"
+		}
+	],
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-11-12 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD CRM Org Unit",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "System Manager",
+			"share": 1,
+			"write": 1
+		},
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent Manager",
+			"share": 1,
+			"write": 1
+		}
+	],
+	"search_fields": "unit_name,unit_type,source",
+	"show_title_field_in_link": 1,
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": [],
+	"title_field": "label",
+	"track_changes": 1
+}

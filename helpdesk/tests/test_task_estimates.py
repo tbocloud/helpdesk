@@ -53,6 +53,9 @@ class EstimateCase(FrappeTestCase):
         self.project = project.name
 
     def add_task(self, **kwargs):
+        # a task needs a due date or an estimate; undated ones here carry an estimate
+        if not kwargs.get("due_date"):
+            kwargs.setdefault("estimated_hours", 2)
         return run_as_user(
             PM[0],
             lambda: tasky.add_task(
@@ -76,15 +79,16 @@ class TestWorkingDays(EstimateCase):
 
 
 class TestEstimates(EstimateCase):
-    def test_ai_sets_due_date_and_hours_for_undated_task(self):
+    def test_ai_dates_an_undated_task_and_keeps_its_estimate(self):
+        # a task without a due date now always has an estimate: the AI keeps it
         with patch.object(task_estimates, "call_haiku", return_value=ai_answer(3, 10)):
-            task = self.add_task(assigned_to=DEV[0])
+            task = self.add_task(assigned_to=DEV[0], estimated_hours=4)
 
         doc = frappe.get_doc("Task", task)
         self.assertEqual(
             getdate(doc.exp_end_date), task_estimates.add_working_days(nowdate(), 3)
         )
-        self.assertEqual(doc.custom_estimated_hours, 10)
+        self.assertEqual(doc.custom_estimated_hours, 4)
         self.assertTrue(doc.ai_estimated)
         self.assertEqual(doc.estimate_note, "Report customisation")
         comments = frappe.get_all(
@@ -93,6 +97,22 @@ class TestEstimates(EstimateCase):
             pluck="content",
         )
         self.assertTrue(any("AI estimate" in c for c in comments))
+
+    def test_a_task_needs_a_due_date_or_an_estimate(self):
+        with self.assertRaises(frappe.ValidationError):
+            self.add_task(estimated_hours=0)
+        self.assertTrue(
+            self.add_task(estimated_hours=0, due_date=add_days(nowdate(), 3))
+        )
+        ticket = make_ticket(subject="Add VAT column", customer=CUSTOMER)
+        make_assignment("HD Ticket", ticket.name, SUPPORT[0])
+        with self.assertRaises(frappe.ValidationError):
+            run_as_user(
+                SUPPORT[0],
+                lambda: work.create_task_from_ticket(
+                    ticket=ticket.name, project=self.project
+                ),
+            )
 
     def test_estimate_is_capped(self):
         with patch.object(task_estimates, "call_haiku", return_value=ai_answer(90)):
@@ -159,7 +179,7 @@ class TestEstimates(EstimateCase):
             task = run_as_user(
                 SUPPORT[0],
                 lambda: work.create_task_from_ticket(
-                    ticket=ticket.name, project=self.project
+                    ticket=ticket.name, project=self.project, estimated_hours=3
                 ),
             )["task"]["name"]
         self.assertEqual(

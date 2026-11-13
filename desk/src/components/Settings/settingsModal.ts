@@ -43,6 +43,8 @@ import IntakeSettings from "./Intake/IntakeSettings.vue";
 import LucideInbox from "~icons/lucide/inbox";
 import FileStorageSettings from "./FileStorage/FileStorageSettings.vue";
 import CRMSettings from "./CRM/CRMSettings.vue";
+import CrmDashboardSettings from "./CrmDashboards/CrmDashboardSettings.vue";
+import LucideChartPie from "~icons/lucide/chart-pie";
 import LucideHandshake from "~icons/lucide/handshake";
 import LucideHardDrive from "~icons/lucide/hard-drive";
 import LucideCalendarDays from "~icons/lucide/calendar-days";
@@ -295,6 +297,13 @@ export const tabs = computed(() => {
           component: markRaw(CRMSettings),
           condition: () => auth.isAdmin || auth.isManager,
         },
+        {
+          label: __("CRM dashboards"),
+          icon: markRaw(LucideChartPie),
+          component: markRaw(CrmDashboardSettings),
+          // helpdesk.api.crm_dashboard_settings checks the roles itself
+          condition: () => auth.isAdmin || auth.isManager,
+        },
       ],
     },
   ];
@@ -347,7 +356,8 @@ type TabName =
   | "AI providers"
   | "Sign-off templates"
   | "File storage"
-  | "CRM";
+  | "CRM"
+  | "CRM dashboards";
 
 export const setActiveSettingsTab = (tabName: TabName) => {
   activeTab.value =

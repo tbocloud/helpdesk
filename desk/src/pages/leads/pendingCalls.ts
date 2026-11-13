@@ -8,6 +8,8 @@ export interface PendingCall {
   lead: string;
   lead_name: string;
   phone: string;
+  /** the lead's number that was dialled (null: its main number) */
+  number: string | null;
   /** the call in Today's calls it belongs to */
   item: string | null;
   /** the phone's own dialler, or MyOperator ringing the person's phone */
@@ -41,6 +43,9 @@ export const pendingCalls = computed<PendingCall[]>(
 
 /** The lead whose result sheet should open now (set when the person comes back from a call). */
 export const askFor = ref("");
+/** Bumped when a call of Today's calls is answered from the call result sheet: the queue
+ * reads again at once, so the call can't be answered twice from its row. */
+export const queueChanged = ref(0);
 // a call placed from the phone's dialler: the page loses focus, and the sheet opens on return
 let awaitingReturn = "";
 let timer: ReturnType<typeof setTimeout> | undefined;
@@ -58,6 +63,7 @@ export function startCall(placed: {
   lead: string;
   lead_name?: string;
   phone?: string;
+  number?: string | null;
   item?: string | null;
   via: "phone" | "myoperator";
 }) {
@@ -65,6 +71,7 @@ export function startCall(placed: {
     ...placed,
     lead_name: placed.lead_name || null,
     phone: placed.phone || null,
+    number: placed.number || null,
     item: placed.item || null,
   })
     .then((answer: PendingAnswer) => setPendingCalls(answer))

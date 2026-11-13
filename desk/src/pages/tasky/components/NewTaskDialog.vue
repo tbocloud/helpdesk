@@ -109,20 +109,26 @@
           :options="priorityOptions()"
         />
 
-        <TextInput
-          v-model.number="form.estimated_hours"
-          type="number"
-          min="0"
-          step="0.25"
-          :label="__('Estimated hours')"
-          placeholder="0"
+        <EstimateInput
+          v-model="form.estimated_hours"
+          :label="__('Estimate')"
+          due-or-estimate
         />
 
-        <TextInput
-          v-model="form.due_date"
-          type="date"
-          :label="__('Due date')"
-        />
+        <TextInput v-model="form.due_date" type="date" :label="__('Due date')">
+          <template #label>
+            {{ __("Due date") }}
+            <RequiredMark
+              :hint="__('(a due date or an estimate is required)')"
+            />
+          </template>
+        </TextInput>
+        <p
+          v-if="!hasDueOrEstimate(form.due_date, form.estimated_hours)"
+          class="text-p-xs text-ink-gray-6 sm:col-span-2"
+        >
+          {{ dueOrEstimateHint() }}
+        </p>
       </div>
 
       <FormControl
@@ -176,7 +182,11 @@
           :form="formId"
           :label="__('Create task')"
           :loading="addTask.loading"
-          :disabled="!form.task_name.trim() || !project"
+          :disabled="
+            !form.task_name.trim() ||
+            !project ||
+            !hasDueOrEstimate(form.due_date, form.estimated_hours)
+          "
         />
       </div>
     </template>
@@ -198,7 +208,15 @@ import {
 } from "frappe-ui";
 import { computed, reactive, ref, useId, watch } from "vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
-import { categoryOptions, isAiDrafted, priorityOptions } from "../taskMeta";
+import {
+  categoryOptions,
+  dueOrEstimateHint,
+  hasDueOrEstimate,
+  isAiDrafted,
+  priorityOptions,
+} from "../taskMeta";
+import RequiredMark from "@/components/RequiredMark.vue";
+import EstimateInput from "./EstimateInput.vue";
 import TaskDescriptionField, {
   type DraftContext,
 } from "./TaskDescriptionField.vue";

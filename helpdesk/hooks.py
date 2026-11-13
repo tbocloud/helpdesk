@@ -50,6 +50,8 @@ scheduler_events = {
             "helpdesk.tasks.pull_client_tickets",
             # approved WhatsApp outreach waiting for TBO Chat (docs/whatsapp-outreach.md)
             "helpdesk.whatsapp_outreach.send_pending",
+            # the local copy of the ERP's leads, while it is on (docs/lead-mirror.md)
+            "helpdesk.lead_mirror.sync_lead_changes",
         ],
         # every 15 minutes: follow-ups and escalation for tasks and tickets, and the
         # digests at their times (docs/follow-ups.md)
@@ -62,6 +64,13 @@ scheduler_events = {
             "helpdesk.copilot.approvals.remind_and_escalate",
             # action approvals (Press, AWS, repairs): remind, escalate, expire (Phase 18)
             "helpdesk.copilot.actions.remind_and_escalate",
+            # each CRM dashboard data source whose sync interval has passed (docs/crm-dashboard.md)
+            "helpdesk.crm_dashboard.sync.sync_due_sources",
+        ],
+        # mid-morning: the one reminder for a sign-off unanswered for two working days
+        # (docs/project-signoff.md, Reminders)
+        "30 10 * * *": [
+            "helpdesk.helpdesk.doctype.hd_project_signoff.hd_project_signoff.send_signoff_reminders",
         ],
         "*/5 * * * *": [
             # the watcher's heartbeat: the Agent Managers hear when it goes quiet (Phase 18)
@@ -158,6 +167,10 @@ scheduler_events = {
         "helpdesk.helpdesk.doctype.hd_chatwoot_event.hd_chatwoot_event.clear_old_events",
         "helpdesk.support_contracts.send_support_hours_alerts",
         "helpdesk.helpdesk.doctype.hd_recurring_task.hd_recurring_task.create_recurring_tasks",
+        # nightly: the lead copy against the ERP's index of every lead
+        "helpdesk.lead_mirror.check_drift",
+        # nightly: every lead of every CRM dashboard source, which drops deleted ones
+        "helpdesk.crm_dashboard.sync.full_sync_all",
     ],
     "hourly": [
         "helpdesk.triage.fail_stuck_triages",

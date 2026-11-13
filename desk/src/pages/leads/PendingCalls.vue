@@ -38,6 +38,13 @@
     :saving="saving"
     @answer="answer"
     @dismiss="dismiss"
+    @add-number="showAddNumber = true"
+  />
+  <AddNumberDialog
+    v-if="current"
+    v-model:open="showAddNumber"
+    :lead-id="current.lead"
+    on-call
   />
 </template>
 
@@ -49,6 +56,7 @@ import { Button, call as post, toast } from "frappe-ui";
 import { computed, onMounted, ref, watch } from "vue";
 import LucidePhoneCall from "~icons/lucide/phone-call";
 import type { CallOutcome } from "./callBatches";
+import AddNumberDialog from "./AddNumberDialog.vue";
 import CallResultSheet from "./CallResultSheet.vue";
 import {
   askFor,
@@ -56,10 +64,12 @@ import {
   dismissCall,
   loadPendingCalls,
   pendingCalls,
+  queueChanged,
   type PendingCall,
 } from "./pendingCalls";
 
 const showSheet = ref(false);
+const showAddNumber = ref(false);
 const saving = ref(false);
 // the call the sheet is on; after it is saved the next one without a result follows
 const currentLead = ref("");
@@ -109,16 +119,19 @@ function answer(
         outcome: value.outcome,
         note: value.note || null,
         callback_at: value.callback_at,
+        number: pending.number,
       })
     : post("helpdesk.api.leads.log_call", {
         lead: pending.lead,
         outcome: value.outcome,
         note: value.note,
         callback_at: value.callback_at,
+        number: pending.number,
       });
   request
     .then(() => {
       toast.success(__("Saved"));
+      if (pending.item) queueChanged.value++;
       return next();
     })
     .catch((e: unknown) =>

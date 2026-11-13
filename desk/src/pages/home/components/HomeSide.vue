@@ -142,30 +142,38 @@
     </p>
   </SectionCard>
 
-  <SectionCard :title="__('Team load')" :to="{ name: 'TeamWorkload' }">
+  <SectionCard :title="__('Team today')" :to="{ name: 'TeamWorkload' }">
     <ul v-if="company.people.length" role="list">
       <li
         v-for="person in company.people"
         :key="person.user"
-        class="flex items-start justify-between gap-3 border-b border-outline-gray-1 px-4 py-2.5 last:border-b-0"
+        class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-2.5 last:border-b-0"
       >
-        <span class="min-w-0">
-          <span class="block break-words text-sm text-ink-gray-9">
+        <Avatar
+          shape="circle"
+          size="md"
+          :image="userStore.getUser(person.user)?.user_image"
+          :label="person.full_name"
+          aria-hidden="true"
+        />
+        <span class="min-w-0 flex-1">
+          <span class="block truncate text-sm-medium text-ink-gray-9">
             {{ person.full_name }}
           </span>
-          <span class="block break-words text-p-xs text-ink-gray-5">
+          <span class="block truncate text-p-xs text-ink-gray-5">
             {{ person.projects.join(", ") }}
           </span>
         </span>
-        <span class="shrink-0 text-right text-p-xs text-ink-gray-6">
-          <span class="font-mono tabular-nums text-ink-gray-8">{{
-            person.open
-          }}</span>
-          {{ __("open") }}
-          <span v-if="person.working" class="block">
-            <span class="font-mono tabular-nums">{{ person.working }}</span>
-            {{ __("in progress") }}
-          </span>
+        <span
+          class="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium tabular-nums"
+          :class="TONE_CLASSES[person.working ? 'info' : 'neutral']"
+        >
+          <span class="size-1.5 rounded-full bg-current" aria-hidden="true" />
+          {{
+            person.working
+              ? __("{0} in progress", String(person.working))
+              : __("{0} open", String(person.open))
+          }}
         </span>
       </li>
     </ul>
@@ -183,7 +191,10 @@
 </template>
 
 <script setup lang="ts">
+import { TONE_CLASSES } from "@/components/tone";
+import { useUserStore } from "@/stores/user";
 import { __ } from "@/translation";
+import { Avatar } from "frappe-ui";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
@@ -198,6 +209,8 @@ import TaskyBadge from "@/components/TaskyBadge.vue";
 import { healthBadge } from "@/composables/customerHealth";
 
 const props = defineProps<{ company: Company }>();
+
+const userStore = useUserStore();
 
 const healthDescription = computed(() => {
   const { count, at_risk } = props.company.customer_health;

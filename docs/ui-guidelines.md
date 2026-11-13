@@ -151,15 +151,10 @@ means nothing is noise. The mapping is fixed:
 - `StatTile` draws the circle from `iconTone` (`TONE_CLASSES` in `tone.ts`). Without a
   meaning the circle stays neutral gray, never a pastel.
 - **Brand fill** is for the current selection: the active segmented control option
-  (frappe-ui `TabButtons`, themed in `theme.css`) and the current app sidebar item: a white
-  card (`surface-base`, hairline) with its icon in a `brand` tile (`on-brand` icon).
-- **Sidebar icon tiles** are the owner's mockup, an exception to "no pastel icon tiles": each
-  app sidebar icon sits in a tile tinted by page group (`--nav-*` in `theme.css`, `tone` in
-  `layoutSettings.ts`): blue for Home, Overview, In progress, Stand-up, Scoreboard, Performance, Customers and Help;
-  teal for Team, Summaries, Customer report, Leads and Contacts; orange for Notifications, Support
-  hours and Tickets; purple for Projects, My Work, Board, Content and Templates; green for
-  Calendar, Timesheets and Knowledge base; gray for the pin control and the collapsed
-  rail's Search and theme items. The tint only groups pages. It never carries a status.
+  (frappe-ui `TabButtons`, themed in `theme.css`) and the selected rail area (`brand` fill,
+  `on-brand` icon). The current panel item is tinted `brand-soft` with `brand-ink` text.
+- **The sidebar rail** is dark in both themes with neutral icons; only the selected area is
+  filled in `brand`. There are no tinted icon tiles; the old per-group tones are gone.
 - **Champion gold** (`champion`, `champion-soft`, `champion-border`) is only for the
   Scoreboard's champion card, with a trophy and a badge: it marks an award, not a status.
 - Everything else stays neutral: decorative and section
@@ -187,6 +182,42 @@ fixed and uses the existing tokens, never a new colour:
 - A target behind pace is `warning` with its words ("Behind by 4 meetings"), **never
   `danger`**: it isn't a failure to shame. Every tone has its icon or words beside it.
 - No gradients, no tone outside the table above, and the rest of the app is unchanged.
+
+### The owner's exception: the CRM dashboards are colourful (2026-11-13)
+
+The owner asked for the CRM dashboards page to be colourful, so each metric carries a tone
+**on that screen only** ([crm-dashboard.md](crm-dashboard.md)). The reason: the page is
+scanned for a dozen figures at once, and a tone per kind of figure tells won from lost from
+money still to win at a glance. The mapping is fixed, uses the existing tokens, and lives in
+one place (`METRIC_LOOK` in `desk/src/pages/crm-dashboard/crmDashboard.ts`):
+
+| Metric | Tone (icon circle, chart card heading) | Chart series |
+| --- | --- | --- |
+| Total leads, open leads | `brand` (leads, as on the Daily report) | slot 0 (blue) |
+| Won, converted, won sales value, average deal value | `success` | slot 2 (green) |
+| Lost leads | `danger` | slot 1 (orange) |
+| Expected revenue, pending sales value | `warning` | slot 3 (amber) |
+| Conversion rate, closing time | `info` | slot 4 (pink), always alone in its chart |
+
+- The three headline KPI cards are filled with their tone's soft colour (`StatTile`'s `tint`),
+  the icon on the solid tone, and a mini trend in the tone's colour; every other KPI card is a
+  compact `StatTile` with a 4 px left edge and its icon in the tone. Values stay neutral ink.
+  The page sits on `surface-gray-1` so the cards stand out, the filters are a light bar of
+  outlined selects with no box around them, and a chart card is a section as on the Daily
+  report: a 4 px left border, a soft heading strip and the heading icon in the tone of the
+  chart's metric.
+- **Series colours come from `chartTheme`'s validated palette, never the status tones:** the
+  status tones failed the colour-vision checks as series (red beside green and amber). Each
+  metric keeps its slot from chart to chart; two series whose slots don't pass together in
+  both themes (orange with amber, green with pink) fall back to blue and orange. Bars carry
+  their value at the end and lines their last figure, because the lighter slots sit below 3:1
+  on white. A table's columns carry a dot of their metric's colour beside the name.
+- A card's change against the period before is `success` when it is good news, `warning`
+  when it isn't, never `danger` (as on the Daily report, a slower stretch is not a failure),
+  and neutral for figures where neither is (open leads, pending value); it always reads in
+  words with its arrow.
+- Every tone has its icon and words beside it. No gradients (a line's area wash is one flat
+  colour), and the rest of the app is unchanged.
 
 ## 9. Components
 
@@ -221,7 +252,14 @@ Reuse when repetition is real; abstract only when it improves clarity.
 
 ## 13. Navigation
 
-- Keep the sidebar hierarchy clear and its sections meaningful.
+- The sidebar is a rail (areas) plus a panel (that area's pages, grouped under small
+  uppercase headings, sub-items as a tree with a guide line and dots). Neutral icons; brand
+  only for the selected area and the current page (`aria-current`).
+- The panel never collapses by itself: only its own button closes it, the choice is
+  remembered per person, and it defaults to open. Expanded groups stay expanded. Only the
+  mobile drawer closes after a page is picked.
+- Keep every control reachable by keyboard with a visible `ring-highlight` focus ring,
+  `aria-expanded` on folding items and `aria-current` on the current page.
 - On mobile, primary destinations must stay reachable.
 - The command palette must never be the only way to get somewhere.
 - Keep meaningful state in the URL: tab, filters, search and page.

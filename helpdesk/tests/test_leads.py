@@ -47,6 +47,39 @@ class TestLeads(FrappeTestCase):
     def as_bde(self):
         frappe.set_user(BDE)
 
+    def test_my_call_counts_come_from_the_erp_site_for_the_person(self):
+        self.crm.lead_answers["get_my_call_counts"] = {
+            "today": {"calls": 12, "connected": 7},
+            "all_time": {"calls": 900, "connected": 410},
+            "days": [{"date": "2026-11-11", "calls": 12, "connected": 7}],
+        }
+        self.as_bde()
+        counts = leads_api.get_my_call_counts(days=9999, fresh=1)
+        self.assertTrue(counts["available"])
+        self.assertEqual(counts["today"], {"calls": 12, "connected": 7})
+        ((method, _post, params),) = self.crm.lead_calls
+        self.assertEqual((method, params["days"]), ("get_my_call_counts", 366))
+
+    def test_follow_up_cards_count_and_list_by_when_they_are_due(self):
+        self.crm.lead_answers["get_follow_up_counts"] = {
+            "overdue": 4,
+            "today": 2,
+            "tomorrow": 1,
+            "week": 3,
+            "later": 0,
+        }
+        self.as_bde()
+        counts = leads_api.get_follow_up_counts(owner="x@y.example", fresh=1)
+        self.assertEqual((counts["available"], counts["overdue"]), (True, 4))
+        leads_api.list_leads(view="follow_up", due="tomorrow")
+        sent = [p for m, _post, p in self.crm.lead_calls if m == "list_leads"][-1]
+        self.assertEqual(sent["due"], "tomorrow")
+        leads_api.list_leads(view="all", due="tomorrow")
+        sent = [p for m, _post, p in self.crm.lead_calls if m == "list_leads"][-1]
+        self.assertNotIn("due", sent)
+        with self.assertRaises(frappe.ValidationError):
+            leads_api.list_leads(view="follow_up", due="soon")
+
     def test_leads_are_off_by_default(self):
         frappe.db.set_single_value("HD CRM Settings", "enable_leads", 0)
         self.as_bde()
@@ -232,10 +265,15 @@ class TestLeads(FrappeTestCase):
         )
         self.crm.lead_answers["get_lead_intake"] = older
         self.crm.lead_answers["get_proposal_money"] = older
+        self.crm.lead_answers["get_lead_analysis"] = older
         self.as_bde()
         frappe.clear_messages()
         self.assertEqual(leads_api.get_lead_intake(), {"available": False})
         self.assertEqual(leads_api.get_proposal_money(), {"available": False})
+        self.crm.lead_answers["get_overview"] = {"totals": {}}
+        self.assertEqual(
+            leads_api.get_overview_page()["analysis"], {"available": False}
+        )
         # nothing for a toast: the parts just stay out
         self.assertEqual(frappe.message_log, [])
         # anything else is still an error the page shows
@@ -247,6 +285,7 @@ class TestLeads(FrappeTestCase):
         self.crm.lead_answers["get_overview"] = {"totals": {"new": 3}}
         self.crm.lead_answers["get_proposal_money"] = {"totals": {"to_collect": 5}}
         self.crm.lead_answers["get_lead_intake"] = {"days": [], "people": []}
+        self.crm.lead_answers["get_lead_analysis"] = {"calling": [], "quality": {}}
         self.as_bde()
         page = leads_api.get_overview_page(period="week", owner=BDE)
 
@@ -257,8 +296,15 @@ class TestLeads(FrappeTestCase):
         self.assertEqual(page["errors"], {})
         self.assertEqual(
             [m for m, _p, _q in self.crm.lead_calls],
-            ["get_overview", "get_proposal_money", "get_lead_intake"],
+            [
+                "get_overview",
+                "get_proposal_money",
+                "get_lead_intake",
+                "get_lead_analysis",
+            ],
         )
+        self.assertTrue(page["analysis"]["available"])
+        self.assertEqual(self.crm.lead_calls[-1][2]["owner"], BDE)
         with self.assertRaises(frappe.ValidationError):
             leads_api.get_overview_page(period="custom", from_date="2026-10-01")
 
@@ -289,6 +335,7 @@ class TestLeads(FrappeTestCase):
         self.crm.lead_answers["get_options"] = {"stages": []}
         self.crm.lead_answers["get_proposal_money"] = {"totals": {}}
         self.crm.lead_answers["get_lead_intake"] = {"days": [], "people": []}
+        self.crm.lead_answers["get_lead_analysis"] = {"calling": [], "quality": {}}
         # the options also ask whether calls can be logged, which is kept too
         self.crm.lead_answers["get_daily_report"] = {"people": []}
         self.as_bde()
@@ -337,6 +384,16 @@ class TestLeads(FrappeTestCase):
         leads_api.get_overview_page()
         self.crm.lead_answers["get_overview"] = {"totals": {"new": 4}}
         leads_api.set_stage("CRM-LEAD-0001", "Contacted")
+
+        self.assertEqual(leads_api.get_overview_page()["overview"]["totals"]["new"], 4)
+
+    def test_applying_the_ai_stage_clears_that_persons_cached_figures(self):
+        self.crm.lead_answers["get_overview"] = {"totals": {"new": 3}}
+        self.crm.lead_answers["apply_ai_stage"] = {"name": "CRM-LEAD-0001"}
+        self.as_bde()
+        leads_api.get_overview_page()
+        self.crm.lead_answers["get_overview"] = {"totals": {"new": 4}}
+        leads_api.apply_ai_stage("CRM-LEAD-0001")
 
         self.assertEqual(leads_api.get_overview_page()["overview"]["totals"]["new"], 4)
 
@@ -469,6 +526,26 @@ class TestLeads(FrappeTestCase):
                 "don't have a sales account",
             ),
             (
+                CRMError(
+                    "x",
+                    403,
+                    "bde@example.com has no sales role here.",
+                    "bde@example.com has no sales role here.",
+                ),
+                LeadsError,
+                "don't have a sales account",
+            ),
+            (
+                CRMError(
+                    "x",
+                    403,
+                    "PermissionError",
+                    "No permission for Lead CRM-LEAD-0001",
+                ),
+                LeadsError,
+                "No permission for Lead CRM-LEAD-0001",
+            ),
+            (
                 CRMError("x", 404, "Lead CRM-LEAD-0001 not found."),
                 LeadsError,
                 "isn't on the ERP site",
@@ -484,6 +561,11 @@ class TestLeads(FrappeTestCase):
                 "ran into a problem (417)",
             ),
             (CRMError("x", 502, ""), LeadsUnavailableError, "ran into a problem (502)"),
+            (
+                CRMError("x", 503, "SessionStopped"),
+                LeadsUnavailableError,
+                "is being updated right now",
+            ),
         ]
         for error, expected_class, text in cases:
             with self.subTest(status=error.status, detail=error.detail):
@@ -540,6 +622,16 @@ class TestLeads(FrappeTestCase):
         self.assertEqual(
             leads_api.get_lead_departments()["departments"][0]["name"], "Sales Pod"
         )
+
+    def test_a_department_change_renews_everyones_pickers(self):
+        # who heads a department (is_bd) comes from the pickers: a new head must not wait
+        # OPTIONS_TTL for the managers' screens
+        self.crm.lead_answers["save_lead_department"] = lead_department()
+        other = f"{leads_api.CACHE_PREFIX}:someone@example.com:options:{{}}"
+        frappe.cache.set_value(other, {"departments": []}, expires_in_sec=600)
+        self.as_bde()
+        leads_api.save_lead_department({"department_name": "GrowthX"})
+        self.assertIsNone(frappe.cache.get_value(other, expires=True))
 
     def test_a_departments_products_and_campaign_product_are_saved_as_given(self):
         self.crm.lead_answers["save_lead_department"] = lead_department(

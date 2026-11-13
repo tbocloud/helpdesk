@@ -156,6 +156,61 @@
         </p>
       </details>
 
+      <!-- leads nobody handed out by hand by this time go out on their own; shown, but
+           not editable, while the ERP site is older than it (its fields are not sent) -->
+      <div class="flex flex-col gap-3">
+        <p
+          v-if="!autoAssign"
+          class="flex items-start gap-1.5 rounded-lg bg-surface-gray-1 px-3 py-2 text-p-sm text-ink-gray-7"
+        >
+          <LucideInfo
+            class="mt-0.5 size-4 shrink-0 text-ink-gray-5"
+            aria-hidden="true"
+          />
+          {{
+            __(
+              "Auto-assign needs the latest TBO Smart on the ERP site. Until it is updated these settings can't be saved."
+            )
+          }}
+        </p>
+        <Switch
+          v-model="rules.auto_assign"
+          :disabled="!autoAssign"
+          :label="__('Auto-assign leads nobody handed out')"
+          :description="
+            __(
+              'At this time, everyone with a call plan who was not given leads on Assign leads today is topped up to their plan. People on leave or a holiday are skipped.'
+            )
+          "
+        />
+        <div
+          v-if="rules.auto_assign"
+          class="grid grid-cols-1 gap-3 sm:grid-cols-3"
+        >
+          <FormControl
+            v-model="rules.auto_assign_at"
+            type="time"
+            :disabled="!autoAssign"
+            :label="__('Auto-assign at')"
+          />
+          <FormControl
+            v-model="rules.auto_assign_skip_saturdays"
+            type="select"
+            class="sm:col-span-2"
+            :disabled="!autoAssign"
+            :label="__('Saturdays')"
+            :options="AUTO_ASSIGN_SATURDAYS"
+          />
+          <FormControl
+            v-model="rules.auto_assign_skip_sunday"
+            type="checkbox"
+            class="sm:col-span-3"
+            :disabled="!autoAssign"
+            :label="__('Not on Sundays')"
+          />
+        </div>
+      </div>
+
       <details v-if="members.length" class="group">
         <summary
           class="cursor-pointer rounded text-sm text-ink-gray-7 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
@@ -190,9 +245,13 @@
 import { __ } from "@/translation";
 import { Button, FormControl, FormLabel, Switch } from "frappe-ui";
 import { computed } from "vue";
+import LucideInfo from "~icons/lucide/info";
 import LucidePlus from "~icons/lucide/plus";
 import LucideTrash2 from "~icons/lucide/trash-2";
-import type { CallRules } from "@/pages/leads/callBatches";
+import {
+  AUTO_ASSIGN_SATURDAYS,
+  type CallRules,
+} from "@/pages/leads/callBatches";
 
 const rules = defineModel<CallRules>({ required: true });
 const props = withDefaults(
@@ -200,8 +259,10 @@ const props = withDefaults(
     members: { label: string; value: string }[];
     /** the department's products that are on */
     products?: string[];
+    /** the ERP site has the daily auto-assign */
+    autoAssign?: boolean;
   }>(),
-  { products: () => [] }
+  { products: () => [], autoAssign: false }
 );
 
 const productChoices = computed(() => [

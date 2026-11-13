@@ -15,6 +15,8 @@
       hero ? 'sm:col-span-2' : '',
       pressed
         ? 'border-brand bg-brand-soft'
+        : tint
+        ? TINTS[tint].tile
         : 'border-outline-gray-2 bg-surface-base',
       interactive
         ? 'transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4'
@@ -26,7 +28,7 @@
     <span
       v-if="icon && !compact"
       class="grid size-9 shrink-0 place-items-center rounded-full"
-      :class="TONE_CLASSES[iconTone]"
+      :class="tint ? TINTS[tint].circle : circleClass"
     >
       <component :is="icon" class="size-[18px]" aria-hidden="true" />
     </span>
@@ -37,7 +39,7 @@
           :is="icon"
           v-if="icon && compact"
           class="size-4 shrink-0"
-          :class="iconTone === 'neutral' ? 'text-ink-gray-5' : INK[iconTone]"
+          :class="iconInk"
           aria-hidden="true"
         />
         <span class="min-w-0 flex-1" :class="compact ? 'truncate' : ''">{{
@@ -106,6 +108,8 @@
       >
         {{ sub }}
       </span>
+      <!-- extra content under the figures, e.g. a mini trend -->
+      <slot v-if="!loading" />
     </span>
   </component>
 </template>
@@ -130,7 +134,12 @@ const props = withDefaults(
      * Colours the icon's circle, only when that carries meaning: success for
      * done, danger for overdue or risk, info for time and hours.
      */
-    iconTone?: Tone;
+    iconTone?: Tone | "brand";
+    /**
+     * Fills the tile with its tone's soft colour and sets the icon on the solid tone,
+     * for headline figures on a screen that is colourful by exception (ui-guidelines §8).
+     */
+    tint?: Tone | "brand";
     hero?: boolean;
     /** tighter padding and a smaller number, for a strip above a list */
     compact?: boolean;
@@ -165,4 +174,46 @@ const props = withDefaults(
 );
 
 const interactive = computed(() => !!props.to || props.pressed !== undefined);
+
+// brand is not a status tone, so it is handled here, as TaskyBadge does
+const circleClass = computed(() =>
+  props.iconTone === "brand"
+    ? "bg-brand-soft text-brand-ink"
+    : TONE_CLASSES[props.iconTone]
+);
+const iconInk = computed(() =>
+  props.iconTone === "neutral"
+    ? "text-ink-gray-5"
+    : props.iconTone === "brand"
+    ? "text-brand-ink"
+    : INK[props.iconTone]
+);
+
+// full class strings, so Tailwind finds them
+const TINTS: Record<Tone | "brand", { tile: string; circle: string }> = {
+  neutral: {
+    tile: "border-transparent bg-surface-gray-2",
+    circle: "bg-surface-gray-7 text-ink-base",
+  },
+  info: {
+    tile: "border-transparent bg-info-soft",
+    circle: "bg-info text-ink-base",
+  },
+  warning: {
+    tile: "border-transparent bg-warning-soft",
+    circle: "bg-warning text-ink-base",
+  },
+  success: {
+    tile: "border-transparent bg-success-soft",
+    circle: "bg-success text-ink-base",
+  },
+  danger: {
+    tile: "border-transparent bg-danger-soft",
+    circle: "bg-danger text-ink-base",
+  },
+  brand: {
+    tile: "border-transparent bg-brand-soft",
+    circle: "bg-brand text-brand-on",
+  },
+};
 </script>

@@ -11,6 +11,12 @@ a project completion letter is generated.
 A **UAT sign-off** is the same feature for the client's acceptance tests at delivery (see
 [UAT](#uat)): its items are the test cases of the project's SRS, answered Pass / Fail / Blocker.
 
+One dialog sets a sign-off up and sends it: the template, the details, who signs (To) and who is
+copied (CC), and the **mail** the customer gets, filled in from the template and editable ([Mail](#mail)).
+Sales and project people send a UAT sign-off **from the lead page** too and follow it there until
+it is signed ([From the lead](#from-the-lead)). An unanswered sign-off gets **one reminder**
+after two working days ([Reminders](#reminders)).
+
 ## Decisions
 
 - **One sign-off per module / training, several per project.** Trainings happen on different
@@ -44,16 +50,25 @@ A **UAT sign-off** is the same feature for the client's acceptance tests at deli
 Draft, Signed and Reopened are set by actions; the others follow the answers
 (`HDProjectSignoff.refresh_status`).
 
+**Viewed** is not stored: a Sent sign-off reads *Viewed* once the customer opened the link and
+verified their code since it was last sent (the history's *Code verified*;
+`HDProjectSignoff.customer_status`, `customer_status` in the API). The lists, the sign-off page
+and the lead page show it.
+
 Item responses: **Pending**, **Done**, **Not clear**, **Escalated**.
 
 ## Flow
 
 1. **Create** (Project → Sign-off → New sign-off; project managers, the project lead,
-   admins): template (or empty), module title, training date, trainer (from the project
-   team), and who signs for the customer (a contact of the project's customer, with an
-   email). A project without a customer can't have sign-offs. A sign-off made without a
-   template starts with no questions; it saves as a draft but can't be sent until it has
-   at least one.
+   admins; or the lead page, [From the lead](#from-the-lead)): template (only those for this
+   kind of sign-off and the project's type, or "No template" last), module title, training
+   date, trainer (from the project team), who signs for the customer (To: a contact of the
+   project's customer with an email, shown with designation and email), CC, and the mail.
+   **Save as draft** keeps it; **Send to customer** asks once more ("The mail goes to Asha
+   Menon (asha@…) with their link to sign. CC: …") and then creates and sends it in one call;
+   a send that fails saves nothing and the dialog keeps what was typed. A project without a
+   customer can't have sign-offs. A sign-off made without a template starts with no
+   questions; it saves as a draft but can't be sent until it has at least one.
 2. **Edit** (Draft or Reopened): details and questions (add, remove, reorder, reword). A
    reworded question is treated as new: its answer, comment, answer time, clarification
    task and clarification details are cleared and it goes back to Pending.
@@ -83,7 +98,16 @@ Item responses: **Pending**, **Done**, **Not clear**, **Escalated**.
    - records signer name, designation, email, time, IP, user agent and the audit reference;
    - renders the **signed PDF** and saves it as a private File on the Project, so it shows in
      the project's Files tab ([project-files.md](project-files.md));
-   - emails the PDF to the signatory, the trainer and the project lead;
+   - emails the PDF to the signatory and our people: whoever sent the link, the trainer and
+     the project lead; the customer's page says "Signed by …. A copy is in your email.";
+   - notifies (bell, plus email or Teams per HD Notification) whoever sent it and the project
+     lead: "UAT signed by Asha Menon, Director (project)";
+   - for a project made for a lead (`custom_crm_lead`), after the commit
+     (`note_signed_on_crm_lead`): writes that line on the **lead's timeline** on the ERP site
+     (`add_note`, as the person who made the project from the plan, else who sent the link) and
+     tells the lead's owner, read from the lead. A failure is written on the sign-off's history
+     ("Not noted on the lead"); the customer never waits for it. A UAT's state also goes to the
+     plan as before, which turns the lead's Documents step green;
    - checks the project: when **every** sign-off of the project is Signed, renders the
      **project completion letter** (every module with its training date, trainer, signer and
      audit reference), saves it on the project (Project `custom_signoff_letter`) and emails
@@ -92,6 +116,74 @@ Item responses: **Pending**, **Done**, **Not clear**, **Escalated**.
    are written to the history; signature fields are cleared; the signed PDF stays on the
    project; the project's completion letter field is cleared. Signing again generates a new
    PDF (and a new completion letter once all are signed).
+
+## Mail
+
+What the customer gets with the link is the sign-off's own mail: subject, body (rich text) and
+CC, kept on the sign-off (`email_subject`, `email_body`, `cc_emails`) and editable while it is a
+draft or reopened.
+
+- **Where it comes from.** A template's mail (Settings → Sign-off templates: Subject, Body,
+  Always CC), or, when the template has none (or there is no template), the standard mail of
+  its kind: *Training Sign-off – {{ modules }} – {{ project_name }}* or *UAT Sign-off Request –
+  {{ project_name }}*, the wording of TBO's Sign-off requirements
+  (`hd_signoff_template.TRAINING_MAIL`, `UAT_MAIL`).
+- **Placeholders**: `{{ contact_salutation }}`, `{{ contact_name }}`, `{{ customer_name }}`,
+  `{{ project_name }}`, `{{ modules }}` (the module; a UAT's: its tests' sections from the SRS),
+  `{{ training_date }}`, `{{ trainer_name }}`, `{{ sign_off_link }}`, `{{ sender_name }}`,
+  `{{ sender_designation }}` (the sender's Employee designation when the site has one),
+  `{{ company_name }}` (the helpdesk's brand name). They are **filled in, never run as a
+  template** (a regular expression, not Jinja), so a template's text can't execute anything. A
+  salutation or designation that isn't known is left out ("Dear Asha Menon,"; not "Dear
+  Sir/Madam Asha Menon").
+- **Filling in** (`preview_signoff_mail`): when the template is picked, and again whenever a
+  field it uses changes, until the mail is changed by hand; then **Reapply template** puts the
+  template back after asking ("Your changes to the mail are lost"). A placeholder with nothing
+  to fill it stays in the text and **holds the mail back**: "Fill Training date: it is used in
+  the mail." (the dialog's Send button says why it is off, and the server refuses it too:
+  `check_mail_ready`).
+- **The link** goes where `{{ sign_off_link }}` is, else at the end, followed by how the
+  one-time code works. A new link (Resend, a clarification, the reminder) is a new mail.
+- **To** is only the signatory. **CC** starts as the project lead and the person sending, plus
+  the template's Always CC; any valid addresses can be added; the signatory is never copied on
+  their own mail. Replies go to whoever sent the link.
+- A sign-off made before mails were kept (no subject) still goes out with the earlier fixed
+  words.
+
+## From the lead
+
+The lead page's **Documents** card (`LeadDocuments.vue`) ends with the **UAT sign-off** step of a
+project made from an implementation plan. Its status comes from the hub
+(`get_lead_signoff(lead)`): *Sent*, *Viewed*, *In progress*, *Needs clarification*, *Ready to
+sign*, *Signed* (with who signed, and a **Signed PDF** link), read again every 30 seconds while
+the page is in view, so it moves to Signed without opening the project.
+
+- The card's one button: **Send for sign-off** when the project has no UAT sign-off and the
+  person may send one, opening the same dialog for a UAT (its tests from the SRS, the first UAT
+  template that fits the project, CC and mail filled in); **Open sign-off** for someone who can
+  open the project; otherwise the status in words ("UAT sign-off: Viewed").
+- **Who**: the lead's owner, the project's managers and lead, admins create and send it here;
+  anyone who may see the lead sees the status and downloads the signed PDF
+  (`download_lead_signoff_pdf`: the PDF is private on the project, which a salesperson can't
+  open).
+- **How the hub knows**: `get_lead` on the ERP site, as the person (a BD sees only their own
+  leads), says they may see the lead, who owns it, and (its document chain's Project step) which
+  project is its. Kept ten minutes per person and lead (`_lead_access`), so following the status
+  doesn't ask the ERP site every 30 seconds. A project id from the browser is checked against
+  it, never trusted.
+
+## Reminders
+
+Every day at 10:30, on a working day (`helpdesk.follow_ups.WorkCalendar`: the weekly off,
+Saturdays off and holidays), `send_signoff_reminders` sends **one** polite reminder for each
+sign-off that is still **Sent** (nothing answered) two working days after its link went out,
+with a link that still works: the same mail with "Reminder:" before the subject and a first line
+"A gentle reminder: we haven't heard from you yet. The link below replaces the one we sent
+before." It carries a new link (only the link's hash is stored, so the old one can't be sent
+again; the old one stops working), goes to the signatory only, in the name of whoever sent it,
+who is notified. It is written on the history ("Reminder sent") and in `reminder_sent_on`.
+**Resend** stays a manual action; sending the link again by hand starts a new wait. One
+reminder that fails is logged and doesn't stop the others.
 
 ## UAT
 
@@ -156,15 +248,23 @@ base template and helpers (`helpdesk/templates/portal_base.html`). Its endpoints
   note. Never tasks, the history, other sign-offs, IP addresses or internal names.
 - The signed PDF is a private File; the customer downloads it only through
   `download_pdf` with a valid session. Project members open it through Frappe's private-file
-  check (read on the Project).
+  check (read on the Project); people who may see the lead, through
+  `download_lead_signoff_pdf`.
+- The page shows the helpdesk's logo (HD Settings brand logo) in its top bar, its name when
+  there is none. On a phone the answer buttons and the main buttons are full width and 48px
+  tall.
 
 ## Where it is in the app
 
 - **Project page → Sign-off tab** (`/helpdesk/projects/<project>/signoff`, route
   `TaskySignoffs`, `desk/src/pages/tasky/ProjectSignoffs.vue`): roll-up tiles (Signed n of m,
-  items needing clarification, sign-offs with the customer), the completion letter when every
-  sign-off is signed, and the list (module, status badge, signatory, trainer, training date,
-  items to clarify, done/total). **New sign-off** (`components/SignoffFormDialog.vue`).
+  every sign-off, training and UAT; items needing clarification; sign-offs with the customer),
+  **Waiting on**: each sign-off not signed yet and what holds it up, in words, ours first
+  ("Stock: 2 to clarify for our team", "HR: Not sent yet", "UAT: With Asha Menon: opened,
+  nothing answered yet"), the completion letter when every training sign-off is signed, and
+  the list (module, status badge, signatory, trainer, training date, items to clarify,
+  done/total). **New sign-off** and **New UAT sign-off** (`components/SignoffFormDialog.vue`:
+  setup, customer, mail; Save as draft / Send to customer).
 - **A sign-off** (`/helpdesk/projects/<project>/signoff/<name>`, route `TaskySignoff`,
   `ProjectSignoff.vue`): status, signatory, trainer, training date, template, link status;
   actions by state (Edit and Send to customer for drafts; Resend link; Revoke link; Signed
@@ -172,9 +272,11 @@ base template and helpers (`helpdesk/templates/portal_base.html`). Its endpoints
   answer, the customer's comment, the clarification (who, when, note), the task (opens the
   task panel, with its meetings) and **Mark clarified**; the history.
 - **Settings → Sign-off templates** (`desk/src/components/Settings/Signoff/`): list (inactive
-  greyed, question count) and an editor (name, module, description, Active, questions). The
-  question editor (`desk/src/components/SignoffQuestionsEditor.vue`) is shared with editing a
-  sign-off.
+  greyed, UAT marked, project type, question count) and an editor (name, module, **For**:
+  Training or UAT, **Project type**, description, Active, **Mail**: subject, body, Always CC,
+  and the questions, which a UAT template doesn't have). The question editor
+  (`desk/src/components/SignoffQuestionsEditor.vue`) is shared with editing a sign-off.
+- **The lead page**: the Documents card's UAT step ([From the lead](#from-the-lead)).
 - Status and response labels, tones and icons: `desk/src/pages/tasky/signoffMeta.ts`.
 
 ## Who can do what
@@ -182,7 +284,9 @@ base template and helpers (`helpdesk/templates/portal_base.html`). Its endpoints
 | Action | Who |
 | --- | --- |
 | See a project's sign-offs | Anyone who can read the project (`frappe.has_permission("Project", "read")`) |
-| Create | Admins, the project's managers, the project lead (`can_manage_project`) |
+| Create | Admins, the project's managers, the project lead (`can_manage_project`); from the lead page also the lead's owner |
+| Send from the lead page | The same as create |
+| See a UAT sign-off's status and signed PDF on the lead page | Anyone who may see the lead |
 | Edit, send, resend, revoke, mark clarified, reopen, delete a draft | The above, plus the sign-off's trainer |
 | Manage templates | Project managers (includes admins: `is_project_manager`) |
 | Answer and sign | Only the signatory, through the link and code |
@@ -193,12 +297,15 @@ checks in `helpdesk/api/project_signoff.py`.
 ## Data model
 
 - **HD Signoff Template** (named by `template_name`): `module` (suggested module title),
-  `description`, `is_active`, `items` → **HD Signoff Template Item** (`section`, `question`,
-  `help_text`; order is `idx`).
+  `signoff_type` (Training or UAT: a UAT template needs no questions), `project_type` (the
+  Project's types; blank: any), `description`, `is_active`, `email_subject`, `email_body`,
+  `default_cc`, `items` → **HD Signoff Template Item** (`section`, `question`, `help_text`;
+  order is `idx`).
 - **HD Project Signoff** (`SO-#####`): `project`, `project_name` and `customer` (fetched),
   `module_title`, `template`, `status`, `training_date`, `trainer`, `signatory_contact`
-  (Contact of the customer; `signatory_name` and `signatory_email` come from it), `items`,
-  link (`link_token_hash`, `link_expires_on`, `link_sent_on`, `link_sent_by`), signature
+  (Contact of the customer; `signatory_name` and `signatory_email` come from it), the mail
+  (`cc_emails`, `email_subject`, `email_body`), `items`, link (`link_token_hash`,
+  `link_expires_on`, `link_sent_on`, `link_sent_by`, `reminder_sent_on`), signature
   (`signed_on`, `signer_name`, `signer_designation`, `signer_email`, `signer_ip`,
   `signer_user_agent`, `audit_ref`, `signed_pdf` → File), `log`.
 - **HD Project Signoff Item**: `section`, `question`, `help_text`, `response`,
@@ -227,11 +334,25 @@ Old WebKit: tables, no flex or grid.
 
 ## Templates shipped
 
-`ensure_default_signoff_templates()` (install and patch
-`helpdesk.patches.v16_0_2.seed_signoff_templates`) adds, only when a template of that name is
-missing: **Accounts** (Sales, Purchase, Payments, Reports), **Stock / Inventory** (Items and
-warehouses, Stock movements, Receipts and deliveries, Stock reports) and **HR & Payroll**
-(Employees, Attendance and leave, Payroll), written as things the customer can now do.
+`ensure_default_signoff_templates()` (install and patches
+`helpdesk.patches.v16_0_2.seed_signoff_templates`, `seed_signoff_mail_templates`) adds, only when
+a template of that name is missing: **Accounts** (Sales, Purchase, Payments, Reports), **Stock /
+Inventory** (Items and warehouses, Stock movements, Receipts and deliveries, Stock reports) and
+**HR & Payroll** (Employees, Attendance and leave, Payroll), written as things the customer can
+now do, each with the Module Training mail (sites that have them keep theirs, which send the
+same standard mail); and two UAT templates for ERP Implementation projects, **UAT Sign-off** and
+**UAT Sign-off and Go-Live** (the Avera mail), with the customer signing on the page rather than
+by replying. Stages whose mail needs fields a sign-off doesn't have yet (Go-Live Confirmation's
+dates, Digital Marketing's period and services) are added in Settings with the placeholders
+above.
+
+## Not in this change
+
+From TBO's Sign-off requirements, left for a later task: **Edit in full page** (a page per
+sign-off with a mail and document preview), the **Digital Marketing** and ERPNext document
+sections (environment, modules table, open items, deliverables) and their print formats, a
+sign-off document **attached before signing**, the customer's **address**, and **Mark signed
+off** from the customer's email reply. The customer signs on the page; that is the record.
 
 ## API
 
@@ -239,14 +360,27 @@ warehouses, Stock movements, Receipts and deliveries, Stock reports) and **HR & 
 
 - `get_project_signoffs(project)` → `{signoffs, signed, total, completion_letter, can_create,
   can_create_uat}` (`signed` and `total` count the training sign-offs); each sign-off has
-  `signoff_type`, `total`, `done`, `follow_up`.
-- `get_signoff_form(project)` → `{customer, templates, team, contacts}`.
+  `signoff_type`, `customer_status`, `total`, `done`, `follow_up`.
+- `get_signoff_form(project, lead?)` → `{project_name, project_type, customer, templates
+  (with signoff_type, project_type), team, contacts (with designation), default_cc,
+  can_create_uat, placeholder_labels}`.
+- `preview_signoff_mail(project, signoff_type, template?, signatory_contact?, module_title?,
+  training_date?, trainer?, lead?)` → `{subject, body, cc, missing}`; nothing saved.
 - `get_signoff(signoff)` → the sign-off with items, history (newest first), counts,
-  `link_open`, `can_manage`, `can_edit`.
-- POST: `create_signoff`, `create_uat_signoff(project, signatory_contact, trainer)`, `update_signoff`, `send_signoff_link`, `revoke_signoff_link`,
+  `customer_status`, the mail, `reminder_sent_on`, `link_open`, `can_manage`, `can_edit`.
+- POST: `create_signoff(…, email_subject?, email_body?, cc_emails?, send?, lead?)`,
+  `create_uat_signoff(project, signatory_contact, trainer, template?, email_subject?,
+  email_body?, cc_emails?, send?, lead?)` (→ `{name, status}`; `send` 1 sends it at once),
+  `update_signoff` (the mail too, when given), `send_signoff_link`, `revoke_signoff_link`,
   `mark_item_clarified(signoff, item, note)`, `reopen_signoff(signoff, reason)`,
-  `delete_signoff` (drafts only), `save_signoff_template`.
+  `delete_signoff` (drafts only), `save_signoff_template` (with `signoff_type`,
+  `project_type`, `email_subject`, `email_body`, `default_cc`).
 - `get_signoff_templates()`, `get_signoff_template(template)`.
+- The lead page: `get_lead_signoff(lead)` → `{project, signoff (name, status,
+  customer_status, signatory_name, link_sent_on, signed_on, signer_name, signer_designation,
+  has_pdf, counts) or null, can_send, can_open}`; `download_lead_signoff_pdf(lead)`.
+- Jobs: `note_signed_on_crm_lead(signoff, note)` (queued at signing);
+  `hd_project_signoff.send_signoff_reminders` (cron 10:30 daily).
 
 `helpdesk/api/signoff_portal.py` (guest, token + code session): `request_code`,
 `verify_code`, `logout`, `save_response`, `sign`, `download_pdf`; `page_data(token)` and
@@ -265,7 +399,16 @@ task and notifies, Escalate is urgent and reaches managers, escalating an open t
 it urgent and due tomorrow, Mark clarified returns the item
 and emails a new link, completing the task clarifies, signing needs all Done and the
 signatory, signing saves the PDF on the project and locks, reopen needs a reason and is
-logged, the completion letter once every sign-off is signed, a UAT from the plan's SRS (a test a
+logged, the completion letter once every sign-off is signed, the mail (filled in from the
+standard mail, a missing Training date holding it back and named, CC cleaned and the signatory
+never copied, the link put in, replies to the sender), a UAT template needs no questions and
+can't start a training sign-off, Sent reads Viewed once the code is verified, one reminder after
+two working days (not after one, not twice, in the sender's name, the sender told; a manual
+resend starts a new wait; `EveryDayWorkCalendar`), signing emails the sender and queues the
+lead's timeline line, which is written as the plan's maker with the lead's owner told, the lead
+page (its owner sends a UAT without project access and sees it signed and downloads the PDF;
+someone else sees the status but can't send or open the form; a project that isn't the lead's
+is refused; `crm_lead_detail`, `forget_signoff_lead_access`), a UAT from the plan's SRS (a test a
 requirement, read for the project's creator, Pass / Fail words, a Fail a "Fix:" task, a blank
 Fail refused), signing a UAT queued to the ERP site with the signer and not in the completion
 letter, no UAT without a plan, and permissions (members view,

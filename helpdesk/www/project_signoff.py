@@ -14,6 +14,8 @@ def get_context(context):
     # same icon and name as the helpdesk app
     context.favicon = config.favicon
     context.brand_name = config.brand_name or "TBO"
+    # the company's logo on the page (public, like the helpdesk's own)
+    context.brand_logo = config.brand_logo
     token = frappe.form_dict.get("token") or ""
     data = page_data(token)
     # a training sign-off's page, or a UAT's (signoff_portal.words)

@@ -1,0 +1,187 @@
+{
+	"actions": [],
+	"creation": "2026-11-12 12:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"source",
+		"remote_name",
+		"excluded",
+		"column_break_a",
+		"company",
+		"branch",
+		"department",
+		"team",
+		"employee",
+		"lead_owner",
+		"column_break_b",
+		"status",
+		"category",
+		"lead_source",
+		"expected_revenue",
+		"won_value",
+		"created_on",
+		"created_month",
+		"closed_on",
+		"closing_days",
+		"remote_modified",
+		"raw_section",
+		"raw"
+	],
+	"fields": [
+		{
+			"fieldname": "source",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"label": "Source",
+			"options": "HD CRM Source",
+			"reqd": 1,
+			"search_index": 1
+		},
+		{
+			"fieldname": "remote_name",
+			"fieldtype": "Data",
+			"in_list_view": 1,
+			"label": "Lead",
+			"reqd": 1
+		},
+		{
+			"description": "One of its units is inactive.",
+			"fieldname": "excluded",
+			"fieldtype": "Check",
+			"label": "Left out"
+		},
+		{
+			"fieldname": "column_break_a",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "company",
+			"fieldtype": "Data",
+			"in_list_view": 1,
+			"label": "Company",
+			"search_index": 1
+		},
+		{
+			"fieldname": "branch",
+			"fieldtype": "Data",
+			"label": "Branch"
+		},
+		{
+			"fieldname": "department",
+			"fieldtype": "Data",
+			"label": "Department"
+		},
+		{
+			"fieldname": "team",
+			"fieldtype": "Data",
+			"label": "Team"
+		},
+		{
+			"fieldname": "employee",
+			"fieldtype": "Data",
+			"label": "Employee"
+		},
+		{
+			"fieldname": "lead_owner",
+			"fieldtype": "Data",
+			"label": "Lead owner"
+		},
+		{
+			"fieldname": "column_break_b",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "status",
+			"fieldtype": "Data",
+			"label": "Status"
+		},
+		{
+			"fieldname": "category",
+			"fieldtype": "Select",
+			"in_list_view": 1,
+			"label": "Category",
+			"options": "\nOpen\nWon\nLost\nConverted\nOther"
+		},
+		{
+			"fieldname": "lead_source",
+			"fieldtype": "Data",
+			"label": "Lead source"
+		},
+		{
+			"fieldname": "expected_revenue",
+			"fieldtype": "Float",
+			"label": "Expected revenue"
+		},
+		{
+			"fieldname": "won_value",
+			"fieldtype": "Float",
+			"label": "Won value"
+		},
+		{
+			"fieldname": "created_on",
+			"fieldtype": "Date",
+			"label": "Created on",
+			"search_index": 1
+		},
+		{
+			"fieldname": "created_month",
+			"fieldtype": "Data",
+			"label": "Created month"
+		},
+		{
+			"description": "Only for a won, converted or lost lead, and not before it was created.",
+			"fieldname": "closed_on",
+			"fieldtype": "Date",
+			"label": "Closed on"
+		},
+		{
+			"description": "Read only where Closed on is set.",
+			"fieldname": "closing_days",
+			"fieldtype": "Int",
+			"label": "Days to close"
+		},
+		{
+			"fieldname": "remote_modified",
+			"fieldtype": "Datetime",
+			"label": "Modified on the source"
+		},
+		{
+			"fieldname": "raw_section",
+			"fieldtype": "Section Break",
+			"label": "Source values"
+		},
+		{
+			"description": "The mapped fields as the source sent them.",
+			"fieldname": "raw",
+			"fieldtype": "Long Text",
+			"label": "Raw"
+		}
+	],
+	"in_create": 1,
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-11-12 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD CRM Report Lead",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"export": 1,
+			"read": 1,
+			"report": 1,
+			"role": "System Manager"
+		},
+		{
+			"export": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent Manager"
+		}
+	],
+	"read_only": 1,
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": []
+}

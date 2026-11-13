@@ -1,28 +1,34 @@
 <template>
   <!-- stays until the work moves: own overdue, escalated and breached work, and what
        waits on this person as a reviewer, lead or head (docs/follow-ups.md) -->
-  <!-- the collapsed sidebar rail: the bell tile with how many items are waiting -->
-  <RouterLink
+  <!-- the collapsed sidebar column: the bell tile with how many items are waiting -->
+  <Tooltip
     v-if="parts.length && rail"
-    :to="{ name: 'MyWork' }"
-    class="relative mx-auto grid size-8 place-items-center rounded-[10px] transition-colors hover:bg-surface-gray-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
-    :aria-label="railLabel"
+    :text="railLabel"
+    placement="right"
+    :hover-delay="0"
   >
-    <span
-      class="grid size-[26px] place-items-center rounded-[7px] bg-surface-gray-2"
-      :class="urgent ? 'text-danger' : 'text-warning'"
-      aria-hidden="true"
+    <RouterLink
+      :to="{ name: 'MyWork' }"
+      class="relative mx-auto grid size-10 place-items-center rounded-[10px] transition-colors hover:bg-surface-gray-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+      :aria-label="railLabel"
     >
-      <LucideBellRing class="size-3.5" />
-    </span>
-    <span
-      class="absolute -end-1 -top-1 min-w-4 rounded-full bg-surface-base px-1 text-center font-mono text-2xs leading-4 tabular-nums ring-1 ring-outline-gray-2"
-      :class="urgent ? 'text-danger' : 'text-ink-gray-7'"
-      aria-hidden="true"
-    >
-      {{ count > 99 ? "99+" : count }}
-    </span>
-  </RouterLink>
+      <span
+        class="grid size-[26px] place-items-center rounded-[7px] bg-surface-gray-2"
+        :class="urgent ? 'text-danger' : 'text-warning'"
+        aria-hidden="true"
+      >
+        <LucideBellRing class="size-3.5" />
+      </span>
+      <span
+        class="absolute -end-1 -top-1 min-w-4 rounded-full bg-surface-base px-1 text-center font-mono text-2xs leading-4 tabular-nums ring-1 ring-outline-gray-2"
+        :class="urgent ? 'text-danger' : 'text-ink-gray-7'"
+        aria-hidden="true"
+      >
+        {{ count > 99 ? "99+" : count }}
+      </span>
+    </RouterLink>
+  </Tooltip>
   <RouterLink
     v-else-if="parts.length"
     :to="{ name: 'MyWork' }"
@@ -82,6 +88,7 @@
 <script setup lang="ts">
 import { summaryParts, type FollowUpSummary } from "@/components/followUps";
 import { __ } from "@/translation";
+import { Tooltip } from "frappe-ui";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import LucideBellRing from "~icons/lucide/bell-ring";

@@ -28,7 +28,7 @@
         </RouterLink>
       </template>
     </LayoutHeader>
-    <TicketSummaryStrip v-if="!isCustomerPortal" ref="summaryRef" />
+    <TicketViewTabs v-if="!isCustomerPortal" ref="summaryRef" />
     <ListViewBuilder
       ref="listViewRef"
       :options="options"
@@ -157,7 +157,7 @@ import { LayoutHeader, ListViewBuilder, MultipleAvatar } from "@/components";
 import { TicketIcon } from "@/components/icons";
 import IndicatorIcon from "@/components/icons/IndicatorIcon.vue";
 import BulkReplyModal from "@/components/ticket-agent/BulkReplyModal.vue";
-import TicketSummaryStrip from "@/components/ticket-agent/TicketSummaryStrip.vue";
+import TicketViewTabs from "@/components/ticket-agent/TicketViewTabs.vue";
 import ExportModal from "@/components/ticket/ExportModal.vue";
 import ViewBreadcrumbs from "@/components/ViewBreadcrumbs.vue";
 import { normalizeFilters } from "@/components/view-controls/filter";
@@ -174,6 +174,7 @@ import { useSlaTimeLeft } from "@/composables/useSlaTimeLeft";
 import {
   dateFormat,
   dateTooltipFormat,
+  formatTimeShort,
   isCustomerPortal,
   timeAgo,
 } from "@/utils";
@@ -218,7 +219,7 @@ const { $socket } = globalStore();
 const { isManager, userId } = useAuthStore();
 
 const listViewRef = ref(null);
-const summaryRef = ref<InstanceType<typeof TicketSummaryStrip> | null>(null);
+const summaryRef = ref<InstanceType<typeof TicketViewTabs> | null>(null);
 const showExportModal = ref(false);
 
 const { getStatus } = useTicketStatusStore();
@@ -264,6 +265,23 @@ const options = computed(() => ({
             : null,
         ]),
     },
+    // ids and times are numbers: mono, tabular, quiet
+    name: {
+      custom: ({ item }) =>
+        h(
+          "span",
+          { class: "truncate font-mono text-sm tabular-nums text-ink-gray-6" },
+          `#${item}`
+        ),
+    },
+    modified: {
+      custom: ({ item }) =>
+        h(
+          "span",
+          { class: "truncate font-mono text-sm tabular-nums text-ink-gray-6" },
+          formatTimeShort(item)
+        ),
+    },
     status: {
       custom: ({ item }) => {
         if (isCustomerPortal.value) {
@@ -272,11 +290,14 @@ const options = computed(() => ({
         const status = getStatus(item);
         const label = status?.["label_agent"];
         return h(
-          "div",
-          { class: "flex items-center gap-1.5 justify-start w-full" },
+          "span",
+          {
+            class:
+              "inline-flex h-6 max-w-full items-center gap-1.5 rounded-full bg-surface-gray-2 px-2 text-sm text-ink-gray-8",
+          },
           [
             h(IndicatorIcon, { class: status?.["parsed_color"] }),
-            h("span", { class: "truncate flex-1 text-base" }, label),
+            h("span", { class: "truncate" }, label),
           ]
         );
       },

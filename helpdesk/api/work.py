@@ -196,15 +196,16 @@ def status_since(tasks) -> dict[str, str]:
 
 
 def is_task_overdue(task, deadline, today) -> bool:
-    """Past its due date, or due today and already worked longer than its estimate.
-
-    The due date moves out by the days on hold, so a paused task is never late.
+    """Past its due date, or worked longer than its estimate (not while in review),
+    whatever the due date and with none (owner's request, 2026-11-03: a 30 min task is overdue once its timer passes
+    30 min). The due date moves out by the days on hold, so a paused task is never late.
     """
-    if not deadline or task.status in (ON_HOLD, "Completed", "Cancelled"):
+    if task.status in (ON_HOLD, "Completed", "Cancelled"):
         return False
-    if deadline < today:
+    if deadline and deadline < today:
         return True
-    return deadline == today and _over_estimate(task)
+    # in review the assignee can't act, so running past the estimate is not their lateness
+    return task.status != PENDING_REVIEW and _over_estimate(task)
 
 
 def _over_estimate(task) -> bool:
@@ -845,10 +846,23 @@ def get_ticket_task_context(ticket: str | int) -> dict:
     for p in projects:
         p["members"] = members.get(p.name, [])
 
+    approved = frappe.db.get_value(
+        "HD Ticket",
+        ticket,
+        ["custom_estimate_status", "custom_agreed_delivery", "custom_estimate_hours"],
+        as_dict=True,
+    )
     return {
         "customer": customer,
         "projects": projects,
         "linked_tasks": _linked_tasks(ticket),
+        # an approved customization estimate fills the task's date and hours
+        "estimate": {
+            "due_date": approved.custom_agreed_delivery,
+            "hours": frappe.utils.flt(approved.custom_estimate_hours),
+        }
+        if approved and approved.custom_estimate_status == "Approved"
+        else None,
     }
 
 
@@ -932,6 +946,7 @@ def create_task_from_ticket(
         _format_task,
         _is_project_member,
         _task_dict,
+        require_due_or_estimate,
     )
 
     ticket = str(ticket)
@@ -958,6 +973,7 @@ def create_task_from_ticket(
     if ticket_doc.get("custom_estimate_status") == "Approved":
         due_date = due_date or ticket_doc.get("custom_agreed_delivery")
         estimated_hours = estimated_hours or ticket_doc.get("custom_estimate_hours")
+    require_due_or_estimate(due_date, estimated_hours)
     task = frappe.get_doc(
         {
             "doctype": "Task",

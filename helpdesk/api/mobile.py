@@ -680,14 +680,17 @@ def quick_add_task(
     subject: str,
     due_date: str | None = None,
     assignee: str | None = None,
+    estimated_hours: float | str | None = None,
 ) -> dict:
     """Add a task to a project the user may add tasks to (tasky.add_task checks
-    can_add_tasks), given to `assignee` or, by default, the user."""
+    can_add_tasks, and a due date or an estimate), given to `assignee` or, by default,
+    the user."""
     task = tasky.add_task(
         project,
         subject,
         assigned_to=(assignee or "").strip() or frappe.session.user,
         due_date=due_date or None,
+        estimated_hours=estimated_hours or 0,
     )
     return _one(_task_detail(task["name"]))
 

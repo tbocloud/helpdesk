@@ -1,3 +1,4 @@
+import { useAuthStore } from "@/stores/auth";
 import { dayjs } from "frappe-ui";
 import type { RouteLocationRaw } from "vue-router";
 
@@ -43,6 +44,12 @@ export const ticketFilters = {
     ["status_category", "=", "Paused"],
     ["status", "!=", "Waiting on Task"],
   ],
+  // the list's server turns "%@me%" into the session user, but get_count doesn't, so name them
+  mine: (): TicketCondition[] => [
+    OPEN_CATEGORIES,
+    ["_assign", "like", `%${useAuthStore().userId}%`],
+  ],
+  closed: (): TicketCondition[] => [["status_category", "=", "Resolved"]],
   rated: (): TicketCondition[] => [["feedback_rating", ">", 0]],
 };
 

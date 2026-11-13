@@ -440,7 +440,7 @@ function statusMeta(status: string) {
 
 function dueLabel(task: Task) {
   if (isOnHold(task)) return holdDurationLabel(holdDays(task));
-  if (!task.due_date) return "—";
+  if (!task.due_date) return isOverdue(task) ? __("Past its estimate") : "—";
   const due = dayjs(task.due_date);
   if (isClosed(task)) return due.format("D MMM");
   const days = due.startOf("day").diff(dayjs().startOf("day"), "day");
@@ -448,8 +448,9 @@ function dueLabel(task: Task) {
     return days === -1
       ? __("1 day overdue")
       : __("{0} days overdue", String(-days));
-  if (days === 0)
-    return isOverdue(task) ? __("Past its estimate") : __("Due today");
+  // worked past its estimate before its due date: overdue already
+  if (isOverdue(task)) return __("Past its estimate");
+  if (days === 0) return __("Due today");
   if (days === 1) return __("Due tomorrow");
   if (days < 7) return __("Due {0}", due.format("ddd"));
   return due.format("D MMM");

@@ -240,7 +240,25 @@
             </div>
             <EditorFixedMenu :items="fullToolbar" />
           </div>
-          <div class="flex items-center justify-end gap-x-2 sm:mt-0 w-[40%]">
+          <div class="flex shrink-0 items-center justify-end gap-x-2 sm:mt-0">
+            <Dropdown
+              v-if="ticket"
+              :options="sendStatusOptions"
+              placement="right"
+            >
+              <Button
+                variant="ghost"
+                :aria-label="__('Send and set status to')"
+              >
+                <span class="text-ink-gray-5">{{ __("Send and set to") }}</span>
+                <span class="text-ink-gray-9">
+                  {{ sendStatus ?? __("No change") }}
+                </span>
+                <template #suffix>
+                  <LucideChevronDown class="size-4" aria-hidden="true" />
+                </template>
+              </Button>
+            </Dropdown>
             <Button label="Discard" @click="handleDiscard" />
             <Button
               variant="solid"
@@ -274,6 +292,9 @@ import { AttachmentIcon } from "@/components/icons";
 import { useTyping } from "@/composables/realtime";
 import { getUserEmailInfo } from "@/composables/useUserEmailInfo";
 import { useAuthStore } from "@/stores/auth";
+import { useTicketStatusStore } from "@/stores/ticketStatus";
+import { ActivitiesSymbol, TicketSymbol } from "@/types";
+import type { HDTicketStatus } from "@/types/doctypes";
 import {
   getFontFamily,
   htmlToText,
@@ -283,11 +304,12 @@ import {
   validateEmailWithZod,
 } from "@/utils";
 import { useStorage } from "@vueuse/core";
-import { FileUploader, createResource, toast } from "frappe-ui";
+import { Dropdown, FileUploader, createResource, toast } from "frappe-ui";
 import { Editor, EditorContent, EditorFixedMenu } from "frappe-ui/editor";
 import { useOnboarding } from "frappe-ui/frappe";
 import {
   computed,
+  inject,
   nextTick,
   onBeforeUnmount,
   onMounted,
@@ -296,6 +318,7 @@ import {
 } from "vue";
 import { pendingReplyInsert } from "@/pages/ticket/modalStates";
 import { __ } from "@/translation";
+import LucideChevronDown from "~icons/lucide/chevron-down";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideLoaderCircle from "~icons/lucide/loader-circle";
 import LucideSparkles from "~icons/lucide/sparkles";
@@ -338,6 +361,23 @@ const props = defineProps({
 });
 
 const emit = defineEmits(["submit", "discard"]);
+
+const ticket = inject(TicketSymbol, null);
+const activities = inject(ActivitiesSymbol, null);
+const { statuses } = useTicketStatusStore();
+const sendStatus = ref<string | null>(null);
+const sendStatusOptions = computed(() => [
+  {
+    label: __("No change"),
+    onClick: () => (sendStatus.value = null),
+  },
+  ...(statuses.data ?? [])
+    .filter((s: HDTicketStatus) => s.enabled)
+    .map((s: HDTicketStatus) => ({
+      label: s.label_agent,
+      onClick: () => (sendStatus.value = s.label_agent),
+    })),
+]);
 
 const { updateOnboardingStep } = useOnboarding("helpdesk");
 const { isManager } = useAuthStore();
@@ -559,6 +599,7 @@ const sendMail = createResource({
     },
   }),
   onSuccess: () => {
+    applySendStatus();
     resetState();
     emit("submit");
 
@@ -631,6 +672,17 @@ function addToReply(
     newEmail.value = getInitialContent();
   });
   focusEditorAtStart();
+}
+
+// the agent picks where the ticket goes next as they send, instead of a second trip to the header
+function applySendStatus() {
+  const status = sendStatus.value;
+  sendStatus.value = null;
+  if (!status || !ticket?.value || ticket.value.doc.status === status) return;
+  ticket.value.setValue.submit(
+    { status },
+    { onSuccess: () => activities?.value?.reload() }
+  );
 }
 
 function resetState() {

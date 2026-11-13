@@ -506,6 +506,10 @@ class TaskRules:
             return None
         if not is_task_overdue(task, deadline, self.ctx.today):
             return None
+        # the ladder counts working days past the due date, so a task over its estimate
+        # before it (or with none) shows as overdue but isn't escalated until it's due
+        if not deadline or deadline > self.ctx.today:
+            return None
         days = self.ctx.calendar.working_days_since(deadline)
         key = bool(task.is_key or task.is_milestone)
         level = self.ctx.ladder_level(days)

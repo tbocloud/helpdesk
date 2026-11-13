@@ -311,7 +311,7 @@ const COLUMNS: {
     label: __("Calls"),
     tone: "text-info",
     value: (p) => p.calls_total,
-    sub: (p) => __("{0} connected", String(p.calls_connected)),
+    sub: (p) => __("{0} contacted", String(p.calls_connected)),
   },
   {
     key: "fresh",

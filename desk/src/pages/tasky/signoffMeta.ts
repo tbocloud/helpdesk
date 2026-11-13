@@ -3,11 +3,36 @@ import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideCircleDashed from "~icons/lucide/circle-dashed";
 import LucideCircleDot from "~icons/lucide/circle-dot";
 import LucideCircleHelp from "~icons/lucide/circle-help";
+import LucideEye from "~icons/lucide/eye";
 import LucidePenLine from "~icons/lucide/pen-line";
 import LucideRotateCcw from "~icons/lucide/rotate-ccw";
 import LucideSend from "~icons/lucide/send";
 import LucideTriangleAlert from "~icons/lucide/triangle-alert";
 import type { StatusMeta } from "./taskMeta";
+
+// what a sign-off's mail can say, filled in from the sign-off (helpdesk/helpdesk/doctype/
+// hd_project_signoff/hd_project_signoff.py, mail_values; docs/project-signoff.md, Mail)
+export const PLACEHOLDERS = [
+  "contact_salutation",
+  "contact_name",
+  "customer_name",
+  "project_name",
+  "modules",
+  "training_date",
+  "trainer_name",
+  "sign_off_link",
+  "sender_name",
+  "sender_designation",
+  "company_name",
+];
+const PLACEHOLDER = /{{\s*([a-zA-Z_]+)\s*}}/g;
+
+/** The placeholders `text` still has, but the link's (filled as the mail goes out). */
+export function unfilledPlaceholders(text: string): string[] {
+  return [...new Set([...text.matchAll(PLACEHOLDER)].map((m) => m[1]))].filter(
+    (name) => name !== "sign_off_link"
+  );
+}
 
 /** A question on a sign-off or a template; `name` is set once it is saved. */
 export interface SignoffQuestion {
@@ -22,6 +47,8 @@ export interface SignoffQuestion {
 const SIGNOFF_STATUS: Record<string, StatusMeta> = {
   Draft: { label: "Draft", icon: LucideCircleDashed, tone: "neutral" },
   Sent: { label: "Sent", icon: LucideSend, tone: "neutral" },
+  // Sent, and the customer opened the link with their code (customer_status)
+  Viewed: { label: "Viewed", icon: LucideEye, tone: "info" },
   "In progress": { label: "In progress", icon: LucideCircleDot, tone: "info" },
   "Needs clarification": {
     label: "Needs clarification",

@@ -181,12 +181,10 @@
                       :options="priorityOptions()"
                       :aria-label="__('Priority')"
                     />
-                    <TextInput
-                      v-model.number="task.estimated_hours"
-                      type="number"
-                      min="0"
-                      placeholder="0"
-                      :aria-label="__('Estimated hours')"
+                    <EstimateInput
+                      v-model="task.estimated_hours"
+                      :label="__('Estimate')"
+                      hide-label
                     />
                   </li>
                 </ul>
@@ -379,6 +377,7 @@ import LucidePlus from "~icons/lucide/plus";
 import LucideTrash2 from "~icons/lucide/trash-2";
 import LucideX from "~icons/lucide/x";
 import TaskyState from "@/components/TaskyState.vue";
+import EstimateInput from "./components/EstimateInput.vue";
 import { categoryOptions, priorityOptions } from "./taskMeta";
 
 const editing = ref(false);

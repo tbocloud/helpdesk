@@ -251,7 +251,8 @@ def complete_task(
     it to the lead for review on any project, not only those that ask for a review.
 
     A day holds at most the work day's hours (helpdesk.work_hours), counting what the person
-    already has on it; hours entered by hand are for today or yesterday only, or an older
+    already has on it; hours entered by hand are for today and the last working days
+    (HD Work Settings' `hand_entry_days`, 7 by default) only, or an older
     day with a `backdate_reason` from a System Manager (`check_hand_entered`).
     """
     doc = frappe.get_doc("Task", str(task))
@@ -436,7 +437,8 @@ def _log_day(task_doc, day, hours: float, notes: str, today):
     ts = frappe.get_doc(
         {
             "doctype": "Timesheet",
-            "title": _("Task: {0}").format(task_doc.subject),
+            # a Data field of 140: a task's subject can be that long on its own
+            "title": _("Task: {0}").format(task_doc.subject)[:140],
             "employee": frappe.db.get_value("Employee", {"user_id": user}, "name"),
             "time_logs": [
                 {
@@ -670,6 +672,15 @@ def _add_member_for_assignment(project: str, user: str):
     )
 
 
+def require_due_or_estimate(due_date, estimated_hours) -> None:
+    """A task a person creates needs a due date or an estimate, so it can be planned (an
+    estimate alone lets the AI date it). Tasks the hub makes itself (content posts,
+    recurring tasks, proposals, GitHub) set their own."""
+    dated = bool(due_date) and str(due_date) != "null"
+    if not dated and not frappe.utils.flt(estimated_hours) > 0:
+        frappe.throw(_("Give the task a due date or an estimate."))
+
+
 def _estimate_if_undated(task_doc):
     """No due date given: the AI sets one in the background (see helpdesk.task_estimates)."""
     from helpdesk.task_estimates import queue_estimate, should_estimate
@@ -756,6 +767,7 @@ def add_task(
         )
     if not str(task_name or "").strip():
         frappe.throw(_("Task name is required"))
+    require_due_or_estimate(due_date, estimated_hours)
     assigned_to = str(assigned_to or "").strip()
     manages = can_manage_project(project)
     if assigned_to and not _is_assignable(assigned_to):
@@ -951,8 +963,10 @@ def request_help(
     task_name: str,
     description: str = "",
     due_date: str | None = None,
+    estimated_hours: float | str | None = None,
 ) -> dict:
-    """The assignee asks a teammate for something their task needs.
+    """The assignee asks a teammate for something their task needs (a due date or an
+    estimate is required, as for any task).
 
     The teammate gets a new task in the same project and the asking task waits
     on it, so it shows as blocked until the help is done. The lead is told.
@@ -960,6 +974,7 @@ def request_help(
     from helpdesk.work_reminders import notify_users
 
     doc = _get_own_task(task)
+    require_due_or_estimate(due_date, estimated_hours)
     teammate = _teammate(doc, teammate)
     if teammate == frappe.session.user:
         frappe.throw(_("Pick a teammate to ask, not yourself."))
@@ -978,6 +993,7 @@ def request_help(
             "priority": doc.priority,
             "status": "Open",
             "exp_end_date": _help_due_date(doc, due_date),
+            "custom_estimated_hours": frappe.utils.flt(estimated_hours) or 0,
         }
     )
     # developers can't create tasks; _get_own_task checked this one is theirs
@@ -2303,8 +2319,8 @@ def start_timer(task: str):
 
     Only this task's timer, and only when asked: pausing (stop_timer) keeps the
     task in Working with its time banked, and nothing else starts it again. The
-    person's timers on other tasks keep running (several at once), and outside
-    work hours it is refused.
+    person's other running timer is paused first (one timer at a time), and
+    outside work hours it is refused.
     """
     task_id = str(task)
     frappe.has_permission("Task", "write", task_id, throw=True)
@@ -2314,7 +2330,8 @@ def start_timer(task: str):
     if status != "Working":
         frappe.throw(_("Start the task first; its timer runs while it's in progress."))
     if not running:
-        begin_timer(task_id, frappe.session.user)
+        for other in begin_timer(task_id, frappe.session.user):
+            notify_task_list(other)
         notify_task_list(task_id)
     return {"ok": 1}
 
@@ -2377,7 +2394,8 @@ def move_task(task: str, new_status: str):
     # Entering Working: start timer (fresh or resume)
     # (outside work hours the task goes in progress with its timer paused)
     if new_status == "Working":
-        begin_timer(task_id, frappe.session.user, strict=False)
+        for other in begin_timer(task_id, frappe.session.user, strict=False):
+            notify_task_list(other)
 
     # the controller checks dependencies, review and ticket hand-back
     status = _save_status(task_id, new_status)

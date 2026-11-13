@@ -15,7 +15,14 @@ import { createRouter, createWebHistory } from "vue-router";
 const { isMobileView } = useScreenSize();
 
 export const LOGIN_PAGE = "/login";
-const LEADS_ROUTES = new Set(["Leads", "Lead", "LeadProposal", "LeadNewProposal"]);
+const LEADS_ROUTES = new Set([
+  "Leads",
+  "Lead",
+  "LeadProposal",
+  "LeadNewProposal",
+  "AssignLeads",
+  "MemberCalls",
+]);
 
 // type the meta fields
 declare module "vue-router" {
@@ -164,6 +171,18 @@ const portalRoutes = [
     name: "FindProspects",
     component: () => import("@/pages/leads/FindProspects.vue"),
   },
+  // managers and heads: who is handed which product and how many calls per slot
+  {
+    path: "/leads/assign",
+    name: "AssignLeads",
+    component: () => import("@/pages/leads/AssignLeads.vue"),
+  },
+  {
+    path: "/leads/assign/calls/:user",
+    name: "MemberCalls",
+    component: () => import("@/pages/leads/MemberCalls.vue"),
+    props: true,
+  },
   {
     path: "/leads/:leadId",
     name: "Lead",
@@ -181,6 +200,21 @@ const portalRoutes = [
     name: "LeadProposal",
     component: () => import("@/pages/leads/Proposal.vue"),
     props: true,
+  },
+  // configurable lead reporting across companies (docs/crm-dashboard.md)
+  {
+    path: "/crm-dashboards/:dashboardId?",
+    name: "CrmDashboard",
+    component: () => import("@/pages/crm-dashboard/CrmDashboard.vue"),
+    // admins too before the first dashboard exists, to see the page's set-up prompt
+    beforeEnter: () => {
+      const auth = useAuthStore();
+      return (
+        auth.canViewCrmDashboards ||
+        auth.isAdmin ||
+        auth.isManager || { name: "Home" }
+      );
+    },
   },
   // the Lead Bank: any active agent adds leads by photo and sees their own (docs/lead-bank.md)
   {

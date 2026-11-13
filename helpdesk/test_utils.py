@@ -1,12 +1,12 @@
 import gzip
 import io
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from unittest.mock import patch
 
 import frappe
 from frappe.core.doctype.communication.test_communication import create_email_account
-from frappe.utils import add_to_date, getdate, now_datetime
+from frappe.utils import add_to_date, get_datetime, getdate, now_datetime
 
 from helpdesk.api.settings.field_dependency import create_update_field_dependency
 from helpdesk.integrations.erpnext.utils import create_customer_field
@@ -4161,6 +4161,41 @@ def fake_pdf_renderer():
     return stack
 
 
+def forget_signoff_lead_access():
+    """Clears what the sign-off API cached of who may see which lead (ten minutes in
+    helpdesk.api.project_signoff._lead_access), so a test's fake ERP answers are read."""
+    frappe.cache.delete_keys("signoff_lead_access:")
+
+
+class EveryDayWorkCalendar:
+    """Stands in for helpdesk.follow_ups.WorkCalendar with every day a working day, so a
+    test counts working days without the site's weekly off and holidays."""
+
+    def __init__(self, today):
+        self.today = getdate(today)
+
+    def is_working_day(self, day) -> bool:
+        return True
+
+    def working_days_since(self, day) -> int:
+        return max((self.today - getdate(day)).days, 0)
+
+
+def crm_lead_detail(lead: str, project: str | None, owner: str) -> dict:
+    """The ERP site's get_lead answer for `lead`, owned by `owner`, whose document chain's
+    Project step is the hub's `project` (none yet: None)."""
+    return {
+        "lead": {"name": lead, "lead_owner": owner, "created_by": owner},
+        "documents": {
+            "steps": [
+                {"document_type": "Project", "name": project},
+                {"document_type": "UAT", "name": project},
+            ],
+            "next": None,
+        },
+    }
+
+
 def recurrence_rule(**values):
     """A recurring-task rule as plain values, for the date math in helpdesk.recurrence:
     monthly on the start date's day from 1 Jan 2026, never ending, no lead time and
@@ -5592,6 +5627,24 @@ def queue_call(item: str, lead: str = "LEAD-1", **fields) -> dict:
     }
 
 
+def lead_number(number: str, **fields) -> dict:
+    """One contact number of a lead, as TBO Smart's get_lead and add_lead_number list it
+    (an Active Mobile unless `fields` say otherwise)."""
+    return {
+        "id": f"n-{number}",
+        "number": number,
+        "e164": None,
+        "label": "Mobile",
+        "person": "",
+        "designation": "",
+        "is_primary": 0,
+        "status": "Active",
+        "note": "",
+        "source": "Manual",
+        **fields,
+    }
+
+
 def my_calls(
     pending: tuple[dict, ...] = (),
     overdue: tuple[dict, ...] = (),
@@ -5647,6 +5700,53 @@ def call_batches_report(people: list[dict]) -> dict:
         "date": "2026-10-26",
         "people": [{"department": "GrowthX", "batches": [], **p} for p in people],
         "totals": {key: sum(p[key] for p in people) for key in keys},
+    }
+
+
+def call_plans(**department) -> dict:
+    """A get_call_plans answer: GrowthX with Morning and Afternoon slots of 50, the products
+    PhoebiX and BillaX, and Shahana planned for PhoebiX (50 + 50), plus any `department`
+    keys."""
+    return {
+        "date": "2026-11-05",
+        "departments": [
+            {
+                "department": "GrowthX",
+                "slots": [
+                    {
+                        "label": "Morning",
+                        "start_time": "10:00",
+                        "end_time": "13:00",
+                        "size": 50,
+                    },
+                    {
+                        "label": "Afternoon",
+                        "start_time": "14:00",
+                        "end_time": "18:00",
+                        "size": 50,
+                    },
+                ],
+                "products": [
+                    {"product_name": "PhoebiX", "intro_line": "Solar ERP"},
+                    {"product_name": "BillaX", "intro_line": "Billing"},
+                ],
+                "campaign_product": None,
+                "pull_unassigned": 1,
+                "unassigned": {"PhoebiX": 140, "": 12},
+                "members": [
+                    {
+                        "user": "shahana@tbo.example",
+                        "full_name": "Shahana V K",
+                        "product": "PhoebiX",
+                        "sizes": {"Morning": 50, "Afternoon": 50},
+                        "total": 100,
+                        "has_plan": True,
+                        "today": {"size": 50, "called": 12},
+                    }
+                ],
+                **department,
+            }
+        ],
     }
 
 
@@ -6021,3 +6121,369 @@ def ai_reading(**fields) -> dict:
 def clear_lead_bank_scan_limit(user: str) -> None:
     """Forget how many photo readings `user` has made this hour."""
     frappe.cache.delete(frappe.cache.make_key(f"lead_bank_scans:{user}"))
+
+
+class FakeLeadERP:
+    """In-memory stand-in for TBO Smart's lead mirror methods on the ERP (hub_lead_mirror):
+    the change feed, the index of every lead, the bulk read and the scopes. Its own clock moves
+    one second with every change, so changes have a strict order. Use it as the CRM client."""
+
+    base = "https://erp.example"
+
+    def __init__(self):
+        self.leads: dict[str, dict] = {}
+        self.changes: list[tuple[datetime, str]] = []
+        self.clock = datetime(2031, 3, 4, 5, 6, 7)
+        self.scopes = {"ann@erp.example": {"all": True, "team": [], "departments": []}}
+        # (method, params) of every call
+        self.calls: list[tuple[str, dict]] = []
+        # lead -> why the bulk read can't give it; an Exception the bulk read raises
+        self.unreadable: dict[str, str] = {}
+        self.bulk_error: Exception | None = None
+
+    def tick(self) -> datetime:
+        self.clock += timedelta(seconds=1)
+        return self.clock
+
+    def put(self, name: str, **fields) -> None:
+        """Make or change a lead (its `modified` moves) and log the change."""
+        now = self.tick()
+        lead = self.leads.setdefault(
+            name,
+            {
+                "lead_name": name,
+                "lead_owner": "ann@erp.example",
+                "tbo_department": None,
+                "assignees": [],
+                "score": 0,
+                "creation": str(now),
+            },
+        )
+        lead.update(fields, modified=str(now))
+        self.changes.append((now, name))
+
+    def note(self, name: str) -> None:
+        """Something on the lead changed that leaves its `modified` alone (a note)."""
+        self.changes.append((self.tick(), name))
+
+    def drop(self, name: str, log: bool = True) -> None:
+        """Delete a lead; `log` False: the change feed misses it, as after an outage."""
+        del self.leads[name]
+        if log:
+            self.changes.append((self.tick(), name))
+
+    def get_calls(self, method: str) -> list[dict]:
+        return [params for called, params in self.calls if called == method]
+
+    def call(self, method, post=False, **params):
+        name = method.rsplit(".", 1)[-1]
+        self.calls.append((name, params))
+        return getattr(self, name)(**params)
+
+    def get_lead_changes(self, since=None, limit=500):
+        latest: dict[str, datetime] = {}
+        for at, lead in self.changes:
+            if not since or at > get_datetime(since):
+                latest[lead] = at
+        rows = sorted(latest.items(), key=lambda item: item[1])
+        page = rows[:limit]
+        return {
+            "changes": [
+                {"lead": lead, "at": str(at), "deleted": lead not in self.leads}
+                for lead, at in page
+            ],
+            "next_since": str(page[-1][1]) if page else since,
+            "more": len(rows) > limit,
+            "now": str(self.clock),
+        }
+
+    def get_lead_index(self, after=None, limit=1000):
+        names = sorted(name for name in self.leads if not after or name > after)
+        page = names[:limit]
+        return {
+            "leads": [{"name": n, "modified": self.leads[n]["modified"]} for n in page],
+            "next_after": page[-1] if page else after,
+            "more": len(names) > limit,
+            "total": len(self.leads) if not after else None,
+            "now": str(self.clock),
+        }
+
+    def get_leads_bulk(self, names):
+        if self.bulk_error:
+            raise self.bulk_error
+        found, errors = [], {}
+        for name in names:
+            if name not in self.leads:
+                continue
+            if name in self.unreadable:
+                errors[name] = self.unreadable[name]
+                continue
+            lead = self.leads[name]
+            row = {
+                key: lead.get(key)
+                for key in ("lead_name", "lead_owner", "tbo_department", "score")
+            }
+            found.append(
+                {
+                    "name": name,
+                    "row": {"name": name, **row, "tbo_stage": lead.get("tbo_stage")},
+                    "payload": {
+                        "lead": {
+                            "name": name,
+                            "status": "Open",
+                            "creation": lead["creation"],
+                        },
+                        "timeline": [],
+                    },
+                    "owner": lead["lead_owner"],
+                    "assignees": lead["assignees"],
+                    "department": lead["tbo_department"],
+                    "modified": lead["modified"],
+                }
+            )
+        return {
+            "leads": found,
+            "missing": [name for name in names if name not in self.leads],
+            "errors": errors,
+        }
+
+    def get_mirror_scopes(self):
+        return {"scopes": self.scopes, "now": str(self.clock)}
+
+
+class FakeCRMSite:
+    """In-memory stand-in for an ERPNext site a CRM dashboard source reads (CRMClient's
+    get_page, get_list, doctype_fields, logged_user and call). Leads keep the fields they are
+    given; each change moves the site's clock a second, so `modified` orders them."""
+
+    LEAD_FIELDS = (
+        ("company", "Link"),
+        ("branch", "Link"),
+        ("department", "Link"),
+        ("team", "Data"),
+        ("lead_owner", "Link"),
+        ("status", "Select"),
+        ("source", "Link"),
+        ("expected", "Currency"),
+        ("won", "Currency"),
+        ("closed_on", "Date"),
+        ("lead_name", "Data"),
+        ("annual_revenue", "Currency"),
+    )
+
+    def __init__(self):
+        self.leads: dict[str, dict] = {}
+        # unit type -> records, as ERPNext's Company, Branch, Department and Employee list them
+        self.org: dict[str, list[dict]] = {}
+        self.clock = datetime(2031, 3, 4, 5, 6, 7)
+        self.down = False
+        self.pages: list[dict] = []
+
+    def tick(self) -> str:
+        self.clock += timedelta(seconds=1)
+        return str(self.clock)
+
+    def put(self, name: str, **values) -> dict:
+        """Adds or changes a lead; `creation` defaults to the site's clock."""
+        lead = self.leads.setdefault(name, {"name": name, "creation": str(self.clock)})
+        lead.update(values)
+        lead["modified"] = self.tick()
+        return lead
+
+    def remove(self, name: str):
+        self.leads.pop(name, None)
+
+    def check(self):
+        if self.down:
+            from helpdesk.integrations.crm.client import CRMError
+
+            raise CRMError("Couldn't reach the CRM site: down")
+
+    def get_page(
+        self, doctype, fields, filters=None, order_by="", start=0, page_length=500
+    ):
+        self.check()
+        if doctype != "Lead":
+            from helpdesk.integrations.crm.client import CRMError
+
+            # as the real client does for a 404
+            raise CRMError(f"The CRM site has no {doctype}.", 404)
+        self.pages.append({"doctype": doctype, "filters": filters, "start": start})
+        rows = sorted(
+            self.leads.values(), key=lambda lead: (lead["modified"], lead["name"])
+        )
+        for field, op, value in filters or []:
+            if field == "modified" and op == ">=":
+                rows = [lead for lead in rows if lead["modified"] >= value]
+        page = rows[start : start + page_length]
+        return [{f: lead.get(f) for f in fields} for lead in page]
+
+    def get_list(self, doctype, fields, filters=None):
+        self.check()
+        if doctype not in self.org:
+            from helpdesk.integrations.crm.client import CRMError
+
+            raise CRMError("The CRM site answered 403: no access", 403)
+        return [{f: record.get(f) for f in fields} for record in self.org[doctype]]
+
+    def doctype_fields(self, doctype):
+        self.check()
+        if doctype != "Lead":
+            return []
+        return [
+            {"fieldname": name, "label": name.title(), "fieldtype": fieldtype}
+            for name, fieldtype in self.LEAD_FIELDS
+        ]
+
+    def logged_user(self):
+        self.check()
+        return "api@source.example"
+
+    def call(self, method, post=False, **params):
+        self.check()
+        if method == "frappe.client.get_count":
+            return len(self.leads)
+        raise AssertionError(f"FakeCRMSite has no method {method}")
+
+
+def make_crm_source(name: str = "Test Source", **values):
+    """Creates a CRM dashboard data source with its own (fake) connection, mapped to
+    FakeCRMSite's lead fields, statuses New → Open, Won, Lost and Converted mapped, in INR.
+    `values` override any field, e.g. a status_map."""
+    doc = frappe.get_doc(
+        {
+            "doctype": "HD CRM Source",
+            "source_name": name,
+            "site_url": f"https://{frappe.scrub(name)}.example",
+            "api_key": "key",
+            "api_secret": "secret",
+            "currency": "INR",
+            "company_field": "company",
+            "branch_field": "branch",
+            "department_field": "department",
+            "owner_field": "lead_owner",
+            "status_field": "status",
+            "source_field": "source",
+            "expected_revenue_field": "expected",
+            "won_value_field": "won",
+            "created_field": "creation",
+            "closing_date_field": "closed_on",
+            "status_map": [
+                {"status": "New", "category": "Open"},
+                {"status": "Won", "category": "Won"},
+                {"status": "Lost", "category": "Lost"},
+                {"status": "Converted", "category": "Converted"},
+            ],
+            **values,
+        }
+    )
+    doc.insert(ignore_permissions=True)
+    return doc
+
+
+def make_crm_org_unit(source: str, unit_type: str, unit_name: str, **values):
+    """Creates a company, branch, department, team or employee of a CRM dashboard source."""
+    doc = frappe.get_doc(
+        {
+            "doctype": "HD CRM Org Unit",
+            "source": source,
+            "unit_type": unit_type,
+            "unit_name": unit_name,
+            **values,
+        }
+    )
+    doc.insert(ignore_permissions=True)
+    return doc
+
+
+def fill_crm_site(site: FakeCRMSite, today):
+    """Puts five leads on a FakeCRMSite, all created 40 days before `today`: one per
+    category (New, Won, Lost, Converted) and one whose status no mapping covers.
+    Acme has branches North and South; Beta has none; the fifth has no company."""
+
+    def day(days_ago: int) -> str:
+        return f"{add_to_date(today, days=-days_ago)} 10:00:00"
+
+    def date(days_ago: int) -> str:
+        return str(add_to_date(today, days=-days_ago))
+
+    site.put(
+        "L1",
+        company="Acme",
+        branch="North",
+        department="Sales North",
+        lead_owner="ann.crmdash@example.com",
+        status="New",
+        source="Web",
+        expected=1000,
+        creation=day(40),
+    )
+    site.put(
+        "L2",
+        company="Acme",
+        branch="North",
+        lead_owner="ann.crmdash@example.com",
+        status="Won",
+        source="Web",
+        expected=600,
+        won=500,
+        creation=day(40),
+        closed_on=date(30),
+    )
+    site.put(
+        "L3",
+        company="Acme",
+        branch="South",
+        lead_owner="bob.crmdash@example.com",
+        status="Lost",
+        source="Referral",
+        expected=200,
+        creation=day(40),
+        closed_on=date(10),
+    )
+    site.put(
+        "L4",
+        company="Beta",
+        lead_owner="bob.crmdash@example.com",
+        status="Converted",
+        source="Referral",
+        won=300,
+        creation=day(40),
+        closed_on=date(20),
+    )
+    site.put(
+        "L5",
+        lead_owner="cat.crmdash@example.com",
+        status="Demo Demanded",
+        creation=day(40),
+    )
+
+
+def crm_kpi(page: dict, metric: str, aggregation: str | None = None) -> dict:
+    """The KPI card of `metric` (and `aggregation`, when given) on a CRM dashboard page."""
+    return next(
+        card
+        for card in page["kpis"]
+        if card["metric"] == metric
+        and (aggregation is None or card["aggregation"] == aggregation)
+    )
+
+
+def make_crm_dashboard(dashboard_name: str = "Test Dashboard", **values):
+    """Creates an active CRM dashboard: by default every company over all time, the
+    Company, Branch and Status category filters, one card per metric and no charts."""
+    from helpdesk.crm_dashboard.registry import ALL_KPIS
+
+    doc = frappe.get_doc(
+        {
+            "doctype": "HD CRM Dashboard",
+            "dashboard_name": dashboard_name,
+            "scope": "all",
+            "default_period": "all_time",
+            "filters": [{"filter": f} for f in ("company", "branch", "category")],
+            "kpis": [{"metric": metric} for metric in ALL_KPIS],
+            **values,
+        }
+    )
+    doc.insert(ignore_permissions=True)
+    return doc

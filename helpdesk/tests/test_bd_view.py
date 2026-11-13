@@ -85,12 +85,63 @@ class TestBDGate(BDCase):
         leads_api.list_leads(view="all", owner="someone@else.example")
         sent = self.calls("list_leads")[-1]
         self.assertEqual(sent["view"], "mine")
-        self.assertIsNone(sent["owner"])
+        # the ones they own or created (the ERP site picks them); no other owner is asked for
+        self.assertEqual((sent["mine"], sent["owner"]), (1, None))
 
-    def test_their_other_views_are_kept(self):
+    def test_their_other_views_are_kept_but_only_their_own_leads(self):
         frappe.set_user(BD)
-        leads_api.list_leads(view="follow_up")
-        self.assertEqual(self.calls("list_leads")[-1]["view"], "follow_up")
+        for view in ("follow_up", "called"):
+            leads_api.list_leads(view=view, owner="someone@else.example")
+            sent = self.calls("list_leads")[-1]
+            self.assertEqual(
+                (sent["view"], sent["mine"], sent["owner"]), (view, 1, None)
+            )
+
+    def test_the_page_may_send_created_by_me_empty(self):
+        # an unset Created by filter comes as null; the type check refused the whole list
+        frappe.set_user(BD)
+        leads_api.list_leads(view="all", created_by_me=None)
+        self.assertIsNone(self.calls("list_leads")[-1]["created_by_me"])
+
+    def test_called_takes_its_days_and_created_by_me_is_passed_on(self):
+        frappe.set_user(BD)
+        leads_api.list_leads(
+            view="called", from_date="2026-11-01", to_date="2026-11-10", created_by_me=1
+        )
+        sent = self.calls("list_leads")[-1]
+        self.assertEqual(
+            (sent["from_date"], sent["to_date"], sent["created_by_me"]),
+            ("2026-11-01", "2026-11-10", 1),
+        )
+
+    def test_a_bd_opens_only_their_own_lead(self):
+        self.crm.lead_answers["get_lead"] = {
+            "lead": {"name": "LEAD-1", "lead_owner": "someone@else.example"}
+        }
+        frappe.set_user(BD)
+        with self.assertRaises(frappe.PermissionError):
+            leads_api.get_lead("LEAD-1")
+        self.crm.lead_answers["get_lead"] = {
+            "lead": {"name": "LEAD-1", "lead_owner": BD}
+        }
+        self.assertEqual(leads_api.get_lead("LEAD-1")["lead"]["name"], "LEAD-1")
+        # one they created and handed on opens too (the ERP site keeps it read only)
+        self.crm.lead_answers["get_lead"] = {
+            "lead": {
+                "name": "LEAD-1",
+                "lead_owner": "someone@else.example",
+                "created_by": BD,
+            }
+        }
+        self.assertEqual(leads_api.get_lead("LEAD-1")["lead"]["name"], "LEAD-1")
+
+    def test_a_head_opens_a_lead_of_their_team(self):
+        self.crm.lead_answers["get_lead"] = {
+            "lead": {"name": "LEAD-1", "lead_owner": "someone@else.example"}
+        }
+        frappe.set_user(HEAD)
+        self.head_options()
+        self.assertEqual(leads_api.get_lead("LEAD-1")["lead"]["name"], "LEAD-1")
 
     def test_a_manager_and_a_head_keep_the_all_view(self):
         frappe.set_user(MANAGER)
@@ -246,3 +297,15 @@ class TestCallsWithoutAResult(BDCase):
         frappe.set_user("plain.bd@bdview.example")
         with self.assertRaises(frappe.PermissionError):
             pending_calls.start_call("LEAD-1")
+
+
+class TestWhoGetsTheBDView(BDCase):
+    def test_a_sales_employee_who_also_administers_does_not_get_it(self):
+        from helpdesk.content_team import is_sales_bd_role
+
+        self.assertTrue(is_sales_bd_role(BD))
+        self.assertFalse(is_sales_bd_role(MANAGER))
+        for role in ("System Manager", "Agent Manager"):
+            frappe.get_doc("User", HEAD).add_roles(role)
+            self.assertFalse(is_sales_bd_role(HEAD), role)
+            frappe.get_doc("User", HEAD).remove_roles(role)

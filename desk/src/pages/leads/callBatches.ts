@@ -21,28 +21,33 @@ export type CallOutcome =
   | "Not interested"
   | "Wrong number";
 
-/** The six answers, in the order the chips show them. `flow` outcomes ask for more first. */
+/** The six answers, in the order the chips show them. `flow` outcomes ask for more first.
+ * Each is labelled with the lead stage it moves the lead to, so people see one word for both
+ * (Busy keeps its own: like Not answered it makes the lead Not Responding). `value` is what
+ * the ERP site takes and stays as it is. */
 export const OUTCOMES: { value: CallOutcome; label: string; flow: boolean }[] =
   [
-    { value: "Connected", label: __("Connected"), flow: true },
-    { value: "Not answered", label: __("Not answered"), flow: false },
+    { value: "Connected", label: __("Contacted"), flow: true },
+    { value: "Not answered", label: __("Not Responding"), flow: false },
     { value: "Busy", label: __("Busy"), flow: false },
-    { value: "Call back", label: __("Call back"), flow: true },
-    { value: "Not interested", label: __("Not interested"), flow: true },
-    { value: "Wrong number", label: __("Wrong number"), flow: false },
+    { value: "Call back", label: __("Follow-up Required"), flow: true },
+    { value: "Not interested", label: __("Not Interested"), flow: true },
+    { value: "Wrong number", label: __("Wrong Number"), flow: false },
   ];
 
 /** An outcome's icon, and the tone it shows in on a lead's row: colour only where it says
  * something (a call that got through, one to repeat, a no), never for the plain ones. */
-export const OUTCOME_LOOK: Record<CallOutcome, { icon: Component; tone: Tone }> =
-  {
-    Connected: { icon: LucideCircleCheck, tone: "success" },
-    "Not answered": { icon: LucidePhoneMissed, tone: "warning" },
-    Busy: { icon: LucidePhoneOff, tone: "warning" },
-    "Call back": { icon: LucideCalendarClock, tone: "info" },
-    "Not interested": { icon: LucideThumbsDown, tone: "danger" },
-    "Wrong number": { icon: LucideX, tone: "neutral" },
-  };
+export const OUTCOME_LOOK: Record<
+  CallOutcome,
+  { icon: Component; tone: Tone }
+> = {
+  Connected: { icon: LucideCircleCheck, tone: "success" },
+  "Not answered": { icon: LucidePhoneMissed, tone: "warning" },
+  Busy: { icon: LucidePhoneOff, tone: "warning" },
+  "Call back": { icon: LucideCalendarClock, tone: "info" },
+  "Not interested": { icon: LucideThumbsDown, tone: "danger" },
+  "Wrong number": { icon: LucideX, tone: "neutral" },
+};
 
 export interface QueueLead {
   name: string;
@@ -56,6 +61,13 @@ export interface QueueLead {
   last_note?: string | null;
   next_step?: string | null;
   wrong_number?: number;
+  /** the other numbers still in use besides `phone` (absent from an older TBO Smart) */
+  other_numbers?: {
+    id: string;
+    number: string;
+    label: string;
+    person: string;
+  }[];
 }
 
 /** What the caller says they are calling under: the lead's product, else its department. */
@@ -144,6 +156,16 @@ export interface MyCalls {
   /** what the person calls for now (null: every department of theirs) */
   focus?: CallFocus | null;
   focus_options?: FocusOption[];
+  /** someone else's calls, read-only (get_member_calls): whose, and what they called today */
+  member?: { user: string; full_name: string };
+  called?: CalledCall[];
+}
+
+/** A call already made today, as a watcher sees it. */
+export interface CalledCall extends QueueCall {
+  outcome: CallOutcome;
+  called_at: string | null;
+  note?: string | null;
 }
 
 export interface BatchReportPerson {
@@ -214,6 +236,14 @@ export function withOutcome(data: MyCalls, call: QueueCall): MyCalls {
 export function useMyCalls() {
   return createResource({
     url: "helpdesk.api.call_batches.get_my_calls",
+  });
+}
+
+/** Someone else's Today's calls, read-only, for a manager, head or viewer of their department. */
+export function useMemberCalls(user: string) {
+  return createResource({
+    url: "helpdesk.api.call_batches.get_member_calls",
+    params: { user },
   });
 }
 
@@ -327,7 +357,25 @@ export interface CallRules {
   call_slots: CallSlot[];
   /** a member's own cap, replacing the department's */
   member_caps: Record<string, number | string>;
+  /** at `auto_assign_at` ("HH:mm"), planned members nobody handed leads to today are topped up */
+  auto_assign: boolean;
+  auto_assign_at: string;
+  auto_assign_skip_sunday: boolean;
+  /** Saturdays of the month without it */
+  auto_assign_skip_saturdays: AutoAssignSaturdays;
 }
+
+export type AutoAssignSaturdays = "None" | "2nd" | "2nd and 4th" | "All";
+
+export const AUTO_ASSIGN_SATURDAYS: {
+  label: string;
+  value: AutoAssignSaturdays;
+}[] = [
+  { label: __("Every Saturday is a work day"), value: "None" },
+  { label: __("Not on the 2nd Saturday"), value: "2nd" },
+  { label: __("Not on the 2nd and 4th Saturdays"), value: "2nd and 4th" },
+  { label: __("Not on Saturdays"), value: "All" },
+];
 
 export const DEFAULT_RULES: CallRules = {
   call_batches_enabled: false,
@@ -339,10 +387,15 @@ export const DEFAULT_RULES: CallRules = {
   campaign_district: "",
   campaign_product: "",
   call_slots: [
-    { label: "Morning", start_time: "10:00", end_time: "13:00", size: 50 },
-    { label: "Afternoon", start_time: "14:00", end_time: "18:00", size: 50 },
+    { label: "Morning", start_time: "10:00", end_time: "13:00", size: 40 },
+    { label: "Afternoon", start_time: "14:00", end_time: "16:00", size: 30 },
+    { label: "Evening", start_time: "16:00", end_time: "18:00", size: 30 },
   ],
   member_caps: {},
+  auto_assign: true,
+  auto_assign_at: "11:00",
+  auto_assign_skip_sunday: true,
+  auto_assign_skip_saturdays: "2nd",
 };
 
 /** A department's rules as the form edits them (a copy): the defaults for a new one. */
@@ -356,6 +409,10 @@ export function rulesFrom(saved?: Partial<CallRules> | null): CallRules {
       );
   rules.call_batches_enabled = !!saved.call_batches_enabled;
   rules.pull_unassigned = !!saved.pull_unassigned;
+  if (saved.auto_assign !== undefined) {
+    rules.auto_assign = !!saved.auto_assign;
+    rules.auto_assign_skip_sunday = !!saved.auto_assign_skip_sunday;
+  }
   return rules;
 }
 
@@ -381,11 +438,17 @@ export function rulesProblem(rules: CallRules) {
       );
   if (!(Math.floor(Number(rules.daily_call_cap)) >= 1))
     return __("Give the daily limit a number, 1 or more.");
+  if (rules.auto_assign && !/^\d{2}:\d{2}/.test(rules.auto_assign_at || ""))
+    return __("Give the auto-assign time, e.g. 11:00.");
   return "";
 }
 
 /** The rules as the ERP site takes them. */
-export function rulesPayload(rules: CallRules, withProduct = false) {
+export function rulesPayload(
+  rules: CallRules,
+  withProduct = false,
+  withAutoAssign = false
+) {
   const caps: Record<string, number> = {};
   for (const [user, cap] of Object.entries(rules.member_caps))
     if (Math.floor(Number(cap)) >= 1) caps[user] = Math.floor(Number(cap));
@@ -409,5 +472,14 @@ export function rulesPayload(rules: CallRules, withProduct = false) {
       size: Math.floor(Number(s.size)),
     })),
     member_caps: caps,
+    // an older TBO Smart refuses fields it doesn't know
+    ...(withAutoAssign
+      ? {
+          auto_assign: rules.auto_assign ? 1 : 0,
+          auto_assign_at: rules.auto_assign_at,
+          auto_assign_skip_sunday: rules.auto_assign_skip_sunday ? 1 : 0,
+          auto_assign_skip_saturdays: rules.auto_assign_skip_saturdays,
+        }
+      : {}),
   };
 }

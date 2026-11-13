@@ -8,7 +8,8 @@ from frappe.query_builder.functions import Coalesce
 from frappe.utils import add_days, formatdate, getdate, now, now_datetime, nowdate
 
 from helpdesk.automation import acting_user
-from helpdesk.tasky.time_sessions import record_session
+from helpdesk.tasky.time_sessions import pause_other_timers, record_session
+from helpdesk.utils import join_malayalam_signs
 from helpdesk.work_hours import in_work_window
 
 WAITING_ON_TASK = "Waiting on Task"
@@ -18,6 +19,8 @@ TASK_COMPLETED = "Task Completed"
 DONE = ("Completed", "Cancelled")
 # a task can't enter these while the task it depends on is still open
 NEEDS_DEPENDENCY_DONE = ("Working", PENDING_REVIEW, "Completed")
+# what people type or paste: Malayalam copied from a PDF comes in broken
+PASTED_TEXT_FIELDS = ("subject", "description")
 
 
 class Task(Document):
@@ -32,6 +35,7 @@ class Task(Document):
         self.set_completed_on()
         self.clear_escalation()
         self.unmark_ai_description_when_edited()
+        self.mend_pasted_malayalam()
 
     def after_insert(self):
         self.queue_ai_description()
@@ -220,6 +224,12 @@ class Task(Document):
 
         if should_describe(self):
             queue_description(self.name)
+
+    def mend_pasted_malayalam(self):
+        """Joins the vowel signs that a copy from a PDF splits off their letters."""
+        for field in PASTED_TEXT_FIELDS:
+            if self.get(field):
+                self.set(field, join_malayalam_signs(self.get(field)))
 
     def unmark_ai_description_when_edited(self):
         """Once a person rewrites it, the description is theirs, not the AI's."""
@@ -530,12 +540,14 @@ class Task(Document):
         self.hold_previous_status = None
 
     def restart_timer(self):
-        """The timer picks up where the hold stopped it, if it is work time (the person's
-        timers on other tasks keep running). Outside work hours it stays paused."""
+        """The timer picks up where the hold stopped it, if it is work time; the person's other
+        timer is paused (one at a time). Outside work hours it stays paused."""
         if not in_work_window(now_datetime()):
             return
+        user = frappe.session.user
+        pause_other_timers(self.name, user)
         self.custom_timer_start = now()
-        self.custom_timer_user = frappe.session.user
+        self.custom_timer_user = user
 
     def announce_hold(self):
         """Tell the project lead (or its managers) right away, and keep it in the task's history."""

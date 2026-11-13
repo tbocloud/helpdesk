@@ -53,9 +53,9 @@
             </div>
           </div>
 
-          <!-- roll-up -->
+          <!-- roll-up: every sign-off, training and UAT -->
           <div
-            v-if="!data || data.total"
+            v-if="!data || data.signoffs.length"
             class="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3"
           >
             <StatTile
@@ -63,12 +63,16 @@
               :label="__('Signed')"
               :value="
                 data
-                  ? __('{0} of {1}', String(data.signed), String(data.total))
+                  ? __(
+                      '{0} of {1}',
+                      String(signedCount),
+                      String(data.signoffs.length)
+                    )
                   : ''
               "
               :icon="LucideCircleCheck"
               :icon-tone="allSigned ? 'success' : 'neutral'"
-              :meter="data ? (data.signed / data.total) * 100 : null"
+              :meter="data ? (signedCount / data.signoffs.length) * 100 : null"
               :tone="allSigned ? 'success' : 'neutral'"
               :loading="!data"
             />
@@ -94,6 +98,44 @@
               :loading="!data"
             />
           </div>
+
+          <!-- what holds up each sign-off not signed yet, in words -->
+          <section
+            v-if="waiting.length"
+            class="mb-4 rounded-lg border border-outline-gray-2 bg-surface-base"
+            :aria-labelledby="waitingHeading"
+          >
+            <h3
+              :id="waitingHeading"
+              class="border-b border-outline-gray-1 px-4 py-2 text-sm font-medium text-ink-gray-8"
+            >
+              {{ __("Waiting on") }}
+            </h3>
+            <ul role="list">
+              <li
+                v-for="w in waiting"
+                :key="w.name"
+                class="border-b border-outline-gray-1 last:border-b-0"
+              >
+                <router-link
+                  :to="{
+                    name: 'TaskySignoff',
+                    params: { projectId, signoffId: w.name },
+                  }"
+                  class="flex min-h-[44px] flex-wrap items-center gap-x-2 gap-y-0.5 px-4 py-2 text-sm hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-highlight"
+                >
+                  <component
+                    :is="w.onUs ? LucideCircleHelp : LucideClock"
+                    class="size-4 shrink-0"
+                    :class="w.onUs ? 'text-warning' : 'text-ink-gray-5'"
+                    aria-hidden="true"
+                  />
+                  <span class="font-medium text-ink-gray-9">{{ w.title }}</span>
+                  <span class="text-ink-gray-6">{{ w.reason }}</span>
+                </router-link>
+              </li>
+            </ul>
+          </section>
 
           <div
             v-if="data?.completion_letter"
@@ -205,9 +247,9 @@
                       :icon="LucideListChecks"
                     />
                     <TaskyBadge
-                      :label="__(signoffStatusMeta(s.status).label)"
-                      :tone="signoffStatusMeta(s.status).tone"
-                      :icon="signoffStatusMeta(s.status).icon"
+                      :label="__(signoffStatusMeta(s.customer_status).label)"
+                      :tone="signoffStatusMeta(s.customer_status).tone"
+                      :icon="signoffStatusMeta(s.customer_status).icon"
                     />
                   </div>
                   <div
@@ -302,12 +344,13 @@ import { FILL, TRACK } from "@/components/tone";
 import { __ } from "@/translation";
 import { dateFormat } from "@/utils";
 import { Button, createResource } from "frappe-ui";
-import { computed, ref, watch } from "vue";
+import { computed, ref, useId, watch } from "vue";
 import { useRouter } from "vue-router";
 import LucideBadgeCheck from "~icons/lucide/badge-check";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideCircleHelp from "~icons/lucide/circle-help";
+import LucideClock from "~icons/lucide/clock";
 import LucideClipboardCheck from "~icons/lucide/clipboard-check";
 import LucideDownload from "~icons/lucide/download";
 import LucideListChecks from "~icons/lucide/list-checks";
@@ -325,6 +368,8 @@ interface SignoffRow {
   /** Training, or UAT (the client's acceptance tests from the SRS) */
   signoff_type: "Training" | "UAT";
   status: string;
+  /** the status in the customer's terms: Sent turns Viewed once they opened the link */
+  customer_status: string;
   training_date?: string | null;
   trainer_name?: string | null;
   signatory_name?: string | null;
@@ -369,8 +414,59 @@ const data = computed(() => signoffs.data as SignoffList | undefined);
 const hasUat = computed(
   () => !!data.value?.signoffs.some((s) => s.signoff_type === "UAT")
 );
+const waitingHeading = useId();
+const signedCount = computed(
+  () => data.value?.signoffs.filter((s) => s.status === "Signed").length ?? 0
+);
 const allSigned = computed(
-  () => !!data.value?.total && data.value.signed === data.value.total
+  () =>
+    !!data.value?.signoffs.length &&
+    signedCount.value === data.value.signoffs.length
+);
+
+/** What a sign-off not signed yet waits for, and whether that is on us. */
+function waitingFor(s: SignoffRow): { reason: string; onUs: boolean } {
+  const who = s.signatory_name || __("the customer");
+  switch (s.customer_status) {
+    case "Draft":
+      return { reason: __("Not sent yet"), onUs: true };
+    case "Reopened":
+      return { reason: __("Reopened: send it again"), onUs: true };
+    case "Needs clarification":
+      return {
+        reason:
+          s.signoff_type === "UAT"
+            ? __("{0} open issues for our team", String(s.follow_up))
+            : __("{0} to clarify for our team", String(s.follow_up)),
+        onUs: true,
+      };
+    case "Viewed":
+      return {
+        reason: __("With {0}: opened, nothing answered yet", who),
+        onUs: false,
+      };
+    case "In progress":
+      return {
+        reason: __(
+          "With {0}: {1} of {2} answered",
+          who,
+          String(s.done),
+          String(s.total)
+        ),
+        onUs: false,
+      };
+    case "Ready to sign":
+      return { reason: __("Ready for {0} to sign", who), onUs: false };
+    default:
+      return { reason: __("With {0}: not opened yet", who), onUs: false };
+  }
+}
+// what is on us first, then what waits for the customer
+const waiting = computed(() =>
+  (data.value?.signoffs ?? [])
+    .filter((s) => s.status !== "Signed")
+    .map((s) => ({ name: s.name, title: s.module_title, ...waitingFor(s) }))
+    .sort((a, b) => Number(b.onUs) - Number(a.onUs))
 );
 // items, not sign-offs: each one is a clarification someone has to give
 const followUpCount = computed(

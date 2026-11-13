@@ -1,0 +1,150 @@
+{
+	"actions": [],
+	"creation": "2026-11-10 12:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-11-10 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"owner": "Administrator",
+	"states": [],
+	"name": "HD Lead Sync State",
+	"issingle": 1,
+	"field_order": [
+		"enabled",
+		"backfill_status",
+		"since",
+		"column_break_a",
+		"last_run",
+		"last_synced_on",
+		"lag_seconds",
+		"leads_mirrored",
+		"erp_total",
+		"errors_section",
+		"last_error",
+		"last_compared_on",
+		"compare_result",
+		"scopes_section",
+		"scopes_synced_on",
+		"scopes"
+	],
+	"fields": [
+		{
+			"fieldname": "enabled",
+			"fieldtype": "Check",
+			"label": "Keep a local copy of the leads",
+			"default": "0",
+			"read_only": 1,
+			"description": "Turned on from Settings \u2192 CRM."
+		},
+		{
+			"fieldname": "backfill_status",
+			"fieldtype": "Select",
+			"label": "Copying",
+			"options": "Idle\nCopying",
+			"default": "Idle",
+			"read_only": 1
+		},
+		{
+			"fieldname": "since",
+			"fieldtype": "Data",
+			"label": "Read the ERP's changes up to",
+			"read_only": 1,
+			"description": "The ERP's own clock; empty until the first full copy is done."
+		},
+		{
+			"fieldname": "column_break_a",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "last_run",
+			"fieldtype": "Datetime",
+			"label": "Last Run",
+			"read_only": 1
+		},
+		{
+			"fieldname": "last_synced_on",
+			"fieldtype": "Datetime",
+			"label": "Last Successful Sync",
+			"read_only": 1
+		},
+		{
+			"fieldname": "lag_seconds",
+			"fieldtype": "Int",
+			"label": "Lag (Seconds)",
+			"read_only": 1,
+			"description": "How old the newest change was when it was copied."
+		},
+		{
+			"fieldname": "leads_mirrored",
+			"fieldtype": "Int",
+			"label": "Leads Copied",
+			"read_only": 1
+		},
+		{
+			"fieldname": "erp_total",
+			"fieldtype": "Int",
+			"label": "Leads on the ERP",
+			"read_only": 1,
+			"description": "At the last full comparison."
+		},
+		{
+			"fieldname": "errors_section",
+			"fieldtype": "Section Break",
+			"label": "Problems and checks"
+		},
+		{
+			"fieldname": "last_error",
+			"fieldtype": "Small Text",
+			"label": "Last Error",
+			"read_only": 1
+		},
+		{
+			"fieldname": "last_compared_on",
+			"fieldtype": "Datetime",
+			"label": "Last Full Comparison",
+			"read_only": 1
+		},
+		{
+			"fieldname": "compare_result",
+			"fieldtype": "Small Text",
+			"label": "Comparison Result",
+			"read_only": 1
+		},
+		{
+			"fieldname": "scopes_section",
+			"fieldtype": "Section Break",
+			"label": "Who sees what"
+		},
+		{
+			"fieldname": "scopes_synced_on",
+			"fieldtype": "Datetime",
+			"label": "Scopes Copied On",
+			"read_only": 1
+		},
+		{
+			"fieldname": "scopes",
+			"fieldtype": "Code",
+			"options": "JSON",
+			"label": "Scopes",
+			"read_only": 1,
+			"description": "Per person on the ERP: sees all, the users whose leads they see, the departments they head."
+		}
+	],
+	"permissions": [
+		{
+			"read": 1,
+			"report": 1,
+			"export": 1,
+			"role": "System Manager"
+		},
+		{
+			"read": 1,
+			"report": 1,
+			"export": 1,
+			"role": "Agent Manager"
+		}
+	]
+}

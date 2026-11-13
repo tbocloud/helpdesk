@@ -11,16 +11,21 @@ from helpdesk.api import project_signoff as api
 from helpdesk.api import signoff_portal as portal
 from helpdesk.helpdesk.doctype.hd_project_signoff.hd_project_signoff import (
     HDProjectSignoff,
+    send_signoff_reminders,
 )
 from helpdesk.helpdesk.doctype.hd_signoff_template.hd_signoff_template import (
     DEFAULT_TEMPLATES,
     ensure_default_signoff_templates,
 )
 from helpdesk.test_utils import (
+    EveryDayWorkCalendar,
     FakeCRM,
     create_customer,
+    crm_lead_detail,
+    enable_leads,
     fake_pdf_renderer,
     fake_request,
+    forget_signoff_lead_access,
     get_reminder_messages,
     hold_commits,
     make_portal_contact,
@@ -638,4 +643,315 @@ class TestProjectSignoff(FrappeTestCase):
             run_as_user(
                 PM[0],
                 lambda: api.create_uat_signoff(self.project, self.contact, TRAINER[0]),
+            )
+
+    # --- the mail (docs/project-signoff.md, Mail) ---
+
+    def test_the_mail_fills_in_and_holds_back_what_is_missing(self):
+        details = {
+            "template": TEMPLATE,
+            "signatory_contact": self.contact,
+            "module_title": "Accounts",
+            "trainer": TRAINER[0],
+        }
+        preview = run_as_user(
+            PM[0], lambda: api.preview_signoff_mail(self.project, **details)
+        )
+        # the template has no mail of its own: the standard training mail, filled in
+        self.assertEqual(preview["missing"], ["Training date"])
+        self.assertIn("{{ training_date }}", preview["body"])
+        self.assertIn("Meera Joseph", preview["body"])
+        self.assertIn("Anjali Pillai", preview["body"])
+        self.assertTrue(preview["subject"].startswith("Training Sign-off – Accounts"))
+        with self.assertRaises(frappe.ValidationError) as refused:
+            run_as_user(
+                PM[0],
+                lambda: api.create_signoff(
+                    self.project,
+                    "Accounts",
+                    self.contact,
+                    TRAINER[0],
+                    template=TEMPLATE,
+                    email_subject=preview["subject"],
+                    email_body=preview["body"],
+                    send=1,
+                ),
+            )
+        self.assertIn("Training date", str(refused.exception))
+
+        filled = run_as_user(
+            PM[0],
+            lambda: api.preview_signoff_mail(
+                self.project, training_date=nowdate(), **details
+            ),
+        )
+        self.assertEqual(filled["missing"], [])
+        created = run_as_user(
+            PM[0],
+            lambda: api.create_signoff(
+                self.project,
+                "Accounts",
+                self.contact,
+                TRAINER[0],
+                template=TEMPLATE,
+                training_date=nowdate(),
+                email_subject=filled["subject"],
+                email_body=filled["body"],
+                cc_emails=f"{PM[0]}; {SIGNATORY}",
+                send=1,
+            ),
+        )
+        doc = frappe.get_doc("HD Project Signoff", created["name"])
+        # the signatory isn't copied on their own mail
+        self.assertEqual((doc.status, doc.cc_emails), ("Sent", PM[0]))
+        sent = self.sendmail.call_args.kwargs
+        self.assertEqual(
+            (sent["recipients"], sent["cc"], sent["subject"], sent["reply_to"]),
+            ([SIGNATORY], [PM[0]], filled["subject"], PM[0]),
+        )
+        self.assertIn("/project-signoff?token=", sent["message"])
+        self.assertNotIn("{{", sent["message"])
+        with self.assertRaises(frappe.ValidationError):
+            run_as_user(
+                PM[0],
+                lambda: api.create_signoff(
+                    self.project,
+                    "Accounts",
+                    self.contact,
+                    TRAINER[0],
+                    cc_emails="not-an-email",
+                ),
+            )
+
+    def test_a_uat_template_carries_only_the_mail(self):
+        ensure_default_signoff_templates()
+        uat = frappe.get_doc("HD Signoff Template", "UAT Sign-off and Go-Live")
+        self.assertEqual(
+            (uat.signoff_type, uat.project_type, len(uat.items)),
+            ("UAT", "ERP Implementation", 0),
+        )
+        self.assertIn("{{ sign_off_link }}", uat.email_body)
+        # a UAT's template can't start a training sign-off
+        with self.assertRaises(frappe.ValidationError):
+            run_as_user(
+                PM[0],
+                lambda: api.create_signoff(
+                    self.project,
+                    "Accounts",
+                    self.contact,
+                    TRAINER[0],
+                    template="UAT Sign-off",
+                ),
+            )
+
+    def test_sent_reads_viewed_once_the_customer_opens_it(self):
+        doc, _token = self.sent()
+
+        def status():
+            listed = run_as_user(PM[0], lambda: api.get_project_signoffs(self.project))
+            return next(
+                s.customer_status for s in listed["signoffs"] if s.name == doc.name
+            )
+
+        self.assertEqual(status(), "Sent")
+        doc.reload()
+        doc.log_event(frappe._("Code verified"), by_email=SIGNATORY)
+        doc.flags.signoff_action = True
+        doc.save(ignore_permissions=True)
+        self.assertEqual(status(), "Viewed")
+        self.assertEqual(
+            run_as_user(PM[0], lambda: api.get_signoff(doc.name))["customer_status"],
+            "Viewed",
+        )
+
+    # --- the reminder (docs/project-signoff.md, Reminders) ---
+
+    def test_one_reminder_after_two_working_days(self):
+        doc, _token = self.sent()
+
+        def sent_days_ago(days):
+            frappe.db.set_value(
+                "HD Project Signoff",
+                doc.name,
+                {
+                    "link_sent_on": add_days(now_datetime(), -days),
+                    "link_sent_by": PM[0],
+                },
+            )
+
+        def run():
+            with patch("helpdesk.follow_ups.WorkCalendar", EveryDayWorkCalendar):
+                with patch("helpdesk.work_reminders.notify_users") as notify:
+                    send_signoff_reminders()
+            return notify
+
+        sent_days_ago(1)
+        run()
+        self.sendmail.assert_not_called()
+
+        sent_days_ago(3)
+        notify = run()
+        self.assertEqual(self.sendmail.call_count, 1)
+        mail = self.sendmail.call_args.kwargs
+        self.assertEqual(mail["recipients"], [SIGNATORY])
+        self.assertTrue(mail["subject"].startswith("Reminder:"))
+        self.assertIn("/project-signoff?token=", mail["message"])
+        doc.reload()
+        self.assertTrue(doc.reminder_sent_on)
+        # in the name of whoever sent it, who is told
+        self.assertEqual(doc.link_sent_by, PM[0])
+        self.assertEqual(doc.log[-1].event, "Reminder sent")
+        self.assertEqual(notify.call_args.args[0], [PM[0]])
+
+        sent_days_ago(5)
+        run()
+        self.assertEqual(self.sendmail.call_count, 1)
+
+        # a link sent again by hand starts a new wait
+        run_as_user(PM[0], lambda: api.send_signoff_link(doc.name))
+        self.assertFalse(
+            frappe.db.get_value("HD Project Signoff", doc.name, "reminder_sent_on")
+        )
+
+    # --- after signing ---
+
+    def test_signing_emails_our_owner_and_notes_the_lead(self):
+        crm = self.lead_project(owner=OUTSIDER[0])
+        doc, token = self.sent()
+        frappe.db.set_value("HD Project Signoff", doc.name, "link_sent_by", PM[0])
+        doc = self.answer_all_done(doc, token)
+        with patch("frappe.enqueue") as enqueue:
+            self.sign(doc, token)
+        signed_mail = next(
+            c.kwargs
+            for c in self.sendmail.call_args_list
+            if c.kwargs.get("attachments")
+        )
+        self.assertIn(PM[0], signed_mail["recipients"])
+        self.assertIn(SIGNATORY, signed_mail["recipients"])
+        job = next(
+            c
+            for c in enqueue.call_args_list
+            if c.args[0] == "helpdesk.api.project_signoff.note_signed_on_crm_lead"
+        )
+        note = job.kwargs["note"]
+        self.assertEqual(
+            note, f"{TEMPLATE} training signed off by Fathima Rahman, Finance Manager"
+        )
+        with patch("helpdesk.work_reminders.notify_users") as notify:
+            api.note_signed_on_crm_lead(doc.name, note)
+        (_name, post, params) = next(c for c in crm.lead_calls if c[0] == "add_note")
+        self.assertTrue(post)
+        self.assertEqual(
+            (params["name"], params["note"], params["acting_user"]),
+            ("LEAD-SO-1", note, PM[0]),
+        )
+        # the lead's owner hears too (who sent it and the project lead heard at signing)
+        self.assertEqual(notify.call_args.args[0], [OUTSIDER[0]])
+
+    # --- the lead page (docs/project-signoff.md, From the lead) ---
+
+    def lead_project(self, owner: str, project: str | None = None):
+        """The project made for lead LEAD-SO-1 (owned by `owner`) from a plan, the ERP site
+        faked; `project` is what the lead's document chain says its project is."""
+        crm = self.uat_project()
+        enable_leads()
+        forget_signoff_lead_access()
+        self.addCleanup(forget_signoff_lead_access)
+        frappe.db.set_value("Project", self.project, "custom_crm_lead", "LEAD-SO-1")
+        crm.lead_answers["get_lead"] = crm_lead_detail(
+            "LEAD-SO-1", project or self.project, owner
+        )
+        crm.lead_answers["add_note"] = {}
+        return crm
+
+    def test_the_lead_owner_sends_the_uat_and_sees_it_signed(self):
+        self.lead_project(owner=OUTSIDER[0])
+
+        def lead_status():
+            return run_as_user(OUTSIDER[0], lambda: api.get_lead_signoff("LEAD-SO-1"))
+
+        status = lead_status()
+        # the lead's owner may send it, though they can't open the project
+        self.assertEqual(
+            (
+                status["project"],
+                status["signoff"],
+                status["can_send"],
+                status["can_open"],
+            ),
+            (self.project, None, True, False),
+        )
+        mail = run_as_user(
+            OUTSIDER[0],
+            lambda: api.preview_signoff_mail(
+                self.project,
+                "UAT",
+                signatory_contact=self.contact,
+                trainer=TRAINER[0],
+                lead="LEAD-SO-1",
+            ),
+        )
+        self.assertEqual(mail["missing"], [])
+        # a UAT's modules are its tests' sections, from the SRS
+        self.assertIn("covering the following modules: Accounts.", mail["body"])
+        created = run_as_user(
+            OUTSIDER[0],
+            lambda: api.create_uat_signoff(
+                self.project,
+                self.contact,
+                TRAINER[0],
+                email_subject=mail["subject"],
+                email_body=mail["body"],
+                cc_emails=PM[0],
+                send=1,
+                lead="LEAD-SO-1",
+            ),
+        )
+        self.assertEqual(created["status"], "Sent")
+        self.assertEqual(lead_status()["signoff"]["customer_status"], "Sent")
+
+        doc = frappe.get_doc("HD Project Signoff", created["name"])
+        token = open_signoff_link(doc)
+        doc = self.answer_all_done(doc, token)
+        with patch("frappe.enqueue"):
+            self.sign(doc, token)
+        signed = lead_status()["signoff"]
+        self.assertEqual(
+            (signed["status"], signed["signer_name"], signed["has_pdf"]),
+            ("Signed", "Fathima Rahman", True),
+        )
+        run_as_user(OUTSIDER[0], lambda: api.download_lead_signoff_pdf("LEAD-SO-1"))
+        self.assertTrue(frappe.local.response.filecontent)
+
+    def test_others_see_the_lead_status_but_cannot_send(self):
+        self.lead_project(owner=PM[0])
+        status = run_as_user(OUTSIDER[0], lambda: api.get_lead_signoff("LEAD-SO-1"))
+        self.assertEqual((status["can_send"], status["can_open"]), (False, False))
+        with self.assertRaises(frappe.PermissionError):
+            run_as_user(
+                OUTSIDER[0],
+                lambda: api.create_uat_signoff(
+                    self.project, self.contact, TRAINER[0], lead="LEAD-SO-1"
+                ),
+            )
+        with self.assertRaises(frappe.PermissionError):
+            run_as_user(
+                OUTSIDER[0],
+                lambda: api.get_signoff_form(self.project, lead="LEAD-SO-1"),
+            )
+
+    def test_a_project_that_is_not_the_leads_is_refused(self):
+        other = make_project(
+            "Signoff - another rollout",
+            members=[(PM[0], "Project Manager")],
+            owner=PM[0],
+        ).name
+        self.lead_project(owner=OUTSIDER[0], project=other)
+        with self.assertRaises(frappe.PermissionError):
+            run_as_user(
+                OUTSIDER[0],
+                lambda: api.create_uat_signoff(
+                    self.project, self.contact, TRAINER[0], lead="LEAD-SO-1"
+                ),
             )

@@ -28,7 +28,9 @@ from helpdesk.integrations.crm.leads import (
     require_leads,
 )
 
-VIEWS = ("all", "mine", "call_today", "follow_up")
+VIEWS = ("all", "mine", "call_today", "follow_up", "called")
+# when a lead's earliest open follow-up is due: the Follow-up view's cards
+DUE_BUCKETS = ("overdue", "today", "tomorrow", "week", "later")
 PERIODS = ("today", "yesterday", "week", "month", "quarter", "custom")
 # a day is a custom range of that one day on the ERP site, which an older TBO Smart reads too
 DAYS_AGO = {"today": 0, "yesterday": 1}
@@ -70,6 +72,8 @@ MAX_PHOTO_BASE64 = 14 * 1024 * 1024
 PHOTO_METHOD = "helpdesk.api.leads.lead_photo"
 PHOTO_CACHE = "private, max-age=3600"
 MAX_PAGE = 100
+# how far back My leads' day-by-day calls go (the ERP site refuses more)
+MAX_CALL_DAYS = 366
 # the hub and the ERP site share one worker pool on Frappe Cloud, so a read that was just
 # answered is kept per person for a short while instead of asked again (docs/leads.md)
 CACHE_PREFIX = "hd_leads"
@@ -170,8 +174,14 @@ def list_leads(
     last_call_result: list | str | None = None,
     last_reply_class: list | str | None = None,
     product: list | str | None = None,
+    # the page sends null while the Created by filter is off
+    created_by_me: bool | int | str | None = None,
+    due: str | None = None,
 ) -> dict:
-    """A page of leads. `industry`, `state`, `district`, `org_size`, `product`, `last_call_result`
+    """A page of leads. `view` called lists the leads called at least once, last called first
+    (`from_date` and `to_date` without a `metric` keep those last called in those days);
+    `created_by_me` keeps the leads the person created, whoever owns them now. `due` (Follow-up only) keeps the leads whose earliest open
+    follow-up is overdue, today, tomorrow, in the week after (`week`) or `later`. `industry`, `state`, `district`, `org_size`, `product`, `last_call_result`
     (the outcome of the lead's last call) and `last_reply_class` (how its last email reply
     was sorted) each take one value or a list (any of them); a
     list goes to the ERP site as JSON. `metric` with its period keeps the leads one number of the
@@ -179,11 +189,15 @@ def list_leads(
     leads; the ERP site still shows only what the person may see."""
     require_leads()
     if view not in VIEWS:
-        frappe.throw(_("Pick All, Mine, Call today or Follow-up."))
+        frappe.throw(_("Pick All, Mine, Call today, Follow-up or Called."))
+    if due and due not in DUE_BUCKETS:
+        frappe.throw(_("Pick when the follow-ups are due."))
+    mine = False
     if is_bd():
-        # another BD may be calling the same lead: a BD's list is their own leads
+        # another BD may be calling the same lead: every list of a BD is the leads they own or
+        # created, Follow-up included (the ERP site also shows a lead to whoever it is assigned to)
         view = "mine" if view == "all" else view
-        owner = None
+        mine, owner = True, None
     if period:
         check_period(period, from_date, to_date, dates_required=bool(metric))
     when = {"period": None, "from_date": None, "to_date": None}
@@ -195,6 +209,12 @@ def list_leads(
         }
         if period in DAYS_AGO:
             when = erp_period(period, from_date, to_date)
+    elif view == "called":
+        when = {
+            "period": None,
+            "from_date": from_date or None,
+            "to_date": to_date or None,
+        }
     result = call(
         "list_leads",
         search=(search or "").strip() or None,
@@ -216,11 +236,32 @@ def list_leads(
         ),
         **when,
         view=view,
+        mine=1 if mine else None,
+        created_by_me=1 if cint(created_by_me) else None,
+        **({"due": due} if due and view == "follow_up" else {}),
         # cint: a malformed number is 0, never a server error
         start=max(cint(start), 0),
         page_length=min(max(cint(page_length) or 20, 1), MAX_PAGE),
     )
     return result or {"rows": [], "total": 0}
+
+
+@frappe.whitelist()
+def get_follow_up_counts(owner: str | None = None, fresh: int | str = 0) -> dict:
+    """The Follow-up view's cards: {overdue, today, tomorrow, week, later}, the leads whose
+    earliest open follow-up is due then (a BD's own or created; else `owner`'s, or all they
+    see). `available` is false while the ERP site's TBO Smart is older than this."""
+    require_leads()
+    params = {"mine": 1} if is_bd() else {"owner": owner or None}
+    result = cached_read(
+        "follow_up_counts",
+        params,
+        READ_TTL,
+        fresh,
+        lambda: call_if_deployed("get_follow_up_counts", **params),
+        keep=lambda answer: answer is not None,
+    )
+    return {**result, "available": True} if result is not None else {"available": False}
 
 
 def check_call_results(value) -> list[str]:
@@ -329,6 +370,25 @@ def read_lead_intake(fresh) -> dict:
 
 
 @frappe.whitelist()
+def get_my_call_counts(days: int | str = 60, fresh: int | str = 0) -> dict:
+    """The signed-in person's own calls for My leads: today, this week, this month and all
+    time ({calls, connected}), and `days` ([{date, calls, connected}], newest first) for the
+    days with calls in the last `days` days, at most 366. Counted as the Daily report counts
+    calls. `available` is false while the ERP site's TBO Smart is older than this."""
+    require_leads()
+    days = min(max(cint(days) or 60, 1), MAX_CALL_DAYS)
+    result = cached_read(
+        "my_calls",
+        {"days": days},
+        READ_TTL,
+        fresh,
+        lambda: call_if_deployed("get_my_call_counts", days=days),
+        keep=lambda answer: answer is not None,
+    )
+    return {**result, "available": True} if result is not None else {"available": False}
+
+
+@frappe.whitelist()
 def get_proposal_money(
     period: str = "month",
     from_date: str | None = None,
@@ -425,6 +485,21 @@ def business_range(period: str, from_date: str | None, to_date: str | None) -> t
     return getdate(f"{year}-{FY_START_MONTH:02d}-01"), now
 
 
+def read_lead_analysis(period, from_date, to_date, owner, fresh) -> dict:
+    """The Overview's Calling performance and Lead quality. `available` is false while
+    the ERP site's TBO Smart is older than this."""
+    when = erp_period(period, from_date, to_date)
+    result = cached_read(
+        "analysis",
+        {**when, "owner": owner or None},
+        READ_TTL,
+        fresh,
+        lambda: call_if_deployed("get_lead_analysis", **when, owner=owner or None),
+        keep=lambda answer: answer is not None,
+    )
+    return {**result, "available": True} if result is not None else {"available": False}
+
+
 @frappe.whitelist()
 def get_overview_page(
     period: str = "month",
@@ -433,10 +508,10 @@ def get_overview_page(
     owner: str | None = None,
     fresh: int | str = 0,
 ) -> dict:
-    """Everything the Overview shows, in one request: `overview`, `money` and `intake`.
-    The ERP site shares the hub's worker pool, so the reads go one after another here
-    instead of as parallel requests that wait on each other. Money and intake are
-    optional: one that fails leaves the overview whole and says why in `errors`."""
+    """Everything the Overview shows, in one request: `overview`, `money`, `intake` and
+    `analysis`. The ERP site shares the hub's worker pool, so the reads go one after
+    another here instead of as parallel requests that wait on each other. The last three
+    are optional: one that fails leaves the overview whole and says why in `errors`."""
     require_leads()
     refuse_bd()
     check_period(period, from_date, to_date)
@@ -444,6 +519,7 @@ def get_overview_page(
         "overview": read_overview(period, from_date, to_date, owner, fresh),
         "money": None,
         "intake": None,
+        "analysis": None,
         "errors": {},
     }
     for part, read in (
@@ -452,6 +528,10 @@ def get_overview_page(
             lambda: read_proposal_money(period, from_date, to_date, owner, fresh),
         ),
         ("intake", lambda: read_lead_intake(fresh)),
+        (
+            "analysis",
+            lambda: read_lead_analysis(period, from_date, to_date, owner, fresh),
+        ),
     ):
         try:
             page[part] = read()
@@ -516,12 +596,18 @@ def report_deployed() -> bool:
 
 @frappe.whitelist(methods=["POST"])
 def log_call(
-    lead: str, outcome: str, note: str | None = None, callback_at: str | None = None
+    lead: str,
+    outcome: str,
+    note: str | None = None,
+    callback_at: str | None = None,
+    number: str | None = None,
 ) -> dict:
     """A call made outside MyOperator, logged on the lead as the signed-in person; it
     counts in today's report, so their cached reads go. The ERP site also sets the
     lead's last call result and moves its stage (`stage` in the answer). Call back needs
-    `callback_at`, the follow-up."""
+    `callback_at`, the follow-up. `number` is the lead's number that was called (default:
+    its main number); a Wrong number marks that number, and the lead only when none is
+    left."""
     require_leads()
     if outcome not in CALL_OUTCOMES:
         frappe.throw(
@@ -538,6 +624,7 @@ def log_call(
         outcome=outcome,
         note=(note or "").strip() or None,
         callback_at=(callback_at or "").strip() or None,
+        number=(number or "").strip() or None,
     )
     if logged is None:
         frappe.throw(
@@ -582,6 +669,20 @@ def get_lead(name: str) -> dict:
     """The lead, its timeline, its quotations and the stages it may move to."""
     require_leads()
     detail = call("get_lead", name=name) or {}
+    lead = detail.get("lead", {})
+    user = frappe.session.user
+    if user not in (lead.get("lead_owner"), lead.get("created_by")) and is_bd():
+        # the ERP site opens a lead to whoever it is assigned to; a BD sees their own and the
+        # ones they created (read only: the ERP site lets them change only their own)
+        frappe.throw(
+            _("This lead is someone else's. You can open only your own leads."),
+            frappe.PermissionError,
+        )
+    return add_whatsapp_box(detail)
+
+
+def add_whatsapp_box(detail: dict) -> dict:
+    """The lead's WhatsApp reply box, when the ERP site sends its conversation."""
     if detail.get("lead", {}).get("whatsapp") is not None:
         detail["lead"]["whatsapp_box"] = whatsapp_outreach.lead_box(detail["lead"])
     return detail
@@ -609,7 +710,7 @@ def get_lead_departments(fresh: int | str = 0) -> dict:
 @frappe.whitelist(methods=["POST"])
 def save_lead_department(values: dict | str, name: str | None = None) -> dict:
     """Adds a lead department (or edits `name`): `department_name`, `lead_type`,
-    `is_active`, `heads` and `members` (users), `products` (the names callers call under,
+    `is_active`, `heads`, `viewers` and `members` (users), `products` (the names callers call under,
     each with an intro line and an on/off switch) and the call-batch rules. Only System Managers and Sales Managers
     on the ERP site may; it says so when it refuses."""
     require_leads()
@@ -629,7 +730,8 @@ def set_lead_department_active(name: str, active: int | str = 1) -> dict:
 
 def change_department(method: str, **params) -> dict:
     """A department write on the ERP site; the signed-in person's cached reads go, as the
-    departments (and what they may see) changed."""
+    departments (and what they may see) changed, and everyone's cached pickers, which say
+    who heads a department (`is_bd`): a new head gets the managers' screens straight away."""
     saved = call_if_deployed(
         method,
         post=True,
@@ -646,6 +748,7 @@ def change_department(method: str, **params) -> dict:
             LeadsUnavailableError,
         )
     clear_cached_reads()
+    frappe.cache.delete_keys(f"{CACHE_PREFIX}:*:options:")
     return saved
 
 
@@ -674,6 +777,46 @@ def find_duplicate_leads(
     if matches is None:
         return {"available": False, "matches": []}
     return {"available": True, "matches": matches}
+
+
+def merge_call(method: str, post: bool = False, **params) -> dict:
+    """A merge call on the ERP site; a 403 says who may merge."""
+    require_leads()
+    if not all((value or "").strip() for value in params.values()):
+        frappe.throw(_("Pick both leads first."))
+    result = call_if_deployed(
+        method,
+        post=post,
+        permission_message=_(
+            "Only a Sales Manager, a System Manager or the head of the leads' department can merge leads."
+        ),
+        **{key: value.strip() for key, value in params.items()},
+    )
+    if result is None:
+        frappe.throw(
+            _("The ERP site can't merge leads yet. It needs the latest TBO Smart."),
+            LeadsUnavailableError,
+        )
+    return result
+
+
+@frappe.whitelist()
+def get_merge_preview(first: str, second: str) -> dict:
+    """Two leads side by side for the Merge dialog: {leads: [{name, lead_name, company_name,
+    email_id, mobile_no, tbo_stage, owner_name, creation, numbers, new_numbers, counts}]},
+    `counts` being what sits on each (notes, calls, ...) and `new_numbers` how many of its
+    numbers the other lead lacks."""
+    return merge_call("get_merge_preview", first=first, second=second)
+
+
+@frappe.whitelist(methods=["POST"])
+def merge_leads(keep: str, merge: str) -> dict:
+    """Merges lead `merge` into `keep` (a manager, or the head of their department): its
+    numbers, empty fields and everything linked move to `keep`, and it is deleted. Returns
+    the kept lead as `get_lead` does."""
+    detail = merge_call("merge_leads", post=True, keep=keep, merge=merge)
+    clear_cached_reads()
+    return add_whatsapp_box(detail)
 
 
 @frappe.whitelist()
@@ -730,8 +873,9 @@ def read_stale_leads(departments: list[dict], acting_user: str | None = None):
 
 @frappe.whitelist(methods=["POST"])
 def create_lead(data: dict | str, allow_duplicate: int | str = 0) -> dict:
-    """A new lead. The ERP site refuses one whose email or phone another lead already
-    has, until the person confirms with `allow_duplicate`."""
+    """A new lead. The ERP site refuses one whose email another lead already has until the
+    person confirms with `allow_duplicate`, and one whose number another lead has always
+    (docs/leads.md, "One lead per number")."""
     require_leads()
     extra = {"allow_duplicate": 1} if cint(allow_duplicate) else {}
     result = call("create_lead", post=True, data=parse_data(data), **extra) or {}
@@ -833,6 +977,95 @@ def set_stage(name: str, stage: str, note: str | None = None) -> dict:
 
 
 @frappe.whitelist(methods=["POST"])
+def add_lead_number(
+    lead: str,
+    number: str,
+    label: str | None = None,
+    person: str | None = None,
+    designation: str | None = None,
+    make_primary: int | str = 0,
+    note: str | None = None,
+    on_call: int | str = 0,
+) -> dict:
+    """Adds a contact number to the lead: {numbers}. The ERP site refuses a number another
+    lead has (docs/leads.md, "One lead per number"). `make_primary` makes it the main
+    number; the old one stays, marked Old. `on_call` records it as added during a call."""
+    require_leads()
+    if not (number or "").strip():
+        frappe.throw(_("Type the number first."))
+    return change_numbers(
+        "add_lead_number",
+        lead=lead,
+        number=number.strip(),
+        label=label or None,
+        person=(person or "").strip() or None,
+        designation=(designation or "").strip() or None,
+        make_primary=1 if cint(make_primary) else 0,
+        note=(note or "").strip() or None,
+        on_call=1 if cint(on_call) else 0,
+    )
+
+
+@frappe.whitelist(methods=["POST"])
+def update_lead_number(
+    lead: str,
+    number_id: str,
+    status: str | None = None,
+    label: str | None = None,
+    person: str | None = None,
+    designation: str | None = None,
+    make_primary: int | str = 0,
+    note: str | None = None,
+) -> dict:
+    """Changes a number's status (Active, Not reachable, Wrong number, Old), label or
+    person, or makes it the main number: {numbers}."""
+    require_leads()
+    return change_numbers(
+        "update_lead_number",
+        lead=lead,
+        number_id=number_id,
+        status=status or None,
+        label=label or None,
+        person=person,
+        designation=designation,
+        make_primary=1 if cint(make_primary) else 0,
+        note=note,
+    )
+
+
+@frappe.whitelist(methods=["POST"])
+def remove_lead_number(lead: str, number_id: str) -> dict:
+    """Takes a number off the lead for good: managers only (the ERP site says so when it
+    refuses). A salesperson marks it Old or Wrong number instead."""
+    require_leads()
+    return change_numbers(
+        "remove_lead_number",
+        permission_message=_("Only a manager can remove a number."),
+        lead=lead,
+        number_id=number_id,
+    )
+
+
+def change_numbers(method: str, **params) -> dict:
+    """A number write on the ERP site. The signed-in person's cached reads go: the lead
+    list and Today's calls show the main number."""
+    result = call_if_deployed(
+        method,
+        post=True,
+        **params,
+    )
+    if result is None:
+        frappe.throw(
+            _(
+                "The ERP site can't keep more than one number yet. It needs the latest TBO Smart."
+            ),
+            LeadsUnavailableError,
+        )
+    clear_cached_reads()
+    return result
+
+
+@frappe.whitelist(methods=["POST"])
 def add_note(name: str, note: str) -> dict:
     require_leads()
     note = (note or "").strip()
@@ -862,7 +1095,9 @@ def refresh_lead_ai(name: str) -> dict:
 def apply_ai_stage(name: str) -> dict:
     """Moves the lead to the stage the AI suggested, as the signed-in person."""
     require_leads()
-    return call("apply_ai_stage", post=True, name=name) or {}
+    result = call("apply_ai_stage", post=True, name=name) or {}
+    clear_cached_reads()
+    return result
 
 
 @frappe.whitelist(methods=["POST"])
