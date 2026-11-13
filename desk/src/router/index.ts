@@ -1,3 +1,4 @@
+import { useScreenSize } from "@/composables/screen";
 import { canViewPersona, personaInterrupt } from "@/persona";
 import { useAuthStore } from "@/stores/auth";
 import { useUserStore } from "@/stores/user";
@@ -11,14 +12,10 @@ import {
   SALES_EMPLOYEE_ROUTES,
 } from "@/pages/content/contentTeam";
 import { createRouter, createWebHistory } from "vue-router";
+const { isMobileView } = useScreenSize();
 
 export const LOGIN_PAGE = "/login";
-const LEADS_ROUTES = new Set([
-  "Leads",
-  "Lead",
-  "LeadProposal",
-  "LeadNewProposal",
-]);
+const LEADS_ROUTES = new Set(["Leads", "Lead", "LeadProposal", "LeadNewProposal"]);
 
 // type the meta fields
 declare module "vue-router" {
@@ -47,24 +44,18 @@ const portalRoutes = [
   },
 
   {
-    // the inbox (Phase 16): the list stays while the ticket beside it changes
     path: "/tickets",
-    component: () => import("@/pages/ticket/TicketsInbox.vue"),
-    children: [
-      {
-        path: "",
-        name: "TicketsAgent",
-        component: () => import("@/pages/ticket/NoTicketPicked.vue"),
-        // System / Agent Managers and the ERP team (docs/departments.md)
-        beforeEnter: () => useAuthStore().canWorkTickets || { name: "Home" },
-      },
-      {
-        path: ":ticketId",
-        name: "TicketAgent",
-        component: () => import("@/pages/ticket/TicketAgent.vue"),
-        props: true,
-      },
-    ],
+    name: "TicketsAgent",
+    component: () => import("@/pages/ticket/Tickets.vue"),
+    // System / Agent Managers and the ERP team (docs/departments.md)
+    beforeEnter: () => useAuthStore().canWorkTickets || { name: "Home" },
+  },
+  {
+    path: "/tickets/:ticketId",
+    name: "TicketAgent",
+    component: () =>
+      import(`@/pages/ticket/${handleMobileView("TicketAgent")}.vue`),
+    props: true,
   },
   {
     path: "/tickets/new/:templateId?",
@@ -491,6 +482,10 @@ const routes = [
     children: portalRoutes,
   },
 ];
+
+const handleMobileView = (componentName: string) => {
+  return isMobileView.value ? `Mobile${componentName}` : componentName;
+};
 
 export const router = createRouter({
   history: createWebHistory("/helpdesk/"),

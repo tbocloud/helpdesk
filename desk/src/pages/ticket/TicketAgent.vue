@@ -1,51 +1,17 @@
 <template>
-  <div v-if="ticket.doc?.name" class="flex min-h-0 min-w-0 flex-1 flex-col">
+  <div v-if="ticket.doc?.name" class="flex-1">
     <TicketHeader
       :viewers="viewers"
       :details-open="isSheet ? detailsOpen : !detailsHidden"
       @toggle-details="toggleDetails"
     />
-    <!-- a phone's header is one line: the subject, who it is from and who has it come here -->
-    <div
-      v-if="isMobileView"
-      class="shrink-0 border-b border-outline-gray-1 px-4 py-2.5"
-    >
-      <h1
-        class="line-clamp-2 text-base font-semibold leading-6 text-ink-gray-9 [overflow-wrap:anywhere]"
-      >
-        {{ ticket.doc.subject }}
-      </h1>
-      <div class="mt-1 flex items-center gap-2 text-sm text-ink-gray-6">
-        <span class="min-w-0 truncate">
-          <span class="text-ink-gray-8">{{
-            ticket.doc.contact || ticket.doc.raised_by
-          }}</span>
-          <template v-if="ticket.doc.customer">
-            · {{ ticket.doc.customer }}</template
-          >
-        </span>
-        <TaskyBadge v-if="priority" v-bind="priority" />
-        <AssignTo hide-label quiet class="ms-auto max-w-[45%]" />
-      </div>
-    </div>
-    <div class="flex min-h-0 flex-1 overflow-hidden">
-      <!-- the ticket as one conversation (Phase 16): where it stands, the thread, one box to
-           write in; keyed so each ticket starts with its own state -->
-      <div
-        :key="String(ticket.doc.name)"
-        class="flex min-w-0 flex-1 flex-col overflow-hidden"
-      >
-        <TicketStanding />
-        <TicketConversation
-          @reply="(target) => composerRef?.replyToEmail(target)"
-        />
-        <TicketComposer
-          ref="composerRef"
-          @sent="ticketComposable.activities.reload()"
-        />
+    <div class="h-full flex overflow-hidden">
+      <div class="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <!-- Chat (first), Customer and Activity (Phase 12) -->
+        <TicketViews />
       </div>
 
-      <!-- Details: inline with a resizer when there is room, a sheet otherwise -->
+      <!-- Side panel: inline with a resizer from lg, a sheet below -->
       <TicketSidebar
         v-model:open="detailsOpen"
         :sheet="isSheet"
@@ -88,15 +54,9 @@
 import TicketIcon from "@/components/icons/TicketIcon.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import LucideArrowLeft from "~icons/lucide/arrow-left";
-import TicketComposer from "@/components/ticket-inbox/TicketComposer.vue";
-import TicketConversation from "@/components/ticket-inbox/TicketConversation.vue";
-import TicketStanding from "@/components/ticket-inbox/TicketStanding.vue";
-import { refreshInbox } from "@/components/ticket-inbox/inbox";
+import TicketViews from "@/components/ticket-agent/TicketViews.vue";
+import { ticketView } from "@/pages/ticket/modalStates";
 import TicketHeader from "@/components/ticket-agent/TicketHeader.vue";
-import AssignTo from "@/components/ticket-agent/AssignTo.vue";
-import TaskyBadge from "@/components/TaskyBadge.vue";
-import { useScreenSize } from "@/composables/screen";
-import { priorityBadge } from "@/pages/ticket/ticketMeta";
 import TicketSidebar from "@/components/ticket-agent/TicketSidebar.vue";
 import SetContactPhoneModal from "@/components/ticket/SetContactPhoneModal.vue";
 import { useActiveViewers } from "@/composables/realtime";
@@ -130,18 +90,16 @@ import {
 } from "frappe-ui";
 import {
   computed,
-  inject,
   nextTick,
   onBeforeUnmount,
   onMounted,
   provide,
   ref,
   watch,
-  type Ref,
 } from "vue";
 import { useMediaQuery, useStorage } from "@vueuse/core";
 import { useRoute } from "vue-router";
-import { composerMode, showCommentBox, showEmailBox } from "./modalStates";
+import { showCommentBox, showEmailBox } from "./modalStates";
 
 const telephonyStore = useTelephonyStore();
 
@@ -156,15 +114,8 @@ const props = defineProps({
 const route = useRoute();
 const showPhoneModal = ref(false);
 const detailsOpen = ref(false);
-const composerRef = ref<InstanceType<typeof TicketComposer> | null>(null);
-const { isMobileView } = useScreenSize();
-// the side panel is a sheet below lg, or below 1440 px when the inbox list sits beside the ticket
-const listBeside = inject<Ref<boolean>>("inboxListShown", ref(false));
-const narrow = useMediaQuery("(max-width: 1023.98px)");
-const crowded = useMediaQuery("(max-width: 1439.98px)");
-const isSheet = computed(
-  () => narrow.value || (listBeside.value && crowded.value)
-);
+// below lg the side panel is a sheet, opened from the header or by a field shortcut
+const isSheet = useMediaQuery("(max-width: 1023.98px)");
 // from lg the panel sits beside the conversation; it can be hidden (Phase 15), per browser
 const detailsHidden = useStorage("helpdesk-ticket-details-hidden", false);
 function toggleDetails() {
@@ -179,7 +130,6 @@ provide("openTicketDetails", async () => {
 
 const ticketComposable = computed(() => useTicket(props.ticketId));
 const ticket = computed(() => ticketComposable.value.ticket);
-const priority = computed(() => priorityBadge(ticket.value.doc?.priority));
 const customizations: Resource<Customizations> = createResource({
   url: "helpdesk.helpdesk.doctype.hd_ticket.api.get_ticket_customizations",
   cache: ["HD Ticket", "customizations"],
@@ -245,10 +195,8 @@ watch(
 
     if (oldTicketId) stopViewing(oldTicketId as string);
     startViewing(newTicketId as string);
-    // every ticket opens with the reply box ready and nothing half-open from the last one
-    composerMode.value = "reply";
-    showEmailBox.value = false;
-    showCommentBox.value = false;
+    // every ticket opens on its chat
+    ticketView.value = "chat";
 
     // Switching to an already-visited ticket: show its cached conversation and
     // refresh it in the background in case it changed while we were elsewhere.
@@ -307,12 +255,6 @@ onBeforeUnmount(() => {
   $socket.off("helpdesk:ticket-comment");
   $socket.off("helpdesk:ticket-update");
 });
-// a change on the open ticket (a reply, the status, the assignee) shows in the inbox's row
-watch(
-  () => ticket.value?.doc?.modified,
-  (now, before) => before && now !== before && refreshInbox()
-);
-
 usePageMeta(() => {
   if (!ticket.value?.doc?.name) {
     return { title: props.ticketId };
