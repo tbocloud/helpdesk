@@ -430,6 +430,7 @@ def send_weekly_email(now=None, force: bool = False):
         template="new_notification",
         args={
             "body_content": weekly_email_html(rows, week_start, week_end)
+            + usage_html(usage_rows(week_start, week_end))
             + releases.week_html(week_start, week_end),
             "doc_link": get_url(
                 f"/app/query-report/Copilot Pilot?from_date={week_start}&to_date={week_end}"
@@ -457,6 +458,110 @@ EMAIL_COLUMNS = (
     ("median_approval_hours", "Approval wait (h)"),
     ("ai_cost", "AI cost ($)"),
 )
+
+
+# what the pilot's people did through Copilot, by channel (HDS Copilot Call Log's kinds)
+USAGE_KINDS = (
+    ("Teams", "Teams"),
+    ("Web", "Panel"),
+    ("Desktop", "Desktop"),
+    ("MCP person", "MCP"),
+)
+
+
+def usage_rows(from_date, to_date) -> list[dict]:
+    """Per person, from HDS Copilot Call Log and HDS Action Approval: actions per channel, refused and
+    failed calls, approvals they decided, problems they reported (TBO Copilot Phase 21)."""
+    from frappe.query_builder.functions import Count
+
+    log = frappe.qb.DocType("HDS Copilot Call Log")
+    start, end = f"{from_date} 00:00:00", f"{to_date} 23:59:59"
+    counted = (
+        frappe.qb.from_(log)
+        .select(log.user, log.kind, log.status, log.tool, Count("*").as_("n"))
+        .where(log.creation[start:end])
+        .where(log.kind.isin([kind for kind, _label in USAGE_KINDS]))
+        .groupby(log.user, log.kind, log.status, log.tool)
+        .run(as_dict=True)
+    )
+    people: dict[str, dict] = {}
+
+    def person(user: str) -> dict:
+        return people.setdefault(
+            user,
+            {
+                "user": user,
+                **{label: 0 for _kind, label in USAGE_KINDS},
+                "refused": 0,
+                "failed": 0,
+                "approvals": 0,
+                "reports": 0,
+            },
+        )
+
+    for row in counted:
+        entry = person(row.user)
+        label = dict(USAGE_KINDS)[row.kind]
+        entry[label] += row.n
+        if row.status == "Refused":
+            entry["refused"] += row.n
+        elif row.status in ("Error", "Limited"):
+            entry["failed"] += row.n
+        if row.tool == "report_problem":
+            entry["reports"] += row.n
+    approval = frappe.qb.DocType("HDS Action Approval")
+    for row in (
+        frappe.qb.from_(approval)
+        .select(approval.decided_by, Count("*").as_("n"))
+        .where(approval.decided_at[start:end])
+        .where(approval.decided_by.isnotnull())
+        .groupby(approval.decided_by)
+        .run(as_dict=True)
+    ):
+        person(row.decided_by)["approvals"] += row.n
+    return sorted(
+        people.values(), key=lambda r: -sum(r[label] for _kind, label in USAGE_KINDS)
+    )
+
+
+def usage_html(rows: list[dict]) -> str:
+    if not rows:
+        return "<p>{0}</p>".format(
+            escape_html(
+                _(
+                    "Nobody used Copilot in Teams, the panel, the desktop app or MCP last week."
+                )
+            )
+        )
+    columns = (
+        [("user", _("Person"))]
+        + [(label, _(label)) for _kind, label in USAGE_KINDS]
+        + [
+            ("approvals", _("Approvals decided")),
+            ("refused", _("Refused")),
+            ("failed", _("Failed")),
+            ("reports", _("Problems reported")),
+        ]
+    )
+    head = "".join(
+        f"<th style='text-align:left;padding:4px 8px'>{escape_html(label)}</th>"
+        for _key, label in columns
+    )
+    body = "".join(
+        "<tr>"
+        + "".join(
+            f"<td style='padding:4px 8px'>{escape_html(str(row.get(key, 0)))}</td>"
+            for key, _label in columns
+        )
+        + "</tr>"
+        for row in rows
+    )
+    return (
+        "<p><b>{0}</b></p>".format(
+            escape_html(_("Copilot use by person (Teams, panel, desktop app, MCP)"))
+        )
+        + f"<table style='border-collapse:collapse'><tr>{head}</tr>{body}</table>"
+    )
 
 
 def weekly_email_html(rows: list[dict], week_start, week_end) -> str:

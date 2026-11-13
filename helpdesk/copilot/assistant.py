@@ -36,6 +36,7 @@ INTENTS = (
     "press_action",
     "repair_pause",
     "repair_resume",
+    "report_problem",
     "help",
     "unclear",
 )
@@ -64,11 +65,16 @@ CURRENT_TICKET_KINDS = ("question", "change_request", "fix", "build")
 MESSAGES_PER_MINUTE = 30
 PROPOSAL_HOURS = 24  # a confirmation card older than this does nothing
 TASK_RE = re.compile(r"\bTASK-\d{4}-\d{3,6}\b", re.I)
+# "report a problem: …" or "feedback: …" is read without the model: the person asked for it in so many words
+REPORT_RE = re.compile(
+    r"^\s*(?:report\s+a\s+problem|feedback)\b\s*[:\-\u2013\u2014]?\s*(?P<text>.*)$",
+    re.I | re.S,
+)
 TICKET_RE = re.compile(r"(?:ticket\s*#?|#)\s*(\d{1,7})\b", re.I)
 
 INTENT_PROMPT = """You read one message that a TBO support engineer sent to TBO Copilot, the team's AI support
 engineer, in a chat. You decide what they want; you never act yourself. Answer with JSON only:
-{"intent": "question" | "approve" | "reject" | "change_request" | "new_work" | "waiting" | "snooze" | "build" | "fix" | "press_status" | "press_backup" | "press_action" | "repair_pause" | "repair_resume" | "help" | "unclear",
+{"intent": "question" | "approve" | "reject" | "change_request" | "new_work" | "waiting" | "snooze" | "build" | "fix" | "press_status" | "press_backup" | "press_action" | "repair_pause" | "repair_resume" | "report_problem" | "help" | "unclear",
  "ticket": a ticket number they name, like "0312", or "",
  "task": a task they name, like "TASK-2026-00123", or "",
  "reason": for reject, change_request or repair_pause, their reason or the change they want, in their own words, or "",
@@ -92,6 +98,7 @@ press_backup: they want a backup of a hosted site taken now ("take a backup of d
 press_action: they want Press to act on a hosted site or its bench: restart the bench, update or migrate the site, change its plan, deploy the bench group, restore a backup, create a site ("restart the bench of galom").
 repair_pause: they want Copilot's automatic repairs of the servers stopped for now ("pause auto-repair", "stop auto repair: migration tonight").
 repair_resume: they want the automatic repairs running again ("resume auto-repair", "auto repair back on").
+report_problem: they say something is wrong with TBO Copilot itself, or give feedback about it ("your last answer was wrong", "this card is confusing").
 unclear: anything else, or when you are not sure.
 When they say "it" or "this fix", they mean the one fix waiting for them, when there is exactly one; for fix, the
 ticket of the last diagnosis they got.
@@ -231,7 +238,10 @@ def log_action(
     run=None,
     ticket=None,
 ):
-    """Every action from a chat also goes to HDS Copilot Call Log, with the channel as its kind."""
+    """Every action from a chat also goes to HDS Copilot Call Log, with the channel as its kind
+    (identifiers kept, text as a fingerprint, the result as its size: audit.safe_arguments)."""
+    from helpdesk.copilot import audit
+
     frappe.get_doc(
         {
             "doctype": "HDS Copilot Call Log",
@@ -242,8 +252,8 @@ def log_action(
             "ms": 0,
             "ticket": ticket,
             "run": run,
-            "arguments": json.dumps(arguments, ensure_ascii=False, default=str)[:2000],
-            "result": (result or "")[:500],
+            "arguments": audit.safe_arguments(arguments),
+            "result": audit.result_size(result),
         }
     ).insert(ignore_permissions=True)
 
@@ -286,7 +296,14 @@ def receive(
     if not text and files:
         text = _("new work, see the attached files")
     flagged = suspicious.suspicious_lines(text, 3)
-    intent, cost = read_intent(user, text, chat, bool(files))
+    reported = REPORT_RE.match(text)
+    if reported:
+        intent, cost = {
+            "intent": "report_problem",
+            "text": reported.group("text").strip(),
+        }, 0.0
+    else:
+        intent, cost = read_intent(user, text, chat, bool(files))
     incoming.db_set(
         {"intent": intent.get("intent"), "cost_usd": cost}, update_modified=False
     )
@@ -444,6 +461,8 @@ def handle(
         ]
     if kind == "help":
         return [help_card()]
+    if kind == "report_problem":
+        return [report_problem(user, channel, intent)]
     if kind == "waiting":
         return [waiting_card(user)]
     if kind == "new_work" or (files and kind == "unclear"):
@@ -473,7 +492,7 @@ def handle(
         if kind == "approve":
             return [fix_card(approval)]
         if kind == "snooze":
-            return [snooze(user, approval, intent.get("hours"))]
+            return [snooze(user, approval, intent.get("hours"), channel)]
         reason = (intent.get("reason") or "").strip() or text
         if kind == "reject":
             return [
@@ -723,6 +742,30 @@ def answer(user: str, run, question: str) -> dict:
     )
 
 
+def report_problem(user: str, channel: str, intent: dict) -> dict:
+    """ "report a problem: …" files a task for the TBO Copilot team; worded otherwise, the person is
+    shown how (nothing is filed that they did not ask for in so many words)."""
+    from helpdesk.copilot import feedback
+
+    text = (intent.get("text") or "").strip()
+    if not text:
+        return text_card(
+            _(
+                'To tell the TBO Copilot team, write "report a problem:" and then what you asked and what happened. It becomes a task for them.'
+            )
+        )
+    filed = feedback.report(user, channel, text)
+    return card(
+        _("Thank you: {0} is with the TBO Copilot team").format(filed["task"]),
+        [
+            _(
+                "They see your words, where you wrote them, and your last Copilot actions (by number only)."
+            )
+        ],
+        links=[(_("Open the task"), filed["url"])],
+    )
+
+
 def help_card() -> dict:
     return card(
         _("What I can do"),
@@ -748,6 +791,9 @@ def help_card() -> dict:
             ),
             _(
                 '"Pause auto-repair: migration tonight" stops the watcher\'s repairs; "resume auto-repair" starts them (managers and DevOps).'
+            ),
+            _(
+                '"Report a problem: …" tells the TBO Copilot team what went wrong; it becomes a task for them.'
             ),
             _(
                 "Nothing happens until you press Yes, and I act with your own permissions."
@@ -1159,8 +1205,9 @@ def decided_card(approval) -> dict:
     )
 
 
-def snooze(user: str, approval, hours) -> dict:
-    """Holds the approval's reminders: `hours` from now, or until tomorrow 09:00."""
+def snooze(user: str, approval, hours, channel: str = "Teams") -> dict:
+    """Holds the approval's reminders: `hours` from now, or until tomorrow 09:00. The person's own
+    change to their reminders, logged like every other action (Phase 21)."""
     from helpdesk.copilot.pilot import PILOT_TZ
 
     try:
@@ -1179,6 +1226,14 @@ def snooze(user: str, approval, hours) -> dict:
         morning = local.replace(hour=9, minute=0, second=0, microsecond=0)
         until = morning.astimezone(ZoneInfo(get_system_timezone())).replace(tzinfo=None)
     approval.db_set("snoozed_until", until, update_modified=False)
+    log_action(
+        user,
+        channel,
+        "snooze",
+        "OK",
+        {"approval": approval.name, "hours": hours},
+        ticket=approval.ticket,
+    )
     return text_card(
         _("I will remind you about ticket {0} at {1}.").format(
             approval.ticket, frappe.utils.format_datetime(until, "d MMM, HH:mm")
@@ -1474,7 +1529,7 @@ def _press(user: str, channel: str, chat, verb: str, data: dict, inputs: dict) -
             }  # first decision wins
         if verb == "snooze":
             return {
-                "replies": [snooze(user, approval, data.get("hours"))],
+                "replies": [snooze(user, approval, data.get("hours"), channel)],
                 "card": None,
             }
         return decide(

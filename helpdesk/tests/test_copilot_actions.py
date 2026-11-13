@@ -159,8 +159,17 @@ class TestDeciding(ActionCase):
         frappe.set_user(self.two)
         with self.assertRaises(frappe.ValidationError):
             api.decide_action(doc.name, False, "")
-        result = api.decide_action(doc.name, False, "No")
+        result = api.decide_action(doc.name, False, "No, not this week")
         self.assertEqual(result["status"], "Rejected")
+        # the decision is logged from the desktop app too, the note as a fingerprint (Phase 21)
+        logged = frappe.get_all(
+            "HDS Copilot Call Log",
+            filters={"tool": "decide_action", "kind": "Desktop", "user": self.two},
+            fields=["arguments"],
+        )
+        self.assertEqual(len(logged), 1)
+        self.assertIn(doc.name, logged[0].arguments)
+        self.assertNotIn("not this week", logged[0].arguments)
 
     def test_only_the_requester_marks_the_run(self):
         doc = self.ask()
@@ -171,6 +180,14 @@ class TestDeciding(ActionCase):
         frappe.set_user(self.one)
         self.assertEqual(
             api.mark_action_executed(doc.name, True, "done")["status"], "Executed"
+        )
+        # the outcome is logged once, by the requester, from the desktop app (Phase 21)
+        self.assertEqual(
+            frappe.db.count(
+                "HDS Copilot Call Log",
+                {"tool": "mark_action_executed", "kind": "Desktop", "user": self.one},
+            ),
+            1,
         )
 
 

@@ -41,7 +41,10 @@ class WriteCase(FrappeTestCase):
         frappe.set_user(AGENT)
         self.caller = Caller(AGENT)
 
-    def call(self, tool, **arguments):
+    def call(self, tool, confirmed=True, **arguments):
+        # a write tool needs the person's yes (Phase 21); None leaves it out
+        if confirmed is not None:
+            arguments["confirmed"] = confirmed
         result = registry.call(self.caller, tool, arguments)
         return result["isError"], mcp_tool_result(result)
 

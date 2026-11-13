@@ -15,6 +15,17 @@ from frappe.utils import strip_html
 from helpdesk.copilot import audit
 from helpdesk.copilot.mcp.auth import WORKER
 
+
+def traceback_without_message(e: BaseException) -> str:
+    """Where it failed (the frames) and what kind of error, without the error's own text."""
+    import traceback
+
+    return (
+        "".join(traceback.format_tb(e.__traceback__))
+        + f"{type(e).__module__}.{type(e).__name__}"
+    )
+
+
 READ, WRITE, WORKER_TOOL = "read", "write", "worker"
 TOOLS: dict[str, dict] = {}
 # imported on first use, so every entry point (endpoint, tests, bench execute) sees all tools
@@ -42,6 +53,14 @@ JSON_TYPES = {
 }
 
 
+# what a write tool needs from the client: the person saw this change and said yes to it
+CONFIRMED = {
+    "type": "boolean",
+    "description": "true only after you showed the person this exact change and they said yes to it in this "
+    "conversation. Without it nothing is written.",
+}
+
+
 def register_tool(
     name: str,
     *,
@@ -53,9 +72,13 @@ def register_tool(
     read_only: bool | None = None,
     open_world: bool = False,
 ):
-    """Adds a tool; `kind` read and write are for people, worker for a Copilot run."""
+    """Adds a tool; `kind` read and write are for people, worker for a Copilot run. A write tool
+    for people takes `confirmed`: the person said yes to this very change (Phase 21, decision 2)."""
     if kind not in (READ, WRITE, WORKER_TOOL):
         raise ValueError(f"Unknown tool kind: {kind}")
+    if kind == WRITE:
+        properties = {**(properties or {}), "confirmed": CONFIRMED}
+        required = [*(required or []), "confirmed"]
     TOOLS[name] = {
         "name": name,
         "kind": kind,
@@ -110,9 +133,24 @@ def call(caller, name: str, arguments) -> dict:
         if not tool or not visible(caller, tool):
             frappe.throw(_("Unknown tool: {0}").format(name), frappe.ValidationError)
         audit.check_rate_limit(caller.user)
+        # before the schema's own check, so a missing yes gets this explanation, not "Missing argument"
+        if (
+            tool["kind"] == WRITE
+            and isinstance(arguments, dict)
+            and arguments.get("confirmed") is not True
+        ):
+            frappe.throw(
+                _(
+                    "Nothing was written: show the person this change, ask them, and call again with "
+                    "confirmed: true once they say yes."
+                ),
+                frappe.ValidationError,
+            )
         arguments = check_arguments(tool["input_schema"], arguments)
+        handler_arguments = dict(arguments)
+        handler_arguments.pop("confirmed", None)
         frappe.db.savepoint(SAVEPOINT)
-        text = to_text(tool["handler"](caller, **arguments))
+        text = to_text(tool["handler"](caller, **handler_arguments))
     except frappe.RateLimitExceededError as e:
         status, is_error, text = "Limited", True, message_of(e)
     except EXPECTED_ERRORS as e:
@@ -120,8 +158,10 @@ def call(caller, name: str, arguments) -> dict:
         status, is_error, text = "Refused", True, message_of(e)
     except Exception as e:
         _undo()
+        # the trace without the exception's own words, which may quote ticket or customer data
         frappe.log_error(
-            title=f"Copilot MCP tool failed: {name}", message=frappe.get_traceback()
+            title=f"Copilot MCP tool failed: {name} ({type(e).__name__})",
+            message=traceback_without_message(e),
         )
         status, is_error, text = "Error", True, f"{name} failed: {message_of(e)}"
     finally:

@@ -21,6 +21,8 @@ Code: `helpdesk/copilot/` (one module per concern), `helpdesk/api/copilot*.py` (
 | Check after deploy (minutes) | How long the check after a deploy may keep asking a site that does not answer (default 30) |
 | Skip Press's backup | Test benches only (off by default): Press updates the sites without a backup first, so a failed update cannot be restored from one. The Deploy dialog says so. Leave it off for customers' live sites |
 | Auto-deploy categories | Empty in the pilot. Root-cause categories or risk levels, one per line, whose approved fixes are scheduled for the window by themselves |
+| Feedback tasks go to | The project that "report a problem" files its tasks in (Phase 21); empty: HDS Hub Settings' internal project |
+| Teams app version, privacy page, terms page | The Teams app package's version (raise it for every update: Teams refuses a version it already has; empty: TBO Support's own version) and the pages its listing links to (empty: the hub's address) |
 
 `helpdesk/copilot/settings.py`: `get_settings()`, `is_enabled()`, `is_shadow()`, `template_for(stage)`.
 
@@ -336,7 +338,7 @@ The Support button in a customer's ERP opens a chat with TBO Copilot instead of 
 
 One engine for the **TBO Copilot bot in Teams** (personal chat) and the **TBO Copilot panel** in the agent app (sidebar → TBO Copilot). Chats and messages: **HDS Copilot Chat** and **HDS Copilot Chat Message** (kept 90 days, `assistant.prune` daily).
 
-**How it works.** The model only reads what the person wants: `call_haiku(job="chat")` returns one intent as JSON (`question`, `approve`, `reject`, `change_request`, `new_work`, `waiting`, `snooze`, `build`, `fix`, `help`, `unclear`) with the ticket, task, reason, customer or summary it names. The code then:
+**How it works.** The model only reads what the person wants: `call_haiku(job="chat")` returns one intent as JSON (`question`, `approve`, `reject`, `change_request`, `new_work`, `waiting`, `snooze`, `build`, `fix`, `help`, `report_problem`, `unclear`) with the ticket, task, reason, customer or summary it names. The code then:
 
 | Intent | What happens |
 |---|---|
@@ -346,7 +348,8 @@ One engine for the **TBO Copilot bot in Teams** (personal chat) and the **TBO Co
 | change_request | A confirmation card; Yes notes the words on the ticket (an HD Ticket Comment, which the worker reads), rejects a pending fix with them (so `fix.guidance` carries them to the next fix job) and asks Copilot for a new fix when the customer's level allows; on a finished run, a follow-up run |
 | new_work | The customer from the site cards (buttons when several match); a confirmation card; Yes raises the ticket for the customer's contact (no acknowledgement email: a person replies first), attaches the files and starts Copilot. The diagnosis comes back in the same chat |
 | fix | "fix ticket 0009", or "fix it" (the newest run sent to the person that still waits for its fix): a confirmation card; Yes asks Copilot for the fix as on the ticket page, or says why it can't (level, a fix already running, an open pull request, attempts used). The diagnosis card has its own **Let Copilot fix it** button while Copilot may start the fix; pressing it asks at once and shows in the chat as the person's line. Whoever asked hears in the chat when the fix waits for approval (the approver gets the fix card) or when it failed |
-| waiting, snooze, help | What waits for the person; snooze an approval's reminders (hours, or until 09:00 Riyadh); what it can do |
+| waiting, snooze, help | What waits for the person; snooze an approval's reminders (hours, or until 09:00 Riyadh; logged as `snooze`); what it can do |
+| report_problem | "report a problem: …" (or "feedback: …") is read without the model and files a task for the TBO Copilot team (see **Pilot readiness**); a complaint worded otherwise only gets the card that says how to report |
 
 Every action runs **as the person** (their permissions), only after **Yes** or a card's own button (Approve, Reject, Let Copilot fix it; a proposal older than 24 hours expires), and is logged in HDS Copilot Call Log with kind `Teams` or `Web`. Approve and Reject call the same `approvals.decide` as the ticket page (`decided_via` Teams or Web). Messages with text that tries to instruct the AI get the warning card first. 30 messages a minute per person.
 
@@ -549,7 +552,7 @@ TBO staff use tickets, tasks and the knowledge base from the TBO Copilot desktop
 - **Endpoint:** `POST /api/method/helpdesk.api.copilot_mcp.handle`. Streamable HTTP without sessions or event streams: every request is a POST and carries its own credentials; GET and DELETE answer 405. Replies are raw JSON-RPC (`initialize`, `ping`, `tools/list`, `tools/call`, batches; notifications get 202). Protocol versions 2025-11-25, 2025-06-18 and 2025-03-26.
 - **Who:** an enabled agent (Agent or Agent Manager role, or an HD Agent) with their own API key, `Authorization: token <key>:<secret>`, which Frappe checks before the endpoint runs. Administrator, non-agents and requests without the header are refused (403, 403, 401). The key is checked on every request.
 - **Switch and limit:** HDS Copilot Settings **MCP Server On** and **MCP Calls per Minute** (per person, default 120; over it a call is refused as "Rate limited").
-- **Log:** every tool call is an **HDS Copilot Call Log** row (user, kind, tool, status OK / Refused / Error / Limited, time, ticket, task, run, arguments, the start of the result), kept 90 days.
+- **Log:** every tool call is an **HDS Copilot Call Log** row (user, kind, tool, status OK / Refused / Error / Limited, time, ticket, task, run, the arguments with text as fingerprints, the result's size), kept 90 days. See **Pilot readiness** for what is kept.
 - **Results:** compact JSON as text. Ticket text written by people is wrapped in `<untrusted_ticket_content>`. Conversations keep the last 15 messages (2,500 characters each) and notes (1,500), the description 6,000; anything over 100,000 characters is cut. A refusal (permission, missing record, bad argument, rate limit) is an `isError` result whose first words say why, and is not written to Error Log.
 
 | Read tool | Wraps |
@@ -572,6 +575,8 @@ Ticket numbers may be written as people write them (`236`, `#236`, `HD-0236`).
 | `draft_ticket_reply` | Saves the text in the ticket's suggested-reply card for the person to edit and send, with Regenerate's guard (ticket write, open ticket) |
 | `update_task_status` | Open, Working, Cancelled through the task board's API; On Hold needs one of the task's hold reasons; Completed needs the hours worked (it may become Pending Review); a held task is resumed first |
 | `create_kb_article_draft` | A Draft HD Article in General as the person (their own create permission), Markdown content, optionally linked to a ticket they can read; never published |
+
+Every write tool takes **`confirmed`** (required, Phase 21): `true` only after the client showed the person this exact change and they said yes. Without it nothing is written and the result says "Nothing was written: show the person this change, ask them, and call again with confirmed: true once they say yes."; the call is logged as Refused. The desktop app also asks before each MCP call in Ask mode; `confirmed` holds for any other MCP client.
 
 **The worker's run token.** `claim_job` returns a lease token and records the claiming user as the run's `worker_user`. The run's agent sends `X-Copilot-Run-Token: <run>:<lease token>` (and no Authorization header, which Frappe would check as a key). The request then runs as that worker user, sees only the worker tools, and is scoped to that run; the token stops working when the lease ends (a result, a cancel, an expiry). The agent never holds the worker user's API key.
 
@@ -678,3 +683,29 @@ The watcher repairs what its runbooks cover; TBO Support holds the switch and th
 - **The week** (`repairs.weekly`, Monday 09:00): the repairs by runbook to the channel; the same runbook on the same
   target 3 times in 7 days becomes a DevOps task "Find the root cause: …" in the internal project (`followup`, key
   `root-cause:<runbook>:<target>`), given to the least busy DevOps Engineer. Monitor follow-ups are DevOps tasks now.
+
+## Pilot readiness (Phase 21: `audit.py`, `feedback.py`, `api/copilot_feedback.py`, `pilot.py`, `teams.py`)
+
+What changed so a few people can use TBO Copilot for a week (TASK-2026-00024; the review itself is `docs/tbo/security.md` in tbocloud/tbo-copilot).
+
+- **The logs keep identifiers, not words.** HDS Copilot Call Log and HDS Remote Audit Log keep an argument as it is when it is a number, true or false, or one word without `@` (a ticket, task, site, doctype, action). Anything under a text name (`query`, `text`, `note`, `reply`, `customer`, `email`, `subject`, `filters`, `payload` and the rest of `audit.TEXT_KEYS`), and any other value with spaces or `@`, is kept as `{"chars", "mark"}`: its length and the first 12 hex characters of an HMAC-SHA256 keyed with the site's encryption key, so a repeated text can be matched without being stored. Three levels and 40 items deep; 2,000 characters in all.
+- **Results and errors.** A result is kept as its size ("1532 characters"). An error in HDS Remote Audit Log is its first line, 200 characters, with email addresses as `[email]` and numbers of six or more digits as `…`. A failed MCP tool goes to Error Log as its traceback without the exception's own words.
+- **Rows written before.** The patch `v16_0_2.trim_copilot_logs` rewrites both logs the same way, in batches of 500.
+- **Decisions from the desktop app are logged.** `decide_action` and `mark_action_executed` write a Call Log row of kind `Desktop` (the approval, its kind, approve or ok, the note as a fingerprint). So do snoozes from Teams and the panel.
+- **Teams messages reach the job by key.** The person's message waits in the cache for 15 minutes under `teams-activity:<random>` and the background job gets only the key, because a failed job's arguments stay in the job registry for days. An expired key is logged as "Teams message expired before it was answered".
+
+**Report a problem.** "report a problem: …" in Teams or the panel, or the desktop app's **Report a problem** (`POST helpdesk.api.copilot_feedback.report_problem`, agents only, `text` and `where`), becomes a task:
+- **Where:** in **Feedback tasks go to**, else the internal project. Created by TBO AI, so the person needs no rights there. Category Development, priority Medium, subject "Copilot feedback: <first line>".
+- **What it holds:** the person's words, who and where, and their last 5 Copilot actions by time, channel, tool, status and record only.
+- **Answer and limit:** the person gets the task's number and a link to it in My Work. 10 reports an hour per person.
+
+**The pilot's numbers.** The weekly pilot email has a **Copilot use** table, per person (`pilot.usage_rows`):
+- actions in Teams, the panel, the desktop app and MCP clients;
+- refused and failed calls;
+- approvals they decided;
+- problems they reported.
+
+**The Teams app for everyone.**
+- **Version:** the package's version comes from **Teams app version**; raise it before uploading an update.
+- **Listing:** it links the privacy and terms pages; the description and the command list mention "report a problem".
+- **Admin steps:** in **Setting up the bot**, step 5. Upload the package, then Setup policies → Global (Org-wide default) → Installed apps → add **TBO Copilot**, and Permission policies → allow it. Installation reaches everyone within a day, and the bot can then message people first.

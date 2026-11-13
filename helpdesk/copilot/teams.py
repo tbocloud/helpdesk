@@ -18,6 +18,9 @@ import jwt
 import requests
 from frappe import _
 
+# how long a Teams message waits in the cache for its answer job
+ACTIVITY_TTL_SECONDS = 15 * 60
+
 OPENID = "https://login.botframework.com/v1/.well-known/openidconfiguration"
 ISSUER = "https://api.botframework.com"
 TOKEN_URL = "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token"
@@ -652,10 +655,14 @@ def handle_activity(activity: dict) -> dict | None:
             remember(activity)
         return None
     if kind == "message":
+        # the job carries a key, not the message: a failed job is kept for days in the job
+        # registry, and the person's words must not be (TBO Copilot Phase 21)
+        key = f"teams-activity:{frappe.generate_hash(length=16)}"
+        frappe.cache.set_value(key, activity, expires_in_sec=ACTIVITY_TTL_SECONDS)
         frappe.enqueue(
             "helpdesk.copilot.teams.answer_message",
             queue="short",
-            activity=activity,
+            activity_key=key,
             enqueue_after_commit=True,
             now=frappe.flags.in_test,
         )
@@ -687,14 +694,21 @@ def handle_activity(activity: dict) -> dict | None:
     return None
 
 
-def answer_message(activity: dict):
+def answer_message(activity: dict | None = None, activity_key: str | None = None):
     """Background: a person's message read and answered in the same chat.
 
     The person, their message and what it did are saved before the answer goes out: a failed
     answer fails the job, and Frappe would undo them with it, so nobody would ever appear.
+    The message comes from the cache by its key (`activity` is only for jobs queued before).
     """
     from helpdesk.copilot import assistant
 
+    if activity_key:
+        activity = frappe.cache.get_value(activity_key)
+        frappe.cache.delete_value(activity_key)
+    if not activity:
+        frappe.log_error(title="Teams message expired before it was answered")
+        return
     user = remember(activity)
     frappe.db.commit()  # kept even when the answer cannot be sent - nosemgrep
     if not user:
@@ -843,21 +857,38 @@ def adaptive(reply: dict) -> dict:
 # --- the Teams app for the admin -------------------------------------------------------------------------
 
 
+def package_version(configured: str | None) -> str:
+    """The Teams app package's version: the setting, else the TBO Support app's own (major.minor.patch,
+    what Teams accepts)."""
+    import helpdesk
+
+    for candidate in (
+        (configured or "").strip(),
+        str(getattr(helpdesk, "__version__", "")),
+    ):
+        match = re.match(r"^(\d{1,4})\.(\d{1,4})\.(\d{1,4})", candidate)
+        if match:
+            return ".".join(match.groups())
+    return "1.0.0"
+
+
 def manifest() -> dict:
     """The "TBO Copilot" Teams app: a personal bot that takes files, for this site's Azure Bot."""
     from urllib.parse import urlparse
 
     site = frappe.utils.get_url()
+    conf = settings()
     return {
         "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.17/MicrosoftTeams.schema.json",
         "manifestVersion": "1.17",
-        "version": "1.0.0",
+        # Teams refuses a package with a version it already has: raised in the settings for an update
+        "version": package_version(conf.get("teams_app_version")),
         "id": app_id(),
         "developer": {
             "name": "Team Back Office",
             "websiteUrl": site,
-            "privacyUrl": site,
-            "termsOfUseUrl": site,
+            "privacyUrl": (conf.get("teams_privacy_url") or "").strip() or site,
+            "termsOfUseUrl": (conf.get("teams_terms_url") or "").strip() or site,
         },
         "name": {
             "short": "TBO Copilot",
@@ -865,7 +896,7 @@ def manifest() -> dict:
         },
         "description": {
             "short": "Approve Copilot's fixes, ask about tasks and give it new work.",
-            "full": "TBO Copilot tells you when a fix is ready, merged or deployed. Approve or reject it from the card, ask what changed and why, ask for a change, or send new work with a screenshot or a video. It acts with your TBO Support permissions, and only after you confirm.",
+            "full": 'TBO Copilot tells you when a fix is ready, merged or deployed. Approve or reject it from the card, ask what changed and why, ask for a change, or send new work with a screenshot or a video. It acts with your TBO Support permissions, and only after you confirm. Write "report a problem" to tell the TBO Copilot team what went wrong.',
         },
         "icons": {"color": "color.png", "outline": "outline.png"},
         "accentColor": "#2563EB",
@@ -883,6 +914,10 @@ def manifest() -> dict:
                             {
                                 "title": "what is waiting for me",
                                 "description": "Your approvals and fix tasks",
+                            },
+                            {
+                                "title": "report a problem",
+                                "description": "Tell the TBO Copilot team what went wrong",
                             },
                         ],
                     }

@@ -84,7 +84,9 @@ def decide_action(name: str, approve, note: str = "") -> dict:
     if not approve and not (note or "").strip():
         frappe.throw(_("Write the reason to reject: the person who asked gets it."))
     actions.decide(name, frappe.session.user, approve, (note or "").strip(), via="Web")
-    return actions.as_dict(frappe.get_doc(actions.ACTION, name))
+    doc = frappe.get_doc(actions.ACTION, name)
+    _log(doc, "decide_action", {"approve": approve, "note": note})
+    return actions.as_dict(doc)
 
 
 @frappe.whitelist(methods=["POST"])
@@ -98,4 +100,21 @@ def mark_action_executed(name: str, ok, log: str = "") -> dict:
         frappe.throw(
             _("Only the person who asked may mark this as run."), frappe.PermissionError
         )
-    return actions.as_dict(actions.mark_executed(name, bool(sbool(ok)), log or ""))
+    doc = actions.mark_executed(name, bool(sbool(ok)), log or "")
+    _log(doc, "mark_action_executed", {"ok": bool(sbool(ok)), "log": log})
+    return actions.as_dict(doc)
+
+
+def _log(doc, tool: str, arguments: dict):
+    """A decision or an outcome sent from the desktop app goes to HDS Copilot Call Log too
+    (identifiers kept, text as a fingerprint), like the Teams card's buttons."""
+    from helpdesk.copilot import assistant
+
+    assistant.log_action(
+        frappe.session.user,
+        "Desktop",
+        tool,
+        "OK",
+        {"approval": doc.name, "kind": doc.get("kind"), **arguments},
+        ticket=doc.get("ticket"),
+    )

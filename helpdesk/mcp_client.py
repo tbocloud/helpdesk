@@ -164,8 +164,6 @@ class MCPClient:
         self, tool_name, arguments, result, elapsed_ms, session_id, error_message
     ):
         """Write an entry to HDS Remote Audit Log."""
-        import json as _json
-
         WRITE_TOOLS = {
             "set_value",
             "set_values",
@@ -181,6 +179,10 @@ class MCPClient:
                 content = result["content"][0].get("text", "")[:500]
             is_error = bool(result and result.get("isError"))
 
+            from helpdesk.copilot import audit
+
+            # what was called on which record, and how it went; the customer site's data stays out
+            # (TBO Copilot Phase 21): arguments as identifiers and fingerprints, the answer as its size
             frappe.get_doc(
                 {
                     "doctype": "HDS Remote Audit Log",
@@ -191,9 +193,13 @@ class MCPClient:
                     "status": "Error" if (is_error or error_message) else "Success",
                     "execution_time_ms": elapsed_ms,
                     "session_id": str(session_id) if session_id else "",
-                    "arguments": _json.dumps(arguments, default=str)[:2000],
-                    "result_summary": content if not is_error else "",
-                    "error_message": error_message or (content if is_error else ""),
+                    "arguments": audit.safe_arguments(arguments),
+                    "result_summary": audit.result_size(content)
+                    if not is_error
+                    else "",
+                    "error_message": audit.error_line(
+                        error_message or (content if is_error else "")
+                    ),
                 }
             ).insert(ignore_permissions=True)
             frappe.db.commit()

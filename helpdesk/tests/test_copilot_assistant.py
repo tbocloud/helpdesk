@@ -247,6 +247,12 @@ class TestTheEngine(AssistantCase):
             frappe.db.get_value(APPROVAL, approval.name, "snoozed_until"),
             now_datetime(),
         )
+        # the person's own change to their reminders is logged like every action (Phase 21)
+        self.assertTrue(
+            frappe.db.exists(
+                "HDS Copilot Call Log", {"tool": "snooze", "ticket": approval.ticket}
+            )
+        )
         frappe.db.set_value(
             APPROVAL,
             approval.name,

@@ -93,3 +93,4 @@ helpdesk.patches.v16_0_2.enable_project_status_follow_up
 helpdesk.patches.v16_0_2.enable_adoption_digest
 helpdesk.patches.v16_0_2.setup_health_check_api_role
 helpdesk.patches.v16_0_2.ticket_area_status_colours
+helpdesk.patches.v16_0_2.trim_copilot_logs
