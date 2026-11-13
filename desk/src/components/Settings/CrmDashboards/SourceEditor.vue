@@ -63,9 +63,10 @@
             :label="__('Use the CRM connection')"
             :description="
               crmConnection.site_url
-                ? __('Read {0} with the key in Settings → CRM.', [
-                    crmConnection.site_url,
-                  ])
+                ? __(
+                    'Read {0} with the key in Settings → CRM.',
+                    crmConnection.site_url
+                  )
                 : __('Set up the connection in Settings → CRM first.')
             "
             :disabled="!crmConnection.site_url"
@@ -127,10 +128,11 @@
               min="0"
               step="any"
               :label="
-                __('1 {0} in {1}', [
+                __(
+                  '1 {0} in {1}',
                   form.currency || __('this currency'),
-                  reportingCurrency || __('the reporting currency'),
-                ])
+                  reportingCurrency || __('the reporting currency')
+                )
               "
               :disabled="
                 !!reportingCurrency && form.currency === reportingCurrency
@@ -177,7 +179,7 @@
                 v-model="form[target]"
                 :label="meta.label"
                 :required="registry.required_fields.includes(target)"
-                :placeholder="__('Field name, e.g. {0}', [example(meta.kind)])"
+                :placeholder="__('Field name, e.g. {0}', example(meta.kind))"
                 autocomplete="off"
               />
             </template>
@@ -207,8 +209,12 @@
                 :key="status.status"
                 :label="
                   status.leads
-                    ? __('Map {0} ({1} leads)', [status.status, status.leads])
-                    : __('Map {0}', [status.status])
+                    ? __(
+                        'Map {0} ({1} leads)',
+                        status.status,
+                        String(status.leads)
+                      )
+                    : __('Map {0}', status.status)
                 "
                 @click="addStatus(status.status)"
               />
@@ -241,7 +247,7 @@
               <Button
                 variant="ghost"
                 class="sm:mb-0.5"
-                :aria-label="__('Remove {0}', [row.status || __('this row')])"
+                :aria-label="__('Remove {0}', row.status || __('this row'))"
                 @click="form.status_map.splice(i, 1)"
               >
                 <template #icon>
@@ -339,11 +345,7 @@
     </template>
   </SettingsLayoutBase>
 
-  <Dialog
-    v-model:open="deleteOpen"
-    :title="__('Delete {0}?', [name])"
-    size="sm"
-  >
+  <Dialog v-model:open="deleteOpen" :title="__('Delete {0}?', name)" size="sm">
     <p class="text-p-sm text-ink-gray-7">
       {{
         __(
@@ -539,10 +541,11 @@ const mappingNote = computed(() => {
     return __("Save the connection first; then pick from its own lead fields.");
   if (remoteFields.loading && !remoteFields.data) return "";
   if (!fieldOptions.value)
-    return __("Couldn't read its lead fields ({0}), so type their names.", [
+    return __(
+      "Couldn't read its lead fields ({0}), so type their names.",
       remoteFields.data?.message ||
-        errorText(remoteFields.error, __("no answer")),
-    ]);
+        errorText(remoteFields.error, __("no answer"))
+    );
   return "";
 });
 

@@ -137,6 +137,10 @@ export function syncSummary(
       : __("Not read yet.");
   const when = fromNow(source.last_synced_on);
   return source.last_sync_status === "Failed"
-    ? __("Last read failed; {0} leads from {1}.", [source.leads_synced, when])
-    : __("{0} leads, read {1}.", [source.leads_synced, when]);
+    ? __(
+        "Last read failed; {0} leads from {1}.",
+        String(source.leads_synced),
+        when
+      )
+    : __("{0} leads, read {1}.", String(source.leads_synced), when);
 }

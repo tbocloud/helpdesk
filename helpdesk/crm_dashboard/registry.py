@@ -292,14 +292,15 @@ def chart_presets() -> dict[str, dict]:
     }
 
 
+# the first three cards of a dashboard are its headline figures, shown large
 ALL_KPIS = (
     "total_leads",
+    "won_value",
+    "conversion_rate",
     "open_leads",
     "won_leads",
     "lost_leads",
     "converted_leads",
-    "conversion_rate",
-    "won_value",
     "expected_revenue",
     "pending_value",
     "average_deal_value",
@@ -327,8 +328,8 @@ def templates() -> dict[str, dict]:
             ),
             "kpis": ALL_KPIS,
             "charts": (
-                "company_performance",
                 "monthly_sales",
+                "company_performance",
                 "revenue_comparison",
                 "conversion_trend",
                 "won_vs_lost",
@@ -352,11 +353,11 @@ def templates() -> dict[str, dict]:
             ),
             "kpis": (
                 "total_leads",
+                "won_value",
+                "conversion_rate",
                 "open_leads",
                 "won_leads",
                 "lost_leads",
-                "conversion_rate",
-                "won_value",
                 "pending_value",
                 "avg_closing_days",
             ),
@@ -376,10 +377,10 @@ def templates() -> dict[str, dict]:
             "filters": ("department", "team", "employee", "status", "lead_source"),
             "kpis": (
                 "total_leads",
+                "won_value",
+                "conversion_rate",
                 "open_leads",
                 "won_leads",
-                "conversion_rate",
-                "won_value",
                 "pending_value",
             ),
             "charts": (
@@ -397,10 +398,10 @@ def templates() -> dict[str, dict]:
             "filters": ("team", "employee", "status", "lead_source"),
             "kpis": (
                 "total_leads",
+                "won_value",
+                "conversion_rate",
                 "open_leads",
                 "won_leads",
-                "conversion_rate",
-                "won_value",
                 "avg_closing_days",
             ),
             "charts": (
@@ -418,11 +419,11 @@ def templates() -> dict[str, dict]:
             "filters": ("employee", "status", "lead_source"),
             "kpis": (
                 "total_leads",
+                "won_value",
+                "conversion_rate",
                 "open_leads",
                 "won_leads",
                 "lost_leads",
-                "conversion_rate",
-                "won_value",
             ),
             "charts": ("employee_performance", "won_vs_lost", "lead_sources"),
         },

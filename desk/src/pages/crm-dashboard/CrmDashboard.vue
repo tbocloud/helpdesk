@@ -34,7 +34,7 @@
       </template>
     </LayoutHeader>
 
-    <div class="min-h-0 flex-1 overflow-y-auto">
+    <div class="min-h-0 flex-1 overflow-y-auto bg-surface-gray-1">
       <div class="mx-auto flex max-w-screen-2xl flex-col gap-5 p-4 md:p-5">
         <!-- nobody may open a dashboard yet -->
         <TaskyState
@@ -157,12 +157,13 @@
         <template v-else>
           <!-- the period and filters: kept in the URL, so a view can be shared -->
           <div
-            class="flex flex-col gap-3 rounded-xl border border-outline-gray-2 bg-surface-base p-3 sm:p-4"
+            class="flex flex-col gap-2"
             role="group"
             :aria-label="__('Period and filters')"
           >
             <div class="flex flex-wrap items-end gap-3">
               <FormControl
+                variant="outline"
                 :model-value="selectedPeriod"
                 type="select"
                 class="w-full sm:w-44"
@@ -172,6 +173,7 @@
               />
               <template v-if="isCustom">
                 <FormControl
+                  variant="outline"
                   :model-value="custom.from"
                   type="date"
                   class="w-full sm:w-40"
@@ -179,6 +181,7 @@
                   @update:model-value="setCustom('from', $event)"
                 />
                 <FormControl
+                  variant="outline"
                   :model-value="custom.to"
                   type="date"
                   class="w-full sm:w-40"
@@ -187,7 +190,8 @@
                 />
               </template>
               <FormControl
-                v-for="filter in page.data.filters"
+                variant="outline"
+                v-for="filter in shownFilters"
                 :key="filter.key"
                 :model-value="filter.value"
                 type="select"
@@ -198,20 +202,37 @@
                 @update:model-value="setFilter(filter.key, $event)"
               />
               <Button
+                v-if="moreFilters"
+                variant="outline"
+                :aria-expanded="allFilters"
+                :label="
+                  allFilters
+                    ? __('Fewer filters')
+                    : __('More filters ({0})', String(moreFilters))
+                "
+                @click="filtersOpen = !filtersOpen"
+              >
+                <template #prefix>
+                  <LucideSlidersHorizontal class="size-4" aria-hidden="true" />
+                </template>
+              </Button>
+              <Button
                 v-if="anyFilter"
                 variant="ghost"
                 :label="__('Clear filters')"
                 @click="clearFilters"
               />
+              <p
+                class="ml-auto flex items-center gap-1.5 self-end pb-2 text-p-xs text-ink-gray-6"
+              >
+                <LucideLoaderCircle
+                  v-if="page.loading"
+                  class="size-3.5 animate-spin motion-reduce:animate-none"
+                  aria-hidden="true"
+                />
+                <span aria-live="polite">{{ freshness }}</span>
+              </p>
             </div>
-            <p class="flex items-center gap-1.5 text-p-xs text-ink-gray-6">
-              <LucideLoaderCircle
-                v-if="page.loading"
-                class="size-3.5 animate-spin motion-reduce:animate-none"
-                aria-hidden="true"
-              />
-              <span aria-live="polite">{{ freshness }}</span>
-            </p>
           </div>
 
           <div
@@ -254,19 +275,50 @@
           />
 
           <template v-else>
+            <!-- the first three cards are the headline; the rest a balanced strip -->
             <section
               v-if="page.data.kpis.length"
               :aria-label="__('Key figures')"
-              class="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-3"
+              class="flex flex-col gap-3"
               :class="page.loading ? 'opacity-60' : ''"
             >
-              <StatTile
-                v-for="(card, i) in page.data.kpis"
-                :key="i"
-                :label="card.label"
-                :value="value(card.kind, card.value)"
-                :sub="card.missing || card.period_label || undefined"
-              />
+              <div
+                class="grid grid-cols-1 gap-3"
+                :class="HEADLINE_COLS[headline.length]"
+              >
+                <StatTile
+                  v-for="(card, i) in headline"
+                  :key="i"
+                  v-bind="tile(card)"
+                  :tint="
+                    card.missing ? undefined : METRIC_LOOK[card.metric]?.tone
+                  "
+                >
+                  <Sparkline
+                    v-if="card.trend.some((v) => v)"
+                    :values="card.trend"
+                    :tone="METRIC_LOOK[card.metric]?.tone || 'brand'"
+                    :label="trendLabel(card)"
+                  />
+                </StatTile>
+              </div>
+              <div
+                v-if="strip.length"
+                class="grid grid-cols-2 gap-3"
+                :class="STRIP_COLS[stripCols]"
+              >
+                <StatTile
+                  v-for="(card, i) in strip"
+                  :key="i"
+                  compact
+                  class="border-l-4"
+                  :class="
+                    TONE_SECTION[METRIC_LOOK[card.metric]?.tone || 'info']
+                      .border
+                  "
+                  v-bind="tile(card)"
+                />
+              </div>
             </section>
 
             <div
@@ -278,6 +330,7 @@
                 v-for="(chart, i) in page.data.charts"
                 :key="i + chart.title"
                 :chart="chart"
+                :wide="chartWidths[i] === 'full'"
                 :currency="page.data.currency"
                 :value-format="page.data.value_format"
               />
@@ -308,7 +361,7 @@ import {
   FormControl,
   usePageMeta,
 } from "frappe-ui";
-import { computed, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LucideCalendarRange from "~icons/lucide/calendar-range";
 import LucideChevronsUpDown from "~icons/lucide/chevrons-up-down";
@@ -320,10 +373,17 @@ import LucideLock from "~icons/lucide/lock";
 import LucideNetwork from "~icons/lucide/network";
 import LucideSettings2 from "~icons/lucide/settings-2";
 import LucideTriangleAlert from "~icons/lucide/triangle-alert";
+import { monthLabel } from "@/pages/leads/business/businessFormat";
+import LucideSlidersHorizontal from "~icons/lucide/sliders-horizontal";
 import DashboardChart from "./DashboardChart.vue";
+import Sparkline from "./Sparkline.vue";
 import {
   formatValue,
+  kpiChange,
+  METRIC_LOOK,
+  TONE_SECTION,
   type DashboardPage,
+  type KpiCard,
   type DashboardSummary,
   type MetricKind,
 } from "./crmDashboard";
@@ -398,7 +458,7 @@ const switchOptions = computed(() =>
   (dashboards.data?.dashboards || []).map((d) => ({
     label: d.is_active
       ? d.dashboard_name
-      : __("{0} (inactive)", [d.dashboard_name]),
+      : __("{0} (inactive)", d.dashboard_name),
     onClick: () => openDashboard(d.name),
   }))
 );
@@ -419,8 +479,104 @@ const freshness = computed(() => {
   if (page.loading) return __("Updating…");
   const synced = page.data?.synced_on;
   return synced
-    ? __("Figures as of {0}.", [dayjs(synced).fromNow()])
+    ? __("Figures as of {0}.", dayjs(synced).fromNow())
     : __("A data source hasn't been read yet; its leads aren't counted.");
+});
+
+// full class strings, so Tailwind finds them
+const HEADLINE_COLS: Record<number, string> = {
+  1: "",
+  2: "sm:grid-cols-2",
+  3: "sm:grid-cols-3",
+  4: "sm:grid-cols-2 lg:grid-cols-4",
+};
+const STRIP_COLS: Record<number, string> = {
+  2: "lg:grid-cols-2",
+  3: "sm:grid-cols-3",
+  4: "sm:grid-cols-4",
+  5: "sm:grid-cols-3 lg:grid-cols-5",
+};
+// four cards or fewer all lead; more: three lead and the rest follow in a strip
+const headlineCount = computed(() => {
+  const n = page.data?.kpis.length || 0;
+  return n <= 4 ? n : 3;
+});
+const headline = computed(() =>
+  (page.data?.kpis || []).slice(0, headlineCount.value)
+);
+const strip = computed(() =>
+  (page.data?.kpis || []).slice(headlineCount.value)
+);
+/** As many columns as leave no card alone on its row: 8 cards are 4 and 4. */
+const stripCols = computed(() => {
+  const n = strip.value.length;
+  if (n <= 5) return Math.max(n, 2);
+  return [4, 5, 3].find((cols) => n % cols === 0) || 4;
+});
+
+function tile(card: KpiCard) {
+  const look = METRIC_LOOK[card.metric];
+  const change = kpiChange(
+    card,
+    page.data?.currency || null,
+    page.data?.value_format || "short"
+  );
+  return {
+    label: card.label,
+    value: value(card.kind, card.value),
+    sub: card.missing || card.period_label || undefined,
+    icon: look?.icon,
+    iconTone: card.missing ? "neutral" : look?.tone,
+    delta: change?.delta ?? null,
+    deltaText: change?.text,
+    deltaTone: change?.tone,
+  };
+}
+
+/** "Last 6 months: Jun 26 12, Jul 26 18, …", for a screen reader. */
+function trendLabel(card: KpiCard) {
+  const months = page.data?.trend_months || [];
+  return __(
+    "Last {0} months: {1}",
+    String(months.length),
+    months
+      .map(
+        (m, i) => `${monthLabel(m, true)} ${value(card.kind, card.trend[i])}`
+      )
+      .join(", ")
+  );
+}
+
+// the first two filters show; the rest open with More filters, and stay open while
+// one of them is picked
+const SHOWN_FILTERS = 2;
+const filtersOpen = ref(false);
+const moreFilters = computed(() =>
+  Math.max(0, (page.data?.filters.length || 0) - SHOWN_FILTERS)
+);
+const allFilters = computed(
+  () =>
+    filtersOpen.value ||
+    !!page.data?.filters.slice(SHOWN_FILTERS).some((filter) => filter.value)
+);
+const shownFilters = computed(() =>
+  (page.data?.filters || []).slice(
+    0,
+    allFilters.value ? undefined : SHOWN_FILTERS
+  )
+);
+
+/** Each chart's width: a half chart alone on its row widens, so no row has a hole. */
+const chartWidths = computed(() => {
+  const widths = (page.data?.charts || []).map((chart) => chart.width);
+  for (let i = 0; i < widths.length; ) {
+    if (widths[i] === "half" && widths[i + 1] === "half") i += 2;
+    else {
+      widths[i] = "full";
+      i += 1;
+    }
+  }
+  return widths;
 });
 
 function value(kind: MetricKind, amount: number | null) {

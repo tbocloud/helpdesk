@@ -3,7 +3,7 @@
   <div class="flex shrink-0 items-center gap-1">
     <Button
       variant="ghost"
-      :aria-label="__('Move {0} up', [label])"
+      :aria-label="__('Move {0} up', label)"
       :disabled="first"
       @click="emit('move', -1)"
     >
@@ -13,7 +13,7 @@
     </Button>
     <Button
       variant="ghost"
-      :aria-label="__('Move {0} down', [label])"
+      :aria-label="__('Move {0} down', label)"
       :disabled="last"
       @click="emit('move', 1)"
     >
@@ -23,7 +23,7 @@
     </Button>
     <Button
       variant="ghost"
-      :aria-label="__('Remove {0}', [label])"
+      :aria-label="__('Remove {0}', label)"
       @click="emit('remove')"
     >
       <template #icon>

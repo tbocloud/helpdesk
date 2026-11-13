@@ -154,11 +154,11 @@ const type = computed(() => props.unit?.unit_type || props.unitType);
 const parents = computed(() => props.unitParents[type.value] || []);
 const title = computed(() =>
   props.unit
-    ? __("Edit {0}", [props.unit.label])
-    : __("Add {0}", [unitTypeLabel(type.value).toLowerCase()])
+    ? __("Edit {0}", props.unit.label)
+    : __("Add {0}", unitTypeLabel(type.value).toLowerCase())
 );
 const addLabel = computed(() =>
-  __("Add {0}", [unitTypeLabel(type.value).toLowerCase()])
+  __("Add {0}", unitTypeLabel(type.value).toLowerCase())
 );
 // a synced unit would come back at the next sync; switch it off instead
 const canDelete = computed(

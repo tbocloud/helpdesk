@@ -25,10 +25,11 @@
       >
         <span class="text-p-sm text-ink-gray-8">
           {{
-            __("{0}, {1}", [
+            __(
+              "{0}, {1}",
               change.by,
-              dayjs(change.at).format("D MMM YYYY, h:mm a"),
-            ])
+              dayjs(change.at).format("D MMM YYYY, h:mm a")
+            )
           }}
         </span>
         <ul class="text-p-xs text-ink-gray-6">
@@ -41,16 +42,19 @@
         class="border-l-2 border-outline-gray-2 pl-3 text-p-sm text-ink-gray-6"
       >
         {{
-          __("Created by {0}, {1}", [
+          __(
+            "Created by {0}, {1}",
             history.data.created_by,
-            dayjs(history.data.created_on).format("D MMM YYYY"),
-          ])
+            dayjs(history.data.created_on).format("D MMM YYYY")
+          )
         }}
       </li>
       <li v-if="history.data.changes.length > shown.length">
         <Button
           variant="ghost"
-          :label="__('Show all {0} changes', [history.data.changes.length])"
+          :label="
+            __('Show all {0} changes', String(history.data.changes.length))
+          "
           @click="all = true"
         />
       </li>

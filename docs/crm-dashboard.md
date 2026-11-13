@@ -181,9 +181,29 @@ page, changing a filter clears the ones below it.
 
 `/helpdesk/crm-dashboards/:dashboardId?` (`desk/src/pages/crm-dashboard/`), in the sidebar under
 Sales → Team as **CRM dashboards**. The header has a dashboard switcher (when there is more than
-one) and **Configure** for admins. The period, dates and filters live in the URL. KPI cards are
-`StatTile`s; charts use frappe-ui ECharts with the shared `chartTheme`, with a screen-reader
-table behind each and won/lost in success/danger. Tables turn into two-line rows on a phone.
+one) and **Configure** for admins. The period, dates and filters live in the URL. The period
+and the first two filters show in one light row of outlined selects, with when the figures were
+read at its end; **More filters (N)** opens the rest, which stay open while one of them is
+picked. The page sits on a faint grey, and the compact cards carry a coloured left edge. The page is
+colourful by the owner's exception ([ui-guidelines.md](ui-guidelines.md), "the CRM dashboards
+are colourful"): each metric has one icon, tone and series colour (`METRIC_LOOK`). KPI cards are
+`StatTile`s with their metric's icon. The first three cards are the headline, shown large,
+filled with their tone (leads teal, won value green, conversion blue) with a mini trend under
+the figure (`Sparkline.vue`: the figure in each of the last
+six months up to the end of the period, from one grouped query, in the metric's chart colour,
+with each month and figure read out to screen readers; four cards or fewer all lead); the rest follow as a compact strip in as many columns
+as leave no card alone on its row (8 cards: 4 and 4). Each card says how it changed against the
+stretch just before its period ("+33 vs the 90 days before"): a month, quarter or year against
+the same days of the one before (to date, so a half month meets a half month), any other period
+against as many days before it, all time against nothing. The change is green when it is good
+news, amber when it isn't (never red), and neutral for a figure where neither (open leads,
+pending value). Templates put leads, won sales value and conversion rate first. A half-width
+chart with no half-width partner next to it takes the whole row, so no row has a hole; a chart
+card has a heading strip in its metric's tone; charts use frappe-ui ECharts with the shared `chartTheme` and its validated
+palette, a value at each bar's end and a line's last point, a soft flat wash under a trend line, and
+a screen-reader table behind each; a table's columns carry their metric's colour dot, and each
+row a bar under its name with its share of the largest. Tables turn into two-line rows on a
+phone.
 States: loading skeleton, load error with Try again, no access, no dashboards yet, no source
 connected, viewer not placed, custom period without both dates, empty charts, notices for
 unmapped statuses and failing sources.

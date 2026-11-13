@@ -54,7 +54,7 @@
         :filtered="!!search"
         :empty-icon="LucideNetwork"
         :empty-title="
-          __('No {0} yet', [unitTypeLabel(unitType, true).toLowerCase()])
+          __('No {0} yet', unitTypeLabel(unitType, true).toLowerCase())
         "
         :empty-message="emptyMessage"
         @retry="units.reload()"
@@ -74,13 +74,13 @@
               <span
                 class="whitespace-nowrap text-p-sm tabular-nums text-ink-gray-6"
               >
-                {{ __("{0} leads", [item.leads]) }}
+                {{ __("{0} leads", String(item.leads)) }}
               </span>
             </template>
             <template #actions>
               <Switch
                 :model-value="!!item.is_active"
-                :aria-label="__('Count {0}\'s leads', [item.label])"
+                :aria-label="__('Count {0}\'s leads', item.label)"
                 @update:model-value="setActive(item, $event)"
               />
             </template>
@@ -154,7 +154,7 @@ const shown = computed(() => {
 });
 
 const addLabel = computed(() =>
-  __("Add {0}", [unitTypeLabel(unitType.value).toLowerCase()])
+  __("Add {0}", unitTypeLabel(unitType.value).toLowerCase())
 );
 
 const emptyMessage = computed(() =>
@@ -176,12 +176,12 @@ function subtitle(unit: OrgUnit) {
     .filter(Boolean)
     .join(", ");
   const parts = [];
-  if (above) parts.push(__("in {0}", [above]));
-  if (unit.leader) parts.push(__("led by {0}", [unit.leader]));
+  if (above) parts.push(__("in {0}", above));
+  if (unit.leader) parts.push(__("led by {0}", unit.leader));
   if (unit.user && unit.user !== unit.unit_name)
-    parts.push(__("user {0}", [unit.user]));
+    parts.push(__("user {0}", unit.user));
   if (unit.label !== unit.unit_name)
-    parts.push(__("on the leads as {0}", [unit.unit_name]));
+    parts.push(__("on the leads as {0}", unit.unit_name));
   return parts.join(" · ") || __("Not placed under anything yet");
 }
 
@@ -194,8 +194,8 @@ async function setActive(unit: OrgUnit, active: boolean) {
     unit.is_active = active ? 1 : 0;
     toast.success(
       active
-        ? __("{0}'s leads are counted again", [unit.label])
-        : __("{0}'s leads are left out", [unit.label])
+        ? __("{0}'s leads are counted again", unit.label)
+        : __("{0}'s leads are left out", unit.label)
     );
   } catch (e) {
     toast.error(errorText(e, __("Couldn't change it. Try again.")));

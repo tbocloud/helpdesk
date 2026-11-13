@@ -693,3 +693,19 @@ class TestCRMDashboardReport(CRMDashboardCase):
         total, average = (card["label"] for card in page["kpis"])
         self.assertNotEqual(total, average)
         self.assertIn("average per lead", average)
+
+    def test_a_card_compares_with_the_days_before_its_period(self):
+        card = crm_kpi(self.report(filters={"period": "last_30_days"}), "total_leads")
+        # the five leads were made 40 days ago: none in the last 30, all in the 30 before
+        self.assertEqual((card["value"], card["previous"]), (0, 5))
+        self.assertEqual(card["compared_to"], "vs the 30 days before")
+        all_time = crm_kpi(self.report(), "total_leads")
+        self.assertIsNone(all_time["previous"], "all time has nothing before it")
+
+    def test_a_card_carries_its_last_six_months(self):
+        page = self.report()
+        trend = crm_kpi(page, "total_leads")["trend"]
+        self.assertEqual(len(trend), 6)
+        self.assertEqual(len(page["trend_months"]), 6)
+        self.assertEqual(page["trend_months"][-1], getdate().strftime("%Y-%m"))
+        self.assertEqual(sum(trend), 5, "the five leads, in the month they were made")

@@ -62,6 +62,8 @@ TABLE_COLUMNS = (
     "won_value",
 )
 MAX_FILTER_OPTIONS = 500
+# a card's mini trend: its figure in each of the last months up to its period's end
+TREND_MONTHS = 6
 UNMAPPED_SHOWN = 5
 
 
@@ -438,6 +440,7 @@ class DashboardReport:
             return page
         page.update(
             filters=self.filter_options(),
+            trend_months=self.trend_window()[2],
             kpis=self.kpis(),
             charts=[self.chart(row) for row in dashboard.charts if row.enabled],
             notices=self.notices(),
@@ -450,26 +453,49 @@ class DashboardReport:
 
     def kpis(self) -> list[dict]:
         totals: dict[str, dict] = {}
+        before: dict[str, tuple | None] = {}
+        trend = self.monthly_totals()
         cards = []
         for row in self.dashboard.kpis:
             if not row.enabled:
                 continue
             if row.period not in totals:
-                query = self.base(self.range_of(row.period)).select(*self.aggregates())
-                totals[row.period] = query.run(as_dict=True)[0]
+                totals[row.period] = self.totals(self.range_of(row.period))
+                earlier = self.previous_range(row.period)
+                before[row.period] = earlier and (
+                    self.totals(earlier[:2]),
+                    earlier[2],
+                )
             metric = metrics()[row.metric]
             missing = self.missing(row.metric, row.basis)
+            value = previous = compared_to = None
+            points = []
+            if not missing:
+                additive = metric["kind"] in ("count", "money")
+                points = [
+                    metric_value(row.metric, row.basis, row.aggregation, month)
+                    if month
+                    else (0 if additive else None)
+                    for _key, month in trend
+                ]
+                value = metric_value(
+                    row.metric, row.basis, row.aggregation, totals[row.period]
+                )
+                if before[row.period]:
+                    previous = metric_value(
+                        row.metric, row.basis, row.aggregation, before[row.period][0]
+                    )
+                    compared_to = before[row.period][1]
             cards.append(
                 {
                     "metric": row.metric,
                     "label": row.label or self.default_label(row),
                     "kind": metric["kind"],
                     "aggregation": row.aggregation,
-                    "value": None
-                    if missing
-                    else metric_value(
-                        row.metric, row.basis, row.aggregation, totals[row.period]
-                    ),
+                    "value": value,
+                    "previous": previous,
+                    "compared_to": compared_to,
+                    "trend": points,
                     "missing": missing,
                     "period_label": None
                     if row.period == FOLLOW_DASHBOARD
@@ -477,6 +503,66 @@ class DashboardReport:
                 }
             )
         return cards
+
+    def trend_window(self) -> tuple:
+        """(first day, last day, months) of the cards' mini trends: the last TREND_MONTHS
+        months up to the end of the dashboard's period, this month at most."""
+        end = min(self.range[1] or getdate(), getdate())
+        first = getdate(get_first_day(add_months(end, -(TREND_MONTHS - 1))))
+        months = [
+            getdate(add_months(first, n)).strftime("%Y-%m") for n in range(TREND_MONTHS)
+        ]
+        return first, end, months
+
+    def monthly_totals(self) -> list[tuple[str, dict | None]]:
+        """[(month, its aggregates or None)] across the trend window, with the page's
+        filters, in one query."""
+        first, end, months = self.trend_window()
+        L = self.L
+        found = {
+            row.key: row
+            for row in self.base((first, end))
+            .select(L.created_month.as_("key"), *self.aggregates())
+            .groupby(L.created_month)
+            .run(as_dict=True)
+        }
+        return [(month, found.get(month)) for month in months]
+
+    def totals(self, period: tuple) -> dict:
+        return self.base(period).select(*self.aggregates()).run(as_dict=True)[0]
+
+    def previous_range(self, period: str) -> tuple | None:
+        """(first day, last day, how to say it) of the stretch just before a period, to
+        compare with: as many days, up to today. A month, quarter or year compares with the
+        same days of the one before (the 1st to the 13th with the 1st to the 13th); any
+        other period with the days just before it. None for all time."""
+        key = self.period if period == FOLLOW_DASHBOARD else period
+        start, end = self.range_of(period)
+        if not (start and end):
+            return None
+        end = min(end, getdate())
+        if end < start:
+            return None
+        months = {
+            "this_month": 1,
+            "last_month": 1,
+            "this_quarter": 3,
+            "this_year": 12,
+            "last_12_months": 12,
+        }.get(key)
+        if months:
+            first = getdate(add_months(start, -months))
+            last = min(getdate(add_months(end, -months)), getdate(add_days(start, -1)))
+            said = {
+                1: _("vs last month"),
+                3: _("vs last quarter"),
+                12: _("vs last year"),
+            }[months]
+        else:
+            days = (end - start).days + 1
+            first, last = getdate(add_days(start, -days)), getdate(add_days(start, -1))
+            said = _("vs the {0} days before").format(days)
+        return first, last, said
 
     @staticmethod
     def default_label(row) -> str:

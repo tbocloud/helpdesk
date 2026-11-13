@@ -1,15 +1,22 @@
 <template>
   <section
-    class="flex min-w-0 flex-col rounded-xl border border-outline-gray-2 bg-surface-base"
-    :class="chart.width === 'full' ? 'lg:col-span-2' : ''"
+    class="flex min-w-0 flex-col overflow-hidden rounded-xl border border-l-4 border-outline-gray-2 bg-surface-base"
+    :class="[section.border, wide ? 'lg:col-span-2' : '']"
     :aria-labelledby="headingId"
   >
-    <header class="flex flex-col gap-0.5 px-4 pt-4">
+    <!-- the heading takes its metric's tone, beside the icon and the words -->
+    <header class="flex items-center gap-2 px-4 py-2.5" :class="section.head">
+      <component
+        :is="look.icon"
+        class="size-4 shrink-0"
+        :class="section.ink"
+        aria-hidden="true"
+      />
       <h2 :id="headingId" class="text-base-medium text-ink-gray-9">
         {{ chart.title }}
       </h2>
-      <p class="text-p-sm text-ink-gray-6">{{ subtitle }}</p>
     </header>
+    <p class="px-4 pt-3 text-p-sm text-ink-gray-6">{{ subtitle }}</p>
 
     <div class="min-w-0 flex-1 p-4">
       <p
@@ -46,7 +53,14 @@
                   scope="col"
                   class="whitespace-nowrap px-3 py-2 text-right font-medium"
                 >
-                  {{ column.label }}
+                  <span class="inline-flex items-center gap-1.5">
+                    <span
+                      class="inline-block size-2 shrink-0 rounded-full"
+                      :style="{ background: columnColor(column.metric) }"
+                      aria-hidden="true"
+                    />
+                    {{ column.label }}
+                  </span>
                 </th>
               </tr>
             </thead>
@@ -58,10 +72,19 @@
               >
                 <th
                   scope="row"
-                  class="max-w-[14rem] truncate py-2 pr-3 text-left font-normal text-ink-gray-8"
+                  class="max-w-[14rem] py-2 pr-3 text-left font-normal text-ink-gray-8"
                   :title="item.label"
                 >
-                  {{ item.label }}
+                  <span class="block truncate">{{ item.label }}</span>
+                  <!-- its share of the largest, in the sorting metric's colour -->
+                  <span
+                    class="mt-1 block h-1 rounded-full"
+                    :style="{
+                      width: `${share(item)}%`,
+                      background: columnColor(chart.metric),
+                    }"
+                    aria-hidden="true"
+                  />
                 </th>
                 <td
                   v-for="column in chart.columns"
@@ -97,9 +120,9 @@
 
       <template v-else>
         <div
-          class="h-64"
+          :class="wide ? 'h-72' : 'h-64'"
           role="img"
-          :aria-label="__('{0}: chart', [chart.title])"
+          :aria-label="__('{0}: chart', chart.title)"
         >
           <ECharts :options="options" class="h-full w-full" />
         </div>
@@ -143,7 +166,6 @@ import {
   tooltipRow,
   useChartColors,
   valueAxis,
-  type ChartColors,
 } from "@/pages/performance/chartTheme";
 import { monthLabel } from "@/pages/leads/business/businessFormat";
 import { __ } from "@/translation";
@@ -152,6 +174,9 @@ import { computed, useId } from "vue";
 import LucideInfo from "~icons/lucide/info";
 import {
   formatValue,
+  METRIC_LOOK,
+  seriesSlots,
+  TONE_SECTION,
   type ChartItem,
   type DashboardChart,
   type MetricKind,
@@ -160,12 +185,18 @@ import {
 
 const props = defineProps<{
   chart: DashboardChart;
+  /** takes the whole row: asked for, or a half chart with no partner on its row */
+  wide?: boolean;
   currency: string | null;
   valueFormat: ValueFormat;
 }>();
 
 const headingId = `crm-chart-${useId()}`;
 const colors = useChartColors();
+const look = computed(
+  () => METRIC_LOOK[props.chart.metric] || METRIC_LOOK.total_leads
+);
+const section = computed(() => TONE_SECTION[look.value.tone]);
 const isMonth = computed(() => props.chart.dimension === "month");
 
 const hasData = computed(() =>
@@ -176,18 +207,21 @@ const subtitle = computed(() => {
   const c = props.chart;
   const parts = [
     c.chart_type === "table"
-      ? __("By {0}", [c.dimension_label.toLowerCase()])
+      ? __("By {0}", c.dimension_label.toLowerCase())
       : c.compare_label
-      ? __("{0} and {1} by {2}", [
+      ? __(
+          "{0} and {1} by {2}",
           c.metric_label,
           c.compare_label.toLowerCase(),
-          c.dimension_label.toLowerCase(),
-        ])
-      : __("{0} by {1}", [c.metric_label, c.dimension_label.toLowerCase()]),
+          c.dimension_label.toLowerCase()
+        )
+      : __("{0} by {1}", c.metric_label, c.dimension_label.toLowerCase()),
   ];
   if (c.period_label) parts.push(c.period_label);
   if (!isMonth.value && c.total_groups > c.items.length)
-    parts.push(__("top {0} of {1}", [c.items.length, c.total_groups]));
+    parts.push(
+      __("top {0} of {1}", String(c.items.length), String(c.total_groups))
+    );
   return parts.join(" · ");
 });
 
@@ -206,11 +240,17 @@ function rowSummary(item: ChartItem) {
     .join(" · ");
 }
 
-// won is good news and lost bad news; every other metric takes a palette slot
-function seriesColor(c: ChartColors, metric: string | null, slot: number) {
-  if (metric === "won_leads" || metric === "converted_leads") return c.success;
-  if (metric === "lost_leads") return c.danger;
-  return c.series[slot];
+/** A row's value as a share of the largest, for the bar under its name. */
+function share(item: ChartItem) {
+  const most = Math.max(...props.chart.items.map((i) => i.value || 0));
+  return most > 0
+    ? Math.max(2, Math.round(((item.value || 0) / most) * 100))
+    : 0;
+}
+
+/** A table column's dot: its metric's own series colour, beside its name. */
+function columnColor(metric: string) {
+  return colors.value.series[METRIC_LOOK[metric]?.slot ?? 0];
 }
 
 function axisValue(value: number) {
@@ -233,8 +273,13 @@ const options = computed(() => {
         ]
       : []),
   ];
+  // each metric keeps its own colour, unless two that share a chart look alike
+  const slots = seriesSlots(chart.metric, chart.compare_metric);
+  const seriesColor = (n: number) => c.series[slots[n]];
   const tooltip = {
     ...baseOptions(c).tooltip,
+    // the card clips what spills over its edge
+    confine: true,
     trigger: chart.chart_type === "donut" ? "item" : "axis",
     axisPointer: { type: "shadow", shadowStyle: { color: c.brandSoft } },
     formatter: (points: any) => {
@@ -249,9 +294,9 @@ const options = computed(() => {
                 cell(chart.kind, list[0].value)
               ),
             ]
-          : series.map((s, slot) =>
+          : series.map((s, n) =>
               tooltipRow(
-                seriesColor(c, s.metric, slot),
+                seriesColor(n),
                 s.name,
                 cell(chart.kind, chart.items[i]?.[s.key])
               )
@@ -324,7 +369,7 @@ const options = computed(() => {
     tooltip,
     grid: {
       left: 8,
-      right: 16,
+      right: horizontal || chart.chart_type === "line" ? 64 : 16,
       top: chart.compare_metric ? 32 : 12,
       bottom: 4,
       containLabel: true,
@@ -341,15 +386,37 @@ const options = computed(() => {
     },
     xAxis: horizontal ? values : categories,
     yAxis: horizontal ? categories : values,
-    series: series.map((s, slot) => ({
+    series: series.map((s, n) => ({
       name: s.name,
       type: chart.chart_type === "line" ? "line" : "bar",
       data: chart.items.map((item) => item[s.key] ?? null),
       barMaxWidth: 24,
       symbolSize: 6,
       connectNulls: false,
-      itemStyle: { color: seriesColor(c, s.metric, slot) },
-      lineStyle: { width: 2, color: seriesColor(c, s.metric, slot) },
+      itemStyle: {
+        color: seriesColor(n),
+        borderRadius: horizontal ? [0, 4, 4, 0] : [4, 4, 0, 0],
+      },
+      lineStyle: { width: 2, color: seriesColor(n) },
+      // a soft flat wash under a trend line; fainter when two lines overlap
+      areaStyle:
+        chart.chart_type === "line"
+          ? { color: seriesColor(n), opacity: series.length > 1 ? 0.06 : 0.14 }
+          : undefined,
+      // a lighter series colour needs its figure beside it: at a bar's end, a line's last point
+      label: {
+        show: horizontal,
+        position: "right",
+        color: c.textSecondary,
+        fontSize: 11,
+        formatter: (p: { value: number }) => cell(chart.kind, p.value),
+      },
+      endLabel: {
+        show: chart.chart_type === "line",
+        color: c.textSecondary,
+        fontSize: 11,
+        formatter: (p: { value: number }) => cell(chart.kind, p.value),
+      },
     })),
   };
 });

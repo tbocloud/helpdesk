@@ -82,7 +82,7 @@
                   <Switch
                     :model-value="!!item.is_active"
                     :aria-label="
-                      __('Show {0} to its viewers', [item.dashboard_name])
+                      __('Show {0} to its viewers', item.dashboard_name)
                     "
                     @update:model-value="setActive(item, $event)"
                   />
@@ -90,7 +90,7 @@
                     <Button
                       variant="ghost"
                       :aria-label="
-                        __('More actions for {0}', [item.dashboard_name])
+                        __('More actions for {0}', item.dashboard_name)
                       "
                     >
                       <template #icon>
@@ -168,9 +168,10 @@
             <p class="text-p-sm tabular-nums text-ink-gray-7">
               {{
                 settings.data.unit_count
-                  ? __("{0} units across your data sources.", [
-                      settings.data.unit_count,
-                    ])
+                  ? __(
+                      "{0} units across your data sources.",
+                      String(settings.data.unit_count)
+                    )
                   : __("Units appear here after a data source's first sync.")
               }}
             </p>
@@ -232,7 +233,7 @@
   />
   <Dialog
     v-model:open="deleting.open"
-    :title="__('Delete {0}?', [deleting.label])"
+    :title="__('Delete {0}?', deleting.label)"
     size="sm"
   >
     <p class="text-p-sm text-ink-gray-7">
@@ -340,9 +341,9 @@ function back() {
 
 function dashboardSubtitle(item: DashboardRow) {
   const registry = settings.data!.registry;
-  const parts = [__("Each viewer sees: {0}", [registry.scopes[item.scope]])];
+  const parts = [__("Each viewer sees: {0}", registry.scopes[item.scope])];
   if (item.template && registry.templates[item.template])
-    parts.push(__("from {0}", [registry.templates[item.template].label]));
+    parts.push(__("from {0}", registry.templates[item.template].label));
   return parts.join(" · ");
 }
 
@@ -352,8 +353,8 @@ async function setActive(item: DashboardRow, active: boolean) {
     item.is_active = active ? 1 : 0;
     toast.success(
       active
-        ? __("{0} is shown to its viewers", [item.dashboard_name])
-        : __("{0} is hidden from its viewers", [item.dashboard_name])
+        ? __("{0} is shown to its viewers", item.dashboard_name)
+        : __("{0} is hidden from its viewers", item.dashboard_name)
     );
   } catch (e) {
     toast.error(errorText(e, __("Couldn't change it. Try again.")));
@@ -398,7 +399,7 @@ function dashboardMenu(item: DashboardRow) {
         Object.assign(duplicating, {
           open: true,
           source: item.name,
-          name: __("{0} (copy)", [item.dashboard_name]),
+          name: __("{0} (copy)", item.dashboard_name),
         }),
     },
     {
