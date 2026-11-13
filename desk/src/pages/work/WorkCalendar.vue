@@ -123,7 +123,7 @@
           :message="emptyText"
         />
 
-        <div v-else class="min-h-0 flex-1 overflow-y-auto">
+        <div v-else class="relative min-h-0 flex-1 overflow-y-auto">
           <section
             v-for="day in agenda"
             :key="day.date"

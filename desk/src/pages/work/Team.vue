@@ -35,7 +35,7 @@
       </template>
     </LayoutHeader>
 
-    <div class="flex-1 overflow-auto">
+    <div class="relative flex-1 overflow-auto">
       <div class="mx-auto w-full max-w-7xl px-4 py-5 md:px-6">
         <p class="text-p-sm text-ink-gray-6">
           {{
