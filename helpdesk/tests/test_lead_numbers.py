@@ -38,10 +38,7 @@ class TestLeadNumbers(FrappeTestCase):
         return post, params
 
     def test_a_number_is_posted_as_the_signed_in_person_with_trimmed_details(self):
-        self.crm.lead_answers["add_lead_number"] = {
-            "numbers": [lead_number(NEW)],
-            "duplicates": [],
-        }
+        self.crm.lead_answers["add_lead_number"] = {"numbers": [lead_number(NEW)]}
         result = leads_api.add_lead_number(
             "LEAD-1",
             f"  {NEW} ",

@@ -134,7 +134,9 @@
       <DuplicateLeadsNotice
         :matches="duplicates"
         :title="
-          lead
+          blockedByPhone
+            ? __('This number is already on a lead: work that one instead')
+            : lead
             ? __('Other leads share these details')
             : __('This may already be a lead')
         "
@@ -165,7 +167,7 @@
           :form="formId"
           :label="submitLabel"
           :loading="saving"
-          :disabled="!!leadOptions.error && !options"
+          :disabled="(!!leadOptions.error && !options) || blockedByPhone"
         />
       </div>
     </template>
@@ -235,20 +237,30 @@ const roundRobin = computed(
 );
 
 // leads that share the typed email or phone (the ERP site finds them, only the ones the
-// person may see). An email or phone match is a likely repeat: creating needs a second,
-// explicit "Create anyway"; a company match is shown only
+// person may see). A phone match stops the lead: a number belongs to one lead, so that lead
+// is the one to work (docs/leads.md, "One lead per number"). An email match alone is a likely
+// repeat: creating needs a second, explicit "Create anyway"; a company match is shown only
 const duplicates = ref<DuplicateLead[]>([]);
-// the ERP site refused as a repeat of a lead the person may not see: no match is listed,
-// but the same "Create anyway" applies
+// the ERP site refused as a repeat (by email) of a lead the person may not see: no match is
+// listed, but the same "Create anyway" applies
 const refusedAsRepeat = ref(false);
 let checkedFor = "";
 
+const phoneTaken = computed(() =>
+  duplicates.value.some((d) => d.matched_on.includes("phone"))
+);
+// a new lead with a taken number, or an edit that changes the number to one
+const blockedByPhone = computed(
+  () =>
+    phoneTaken.value &&
+    (!props.lead ||
+      form.mobile_no.trim() !== (props.lead.mobile_no || "").trim())
+);
 const likelyRepeat = computed(
   () =>
     !props.lead &&
-    duplicates.value.some(
-      (d) => d.matched_on.includes("email") || d.matched_on.includes("phone")
-    )
+    !phoneTaken.value &&
+    duplicates.value.some((d) => d.matched_on.includes("email"))
 );
 const needsConfirm = computed(
   () => likelyRepeat.value || refusedAsRepeat.value
@@ -434,6 +446,15 @@ async function submit() {
     // closed and opened again meanwhile: that form is sent by its own click
     if (opened !== opening) return;
     if (likelyRepeat.value && !shown) return;
+  } else if (form.mobile_no.trim() !== (props.lead.mobile_no || "").trim()) {
+    await checkDuplicates();
+    if (opened !== opening) return;
+  }
+  if (blockedByPhone.value) {
+    errorMessage.value = __(
+      "This number is already on another lead. Open that lead instead of making a second one."
+    );
+    return;
   }
   const data = payload();
   if (props.lead && !Object.keys(data).length) {
@@ -477,8 +498,11 @@ async function submit() {
         e,
         __("Couldn't save the lead. Check your connection and try again.")
       );
+      // a number another lead has is never created anyway ("... a number belongs to one lead")
       if (!lead && /possible duplicate/i.test(errorMessage.value))
-        refusedAsRepeat.value = true;
+        refusedAsRepeat.value = !/belongs to one lead/i.test(
+          errorMessage.value
+        );
     })
     .finally(() => (saving.value = false));
 }

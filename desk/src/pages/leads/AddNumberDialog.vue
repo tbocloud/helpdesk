@@ -24,7 +24,11 @@
       />
       <DuplicateLeadsNotice
         :matches="duplicates"
-        :title="__('This number is on another lead too. You can still add it.')"
+        :title="
+          __(
+            'This number is already on another lead. A number belongs to one lead: open that one, or merge the two.'
+          )
+        "
       />
       <FormControl
         v-model="form.label"
@@ -65,7 +69,7 @@
           type="submit"
           :form="formId"
           :label="__('Save')"
-          :disabled="!form.number.trim()"
+          :disabled="!form.number.trim() || numberTaken"
           :loading="addNumber.loading"
         />
       </div>
@@ -85,7 +89,7 @@ import {
   FormControl,
   toast,
 } from "frappe-ui";
-import { reactive, ref, useId, watch } from "vue";
+import { computed, reactive, ref, useId, watch } from "vue";
 import DuplicateLeadsNotice from "./DuplicateLeadsNotice.vue";
 import { NUMBER_LABELS, type DuplicateLead } from "./leads";
 
@@ -119,8 +123,12 @@ function blank() {
 const form = reactive(blank());
 const error = ref("");
 
-// other leads that already have the number (the ERP site finds them; a warning, not a stop)
+// other leads that already have the number (the ERP site finds them). A number belongs to one
+// lead, so a match stops the save (docs/leads.md, "One lead per number")
 const duplicates = ref<DuplicateLead[]>([]);
+const numberTaken = computed(() =>
+  duplicates.value.some((d) => d.matched_on.includes("phone"))
+);
 let checkedFor = "";
 
 async function checkDuplicates() {
@@ -172,8 +180,11 @@ const addNumber = createResource({
   },
 });
 
-function submit() {
+async function submit() {
   if (addNumber.loading || !form.number.trim()) return;
+  // not left the field yet: check now, so a taken number is stopped and shown
+  await checkDuplicates();
+  if (numberTaken.value) return;
   error.value = "";
   addNumber.submit({
     lead: props.leadId,
