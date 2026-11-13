@@ -386,19 +386,27 @@
                     : undefined
                 "
               />
-              <!-- each district with its balance: the unassigned leads of the choice above -->
+              <!-- each district with its balance (the unassigned leads of the choice above) and the
+                   leads the people picked already own there -->
               <fieldset
                 v-if="withDistricts"
                 class="flex flex-col gap-1.5"
                 :disabled="!picked.length || !!current.campaign_district"
               >
+                <!-- padded like the rows, so each heading sits over its column -->
                 <legend
-                  class="mb-1.5 flex w-full items-baseline justify-between gap-2 text-sm text-ink-gray-7"
+                  class="mb-1.5 flex w-full items-baseline gap-2.5 px-3 text-sm text-ink-gray-7"
                 >
-                  <span>{{ __("District") }}</span>
+                  <span class="flex-1">{{ __("District") }}</span>
                   <span class="text-xs text-ink-gray-5">{{
-                    __("Unassigned leads")
+                    __("Unassigned")
                   }}</span>
+                  <span
+                    v-if="pickedOwned"
+                    class="w-24 truncate text-right text-xs text-ink-gray-5"
+                    :title="ownedHeader"
+                    >{{ ownedHeader }}</span
+                  >
                 </legend>
                 <div
                   class="flex max-h-64 flex-col overflow-y-auto rounded-lg border border-outline-gray-2"
@@ -431,6 +439,12 @@
                           : 'text-ink-gray-5'
                       "
                       >{{ row.count }}</span
+                    >
+                    <!-- their own leads: context, not something to give, so it stays gray -->
+                    <span
+                      v-if="pickedOwned"
+                      class="w-24 text-right font-mono tabular-nums text-ink-gray-6"
+                      >{{ row.owned }}</span
                     >
                   </label>
                 </div>
@@ -1064,6 +1078,46 @@ const industryOptions = computed(() => {
     })),
   ];
 });
+// how many open leads the people picked own in each district, next to the pool's balance: a
+// district at 0 unassigned can still hold all their leads. Kept per person under their lead
+// total, so the 15-second reload asks the ERP site again only once their leads moved.
+const ownedDistricts = reactive(new Map<string, Record<string, number>>());
+const ownedKey = (member: PlanMember) =>
+  `${current.value?.department}|${member.user}|${member.leads}`;
+watch(
+  () => (withDistricts.value ? pickedOwners.value.map((m) => ownedKey(m)) : []),
+  (keys) =>
+    keys.forEach(async (key) => {
+      if (ownedDistricts.has(key)) return;
+      ownedDistricts.set(key, {});
+      const [department, owner] = key.split("|");
+      try {
+        const page = await call(
+          "helpdesk.api.call_batches.get_department_leads",
+          { department, owner, page_length: 1 }
+        );
+        ownedDistricts.set(key, page.districts ?? {});
+      } catch {
+        // the column only adds context; the plan works without it
+        ownedDistricts.delete(key);
+      }
+    }),
+  { immediate: true }
+);
+/** The open leads the people picked own in `district` (null: every district). */
+function ownedIn(district: string | null) {
+  if (district === null) return pickedOwned.value;
+  return pickedOwners.value.reduce(
+    (sum, m) => sum + (ownedDistricts.get(ownedKey(m))?.[district] ?? 0),
+    0
+  );
+}
+const ownedHeader = computed(() =>
+  pickedMembers.value.length === 1
+    ? __("With {0}", pickedMembers.value[0].full_name)
+    : __("With them")
+);
+
 /** Each district's balance of the product (or industry) chosen, the fullest first, after
  * "Any district" with the total. A plan's district whose open leads are all gone stays listed,
  * so the choice never disappears. */
@@ -1073,10 +1127,23 @@ const districtRows = computed(() => {
     form.district && !names.includes(form.district)
       ? [form.district, ...names]
       : names
-  ).map((name) => ({ label: name, value: name, count: readyIn(name) }));
-  rows.sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+  ).map((name) => ({
+    label: name,
+    value: name,
+    count: readyIn(name),
+    owned: ownedIn(name),
+  }));
+  rows.sort(
+    (a, b) =>
+      b.count - a.count || b.owned - a.owned || a.label.localeCompare(b.label)
+  );
   return [
-    { label: __("Any district"), value: "", count: readyIn(null) },
+    {
+      label: __("Any district"),
+      value: "",
+      count: readyIn(null),
+      owned: ownedIn(null),
+    },
     ...rows,
   ];
 });
