@@ -300,19 +300,21 @@ batches, and the page opens on it for Sales Employees. It **replaces Call today*
 places for one job. People without batches keep Call today. Managers who are not members see
 neither; they have the batch table on the Daily report.
 
-**The screen (2026-11-12 redesign; presentation only, the data and calls are unchanged).** A
-header with the title, the **Calling for** switch (`CallingFor.vue`, a button that opens the same
-picker) and a red *N overdue* pill. Left: the batch card (slot, time left, progress bar, called,
-contacted, call backs, the product it calls for), then the queue: pending calls first, then the
-overdue ones (red pill), each with its number, name, place and reason; picking a row makes it the
-current call, and the first one is current by default. Right: the **current call** (`CallRow.vue`):
-name and place, a big **Call +91...** button (MyOperator, or the phone's dialler), **WhatsApp**
-(a `wa.me` link on the main number), "+N more numbers", the **Say first** block (the product's
-intro line, under *Calling for*), the six outcomes in a 3-column grid (2 on a phone) and an optional
-note. The note is saved with Not Responding, Busy and Wrong Number, and starts filled in the dialog
-the other three open. On a phone the batch card comes first, then the current call, then the queue.
-Loading, error ("Try again"), empty ("Nothing left to call in this batch") and a failed refresh
-that keeps the last queue are all shown.
+**The screen (2026-11-14: one list; the call is made on the lead's page).** A header with the
+title, the **Calling for** switch (`CallingFor.vue`, a button that opens the same picker) and a red
+*N overdue* pill. Then the batch card (slot, time left, progress bar, called, contacted, call backs,
+the product it calls for, the day's total) with **Get next batch** on its right, or why it has to
+wait. Then the queue, full width: pending calls first, then the overdue ones (red pill), each row
+with its number, name, place, main number and reason. **A row opens the lead's page**
+(`/leads/<lead>?item=<batch item>`), where the person calls (the Call button or a number in the
+Numbers list) and the result sheet asks how it went. There is no call panel on Today's calls any
+more: the lead page already shows the numbers, WhatsApp, the why-call note and the timeline, so one
+place does the call. The `item` in the link makes the pending call carry the batch item, so the
+result goes to `record_call_outcome` and counts in the batch; once a result is saved
+(`queueChanged`) the lead page drops `item`, and a later call there is logged with `log_call`. A
+watcher's rows (Assign leads, read-only) open the lead without `item`. Loading, error ("Try
+again"), empty ("Nothing left to call in this batch") and a failed refresh that keeps the last
+queue are all shown.
 
 **One name for a call and its stage.** The six call answers are labelled with the lead stage they
 move the lead to: **Contacted** (Connected), **Not Responding** (Not answered), **Busy**,
@@ -325,14 +327,9 @@ back, Not interested, Wrong number) are the same, so the names in brackets below
 **What it shows** (`desk/src/pages/leads/TodaysCalls.vue`):
 - the batch header: slot name, time left (a live countdown, a warning icon under 15 minutes),
   *37 / 50 called* with a progress bar, and the day's total;
-- the calls to make now, best priority first. Each row has a big **Call** button (MyOperator
-  click-to-call when set up for the person, otherwise a `tel:` link), the lead's company, industry,
-  district, phone, last note, the AI's next step, why it is in the batch, and six outcome chips;
-- **Connected** opens a quick sheet (what was said, the stage to move the lead to, an optional next
-  follow-up); **Call back** asks for a date and time (with quick choices); **Not interested** asks
-  for a reason (the ERP site moves the lead to Not Interested, no second step). *Not answered*, *Busy* and *Wrong number* save
-  at once. The counter drops the moment an outcome is chosen and is put back with the reason if the
-  ERP site refuses;
+- the calls to make now, best priority first: name, place, main number and why it is in the
+  batch. A row opens the lead's page, where the call is made and the result sheet records how it
+  went (Call back asks when, Not interested asks why); the queue reads again once it is saved;
 - calls that come back later (a retry two hours after Not answered or Busy, or a call back) wait
   under the list and join it at their time;
 - **Get next batch**, disabled with the ERP site's reason in words under it (calls still pending,
@@ -359,8 +356,8 @@ district). The same rules are validated here (no overlaps, an end after the star
 site.
 
 Code: `helpdesk/api/call_batches.py` (proxies; `report_lines` for the 6 pm text),
-`desk/src/pages/leads/callBatches.ts` (types, outcome list, optimistic update, rules helpers),
-`TodaysCalls.vue`, `CallRow.vue`, `CallOutcomeDialog.vue`, `CallBatchesTable.vue`,
+`desk/src/pages/leads/callBatches.ts` (types, outcome list, rules helpers),
+`TodaysCalls.vue`, `CallBatchesTable.vue`,
 `desk/src/components/Settings/CRM/CallBatchRules.vue`.
 
 ## Assign leads
@@ -605,7 +602,7 @@ Today's calls.* `helpdesk.api.call_batches.set_calling_focus`; the choice is rem
 the ERP site, and `get_my_calls` carries `focus` and `focus_options`.
 
 **Recording results** (`helpdesk/api/pending_calls.py`, `PendingCalls.vue`, `CallResultSheet.vue`).
-Tapping **Call** on a lead (a row in Today's calls, the lead page's Call button or its phone number)
+Tapping **Call** on a lead (the lead page's Call button or one of its numbers; opened from Today's calls it carries the batch item)
 remembers the lead. The cache holds it per person for 3 days, at most 50. When the person comes back
 to the page (`visibilitychange` or window focus; for MyOperator, 45 seconds later) the **result
 sheet** opens for it: six big buttons (Connected, Not answered, Busy, Call back, Not interested,
@@ -622,7 +619,7 @@ mistake* (`dismiss_pending_call`). Endpoints: `start_call`, `get_pending_calls`,
 1. Open **Leads**. You see **Today's calls**: only your own calls, nobody else's.
 2. Check **Calling for** at the top. Tap **Change** to call for another department or product (a
    district too, if you like), then **Start calling**.
-3. Tap **Call** on a lead and make the call.
+3. Tap a lead in the list. Its page opens: tap **Call** and make the call.
 4. Back on the page, tap how it went: Connected, Not answered, Busy, Call back, Not interested or
    Wrong number. That is all.
 5. If you forget, the banner *You have N calls without a result* waits. Tap **Add results**.
@@ -658,9 +655,8 @@ office's). A lead keeps all of them, and the old one is never lost. TBO Smart st
   up, otherwise the phone's `tel:` link), a WhatsApp link, and the **...** menu. Old and Wrong
   numbers are greyed and struck through under **Old numbers (n)**. An older TBO Smart, which sends no
   list, keeps the single Mobile line.
-- *Today's calls:* the row shows the main number and, when the lead has more in use, **+1 more**;
-  tap it to call one of the others. The result is recorded against the number that was dialled
-  (`number` on `record_call_outcome`).
+- *Today's calls:* the row shows the main number; the lead's page it opens has every number. The
+  result is recorded against the number that was dialled (`number` on `record_call_outcome`).
 - *Log call:* a **Number called** choice appears when the lead has several numbers in use.
 - *Calls without a result:* the pending call remembers the number that was dialled
   (`pending_calls.start_call`'s `number`), and the result sheet sends it with the outcome.

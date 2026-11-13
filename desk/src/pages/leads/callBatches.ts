@@ -204,34 +204,6 @@ export function timeLeftText(seconds: number) {
   return __("{0} h {1} min left", String(hours), String(minutes % 60));
 }
 
-/** The call the person is about to make, as a dialable number. */
-export function dialNumber(phone?: string | null) {
-  return (phone || "").replace(/[^\d+]/g, "");
-}
-
-/** The shape of a queue after `call` got `outcome`, shown before the ERP site answers: the
- * call leaves its list, a batch call counts as called, and a retry or call back that the
- * ERP site adds is picked up by the read that follows. */
-export function withOutcome(data: MyCalls, call: QueueCall): MyCalls {
-  const counts = data.counts ? { ...data.counts } : undefined;
-  const wasPending = data.pending.some((c) => c.item === call.item);
-  const wasOverdue = data.overdue.some((c) => c.item === call.item);
-  if (counts) {
-    if (wasPending) counts.pending = Math.max(counts.pending - 1, 0);
-    if (wasOverdue) counts.overdue = Math.max(counts.overdue - 1, 0);
-    if (wasPending && !call.is_repeat) counts.called += 1;
-  }
-  const today = data.today ? { ...data.today } : undefined;
-  if (today && wasPending && !call.is_repeat) today.called += 1;
-  return {
-    ...data,
-    counts,
-    today,
-    pending: data.pending.filter((c) => c.item !== call.item),
-    overdue: data.overdue.filter((c) => c.item !== call.item),
-  };
-}
-
 /** One per screen, so a queue read earlier never shows before the fresh one. */
 export function useMyCalls() {
   return createResource({
@@ -306,13 +278,6 @@ export function canSwitch(options: FocusOption[]) {
 export function useSetFocus() {
   return createResource({
     url: "helpdesk.api.call_batches.set_calling_focus",
-    method: "POST",
-  });
-}
-
-export function useRecordOutcome() {
-  return createResource({
-    url: "helpdesk.api.call_batches.record_call_outcome",
     method: "POST",
   });
 }
