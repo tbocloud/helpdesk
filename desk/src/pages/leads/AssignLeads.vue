@@ -613,6 +613,18 @@
                   :disabled="save.loading"
                   @click="confirmClear = true"
                 />
+                <!-- the leads they already own, all at once (it asks which, and confirms) -->
+                <Button
+                  v-if="pickedOwners.length"
+                  variant="ghost"
+                  :label="
+                    __(
+                      'Send their {0} leads back to the pool',
+                      String(pickedOwned)
+                    )
+                  "
+                  @click="sendingBack = true"
+                />
                 <p class="text-xs text-ink-gray-5">
                   {{
                     __(
@@ -636,6 +648,13 @@
     :start-on-pool="leadsOnPool"
     :start-product="leadsProduct"
     :start-district="leadsDistrict"
+    @changed="plans.reload()"
+  />
+  <SendBackLeadsDialog
+    v-if="current"
+    v-model:open="sendingBack"
+    :department="current"
+    :people="pickedOwners"
     @changed="plans.reload()"
   />
   <Dialog
@@ -687,6 +706,7 @@ import LucidePhoneOff from "~icons/lucide/phone-off";
 import LucideTriangleAlert from "~icons/lucide/triangle-alert";
 import LucideUsers from "~icons/lucide/users";
 import MemberLeadsDialog from "./MemberLeadsDialog.vue";
+import SendBackLeadsDialog from "./SendBackLeadsDialog.vue";
 import {
   autoAssignText,
   byIndustry,
@@ -823,6 +843,14 @@ const pickedLabel = computed(() =>
     ? pickedMembers.value[0].full_name
     : __("{0} people", String(pickedMembers.value.length))
 );
+// the people picked who own open leads, and how many: they can be sent back to the pool
+const pickedOwners = computed(() =>
+  pickedMembers.value.filter((m) => m.leads > 0)
+);
+const pickedOwned = computed(() =>
+  pickedOwners.value.reduce((sum, m) => sum + m.leads, 0)
+);
+const sendingBack = ref(false);
 
 // ---------- removing a plan: back to the department's slot sizes ----------
 
