@@ -134,16 +134,20 @@
         </fieldset>
 
         <!-- one point per line: Enter starts the next point, so three points read as
-             three lines, each starting at the left edge -->
+             three lines, each at the left edge, and the box grows with them. Tidied on
+             blur and save, not per keystroke: rewriting the value moved the cursor to
+             the end, so an Enter between two points was dropped -->
         <FormControl
           ref="titleInput"
           :model-value="form.title"
           type="textarea"
           :rows="3"
+          class="[&_textarea]:max-h-64 [&_textarea]:min-h-20 [&_textarea]:[field-sizing:content]"
           :label="__('Copy')"
           :description="__('One point per line')"
           :placeholder="__('e.g. Diwali offer carousel')"
-          @update:model-value="(v: string) => (form.title = copyPoints(v))"
+          @update:model-value="(v: string) => (form.title = v)"
+          @blur="form.title = copyPoints(form.title)"
         />
 
         <div class="flex flex-col gap-1.5">
@@ -392,7 +396,7 @@ async function save(addNext: boolean) {
         customer: form.customer,
         campaign: form.campaign.trim(),
         special_day: form.special_day.trim(),
-        title: form.title.trim(),
+        title: copyPoints(form.title).trim(),
         format: form.format,
         status: "Drafting",
         publish_on: `${form.date} ${form.time}:00`,
