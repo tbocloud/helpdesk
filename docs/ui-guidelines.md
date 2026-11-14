@@ -256,8 +256,9 @@ Reuse when repetition is real; abstract only when it improves clarity.
   uppercase headings, sub-items as a tree with a guide line and dots). Neutral icons; brand
   only for the selected area and the current page (`aria-current`).
 - The panel never collapses by itself: only its own button closes it, the choice is
-  remembered per person, and it defaults to open. Expanded groups stay expanded. Only the
-  mobile drawer closes after a page is picked.
+  remembered per person, and it defaults to open. Below 1024px (a tablet) it defaults to
+  folded to icons, since open it leaves the page too narrow; the person's own choice still
+  wins. Expanded groups stay expanded. Only the mobile drawer closes after a page is picked.
 - Keep every control reachable by keyboard with a visible `ring-highlight` focus ring,
   `aria-expanded` on folding items and `aria-current` on the current page.
 - On mobile, primary destinations must stay reachable.

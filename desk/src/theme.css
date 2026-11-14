@@ -273,6 +273,9 @@ kbd {
     ) {
     min-height: 44px;
     min-width: 44px;
+    /* a block-level link (a breadcrumb in a flex row) keeps its text in the middle
+       of the taller box instead of riding at its top */
+    align-content: center;
   }
 
   :where(

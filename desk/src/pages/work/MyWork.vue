@@ -20,7 +20,7 @@
       </template>
       <template #right-header>
         <!-- leads and managers can open a team member's list -->
-        <div v-if="authStore.canSeeOverview" class="w-44 sm:w-56">
+        <div v-if="authStore.canSeeOverview" class="w-40 sm:w-56">
           <Autocomplete
             :options="personOptions"
             :placeholder="__('Show work for…')"
@@ -50,6 +50,8 @@
           <template #prefix>
             <LucidePlus class="size-4" aria-hidden="true" />
           </template>
+          <!-- icon only below sm (the label stays as the accessible name) -->
+          <span class="hidden sm:inline">{{ __("New task") }}</span>
         </Button>
       </template>
     </LayoutHeader>
