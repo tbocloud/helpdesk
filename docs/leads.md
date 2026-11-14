@@ -330,8 +330,8 @@ When the call didn't connect (*Not answered* or busy, *Can't see this call any m
 waiting*, or CallerDesk refused it) and the lead has other usable numbers (Active or Not
 reachable; Wrong number and Old are left out; the dialled one too), the box shows **Try another
 number**: one button each with the number, its label and the person. Tapping one places the call
-at once to that number (the lead page and Today's calls pass the lead's numbers; the box reads
-them from the lead when a call hasn't), and the result names the number dialled. On the lead page,
+at once to that number (the lead page passes the lead's numbers; every other Call makes the box read
+them from the lead when it needs them), and the result names the number dialled. On the lead page,
 **Call** dials the main number at once; with two or more usable numbers an arrow beside it opens a
 menu of them (`Lead.vue`).
 
