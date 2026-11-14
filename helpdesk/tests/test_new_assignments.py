@@ -125,6 +125,7 @@ class TestAssignmentNotice(NewAssignmentsCase):
             task=task,
             teammate=CONSULTANT[0],
             task_name="Share the bank statement format",
+            estimated_hours=1,
         )["help_task"]["name"]
 
         self.assertEqual(get_assignment_notices(CONSULTANT[0], help_task), [])

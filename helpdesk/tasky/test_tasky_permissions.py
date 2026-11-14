@@ -75,6 +75,7 @@ class TestTaskyPermissions(FrappeTestCase):
             api.add_task,
             project=self.project,
             task_name="Configure chart of accounts",
+            estimated_hours=1,
             phase="Setup",
             assigned_to=DEV_A[0],
         )["name"]
@@ -83,6 +84,7 @@ class TestTaskyPermissions(FrappeTestCase):
             api.add_task,
             project=self.project,
             task_name="Migrate opening stock",
+            estimated_hours=1,
             phase="Data Migration",
             assigned_to=DEV_B[0],
         )["name"]
@@ -121,6 +123,7 @@ class TestTaskyPermissions(FrappeTestCase):
             api.add_task,
             project=self.project,
             task_name="Check tax rounding",
+            estimated_hours=1,
             assigned_to=DEV_B[0],
         )
         self.assertEqual(task["assignees"], [DEV_B[0]])
@@ -137,6 +140,7 @@ class TestTaskyPermissions(FrappeTestCase):
                 api.add_task,
                 project=self.project,
                 task_name="Needs an outsider",
+                estimated_hours=1,
                 assigned_to=OUTSIDER[0],
             )
         members = {u.user for u in frappe.get_doc("Project", self.project).users}
@@ -145,7 +149,11 @@ class TestTaskyPermissions(FrappeTestCase):
     def test_people_not_on_the_project_cannot_add_tasks(self):
         with self.assertRaises(frappe.PermissionError):
             self.as_user(
-                OUTSIDER, api.add_task, project=self.project, task_name="Sneaky task"
+                OUTSIDER,
+                api.add_task,
+                project=self.project,
+                task_name="Sneaky task",
+                estimated_hours=1,
             )
 
     def test_developer_sees_the_project_of_a_task_given_to_them(self):
@@ -283,6 +291,7 @@ class TestTaskyPermissions(FrappeTestCase):
             api.add_task,
             project=self.project,
             task_name="Stock ageing report",
+            estimated_hours=1,
             assigned_to=OUTSIDER[0],
         )
         roles = {
@@ -302,6 +311,7 @@ class TestTaskyPermissions(FrappeTestCase):
                 api.add_task,
                 project=self.project,
                 task_name="Bank feeds",
+                estimated_hours=1,
                 assigned_to=OUTSIDER[0],
             )
 
@@ -313,6 +323,7 @@ class TestTaskyPermissions(FrappeTestCase):
                 api.add_task,
                 project=self.project,
                 task_name="Sneaky",
+                estimated_hours=1,
                 assigned_to="vendor.contact@tasky-smoke.example",
             )
 
@@ -327,6 +338,7 @@ class TestTaskyPermissions(FrappeTestCase):
             api.add_task,
             project=self.project,
             task_name="Review tax setup",
+            estimated_hours=1,
             assigned_to=DEV_B[0],
         )
         self.assertEqual(task["assignees"], [DEV_B[0]])
@@ -356,7 +368,11 @@ class TestTaskyPermissions(FrappeTestCase):
             PM, lambda: api.set_project_lead(project=self.project, user=DEV_A[0])
         )
         task = self.as_user(
-            DEV_B, api.add_task, project=self.project, task_name="Mine to add"
+            DEV_B,
+            api.add_task,
+            project=self.project,
+            task_name="Mine to add",
+            estimated_hours=1,
         )
         frappe.db.set_value("Task", task["name"], "status", "Pending Review")
         with self.assertRaises(frappe.PermissionError):

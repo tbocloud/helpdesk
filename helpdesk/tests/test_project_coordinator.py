@@ -75,6 +75,7 @@ class TestWhatACoordinatorMayDo(CoordinatorCase):
             "add_task",
             project=self.project,
             task_name="Payroll parallel run",
+            estimated_hours=1,
             assigned_to=CONSULTANT[0],
         )
         self.assertEqual(
@@ -151,6 +152,7 @@ class TestWhatACoordinatorMayNotDo(CoordinatorCase):
             f"{API}.add_task",
             project=self.project,
             task_name="Store transfer report",
+            estimated_hours=1,
             assigned_to=OUTSIDER[0],
         )
         self.assertRefused(
