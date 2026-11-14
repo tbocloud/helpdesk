@@ -1,11 +1,13 @@
-"""Training and UAT sign-offs on a project (Project -> Sign-off tab, and the lead page's
-Documents card) and their templates.
+"""Sign-offs on a project (Project -> Sign-off tab, the full sign-off page, and the lead
+page's Documents card) and their templates.
 
-Everyone who can read the project sees its sign-offs. Admins, the project's
-managers and lead, and a sign-off's trainer create, send, clarify and reopen; the
-owner of the lead the project was made for creates and sends from the lead page.
-Templates are managed by project managers. Customers never use these endpoints;
-they answer on the token page (helpdesk.api.signoff_portal).
+Who does what follows TBO's Sign-off requirements (Roles): everyone who can read the project
+sees its sign-offs; its managers and lead, its coordinators, its team members and System
+Managers create and save drafts; only the managers, lead, coordinators and System Managers send,
+remind and mark signed off or changes requested; only a System Manager cancels a signed-off one
+and manages templates. The trainer also marks items clarified, and the owner of the lead the
+project was made for sends its UAT from the lead page. Customers never use these endpoints;
+they answer on the token page (helpdesk.api.signoff_portal) and accept by replying to the mail.
 See docs/project-signoff.md.
 """
 
@@ -15,19 +17,32 @@ from frappe.query_builder.functions import Count, Max
 from frappe.utils import cint, cstr, get_datetime, get_fullname
 
 from helpdesk.helpdesk.doctype.hd_project_signoff.hd_project_signoff import (
+    CANCELLED,
     CODE_VERIFIED,
+    DETAIL_FIELDS,
+    DETAIL_LABELS,
+    DETAIL_TABLES,
+    DRAFT,
     EDITABLE_STATUSES,
     NEEDS_FOLLOW_UP,
     SENT,
-    SIGNED,
+    SIGNED_OFF,
     TRAINING,
     UAT,
     HDProjectSignoff,
 )
+from helpdesk.helpdesk.doctype.hd_signoff_template.hd_signoff_template import (
+    ERPNEXT_MODULES,
+    PLATFORMS,
+    SECTIONS,
+    SERVICES,
+    STAGES,
+    TRAINING_STAGE,
+)
 from helpdesk.tasky.permissions import (
     can_manage_project,
     get_project_team,
-    is_project_manager,
+    is_project_coordinator,
 )
 
 SIGNOFF = "HD Project Signoff"
@@ -61,6 +76,7 @@ def get_project_signoffs(project: str) -> dict:
             "name",
             "module_title",
             "signoff_type",
+            "stage",
             "template",
             "status",
             "training_date",
@@ -69,6 +85,7 @@ def get_project_signoffs(project: str) -> dict:
             "signatory_email",
             "link_sent_on",
             "signed_on",
+            "remarks",
             "creation",
         ],
         order_by="creation asc",
@@ -84,9 +101,16 @@ def get_project_signoffs(project: str) -> dict:
     letter, plan = frappe.db.get_value(
         "Project", project, ["custom_signoff_letter", "custom_crm_plan"]
     )
-    # the completion letter is the training's: a UAT isn't in its roll-up
-    training = [s for s in signoffs if s.signoff_type != UAT]
-    signed = sum(1 for s in training if s.status == SIGNED)
+    # the completion letter is the trainings': a UAT, another stage or a cancelled one isn't
+    # in its roll-up (HDProjectSignoff.project_signoffs)
+    training = [
+        s
+        for s in signoffs
+        if s.signoff_type != UAT
+        and s.stage in (None, "", TRAINING_STAGE)
+        and s.status != CANCELLED
+    ]
+    signed = sum(1 for s in training if s.status == SIGNED_OFF)
     return {
         "signoffs": signoffs,
         "signed": signed,
@@ -96,17 +120,18 @@ def get_project_signoffs(project: str) -> dict:
             if letter and training and signed == len(training)
             else None
         ),
-        "can_create": can_manage_project(project),
+        "can_create": _can_create(project),
         # made from an implementation plan on the ERP site: its SRS gives the UAT's tests
-        "can_create_uat": bool(plan) and can_manage_project(project),
+        "can_create_uat": bool(plan) and _can_create(project),
     }
 
 
 @frappe.whitelist()
 def get_signoff_form(project: str, lead: str | None = None) -> dict:
-    """What the New sign-off dialog offers: active templates, the team (trainers), the
-    customer's contacts and who is copied by default (the project lead and you). `lead`: opened
-    from that lead's page, by someone who may not read the project but owns the lead."""
+    """What the New sign-off dialog offers: the project's type, active templates, the team
+    (trainers), the customer (name, addresses with the primary first, contacts with an email,
+    the default signatory) and who is copied by default (the project lead and you). `lead`:
+    opened from that lead's page, by someone who may not read the project but owns the lead."""
     project = _project_for(project, lead)
     info = frappe.db.get_value(
         "Project",
@@ -115,15 +140,28 @@ def get_signoff_form(project: str, lead: str | None = None) -> dict:
         as_dict=True,
     )
     me = frappe.session.user
+    contacts = _customer_contacts(info.customer) if info.customer else []
     return {
         "project_name": info.project_name or project,
         "project_type": info.project_type,
         "customer": info.customer,
+        "customer_name": (
+            frappe.db.get_value("HD Customer", info.customer, "customer_name")
+            or info.customer
+        )
+        if info.customer
+        else None,
+        "addresses": _customer_addresses(info.customer) if info.customer else [],
+        "default_contact": next(
+            (c["contact"] for c in contacts if c["is_primary"]),
+            contacts[0]["contact"] if len(contacts) == 1 else None,
+        ),
+        "can_send": _can_send(project) or bool(lead),
         "templates": _active_templates(),
         "team": [
             {"user": u, "full_name": get_fullname(u)} for u in get_project_team(project)
         ],
-        "contacts": _customer_contacts(info.customer) if info.customer else [],
+        "contacts": contacts,
         "default_cc": [
             e
             for e in dict.fromkeys((info.project_lead, me))
@@ -133,6 +171,16 @@ def get_signoff_form(project: str, lead: str | None = None) -> dict:
         "can_create_uat": bool(info.custom_crm_plan),
         # a placeholder left in the mail is named in the words of the field that fills it
         "placeholder_labels": HDProjectSignoff.placeholder_labels(),
+        # what each stage shows and needs (TBO's Sign-off requirements), and its choices
+        "stages": STAGES,
+        "sections": SECTIONS,
+        "services": SERVICES,
+        "platforms": PLATFORMS,
+        "erpnext_modules": ERPNEXT_MODULES,
+        "detail_labels": {field: _(label) for field, label in DETAIL_LABELS.items()},
+        # a UAT's modules start as every module in the project's scope
+        "project_modules": _project_modules(project),
+        "fields": _detail_meta(),
     }
 
 
@@ -146,45 +194,116 @@ def preview_signoff_mail(
     training_date: str | None = None,
     trainer: str | None = None,
     lead: str | None = None,
+    customer_address: str | None = None,
+    details: str | dict | None = None,
 ) -> dict:
     """The mail the dialog fills in: the template's (or the standard) subject and body with
     what is known so far, its CC, and the placeholders still `missing` (they hold the mail
     back). Nothing is saved."""
     project = _project_for(project, lead)
-    doc = frappe.get_doc(
+    doc = _unsaved_signoff(
+        project,
         {
-            "doctype": SIGNOFF,
-            "project": project,
-            "signoff_type": UAT if signoff_type == UAT else TRAINING,
-            "template": template or None,
-            "module_title": cstr(module_title).strip(),
-            "training_date": training_date or None,
-            "trainer": trainer or None,
-            "signatory_contact": signatory_contact or None,
-        }
+            "signoff_type": signoff_type,
+            "template": template,
+            "module_title": module_title,
+            "training_date": training_date,
+            "trainer": trainer,
+            "signatory_contact": signatory_contact,
+            "customer_address": customer_address,
+            "details": details,
+        },
     )
-    doc.project_name = frappe.db.get_value("Project", project, "project_name")
-    doc.customer = frappe.db.get_value("Project", project, "customer")
-    if signatory_contact:
-        doc.signatory_name = frappe.db.get_value(
-            "Contact", signatory_contact, "full_name"
-        )
-    if doc.is_uat():
+    if doc.is_uat() and not doc.modules:
         # the modules a UAT covers are its tests' sections
         for case in _uat_cases(project, cached=True).get("cases") or []:
             doc.append("items", {"section": cstr(case.get("module"))})
     return doc.render_mail()
 
 
+@frappe.whitelist(methods=["POST"])
+def preview_new_signoff_document(
+    project: str, values: str | dict, lead: str | None = None
+) -> str:
+    """The sign-off document as HTML for a sign-off not saved yet (the full page's Document
+    preview while it is being written). Nothing is saved."""
+    project = _project_for(project, lead)
+    values = frappe.parse_json(values) if isinstance(values, str) else values or {}
+    doc = _unsaved_signoff(project, values)
+    doc.set("items", _parse_items(values.get("items") or []))
+    for i, row in enumerate(doc.items, start=1):
+        row.idx = i
+    return doc.render_html(doc.document_context())
+
+
+@frappe.whitelist()
+def get_template_questions(
+    project: str, template: str, lead: str | None = None
+) -> list[dict]:
+    """A template's questions, for the full page's questions editor before the sign-off is
+    saved (those who add sign-offs; managing templates is a System Manager's)."""
+    _project_for(project, lead)
+    return _parse_items(
+        frappe.get_all(
+            "HD Signoff Template Item",
+            filters={"parenttype": TEMPLATE, "parent": cstr(template)},
+            fields=["section", "question", "help_text"],
+            order_by="idx asc",
+        )
+    )
+
+
+def _unsaved_signoff(project: str, values: dict):
+    """A sign-off in memory with what the form has so far, to fill its mail or document in."""
+
+    def get(key: str) -> str | None:
+        return cstr(values.get(key)).strip() or None
+
+    # new_doc: the fields' defaults (ERPNext version "V16") apply until the form says otherwise
+    doc = frappe.new_doc(SIGNOFF)
+    doc.update(
+        {
+            "project": project,
+            "signoff_type": UAT if values.get("signoff_type") == UAT else TRAINING,
+            "template": get("template"),
+            "module_title": get("module_title") or "",
+            "training_date": get("training_date"),
+            "trainer": get("trainer"),
+            "signatory_contact": get("signatory_contact"),
+            "customer_address": get("customer_address"),
+            "cc_emails": get("cc_emails"),
+            **_detail_values(values.get("details")),
+        }
+    )
+    if doc.template:
+        doc.stage, doc.declaration = frappe.db.get_value(
+            TEMPLATE, doc.template, ["stage", "declaration_text"]
+        ) or (None, None)
+    doc.project_name = frappe.db.get_value("Project", project, "project_name")
+    doc.customer = frappe.db.get_value("Project", project, "customer")
+    if doc.signatory_contact:
+        contact = doc.contact_details(doc.signatory_contact)
+        if contact:
+            doc.signatory_name = contact.full_name
+            doc.signatory_email = contact.email_id
+            doc.signatory_designation = contact.designation
+    return doc
+
+
 @frappe.whitelist()
 def get_signoff(signoff: str) -> dict:
     doc = _get_signoff(signoff)
-    can_manage = _can_manage(doc)
+    can_edit = _can_create(doc.project) and doc.status in EDITABLE_STATUSES
     return {
         "name": doc.name,
         "project": doc.project,
         "project_name": doc.project_name,
+        "project_type": doc.project_type,
         "customer": doc.customer,
+        "customer_name": doc.customer_name() if doc.customer else None,
+        "customer_address": doc.customer_address,
+        # as sent; until then, the address as it reads now
+        "address_display": doc.address_display or doc.formatted_address(),
         "module_title": doc.module_title,
         "signoff_type": doc.signoff_type,
         # a UAT's state on the ERP site; differs from `status` until recorded
@@ -197,6 +316,9 @@ def get_signoff(signoff: str) -> dict:
         "email_subject": doc.email_subject,
         "email_body": doc.email_body,
         "cc_emails": doc.cc_emails,
+        "attach_pdf": doc.attach_pdf,
+        "sent_pdf": _file_info(doc.sent_pdf) if doc.sent_pdf else None,
+        "remarks": doc.remarks,
         "reminder_sent_on": doc.reminder_sent_on,
         "training_date": doc.training_date,
         "trainer": doc.trainer,
@@ -204,6 +326,7 @@ def get_signoff(signoff: str) -> dict:
         "signatory_contact": doc.signatory_contact,
         "signatory_name": doc.signatory_name,
         "signatory_email": doc.signatory_email,
+        "signatory_designation": doc.signatory_designation,
         "link_open": doc.link_is_open(),
         "link_sent_on": doc.link_sent_on,
         "link_expires_on": doc.link_expires_on if doc.link_token_hash else None,
@@ -211,8 +334,8 @@ def get_signoff(signoff: str) -> dict:
         "signer_name": doc.signer_name,
         "signer_designation": doc.signer_designation,
         "signer_email": doc.signer_email,
-        "signer_ip": doc.signer_ip,
-        "audit_ref": doc.audit_ref,
+        "signed_off_by": doc.signed_off_by,
+        "acceptance_reference": doc.acceptance_reference,
         "signed_pdf": _file_info(doc.signed_pdf) if doc.signed_pdf else None,
         "counts": doc.counts(),
         "items": [
@@ -243,8 +366,15 @@ def get_signoff(signoff: str) -> dict:
             }
             for row in reversed(doc.log)
         ],
-        "can_manage": can_manage,
-        "can_edit": can_manage and doc.status in EDITABLE_STATUSES,
+        "stage": doc.stage,
+        "declaration": doc.declaration,
+        "signed_copy": doc.signed_copy,
+        "shown_sections": list(doc.shown_sections()),
+        "details": _details_of(doc),
+        "can_edit": can_edit,
+        "can_send": _can_send(doc.project),
+        "can_clarify": _can_clarify(doc),
+        "can_cancel": _is_system_manager() and doc.status != CANCELLED,
     }
 
 
@@ -261,16 +391,17 @@ def create_signoff(
     cc_emails: str | None = None,
     send: int | str = 0,
     lead: str | None = None,
+    customer_address: str | None = None,
+    attach_pdf: int | str = 1,
+    items: str | list | None = None,
+    details: str | dict | None = None,
 ) -> dict:
     """A training sign-off, saved as a draft, or (`send`) sent to the customer at once with its
-    mail; a send that fails saves nothing."""
+    mail; a send that fails saves nothing. `items` (from the full page) are its questions;
+    without them, the template's are copied in."""
     project = _project_for(project, lead, manage=True)
     _check_lead_sends(lead, send)
     _check_template(template, TRAINING)
-    if not cstr(module_title).strip():
-        frappe.throw(_("Name the module this sign-off is for, e.g. Accounts."))
-    if not cstr(trainer).strip():
-        frappe.throw(_("Pick the trainer who ran the training."))
     doc = frappe.get_doc(
         {
             "doctype": SIGNOFF,
@@ -280,11 +411,14 @@ def create_signoff(
             "training_date": training_date or None,
             "trainer": cstr(trainer).strip(),
             "signatory_contact": signatory_contact,
-            "status": "Draft",
+            "status": DRAFT,
             **_mail_fields(email_subject, email_body, cc_emails),
+            **_document_fields(customer_address, attach_pdf),
+            **_detail_values(details),
+            "items": _parse_items(items) if items else [],
         }
     ).insert(ignore_permissions=True)
-    return _sent_if_asked(doc, send)
+    return _sent_if_asked(doc, send, lead)
 
 
 @frappe.whitelist(methods=["POST"])
@@ -298,6 +432,9 @@ def create_uat_signoff(
     cc_emails: str | None = None,
     send: int | str = 0,
     lead: str | None = None,
+    customer_address: str | None = None,
+    attach_pdf: int | str = 1,
+    details: str | dict | None = None,
 ) -> dict:
     """A UAT sign-off for a project made from an implementation plan: a test case for
     each functional requirement of the plan's approved SRS on the ERP site (its module the
@@ -323,12 +460,14 @@ def create_uat_signoff(
             "template": template or None,
             "crm_plan": plan,
             **_mail_fields(email_subject, email_body, cc_emails),
+            **_document_fields(customer_address, attach_pdf),
+            **_uat_details(details, cases),
             "module_title": _("User acceptance testing ({0})").format(
                 found.get("srs") or plan
             )[:140],
             "trainer": cstr(trainer).strip(),
             "signatory_contact": signatory_contact,
-            "status": "Draft",
+            "status": DRAFT,
             "items": [
                 {
                     "section": cstr(case.get("module"))[:140],
@@ -346,7 +485,7 @@ def create_uat_signoff(
             ],
         }
     ).insert(ignore_permissions=True)
-    return _sent_if_asked(doc, send)
+    return _sent_if_asked(doc, send, lead)
 
 
 def _uat_cases(project: str, cached: bool = False) -> dict:
@@ -372,11 +511,26 @@ def _mail_fields(subject: str | None, body: str | None, cc: str | None) -> dict:
     }
 
 
-def _sent_if_asked(doc, send: int | str) -> dict:
-    """{name, status}; with `send`, the link goes out first (a failure rolls the new sign-off
-    back with the request, and the dialog keeps what was typed)."""
+def _document_fields(customer_address: str | None, attach_pdf: int | str) -> dict:
+    return {
+        "customer_address": cstr(customer_address).strip() or None,
+        "attach_pdf": 1 if cint(attach_pdf) else 0,
+    }
+
+
+def _sent_if_asked(doc, send: int | str, lead: str | None = None) -> dict:
+    """{name, status}; with `send`, the mail goes out first (a failure rolls the new sign-off
+    back with the request, and the dialog keeps what was typed). From the lead page, its owner
+    may send its UAT; otherwise only those who send sign-offs (`_can_send`)."""
     if cint(send):
-        doc.send_link()
+        if not lead and not _can_send(doc.project):
+            frappe.throw(
+                _(
+                    "Only the project's managers, lead or coordinators can send a sign-off. Save it as a draft."
+                ),
+                frappe.PermissionError,
+            )
+        doc.send_mail()
     return {"name": doc.name, "status": doc.status}
 
 
@@ -444,11 +598,17 @@ def _not_recorded(doc, status: str, error) -> bool:
 @frappe.whitelist(methods=["POST"])
 def record_uat_again(signoff: str) -> dict:
     """Send a UAT's current state to the ERP site again (after it couldn't be recorded)."""
-    doc = _get_signoff(signoff, manage=True)
+    doc = _get_signoff(signoff, need="send")
     if not doc.is_uat() or not doc.crm_plan:
         frappe.throw(_("Only a UAT made from a plan is recorded on the ERP site."))
+    if not doc.erp_state():
+        frappe.throw(
+            _("Only a signed-off or cancelled UAT is recorded on the ERP site.")
+        )
     ok = record_uat_on_erp(
-        doc.name, doc.status, doc.signer_name if doc.status == SIGNED else None
+        doc.name,
+        doc.erp_state(),
+        doc.signer_name if doc.status == SIGNED_OFF else None,
     )
     if not ok:
         frappe.throw(
@@ -488,27 +648,27 @@ def update_signoff(
     email_subject: str | None = None,
     email_body: str | None = None,
     cc_emails: str | None = None,
+    customer_address: str | None = None,
+    attach_pdf: int | str = 1,
+    details: str | dict | None = None,
 ) -> dict:
-    """Edit the details, mail and questions of a draft or reopened sign-off (the mail only
-    when it is given, so an older client leaves it as it is)."""
-    doc = _get_signoff(signoff, manage=True)
+    """Edit the details, mail and questions of a draft (or changes requested) sign-off."""
+    doc = _get_signoff(signoff, need="edit")
     if doc.status not in EDITABLE_STATUSES:
         frappe.throw(
             _(
-                "Only a draft or reopened sign-off can be edited; this one is {0}."
+                "Only a draft, or a sign-off the customer asked to change, can be edited; this one is {0}."
             ).format(_(doc.status))
         )
-    if not cstr(module_title).strip():
-        frappe.throw(_("Name the module this sign-off is for, e.g. Accounts."))
-    if not cstr(trainer).strip():
-        frappe.throw(_("Pick the trainer who ran the training."))
     doc.module_title = cstr(module_title).strip()
     doc.training_date = training_date or None
-    doc.trainer = cstr(trainer).strip()
+    doc.trainer = cstr(trainer).strip() or None
     doc.signatory_contact = signatory_contact
     doc.set("items", _merge_items(doc, items))
-    if email_subject is not None:
-        doc.update(_mail_fields(email_subject, email_body, cc_emails))
+    doc.update(_mail_fields(email_subject, email_body, cc_emails))
+    doc.update(_document_fields(customer_address, attach_pdf))
+    if details is not None:
+        doc.update(_detail_values(details))
     doc.log_event(_("Edited"))
     doc.save(ignore_permissions=True)
     return {"name": doc.name}
@@ -552,7 +712,7 @@ def get_lead_signoff(lead: str) -> dict:
     return {
         "project": project,
         "signoff": signoff,
-        "can_send": bool(plan) and (access.owner or can_manage_project(project)),
+        "can_send": bool(plan) and (access.owner or _can_send(project)),
         "can_open": bool(frappe.has_permission("Project", "read", doc=project)),
     }
 
@@ -565,7 +725,11 @@ def download_lead_signoff_pdf(lead: str):
     found = (
         frappe.get_all(
             SIGNOFF,
-            filters={"project": access.project, "signoff_type": UAT, "status": SIGNED},
+            filters={
+                "project": access.project,
+                "signoff_type": UAT,
+                "status": SIGNED_OFF,
+            },
             pluck="signed_pdf",
             order_by="signed_on desc",
             limit=1,
@@ -582,10 +746,10 @@ def download_lead_signoff_pdf(lead: str):
 
 
 def note_signed_on_crm_lead(signoff: str, note: str) -> None:
-    """Queued when a sign-off of a project made for a lead is signed: `note` on the lead's
+    """Queued when a sign-off of a project made for a lead is signed off: `note` on the lead's
     timeline on the ERP site, as the person who made the project from the plan (else whoever
-    sent the link), and the lead's owner told. A failure is written on the sign-off's history;
-    the customer never waits for it."""
+    sent the mail), and the lead's owner told. A failure is written on the sign-off's history;
+    nobody waits for it."""
     from helpdesk.integrations.crm.leads import LeadsError, call
     from helpdesk.work_reminders import notify_users
 
@@ -619,16 +783,66 @@ def note_signed_on_crm_lead(signoff: str, note: str) -> None:
 
 
 @frappe.whitelist(methods=["POST"])
-def send_signoff_link(signoff: str) -> dict:
-    """Email the signatory a new link; any earlier link stops working."""
-    doc = _get_signoff(signoff, manage=True)
-    doc.send_link(resend=bool(doc.link_sent_on))
-    return {"status": doc.status, "link_expires_on": doc.link_expires_on}
+def send_signoff(signoff: str) -> dict:
+    """Send the sign-off mail to the customer (a draft, or after changes were requested)."""
+    doc = _get_signoff(signoff, need="send")
+    doc.send_mail()
+    return {"status": doc.status}
+
+
+@frappe.whitelist(methods=["POST"])
+def send_signoff_reminder(signoff: str) -> dict:
+    """The same mail again with "Reminder:"; the status stays Sent."""
+    doc = _get_signoff(signoff, need="send")
+    doc.send_reminder()
+    return {"status": doc.status}
+
+
+@frappe.whitelist(methods=["POST"])
+def mark_signed_off(
+    signoff: str,
+    acceptance_reference: str | None = None,
+    signed_on: str | None = None,
+    signed_off_by: str | None = None,
+    signed_copy: str | None = None,
+) -> dict:
+    """The customer accepted (by replying, or with a signed copy): record who, when, and the
+    evidence; the signed PDF goes on the project."""
+    doc = _get_signoff(signoff, need="send")
+    doc.sign_off(
+        cstr(acceptance_reference).strip() or None,
+        signed_on or None,
+        cstr(signed_off_by).strip() or None,
+        cstr(signed_copy).strip() or None,
+    )
+    return {"status": doc.status}
+
+
+@frappe.whitelist(methods=["POST"])
+def mark_changes_requested(signoff: str, remarks: str) -> dict:
+    doc = _get_signoff(signoff, need="send")
+    doc.mark_changes_requested(cstr(remarks))
+    doc.save(ignore_permissions=True)
+    return {"status": doc.status}
+
+
+@frappe.whitelist(methods=["POST"])
+def cancel_signoff(signoff: str, reason: str) -> dict:
+    """Only a System Manager cancels a sign-off (a signed-off one is otherwise final)."""
+    doc = _get_signoff(signoff)
+    if not _is_system_manager():
+        frappe.throw(
+            _("Only a System Manager can cancel a sign-off."), frappe.PermissionError
+        )
+    doc.cancel(cstr(reason))
+    doc.save(ignore_permissions=True)
+    return {"status": doc.status}
 
 
 @frappe.whitelist(methods=["POST"])
 def revoke_signoff_link(signoff: str) -> dict:
-    doc = _get_signoff(signoff, manage=True)
+    """Stop the questions page's link at once."""
+    doc = _get_signoff(signoff, need="send")
     doc.revoke_link()
     doc.save(ignore_permissions=True)
     return {"status": doc.status}
@@ -637,39 +851,80 @@ def revoke_signoff_link(signoff: str) -> dict:
 @frappe.whitelist(methods=["POST"])
 def mark_item_clarified(signoff: str, item: str, note: str = "") -> dict:
     """The trainer explained the item; it goes back to the customer, who gets a fresh link."""
-    doc = _get_signoff(signoff, manage=True)
+    doc = _get_signoff(signoff, need="clarify")
     doc.clarify(cstr(item), cstr(note))
     return {"status": doc.status}
 
 
-@frappe.whitelist(methods=["POST"])
-def reopen_signoff(signoff: str, reason: str) -> dict:
-    doc = _get_signoff(signoff, manage=True)
-    doc.reopen(cstr(reason))
-    doc.save(ignore_permissions=True)
-    return {"status": doc.status}
+@frappe.whitelist()
+def get_signoff_mails(signoff: str) -> list[dict]:
+    """Every mail sent and received in the sign-off's thread, newest first (View mail
+    history), with its attachments."""
+    doc = _get_signoff(signoff)
+    mails = frappe.get_all(
+        "Communication",
+        filters={"reference_doctype": SIGNOFF, "reference_name": doc.name},
+        fields=[
+            "name",
+            "subject",
+            "content",
+            "sender",
+            "sender_full_name",
+            "recipients",
+            "cc",
+            "sent_or_received",
+            "communication_date",
+            "delivery_status",
+        ],
+        order_by="communication_date desc",
+        limit_page_length=0,
+    )
+    files = frappe.get_all(
+        "File",
+        filters={
+            "attached_to_doctype": "Communication",
+            "attached_to_name": ("in", [m.name for m in mails] or [""]),
+        },
+        fields=["name", "file_name", "file_url", "attached_to_name"],
+    )
+    for m in mails:
+        m.attachments = [f for f in files if f.attached_to_name == m.name]
+    return mails
+
+
+@frappe.whitelist()
+def preview_signoff_document(signoff: str) -> str:
+    """The sign-off document as HTML, as it goes out with the mail (Document preview)."""
+    doc = _get_signoff(signoff)
+    return doc.render_html(doc.document_context())
 
 
 @frappe.whitelist(methods=["POST"])
 def delete_signoff(signoff: str) -> None:
     """Only a draft, which the customer has never seen, can be deleted."""
-    doc = _get_signoff(signoff, manage=True)
-    if doc.status != "Draft":
+    doc = _get_signoff(signoff, need="edit")
+    if doc.status != DRAFT:
         frappe.throw(
-            _("Only a draft sign-off can be deleted. Revoke the link instead.")
+            _("Only a draft sign-off can be deleted. A System Manager can cancel it.")
         )
     frappe.delete_doc(SIGNOFF, doc.name, ignore_permissions=True)
-    if not doc.is_uat():
-        # it may have been the last training not signed: the completion letter is due now
-        signed = frappe.db.get_value(
+    if doc.is_training() and not frappe.db.get_value(
+        "Project", doc.project, "custom_signoff_letter"
+    ):
+        # it may have been the last training not signed off: the completion letter is due now
+        for name in frappe.get_all(
             SIGNOFF,
-            {"project": doc.project, "signoff_type": ("!=", UAT), "status": SIGNED},
-        )
-        has_letter = frappe.db.get_value(
-            "Project", doc.project, "custom_signoff_letter"
-        )
-        if signed and not has_letter:
-            frappe.get_doc(SIGNOFF, signed).complete_project_if_all_signed()
+            filters={
+                "project": doc.project,
+                "signoff_type": ("!=", UAT),
+                "status": SIGNED_OFF,
+            },
+            pluck="name",
+        ):
+            signed = frappe.get_doc(SIGNOFF, name)
+            if signed.is_training():
+                signed.complete_project_if_all_signed()
+                break
 
 
 # --- templates ---
@@ -694,6 +949,7 @@ def get_signoff_templates() -> list[dict]:
             template.is_active,
             template.signoff_type,
             template.project_type,
+            template.stage,
             count.as_("question_count"),
         )
         .groupby(template.name)
@@ -718,6 +974,16 @@ def get_signoff_template(template: str) -> dict:
         "email_subject": doc.email_subject,
         "email_body": doc.email_body,
         "default_cc": doc.default_cc,
+        "stage": doc.stage,
+        "declaration_text": doc.declaration_text,
+        "attach_pdf_default": doc.attach_pdf_default,
+        "print_format": doc.print_format,
+        "stages": list(STAGES),
+        "print_formats": frappe.get_all(
+            "Print Format",
+            filters={"doc_type": SIGNOFF, "disabled": 0},
+            pluck="name",
+        ),
         "items": [
             {
                 "name": row.name,
@@ -743,6 +1009,10 @@ def save_signoff_template(
     email_subject: str = "",
     email_body: str = "",
     default_cc: str = "",
+    stage: str = "",
+    declaration_text: str = "",
+    attach_pdf_default: int | str = 1,
+    print_format: str = "",
 ) -> dict:
     """Create a template (no `template`) or replace an existing one's details, mail and
     questions."""
@@ -762,6 +1032,10 @@ def save_signoff_template(
     doc.email_subject = cstr(email_subject).strip() or None
     doc.email_body = email_body or None
     doc.default_cc = cstr(default_cc).strip() or None
+    doc.stage = cstr(stage).strip() or None
+    doc.declaration_text = cstr(declaration_text).strip() or None
+    doc.attach_pdf_default = 1 if cint(attach_pdf_default) else 0
+    doc.print_format = cstr(print_format).strip() or None
     doc.set("items", _parse_items(items))
     doc.save(ignore_permissions=True)
     return {"name": doc.name}
@@ -820,9 +1094,11 @@ def _project_for(project: str, lead: str | None = None, manage: bool = False) ->
     project = cstr(project)
     if not lead:
         project = _check_project(project)
-        if manage and not can_manage_project(project):
+        if manage and not _can_create(project):
             frappe.throw(
-                _("Only the project's manager or lead can add sign-offs."),
+                _(
+                    "Only the project's managers, lead, coordinators and team can add sign-offs."
+                ),
                 frappe.PermissionError,
             )
         return project
@@ -830,7 +1106,7 @@ def _project_for(project: str, lead: str | None = None, manage: bool = False) ->
     if access.project != project or not frappe.db.exists("Project", project):
         frappe.throw(_("That project isn't this lead's."), frappe.PermissionError)
     if (manage or not frappe.has_permission("Project", "read", doc=project)) and not (
-        access.owner or can_manage_project(project)
+        access.owner or _can_send(project)
     ):
         frappe.throw(
             _(
@@ -858,11 +1134,10 @@ def _check_template(template: str | None, signoff_type: str):
     ) or (0, None)
     if not active:
         frappe.throw(_("Template {0} isn't active.").format(template))
-    if (kind or TRAINING) != signoff_type:
+    # a UAT from the SRS needs a UAT template; any template starts an ordinary sign-off
+    if signoff_type == UAT and (kind or TRAINING) != UAT:
         frappe.throw(
-            _("Template {0} is for a {1} sign-off.").format(
-                template, _(kind or TRAINING)
-            )
+            _("Template {0} isn't a UAT template; pick one for UAT.").format(template)
         )
 
 
@@ -891,30 +1166,67 @@ def _viewed_since_sent(signoffs: list) -> set[str]:
     }
 
 
-def _get_signoff(signoff: str, manage: bool = False):
-    """The sign-off, if the user can read its project; with `manage`, only for those who run it."""
+def _get_signoff(signoff: str, need: str | None = None):
+    """The sign-off, if the user can read its project; with `need` ("edit", "send",
+    "clarify"), only for those who may do that (TBO's Sign-off requirements, Roles)."""
     signoff = cstr(signoff)
     if not frappe.db.exists(SIGNOFF, signoff):
         frappe.throw(_("Sign-off not found"), frappe.DoesNotExistError)
     doc = frappe.get_doc(SIGNOFF, signoff)
     _check_project(doc.project)
-    if manage and not _can_manage(doc):
+    allowed = {
+        None: lambda: True,
+        "edit": lambda: _can_create(doc.project),
+        "send": lambda: _can_send(doc.project),
+        "clarify": lambda: _can_clarify(doc),
+    }[need]
+    if not allowed():
         frappe.throw(
-            _("Only the project's manager or lead, or the trainer, can do this."),
+            {
+                "edit": _(
+                    "Only the project's managers, lead, coordinators and team can edit sign-offs."
+                ),
+                "send": _(
+                    "Only the project's managers, lead or coordinators can do this."
+                ),
+                "clarify": _(
+                    "Only the trainer, or the project's managers, lead or coordinators, can do this."
+                ),
+            }[need],
             frappe.PermissionError,
         )
     return doc
 
 
-def _can_manage(doc) -> bool:
-    return doc.trainer == frappe.session.user or can_manage_project(doc.project)
+def _is_system_manager() -> bool:
+    user = frappe.session.user
+    return user == "Administrator" or "System Manager" in frappe.get_roles(user)
+
+
+def _can_send(project: str) -> bool:
+    """Send, remind, mark signed off or changes requested: the project's managers and lead,
+    its coordinators, System Managers."""
+    return (
+        _is_system_manager()
+        or can_manage_project(project)
+        or is_project_coordinator(project)
+    )
+
+
+def _can_create(project: str) -> bool:
+    """Create and save drafts: those who send, and the project's team (a trainer)."""
+    return _can_send(project) or frappe.session.user in get_project_team(project)
+
+
+def _can_clarify(doc) -> bool:
+    return doc.trainer == frappe.session.user or _can_send(doc.project)
 
 
 def _check_template_manager():
     # frappe.only_for is skipped in tests, so check the role directly
-    if not is_project_manager():
+    if not _is_system_manager():
         frappe.throw(
-            _("Only project managers can manage sign-off templates."),
+            _("Only a System Manager can manage sign-off templates."),
             frappe.PermissionError,
         )
 
@@ -929,6 +1241,8 @@ def _active_templates() -> list[dict]:
             template.module,
             template.signoff_type,
             template.project_type,
+            template.stage,
+            template.attach_pdf_default,
             template.default_cc,
         )
         .where(template.is_active == 1)
@@ -945,7 +1259,13 @@ def _customer_contacts(customer: str) -> list[dict]:
         frappe.qb.from_(member)
         .join(contact)
         .on(contact.name == member.contact_name)
-        .select(contact.name, contact.full_name, contact.email_id, contact.designation)
+        .select(
+            contact.name,
+            contact.full_name,
+            contact.email_id,
+            contact.designation,
+            contact.is_primary_contact,
+        )
         .where(member.parenttype == "HD Customer")
         .where(member.parent == customer)
         .where(contact.email_id.isnotnull())
@@ -959,6 +1279,49 @@ def _customer_contacts(customer: str) -> list[dict]:
             "full_name": r.full_name or r.email_id,
             "email": r.email_id,
             "designation": r.designation,
+            "is_primary": bool(r.is_primary_contact),
+        }
+        for r in rows
+    ]
+
+
+def _customer_addresses(customer: str) -> list[dict]:
+    """The customer's addresses (Frappe's, linked to the HD Customer), the primary first,
+    then billing ones, each with how it reads."""
+    from frappe.contacts.doctype.address.address import render_address
+
+    address = frappe.qb.DocType("Address")
+    link = frappe.qb.DocType("Dynamic Link")
+    rows = (
+        frappe.qb.from_(address)
+        .join(link)
+        .on((link.parent == address.name) & (link.parenttype == "Address"))
+        .select(
+            address.name,
+            address.address_title,
+            address.address_type,
+            address.is_primary_address,
+        )
+        .where(link.link_doctype == "HD Customer")
+        .where(link.link_name == customer)
+        .where(address.disabled == 0)
+        .run(as_dict=True)
+    )
+    rows.sort(
+        key=lambda r: (
+            not r.is_primary_address,
+            r.address_type != "Billing",
+            r.address_title or r.name,
+        )
+    )
+    return [
+        {
+            "name": r.name,
+            "title": r.address_title or r.name,
+            "type": r.address_type,
+            "is_primary": bool(r.is_primary_address),
+            # the project's own customer's address: reading it needs the project, not Address
+            "display": render_address(r.name, check_permissions=False) or "",
         }
         for r in rows
     ]
@@ -1027,3 +1390,164 @@ def _merge_items(doc, items: str | list) -> list:
         else:
             merged.append(values)
     return merged
+
+
+def _detail_values(details: str | dict | None) -> dict:
+    """A stage's details from the form: only its known fields, and table rows with only their
+    known columns (TBO's Sign-off requirements, Data model)."""
+    values = frappe.parse_json(details) if isinstance(details, str) else details or {}
+    out = {f: values[f] for f in DETAIL_FIELDS if f in values}
+    for field in ("training_date", "trainer"):
+        if field in values:
+            out[field] = values[field] or None
+    for table, columns in DETAIL_TABLES.items():
+        if table in values:
+            out[table] = [
+                {c: row.get(c) for c in columns}
+                for row in values.get(table) or []
+                if isinstance(row, dict)
+            ]
+    return out
+
+
+def _details_of(doc) -> dict:
+    """The sign-off's details as the form holds them."""
+    return {
+        **{f: doc.get(f) for f in DETAIL_FIELDS},
+        **{
+            table: [{c: row.get(c) for c in columns} for row in doc.get(table)]
+            for table, columns in DETAIL_TABLES.items()
+        },
+    }
+
+
+def _uat_details(details: str | dict | None, cases: list) -> dict:
+    """A UAT's details; its modules start as the SRS's (every module in scope)."""
+    values = _detail_values(details)
+    if not values.get("modules"):
+        values["modules"] = [
+            {"module": module, "status": "Completed"}
+            for module in dict.fromkeys(
+                cstr(c.get("module")) for c in cases if c.get("module")
+            )
+        ]
+    return values
+
+
+def _project_modules(project: str) -> list[str]:
+    """The modules in the project's scope: those its sign-offs have covered, else (a project
+    made from a plan) its SRS's."""
+    modules = frappe.get_all(
+        "HD Signoff Module Item",
+        filters={"parenttype": SIGNOFF, "parent": ("in", _signoff_names(project))},
+        pluck="module",
+        order_by="idx asc",
+    )
+    if not modules and frappe.db.get_value("Project", project, "custom_crm_plan"):
+        try:
+            modules = [
+                cstr(c.get("module"))
+                for c in _uat_cases(project, cached=True).get("cases") or []
+            ]
+        except frappe.ValidationError:
+            frappe.clear_messages()
+    return list(dict.fromkeys(m for m in modules if m))
+
+
+def _signoff_names(project: str) -> list[str]:
+    return frappe.get_all(SIGNOFF, filters={"project": project}, pluck="name") or [""]
+
+
+@frappe.whitelist()
+def get_signoff_deliverables(
+    project: str, period_from: str, period_to: str, lead: str | None = None
+) -> list[dict]:
+    """A digital marketing period's deliverables from the content calendar (the requirements:
+    "entered or pulled from the delivery report"): per kind of post, how many were planned,
+    published, and approved by the client."""
+    project = _project_for(project, lead)
+    customer = frappe.db.get_value("Project", project, "customer")
+    if not customer:
+        return []
+    posts = frappe.get_all(
+        "HD Content Post",
+        filters={
+            "customer": customer,
+            "publish_on": ("between", [period_from, f"{period_to} 23:59:59"]),
+            "status": ("!=", "Cancelled"),
+        },
+        fields=["format", "status", "client_decided_on"],
+        limit_page_length=0,
+    )
+    kinds: dict[str, dict] = {}
+    for post in posts:
+        kind = _deliverable_kind(post.format)
+        row = kinds.setdefault(
+            kind,
+            {
+                "deliverable_type": kind,
+                "planned_qty": 0,
+                "delivered_qty": 0,
+                "approved": 0,
+            },
+        )
+        row["planned_qty"] += 1
+        row["delivered_qty"] += post.status == "Published"
+        row["approved"] += (
+            bool(post.client_decided_on) and post.status != "Changes Requested"
+        )
+    return [
+        {
+            "deliverable_type": r["deliverable_type"],
+            "planned_qty": r["planned_qty"],
+            "delivered_qty": r["delivered_qty"],
+            "customer_approved": int(r["approved"] == r["planned_qty"]),
+            "link": "",
+            "remarks": "",
+        }
+        for r in kinds.values()
+    ]
+
+
+# a content post type in the words of the requirements' deliverables
+DELIVERABLE_WORDS = (
+    ("reel", "Reel"),
+    ("story", "Story"),
+    ("blog", "Blog"),
+    ("video", "Video"),
+    ("landing", "Landing page"),
+    ("ad", "Ad creative"),
+)
+
+
+def _deliverable_kind(post_type: str | None) -> str:
+    text = (post_type or "").lower()
+    return next((kind for word, kind in DELIVERABLE_WORDS if word in text), "Post")
+
+
+def _detail_meta() -> dict:
+    """Each detail field's label, type and choices, and each table's columns, from the
+    doctypes, so the forms build their fields from one place."""
+
+    def describe(df) -> dict:
+        return {
+            "label": _(df.label),
+            "fieldtype": df.fieldtype,
+            "options": [o for o in (df.options or "").split("\n") if o]
+            if df.fieldtype == "Select"
+            else None,
+            "description": _(df.description) if df.description else None,
+        }
+
+    meta = frappe.get_meta(SIGNOFF)
+    out = {}
+    for field in (*DETAIL_FIELDS, "training_date", "trainer"):
+        out[field] = describe(meta.get_field(field))
+    for table, columns in DETAIL_TABLES.items():
+        df = meta.get_field(table)
+        child = frappe.get_meta(df.options)
+        out[table] = {
+            **describe(df),
+            "columns": {c: describe(child.get_field(c)) for c in columns},
+        }
+    return out

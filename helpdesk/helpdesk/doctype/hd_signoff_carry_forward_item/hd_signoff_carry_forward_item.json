@@ -1,0 +1,48 @@
+{
+	"actions": [],
+	"creation": "2026-11-14 10:00:00.000000",
+	"description": "A deliverable moved to a later period (Carry-forward items).",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"item",
+		"reason",
+		"moved_to"
+	],
+	"fields": [
+		{
+			"fieldname": "item",
+			"fieldtype": "Small Text",
+			"label": "Item",
+			"reqd": 1,
+			"in_list_view": 1,
+			"columns": 4
+		},
+		{
+			"fieldname": "reason",
+			"fieldtype": "Small Text",
+			"label": "Reason",
+			"in_list_view": 1,
+			"columns": 4
+		},
+		{
+			"fieldname": "moved_to",
+			"fieldtype": "Data",
+			"label": "Moved To",
+			"in_list_view": 1,
+			"columns": 2,
+			"description": "The period it moves to, e.g. December 2026."
+		}
+	],
+	"istable": 1,
+	"links": [],
+	"modified": "2026-11-14 10:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Signoff Carry Forward Item",
+	"owner": "Administrator",
+	"permissions": [],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": []
+}

@@ -50,7 +50,40 @@
                 __('New sign-offs offer it for projects of this type.')
               "
             />
+            <FormControl
+              v-model="form.stage"
+              type="select"
+              :label="__('Stage')"
+              :options="stageOptions"
+              :description="
+                __('Decides which details a sign-off shows and needs.')
+              "
+            />
+            <FormControl
+              v-model="form.print_format"
+              type="select"
+              :label="__('Print format')"
+              :options="printFormatOptions"
+              :description="
+                __(
+                  'The sign-off document. Standard: the one for the stage\'s project type.'
+                )
+              "
+            />
           </div>
+          <FormControl
+            v-model="form.declaration_text"
+            class="mt-4"
+            type="textarea"
+            :label="__('Declaration')"
+            :rows="2"
+            :description="__('Printed in the document, above the signatures.')"
+          />
+          <Checkbox
+            v-model="form.attach_pdf_default"
+            class="mt-4"
+            :label="__('Attach the sign-off document (PDF) by default')"
+          />
           <FormControl
             v-model="form.description"
             class="mt-4"
@@ -106,7 +139,7 @@
           :title="__('Questions')"
           :description="
             __(
-              'Write each one as something the customer can now do, e.g. \'I can record a Payment Entry against an invoice.\' Questions in the same section are shown together.'
+              'Optional: the customer answers them on the questions page the mail links to. Write each one as something the customer can now do, e.g. \'I can record a Payment Entry against an invoice.\' Questions in the same section are shown together.'
             )
           "
         >
@@ -141,15 +174,21 @@ import CompactEditor from "@/components/CompactEditor.vue";
 import ConfirmDialog from "@/components/ConfirmDialog.vue";
 import SettingsLayoutBase from "@/components/layouts/SettingsLayoutBase.vue";
 import SignoffQuestionsEditor from "@/components/SignoffQuestionsEditor.vue";
-import { PLACEHOLDERS, type SignoffQuestion } from "@/pages/tasky/signoffMeta";
+import {
+  PLACEHOLDERS,
+  SIGNOFF_STAGES,
+  type SignoffQuestion,
+} from "@/pages/tasky/signoffMeta";
 import { projectTypeOptions } from "@/pages/tasky/taskMeta";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
 import {
+  Checkbox,
   FormControl,
   Switch,
   TextInput,
   call,
+  createListResource,
   createResource,
   toast,
 } from "frappe-ui";
@@ -166,11 +205,33 @@ const form = reactive({
   is_active: true,
   signoff_type: "Training",
   project_type: "",
+  stage: "",
+  declaration_text: "",
+  attach_pdf_default: true,
+  print_format: "",
   email_subject: "",
   email_body: "",
   default_cc: "",
   items: [] as SignoffQuestion[],
 });
+const stageOptions = [
+  { label: __("No stage"), value: "" },
+  ...SIGNOFF_STAGES.map((s) => ({ label: __(s), value: s })),
+];
+// the sign-off documents a template can use (HD Project Signoff's print formats)
+const printFormats = createListResource({
+  doctype: "Print Format",
+  filters: { doc_type: "HD Project Signoff", disabled: 0 },
+  fields: ["name"],
+  auto: true,
+});
+const printFormatOptions = computed(() => [
+  { label: __("Standard"), value: "" },
+  ...(printFormats.data ?? []).map((p: { name: string }) => ({
+    label: p.name,
+    value: p.name,
+  })),
+]);
 // written here: a "}}" inside the template's {{ }} would end it
 const placeholderList = PLACEHOLDERS.map((p) => "{{ " + p + " }}").join("  ");
 const linkHint = __(
@@ -179,10 +240,15 @@ const linkHint = __(
 );
 const typeOptions = [
   {
-    label: __("Training: a checklist the customer confirms"),
+    label: __("A sign-off (training, SRS, go-live, digital marketing…)"),
     value: "Training",
   },
-  { label: __("UAT: the tests come from the SRS"), value: "UAT" },
+  {
+    label: __(
+      "UAT: answered Pass / Fail (tests from the SRS on a planned project)"
+    ),
+    value: "UAT",
+  },
 ];
 const loaded = ref(false);
 const saved = ref("");
@@ -203,6 +269,10 @@ const detail = createResource({
       is_active: !!data.is_active,
       signoff_type: data.signoff_type || "Training",
       project_type: data.project_type || "",
+      stage: data.stage || "",
+      declaration_text: data.declaration_text || "",
+      attach_pdf_default: data.attach_pdf_default !== 0,
+      print_format: data.print_format || "",
       email_subject: data.email_subject || "",
       email_body: data.email_body || "",
       default_cc: data.default_cc || "",
@@ -218,12 +288,11 @@ if (!props.template) saved.value = snapshot();
 const dirty = computed(() => snapshot() !== saved.value);
 // a UAT's tests come from the SRS: its template needs no questions
 const isUat = computed(() => form.signoff_type === "UAT");
+// questions are optional: a sign-off is accepted by replying to its mail
 const canSave = computed(
   () =>
     !!form.template_name.trim() &&
-    (isUat.value ||
-      (form.items.every((i) => i.question.trim()) &&
-        (!form.is_active || form.items.length > 0)))
+    (isUat.value || form.items.every((i) => i.question.trim()))
 );
 
 const confirmLeave = ref(false);
@@ -236,7 +305,7 @@ function back() {
 async function save() {
   if (!canSave.value) {
     error.value = __(
-      "Give the template a name and every question some text. An active template needs at least one question."
+      "Give the template a name, and every question some text (or remove it)."
     );
     return;
   }
@@ -251,6 +320,10 @@ async function save() {
       is_active: form.is_active,
       signoff_type: form.signoff_type,
       project_type: form.project_type,
+      stage: form.stage,
+      declaration_text: form.declaration_text,
+      attach_pdf_default: form.attach_pdf_default ? 1 : 0,
+      print_format: form.print_format,
       email_subject: form.email_subject,
       email_body: form.email_body,
       default_cc: form.default_cc,

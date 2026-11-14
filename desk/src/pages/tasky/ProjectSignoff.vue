@@ -6,7 +6,7 @@
           variant="ghost"
           :label="__('Refresh')"
           :loading="detail.loading && !!detail.data"
-          @click="detail.reload()"
+          @click="reloadAll"
         >
           <template #icon><LucideRefreshCw class="size-4" /></template>
         </Button>
@@ -15,11 +15,11 @@
 
     <div class="flex-1 overflow-auto">
       <div
-        class="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-5 md:px-6"
+        class="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-5 md:px-6"
       >
         <router-link
           :to="{ name: 'TaskySignoffs', params: { projectId } }"
-          class="inline-flex w-fit items-center gap-1 rounded text-sm text-ink-gray-6 hover:text-ink-gray-8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+          class="inline-flex w-fit items-center gap-1 rounded text-sm text-ink-gray-6 hover:text-ink-gray-8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
         >
           <LucideArrowLeft class="size-4" aria-hidden="true" />
           {{ __("All sign-offs") }}
@@ -35,7 +35,6 @@
           <Button :label="__('Retry')" @click="detail.reload()" />
         </TaskyState>
 
-        <!-- Loading -->
         <div
           v-else-if="!s"
           class="flex flex-col gap-3"
@@ -55,89 +54,54 @@
             <div class="flex min-w-0 flex-1 flex-col gap-1.5">
               <div class="flex min-w-0 flex-wrap items-center gap-2">
                 <h2 class="truncate text-xl font-semibold text-ink-gray-9">
-                  {{ s.module_title }}
+                  {{ s.module_title || s.template || s.name }}
                 </h2>
                 <TaskyBadge
                   :label="__(status.label)"
                   :tone="status.tone"
                   :icon="status.icon"
                 />
+                <span class="font-mono text-xs text-ink-gray-5">{{
+                  s.name
+                }}</span>
               </div>
-              <dl class="flex flex-wrap gap-x-5 gap-y-1 text-sm">
-                <div class="flex gap-1.5">
-                  <dt class="text-ink-gray-5">{{ __("Signs off") }}</dt>
-                  <dd class="text-ink-gray-8">
-                    {{ s.signatory_name }}
-                    <span class="font-mono text-xs text-ink-gray-5">{{
-                      s.signatory_email
-                    }}</span>
-                  </dd>
-                </div>
-                <div v-if="s.trainer_name" class="flex gap-1.5">
-                  <dt class="text-ink-gray-5">
-                    {{ uat ? __("Tests with") : __("Trainer") }}
-                  </dt>
-                  <dd class="text-ink-gray-8">{{ s.trainer_name }}</dd>
-                </div>
-                <div v-if="s.training_date" class="flex gap-1.5">
-                  <dt class="text-ink-gray-5">{{ __("Training date") }}</dt>
-                  <dd class="tabular-nums text-ink-gray-8">
-                    {{ dateFormat(s.training_date, "D MMM YYYY") }}
-                  </dd>
-                </div>
-                <div v-if="s.template" class="flex gap-1.5">
-                  <dt class="text-ink-gray-5">{{ __("Template") }}</dt>
-                  <dd class="text-ink-gray-8">{{ s.template }}</dd>
-                </div>
-              </dl>
               <p class="flex items-center gap-1.5 text-p-sm text-ink-gray-6">
                 <component
-                  :is="linkLine.icon"
+                  :is="sentLine.icon"
                   class="size-4 shrink-0"
                   aria-hidden="true"
                 />
-                {{ linkLine.text }}
+                {{ sentLine.text }}
               </p>
             </div>
 
-            <div
-              v-if="s.can_manage"
-              class="flex shrink-0 flex-wrap items-center gap-2"
-            >
-              <Button
-                v-if="s.can_edit"
-                :label="__('Edit')"
-                @click="showEdit = true"
-              >
-                <template #prefix
-                  ><LucidePencil class="size-4" aria-hidden="true"
-                /></template>
-              </Button>
-              <Button
-                v-if="s.status === 'Draft' || s.status === 'Reopened'"
-                variant="solid"
-                :label="
-                  s.link_sent_on ? __('Send new link') : __('Send to customer')
-                "
-                :loading="busy === 'send'"
-                @click="confirming = s.link_sent_on ? 'resend' : 'send'"
-              >
-                <template #prefix
-                  ><LucideSend class="size-4" aria-hidden="true"
-                /></template>
-              </Button>
-              <Button
-                v-else-if="s.status !== 'Signed'"
-                :label="__('Resend link')"
-                @click="confirming = 'resend'"
-              >
-                <template #prefix
-                  ><LucideSend class="size-4" aria-hidden="true"
-                /></template>
-              </Button>
+            <div class="flex shrink-0 flex-wrap items-center gap-2">
+              <template v-if="s.status === 'Sent' && s.can_send">
+                <Button
+                  :label="__('Mark changes requested')"
+                  @click="startChanges"
+                />
+                <Button
+                  :label="__('Send reminder')"
+                  @click="confirming = 'remind'"
+                >
+                  <template #prefix
+                    ><LucideBellRing class="size-4" aria-hidden="true"
+                  /></template>
+                </Button>
+                <Button
+                  variant="solid"
+                  :label="__('Mark signed off')"
+                  @click="startSignedOff"
+                >
+                  <template #prefix
+                    ><LucideBadgeCheck class="size-4" aria-hidden="true"
+                  /></template>
+                </Button>
+              </template>
               <!-- a UAT's state the ERP site couldn't take yet (the history says why) -->
               <Button
-                v-if="notRecorded"
+                v-if="notRecorded && s.can_send"
                 :label="__('Record on the ERP site')"
                 :loading="busy === 'record'"
                 @click="
@@ -158,7 +122,7 @@
                 :href="s.signed_pdf.file_url"
                 target="_blank"
                 rel="noopener"
-                class="inline-flex h-7 items-center gap-1.5 rounded-md bg-surface-gray-2 px-2 text-base font-medium text-ink-gray-8 hover:bg-surface-gray-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+                class="inline-flex h-7 items-center gap-1.5 rounded-md bg-surface-gray-2 px-2 text-base font-medium text-ink-gray-8 hover:bg-surface-gray-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
               >
                 <LucideDownload class="size-4" aria-hidden="true" />
                 {{ __("Signed PDF") }}
@@ -166,7 +130,9 @@
               <Dropdown v-if="menu.length" :options="menu" align="end">
                 <Button
                   variant="ghost"
-                  :aria-label="__('More actions for {0}', s.module_title)"
+                  :aria-label="
+                    __('More actions for {0}', s.module_title || s.name)
+                  "
                 >
                   <template #icon
                     ><LucideEllipsis class="size-4" aria-hidden="true"
@@ -174,296 +140,469 @@
                 </Button>
               </Dropdown>
             </div>
-            <a
-              v-else-if="s.signed_pdf"
-              :href="s.signed_pdf.file_url"
-              target="_blank"
-              rel="noopener"
-              class="inline-flex h-7 w-fit items-center gap-1.5 rounded-md bg-surface-gray-2 px-2 text-base font-medium text-ink-gray-8 hover:bg-surface-gray-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
-            >
-              <LucideDownload class="size-4" aria-hidden="true" />
-              {{ __("Signed PDF") }}
-            </a>
           </header>
 
-          <!-- progress -->
-          <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <StatTile
-              compact
-              :label="__(responseMeta('Done', uat).label)"
-              :value="
-                __('{0} of {1}', String(s.counts.done), String(s.counts.total))
-              "
-              :meter="
-                s.counts.total ? (s.counts.done / s.counts.total) * 100 : 0
-              "
-              :tone="s.counts.done === s.counts.total ? 'success' : 'neutral'"
-            />
-            <StatTile
-              compact
-              :label="__(responseMeta('Not clear', uat).label)"
-              :value="s.counts.not_clear"
-              :icon="LucideCircleHelp"
-              :icon-tone="s.counts.not_clear ? 'warning' : 'neutral'"
-            />
-            <StatTile
-              compact
-              :label="__(responseMeta('Escalated', uat).label)"
-              :value="s.counts.escalated"
-              :icon="LucideTriangleAlert"
-              :icon-tone="s.counts.escalated ? 'danger' : 'neutral'"
-            />
-            <StatTile
-              compact
-              :label="__('Waiting for an answer')"
-              :value="s.counts.pending"
-              :icon="LucideCircle"
-            />
-          </div>
-
-          <!-- signature -->
-          <SectionCard
-            v-if="s.status === 'Signed'"
-            :title="__('Signature')"
-            :icon="LucideBadgeCheck"
-            icon-class="text-success"
-          >
-            <dl
-              class="grid grid-cols-1 gap-x-6 gap-y-2 px-4 py-3 text-sm sm:grid-cols-2"
-            >
-              <div class="flex gap-2">
-                <dt class="w-28 shrink-0 text-ink-gray-5">
-                  {{ __("Signed by") }}
-                </dt>
-                <dd class="text-ink-gray-8">{{ s.signer_name }}</dd>
-              </div>
-              <div class="flex gap-2">
-                <dt class="w-28 shrink-0 text-ink-gray-5">
-                  {{ __("Designation") }}
-                </dt>
-                <dd class="text-ink-gray-8">{{ s.signer_designation }}</dd>
-              </div>
-              <div class="flex gap-2">
-                <dt class="w-28 shrink-0 text-ink-gray-5">{{ __("Email") }}</dt>
-                <dd class="font-mono text-xs text-ink-gray-8">
-                  {{ s.signer_email }}
-                </dd>
-              </div>
-              <div class="flex gap-2">
-                <dt class="w-28 shrink-0 text-ink-gray-5">
-                  {{ __("Signed on") }}
-                </dt>
-                <dd class="tabular-nums text-ink-gray-8">
-                  {{ dateFormat(s.signed_on, dateTooltipFormat) }}
-                </dd>
-              </div>
-              <div class="flex gap-2">
-                <dt class="w-28 shrink-0 text-ink-gray-5">
-                  {{ __("IP address") }}
-                </dt>
-                <dd class="font-mono text-xs text-ink-gray-8">
-                  {{ s.signer_ip || "—" }}
-                </dd>
-              </div>
-              <div class="flex min-w-0 gap-2">
-                <dt class="w-28 shrink-0 text-ink-gray-5">
-                  {{ __("Audit reference") }}
-                </dt>
-                <dd class="min-w-0 break-all font-mono text-xs text-ink-gray-8">
-                  {{ s.audit_ref }}
-                </dd>
-              </div>
-            </dl>
-          </SectionCard>
-
-          <!-- questions -->
-          <TaskyState
-            v-if="!s.items.length"
-            :icon="LucideClipboardList"
-            :title="__('No questions yet')"
-            :message="
-              s.can_edit
-                ? __(
-                    'Add the questions the customer should confirm, then send it.'
-                  )
-                : __(
-                    'The project lead or manager adds the questions before sending it.'
-                  )
+          <p
+            v-if="s.remarks && s.status !== 'Signed Off'"
+            class="flex items-start gap-2 rounded-md px-3 py-2 text-p-sm text-ink-gray-9"
+            :class="
+              s.status === 'Cancelled' ? 'bg-surface-gray-2' : 'bg-warning-soft'
             "
           >
-            <Button
-              v-if="s.can_edit"
-              :label="__('Add questions')"
-              @click="showEdit = true"
+            <LucideRotateCcw
+              v-if="s.status === 'Changes Requested'"
+              class="mt-0.5 size-4 shrink-0 text-warning"
+              aria-hidden="true"
             />
-          </TaskyState>
-          <SectionCard
-            v-for="group in groups"
-            :key="group.section"
-            :title="group.section"
-            :count="group.items.length"
+            <LucideCircleSlash
+              v-else
+              class="mt-0.5 size-4 shrink-0 text-ink-gray-6"
+              aria-hidden="true"
+            />
+            <span>
+              {{
+                s.status === "Cancelled"
+                  ? __("Cancelled: {0}", s.remarks)
+                  : __("Changes requested: {0}", s.remarks)
+              }}
+            </span>
+          </p>
+
+          <!-- Draft or Changes Requested: the full page's form -->
+          <SignoffEditorForm
+            v-if="s.can_edit"
+            :project-id="projectId"
+            :signoff="s"
+            @saved="detail.reload()"
+            @back="
+              router.push({ name: 'TaskySignoffs', params: { projectId } })
+            "
+          />
+
+          <!-- sent, signed off or cancelled: read-only, with its status actions -->
+          <div
+            v-else
+            class="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
           >
-            <ol class="divide-y divide-outline-gray-1">
-              <li
-                v-for="item in group.items"
-                :key="item.name"
-                class="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-start sm:gap-4"
-              >
-                <div class="flex min-w-0 flex-1 gap-3">
-                  <span
-                    class="w-5 shrink-0 text-right font-mono text-xs tabular-nums text-ink-gray-5"
-                    >{{ item.n }}</span
-                  >
-                  <div class="flex min-w-0 flex-1 flex-col gap-1">
-                    <p class="text-p-base text-ink-gray-9">
-                      {{ item.question }}
-                    </p>
-                    <p v-if="item.help_text" class="text-p-sm text-ink-gray-5">
-                      {{ item.help_text }}
-                    </p>
-                    <blockquote
-                      v-if="item.customer_comment"
-                      class="mt-1 border-l-2 border-outline-gray-3 pl-3 text-p-sm text-ink-gray-7"
-                    >
-                      {{ item.customer_comment }}
-                      <span class="block text-xs text-ink-gray-5">
-                        {{ s.signatory_name
-                        }}<template v-if="item.responded_on">
-                          · {{ timeAgo(item.responded_on) }}</template
-                        >
-                      </span>
-                    </blockquote>
-                    <p
-                      v-if="item.clarified_on"
-                      class="flex items-start gap-1.5 text-p-sm text-ink-gray-6"
-                    >
-                      <LucideMessageCircleReply
-                        class="mt-0.5 size-4 shrink-0"
-                        aria-hidden="true"
-                      />
-                      <span>
-                        {{
-                          __(
-                            "Clarified by {0}, {1}",
-                            item.clarified_by_name || "",
-                            timeAgo(item.clarified_on)
-                          )
-                        }}<template v-if="item.clarification_note"
-                          >: {{ item.clarification_note }}</template
-                        >
-                      </span>
-                    </p>
-                  </div>
-                </div>
-                <div
-                  class="flex shrink-0 flex-wrap items-center gap-2 pl-8 sm:pl-0"
+            <div class="flex min-w-0 flex-col gap-4">
+              <SectionCard :title="__('Details')">
+                <dl
+                  class="grid grid-cols-1 gap-x-6 gap-y-2 px-4 py-3 text-sm sm:grid-cols-[8rem_minmax(0,1fr)]"
                 >
-                  <TaskyBadge
-                    :label="__(responseMeta(item.response, uat).label)"
-                    :tone="responseMeta(item.response, uat).tone"
-                    :icon="responseMeta(item.response, uat).icon"
-                  />
-                  <Button
-                    v-if="item.clarification_task"
-                    variant="ghost"
-                    :label="__('Task')"
-                    :aria-label="
+                  <dt class="text-ink-gray-5">{{ __("Customer") }}</dt>
+                  <dd class="text-ink-gray-8">{{ s.customer_name }}</dd>
+                  <dt class="text-ink-gray-5">{{ __("Address") }}</dt>
+                  <dd class="whitespace-pre-line text-ink-gray-8">
+                    {{ addressText || __("No address on file") }}
+                  </dd>
+                  <dt class="text-ink-gray-5">{{ __("To") }}</dt>
+                  <dd class="min-w-0 text-ink-gray-8">
+                    {{ s.signatory_name }}
+                    <template v-if="s.signatory_designation"
+                      >, {{ s.signatory_designation }}</template
+                    >
+                    <span class="block font-mono text-xs text-ink-gray-5">{{
+                      s.signatory_email
+                    }}</span>
+                  </dd>
+                  <template v-if="s.cc_emails">
+                    <dt class="text-ink-gray-5">{{ __("CC") }}</dt>
+                    <dd class="break-words font-mono text-xs text-ink-gray-7">
+                      {{ s.cc_emails }}
+                    </dd>
+                  </template>
+                  <template v-if="s.trainer_name">
+                    <dt class="text-ink-gray-5">
+                      {{ uat ? __("Tests with") : __("Trainer") }}
+                    </dt>
+                    <dd class="text-ink-gray-8">{{ s.trainer_name }}</dd>
+                  </template>
+                  <template v-if="s.training_date">
+                    <dt class="text-ink-gray-5">{{ __("Training date") }}</dt>
+                    <dd class="tabular-nums text-ink-gray-8">
+                      {{ dateFormat(s.training_date, "D MMM YYYY") }}
+                    </dd>
+                  </template>
+                  <template v-if="s.stage">
+                    <dt class="text-ink-gray-5">{{ __("Stage") }}</dt>
+                    <dd class="text-ink-gray-8">{{ __(s.stage) }}</dd>
+                  </template>
+                  <template v-if="s.template">
+                    <dt class="text-ink-gray-5">{{ __("Template") }}</dt>
+                    <dd class="text-ink-gray-8">{{ s.template }}</dd>
+                  </template>
+                  <template v-if="s.sent_pdf">
+                    <dt class="text-ink-gray-5">{{ __("Document sent") }}</dt>
+                    <dd>
+                      <a
+                        :href="s.sent_pdf.file_url"
+                        target="_blank"
+                        rel="noopener"
+                        class="rounded text-ink-gray-8 underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+                        >{{ s.sent_pdf.file_name }}</a
+                      >
+                    </dd>
+                  </template>
+                </dl>
+              </SectionCard>
+
+              <SectionCard
+                v-if="s.status === 'Signed Off'"
+                :title="__('Signed off')"
+                :icon="LucideBadgeCheck"
+                icon-class="text-success"
+              >
+                <dl
+                  class="grid grid-cols-1 gap-x-6 gap-y-2 px-4 py-3 text-sm sm:grid-cols-[8rem_minmax(0,1fr)]"
+                >
+                  <dt class="text-ink-gray-5">{{ __("Signed off by") }}</dt>
+                  <dd class="text-ink-gray-8">
+                    {{ s.signer_name
+                    }}<template v-if="s.signer_designation"
+                      >, {{ s.signer_designation }}</template
+                    >
+                    <span class="block font-mono text-xs text-ink-gray-5">{{
+                      s.signer_email
+                    }}</span>
+                  </dd>
+                  <dt class="text-ink-gray-5">{{ __("Signed off on") }}</dt>
+                  <dd class="tabular-nums text-ink-gray-8">
+                    {{ dateFormat(s.signed_on, "D MMM YYYY") }}
+                  </dd>
+                  <dt class="text-ink-gray-5">{{ __("Acceptance") }}</dt>
+                  <dd class="text-ink-gray-8">
+                    <template v-if="s.acceptance_reference">{{
+                      __("Their reply, kept in the mail history")
+                    }}</template>
+                    <a
+                      v-else-if="s.signed_copy"
+                      :href="s.signed_copy"
+                      target="_blank"
+                      rel="noopener"
+                      class="rounded underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+                      >{{ __("Signed copy") }}</a
+                    >
+                    <template v-else>{{
+                      __("Recorded without a reply in the mail history")
+                    }}</template>
+                  </dd>
+                </dl>
+              </SectionCard>
+
+              <!-- the questions page's answers -->
+              <template v-if="s.items.length">
+                <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
+                  <StatTile
+                    compact
+                    :label="__(responseMeta('Done', uat).label)"
+                    :value="
                       __(
-                        'Open the clarification task for question {0}',
-                        String(item.n)
+                        '{0} of {1}',
+                        String(s.counts.done),
+                        String(s.counts.total)
                       )
                     "
-                    @click="
-                      openTask = {
-                        name: item.clarification_task,
-                        project: s.project,
-                        project_name: s.project_name,
-                      }
+                    :meter="(s.counts.done / s.counts.total) * 100"
+                    :tone="
+                      s.counts.done === s.counts.total ? 'success' : 'neutral'
                     "
-                  >
-                    <template #prefix
-                      ><LucideSquareCheck class="size-4" aria-hidden="true"
-                    /></template>
-                  </Button>
-                  <Button
-                    v-if="s.can_manage && needsFollowUp(item.response)"
-                    :label="uat ? __('Mark fixed') : __('Mark clarified')"
-                    :aria-label="
-                      uat
-                        ? __('Mark test {0} fixed', String(item.n))
-                        : __('Mark question {0} clarified', String(item.n))
-                    "
-                    @click="startClarify(item)"
+                  />
+                  <StatTile
+                    compact
+                    :label="__(responseMeta('Not clear', uat).label)"
+                    :value="s.counts.not_clear"
+                    :icon="LucideCircleHelp"
+                    :icon-tone="s.counts.not_clear ? 'warning' : 'neutral'"
+                  />
+                  <StatTile
+                    compact
+                    :label="__(responseMeta('Escalated', uat).label)"
+                    :value="s.counts.escalated"
+                    :icon="LucideTriangleAlert"
+                    :icon-tone="s.counts.escalated ? 'danger' : 'neutral'"
+                  />
+                  <StatTile
+                    compact
+                    :label="__('Waiting for an answer')"
+                    :value="s.counts.pending"
+                    :icon="LucideCircle"
                   />
                 </div>
-              </li>
-            </ol>
-          </SectionCard>
+                <SectionCard
+                  v-for="group in groups"
+                  :key="group.section"
+                  :title="group.section"
+                  :count="group.items.length"
+                >
+                  <ol class="divide-y divide-outline-gray-1">
+                    <li
+                      v-for="item in group.items"
+                      :key="item.name"
+                      class="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-start sm:gap-4"
+                    >
+                      <div class="flex min-w-0 flex-1 gap-3">
+                        <span
+                          class="w-5 shrink-0 text-right font-mono text-xs tabular-nums text-ink-gray-5"
+                          >{{ item.n }}</span
+                        >
+                        <div class="flex min-w-0 flex-1 flex-col gap-1">
+                          <p class="text-p-base text-ink-gray-9">
+                            {{ item.question }}
+                          </p>
+                          <p
+                            v-if="item.help_text"
+                            class="text-p-sm text-ink-gray-5"
+                          >
+                            {{ item.help_text }}
+                          </p>
+                          <blockquote
+                            v-if="item.customer_comment"
+                            class="mt-1 border-l-2 border-outline-gray-3 pl-3 text-p-sm text-ink-gray-7"
+                          >
+                            {{ item.customer_comment }}
+                            <span class="block text-xs text-ink-gray-5">
+                              {{ s.signatory_name
+                              }}<template v-if="item.responded_on">
+                                · {{ timeAgo(item.responded_on) }}</template
+                              >
+                            </span>
+                          </blockquote>
+                          <p
+                            v-if="item.clarified_on"
+                            class="flex items-start gap-1.5 text-p-sm text-ink-gray-6"
+                          >
+                            <LucideMessageCircleReply
+                              class="mt-0.5 size-4 shrink-0"
+                              aria-hidden="true"
+                            />
+                            <span>
+                              {{
+                                __(
+                                  "Clarified by {0}, {1}",
+                                  item.clarified_by_name || "",
+                                  timeAgo(item.clarified_on)
+                                )
+                              }}<template v-if="item.clarification_note"
+                                >: {{ item.clarification_note }}</template
+                              >
+                            </span>
+                          </p>
+                        </div>
+                      </div>
+                      <div
+                        class="flex shrink-0 flex-wrap items-center gap-2 pl-8 sm:pl-0"
+                      >
+                        <TaskyBadge
+                          :label="__(responseMeta(item.response, uat).label)"
+                          :tone="responseMeta(item.response, uat).tone"
+                          :icon="responseMeta(item.response, uat).icon"
+                        />
+                        <Button
+                          v-if="item.clarification_task"
+                          variant="ghost"
+                          :label="__('Task')"
+                          :aria-label="
+                            __(
+                              'Open the clarification task for question {0}',
+                              String(item.n)
+                            )
+                          "
+                          @click="
+                            openTask = {
+                              name: item.clarification_task,
+                              project: s.project,
+                              project_name: s.project_name,
+                            }
+                          "
+                        >
+                          <template #prefix
+                            ><LucideSquareCheck
+                              class="size-4"
+                              aria-hidden="true"
+                          /></template>
+                        </Button>
+                        <Button
+                          v-if="
+                            s.can_clarify &&
+                            s.status === 'Sent' &&
+                            needsFollowUp(item.response)
+                          "
+                          :label="uat ? __('Mark fixed') : __('Mark clarified')"
+                          :aria-label="
+                            uat
+                              ? __('Mark test {0} fixed', String(item.n))
+                              : __(
+                                  'Mark question {0} clarified',
+                                  String(item.n)
+                                )
+                          "
+                          @click="startClarify(item)"
+                        />
+                      </div>
+                    </li>
+                  </ol>
+                </SectionCard>
+              </template>
 
-          <!-- history -->
-          <SectionCard
-            :title="__('History')"
-            :description="
-              __(
-                'Every step, with who took it and when. The customer\'s steps include their IP address in the record.'
-              )
-            "
-          >
-            <ol class="divide-y divide-outline-gray-1">
-              <li
-                v-for="(entry, i) in visibleLog"
-                :key="i"
-                class="flex flex-col gap-0.5 px-4 py-2.5 text-sm sm:flex-row sm:items-baseline sm:gap-4"
+              <!-- View mail history -->
+              <SectionCard
+                :title="__('Mail history')"
+                :description="
+                  __('Every mail sent and received for this sign-off.')
+                "
+                :count="mails.data?.length"
               >
-                <span class="w-40 shrink-0 tabular-nums text-ink-gray-5">
-                  <time
-                    :datetime="entry.at"
-                    :title="dateFormat(entry.at, dateTooltipFormat)"
-                    >{{ dateFormat(entry.at, "D MMM, h:mm A") }}</time
+                <p
+                  v-if="mails.error"
+                  class="px-4 py-3 text-p-sm text-danger"
+                  role="alert"
+                >
+                  {{ errorText(mails.error, __("Couldn't load the mails.")) }}
+                </p>
+                <p
+                  v-else-if="mails.data && !mails.data.length"
+                  class="px-4 py-3 text-p-sm text-ink-gray-6"
+                >
+                  {{ __("No mails yet.") }}
+                </p>
+                <ul v-else class="divide-y divide-outline-gray-1">
+                  <li v-for="m in mails.data ?? []" :key="m.name">
+                    <button
+                      type="button"
+                      class="flex w-full flex-col gap-0.5 px-4 py-2.5 text-left hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-highlight"
+                      :aria-expanded="openMail === m.name"
+                      @click="openMail = openMail === m.name ? null : m.name"
+                    >
+                      <span class="flex min-w-0 items-center gap-2">
+                        <component
+                          :is="
+                            m.sent_or_received === 'Received'
+                              ? LucideMailOpen
+                              : LucideSend
+                          "
+                          class="size-4 shrink-0 text-ink-gray-5"
+                          aria-hidden="true"
+                        />
+                        <span
+                          class="min-w-0 flex-1 truncate text-sm font-medium text-ink-gray-9"
+                          >{{ m.subject }}</span
+                        >
+                        <time
+                          class="shrink-0 text-xs tabular-nums text-ink-gray-5"
+                          :datetime="m.communication_date"
+                          >{{
+                            dateFormat(m.communication_date, "D MMM, h:mm A")
+                          }}</time
+                        >
+                      </span>
+                      <span class="truncate pl-6 text-xs text-ink-gray-6">
+                        {{
+                          m.sent_or_received === "Received"
+                            ? __("From {0}", m.sender_full_name || m.sender)
+                            : __("To {0}", m.recipients)
+                        }}
+                        <template v-if="m.cc">
+                          · {{ __("CC {0}", m.cc) }}</template
+                        >
+                      </span>
+                    </button>
+                    <div v-if="openMail === m.name" class="px-4 pb-3">
+                      <iframe
+                        :title="m.subject"
+                        sandbox=""
+                        :srcdoc="mailDoc(m.content)"
+                        class="h-72 w-full rounded border border-outline-gray-2 bg-white"
+                      />
+                      <div
+                        v-if="m.attachments.length"
+                        class="mt-2 flex flex-wrap gap-2"
+                      >
+                        <a
+                          v-for="a in m.attachments"
+                          :key="a.name"
+                          :href="a.file_url"
+                          target="_blank"
+                          rel="noopener"
+                          class="inline-flex items-center gap-1 rounded text-xs text-ink-gray-8 underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+                        >
+                          <LucidePaperclip
+                            class="size-3.5"
+                            aria-hidden="true"
+                          />
+                          {{ a.file_name }}
+                        </a>
+                      </div>
+                    </div>
+                  </li>
+                </ul>
+              </SectionCard>
+
+              <!-- history -->
+              <SectionCard
+                :title="__('History')"
+                :description="__('Every step, with who took it and when.')"
+              >
+                <ol class="divide-y divide-outline-gray-1">
+                  <li
+                    v-for="(entry, i) in visibleLog"
+                    :key="i"
+                    class="flex flex-col gap-0.5 px-4 py-2.5 text-sm sm:flex-row sm:items-baseline sm:gap-4"
                   >
-                </span>
-                <span class="min-w-0 flex-1 text-ink-gray-8">
-                  <span class="font-medium">{{ __(entry.event) }}</span>
-                  <template v-if="entry.item && itemNumber[entry.item]">
-                    ·
-                    {{
-                      __("question {0}", String(itemNumber[entry.item]))
-                    }}</template
-                  >
-                  <template v-if="entry.detail"
-                    >:
-                    <span class="text-ink-gray-7">{{
-                      entry.detail
-                    }}</span></template
-                  >
-                </span>
-                <span class="shrink-0 text-ink-gray-6">{{
-                  entry.by_name
-                }}</span>
-              </li>
-            </ol>
-            <div
-              v-if="s.log.length > visibleLog.length"
-              class="border-t border-outline-gray-1 px-4 py-2"
-            >
-              <Button
-                variant="ghost"
-                :label="__('Show all {0}', String(s.log.length))"
-                @click="showAllLog = true"
-              />
+                    <span class="w-40 shrink-0 tabular-nums text-ink-gray-5">
+                      <time
+                        :datetime="entry.at"
+                        :title="dateFormat(entry.at, dateTooltipFormat)"
+                        >{{ dateFormat(entry.at, "D MMM, h:mm A") }}</time
+                      >
+                    </span>
+                    <span class="min-w-0 flex-1 text-ink-gray-8">
+                      <span class="font-medium">{{ __(entry.event) }}</span>
+                      <template v-if="entry.item && itemNumber[entry.item]">
+                        ·
+                        {{
+                          __("question {0}", String(itemNumber[entry.item]))
+                        }}</template
+                      >
+                      <template v-if="entry.detail"
+                        >:
+                        <span class="text-ink-gray-7">{{
+                          entry.detail
+                        }}</span></template
+                      >
+                    </span>
+                    <span class="shrink-0 text-ink-gray-6">{{
+                      entry.by_name
+                    }}</span>
+                  </li>
+                </ol>
+                <div
+                  v-if="s.log.length > visibleLog.length"
+                  class="border-t border-outline-gray-1 px-4 py-2"
+                >
+                  <Button
+                    variant="ghost"
+                    :label="__('Show all {0}', String(s.log.length))"
+                    @click="showAllLog = true"
+                  />
+                </div>
+              </SectionCard>
             </div>
-          </SectionCard>
+
+            <SignoffPreview
+              class="lg:sticky lg:top-4 lg:max-h-[calc(100vh-8rem)]"
+              :mail="{
+                subject: s.email_subject || '',
+                toName: s.signatory_name,
+                toEmail: s.signatory_email,
+                cc: splitEmails(s.cc_emails || ''),
+                body: s.email_body || '',
+              }"
+              :signoff="s.name"
+            />
+          </div>
         </template>
       </div>
     </div>
-
-    <SignoffFormDialog
-      v-if="s?.can_edit"
-      v-model:open="showEdit"
-      :project-id="projectId"
-      :signoff="s"
-      @saved="detail.reload()"
-    />
 
     <TaskDetailDialog
       v-model:task="openTask"
@@ -509,10 +648,10 @@
       </template>
     </Dialog>
 
-    <!-- reopen -->
+    <!-- mark signed off: from the customer's reply -->
     <Dialog
-      :open="confirming === 'reopen'"
-      :title="__('Reopen sign-off?')"
+      :open="confirming === 'signed'"
+      :title="__('Mark signed off')"
       size="lg"
       @update:open="(v: boolean) => !v && (confirming = null)"
     >
@@ -520,15 +659,112 @@
         <p class="text-p-sm text-ink-gray-7">
           {{
             __(
-              "The customer's signature is withdrawn and recorded in the history. The signed PDF stays on the project. You can then change the questions and send a new link."
+              "Record that the customer accepted this sign-off. The signed PDF is saved on the project and sent to them and to our team."
             )
           }}
         </p>
         <FormControl
-          v-model="reopenReason"
+          v-model="signedOff.reply"
+          type="select"
+          :label="__('Their reply (acceptance reference)')"
+          :options="replyOptions"
+        />
+        <p
+          v-if="replyOptions.length === 1"
+          class="-mt-2 text-p-xs text-ink-gray-5"
+        >
+          {{
+            __(
+              "No reply has come into the mail history. You can still record it, for example from a reply that came to another mailbox."
+            )
+          }}
+        </p>
+        <!-- the requirements' other acceptance: a signed copy of the document -->
+        <div v-if="!signedOff.reply" class="flex flex-col gap-1.5">
+          <span class="text-xs text-ink-gray-5">{{
+            __("Signed copy (optional)")
+          }}</span>
+          <div class="flex flex-wrap items-center gap-2">
+            <span
+              v-if="signedOff.copy"
+              class="truncate text-sm text-ink-gray-8"
+              >{{ signedOff.copy.split("/").pop() }}</span
+            >
+            <FileUploader
+              :upload-args="{ private: true }"
+              @success="(file: { file_url: string }) => (signedOff.copy = file.file_url)"
+            >
+              <template #default="{ openFileSelector, uploading }">
+                <Button
+                  size="sm"
+                  :label="signedOff.copy ? __('Replace') : __('Upload')"
+                  :loading="uploading"
+                  @click="openFileSelector()"
+                />
+              </template>
+            </FileUploader>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <TextInput
+            v-model="signedOff.date"
+            type="date"
+            :label="__('Signed off on')"
+            :max="today"
+          />
+          <FormControl
+            v-model="signedOff.contact"
+            type="select"
+            :label="__('Signed off by')"
+            :options="contactOptions"
+          />
+        </div>
+      </div>
+      <template #actions>
+        <div class="flex justify-end gap-2">
+          <Button :label="__('Cancel')" @click="confirming = null" />
+          <Button
+            variant="solid"
+            :label="__('Mark signed off')"
+            :loading="busy === 'signed'"
+            :disabled="!signedOff.date || busy === 'signed'"
+            @click="markSignedOff"
+          />
+        </div>
+      </template>
+    </Dialog>
+
+    <!-- changes requested, cancel: a reason each -->
+    <Dialog
+      :open="confirming === 'changes' || confirming === 'cancel'"
+      :title="
+        confirming === 'cancel'
+          ? __('Cancel this sign-off?')
+          : __('Mark changes requested')
+      "
+      size="lg"
+      @update:open="(v: boolean) => !v && (confirming = null)"
+    >
+      <div class="flex flex-col gap-3">
+        <p class="text-p-sm text-ink-gray-7">
+          {{
+            confirming === "cancel"
+              ? __(
+                  "A cancelled sign-off no longer counts; a signed-off training leaves the completion letter. The record stays, with your reason."
+                )
+              : __(
+                  "The sign-off can be edited again and sent as a new mail in the same thread. The questions link stops working until then."
+                )
+          }}
+        </p>
+        <FormControl
+          v-model="reason"
           type="textarea"
-          :label="__('Reason')"
-          :placeholder="__('e.g. The customer asked to add the GST report.')"
+          :label="
+            confirming === 'cancel'
+              ? __('Reason')
+              : __('What did the customer ask to change?')
+          "
           :rows="3"
           maxlength="1000"
           required
@@ -536,34 +772,51 @@
       </div>
       <template #actions>
         <div class="flex justify-end gap-2">
-          <Button :label="__('Cancel')" @click="confirming = null" />
+          <Button :label="__('Back')" @click="confirming = null" />
           <Button
             variant="solid"
-            theme="red"
-            :label="__('Reopen sign-off')"
-            :loading="busy === 'reopen'"
-            :disabled="!reopenReason.trim()"
+            :theme="confirming === 'cancel' ? 'red' : 'gray'"
+            :label="
+              confirming === 'cancel'
+                ? __('Cancel sign-off')
+                : __('Mark changes requested')
+            "
+            :loading="busy === confirming"
+            :disabled="!reason.trim()"
             @click="
-              run(
-                'reopen',
-                'reopen_signoff',
-                { reason: reopenReason },
-                __('Sign-off reopened')
-              )
+              confirming === 'cancel'
+                ? run(
+                    'cancel',
+                    'cancel_signoff',
+                    { reason },
+                    __('Sign-off cancelled')
+                  )
+                : run(
+                    'changes',
+                    'mark_changes_requested',
+                    { remarks: reason },
+                    __('Marked changes requested')
+                  )
             "
           />
         </div>
       </template>
     </Dialog>
 
-    <!-- send, resend, revoke, delete: the mail goes to a customer, so it is said once more -->
+    <SignoffSendConfirm
+      :open="confirming === 'remind'"
+      reminder
+      :name="s?.signatory_name || ''"
+      :email="s?.signatory_email || ''"
+      :cc="splitEmails(s?.cc_emails || '')"
+      :loading="busy === 'remind'"
+      @update:open="(v: boolean) => !v && (confirming = null)"
+      @send="run('remind', 'send_signoff_reminder', {}, __('Reminder sent'))"
+    />
+
+    <!-- revoke, delete -->
     <Dialog
-      :open="
-        confirming === 'send' ||
-        confirming === 'resend' ||
-        confirming === 'revoke' ||
-        confirming === 'delete'
-      "
+      :open="confirming === 'revoke' || confirming === 'delete'"
       :title="confirmCopy.title"
       :message="confirmCopy.message"
       size="md"
@@ -571,12 +824,10 @@
     >
       <template #actions>
         <div class="flex justify-end gap-2">
-          <Button :label="__('Cancel')" @click="confirming = null" />
+          <Button :label="__('Back')" @click="confirming = null" />
           <Button
             variant="solid"
-            :theme="
-              confirming === 'send' || confirming === 'resend' ? 'gray' : 'red'
-            "
+            theme="red"
             :label="confirmCopy.action"
             :loading="!!busy"
             @click="confirmCopy.run()"
@@ -599,25 +850,29 @@ import {
   Button,
   Dialog,
   Dropdown,
+  FileUploader,
   FormControl,
+  TextInput,
   call,
   createResource,
   toast,
 } from "frappe-ui";
-import { computed, ref, watch } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import LucideArrowLeft from "~icons/lucide/arrow-left";
 import LucideBadgeCheck from "~icons/lucide/badge-check";
+import LucideBellRing from "~icons/lucide/bell-ring";
 import LucideCircle from "~icons/lucide/circle";
-import LucideClipboardList from "~icons/lucide/clipboard-list";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
+import LucideCircleDashed from "~icons/lucide/circle-dashed";
 import LucideCircleHelp from "~icons/lucide/circle-help";
+import LucideCircleSlash from "~icons/lucide/circle-slash";
 import LucideDownload from "~icons/lucide/download";
 import LucideEllipsis from "~icons/lucide/ellipsis";
-import LucideLink from "~icons/lucide/link";
 import LucideLinkOff from "~icons/lucide/link-2-off";
+import LucideMailOpen from "~icons/lucide/mail-open";
 import LucideMessageCircleReply from "~icons/lucide/message-circle-reply";
-import LucidePencil from "~icons/lucide/pencil";
+import LucidePaperclip from "~icons/lucide/paperclip";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideRotateCcw from "~icons/lucide/rotate-ccw";
 import LucideSend from "~icons/lucide/send";
@@ -625,7 +880,9 @@ import LucideSquareCheck from "~icons/lucide/square-check";
 import LucideTrash2 from "~icons/lucide/trash-2";
 import LucideTriangleAlert from "~icons/lucide/triangle-alert";
 import ProjectNav from "./components/ProjectNav.vue";
-import SignoffFormDialog from "./components/SignoffFormDialog.vue";
+import SignoffEditorForm from "./components/SignoffEditorForm.vue";
+import SignoffPreview from "./components/SignoffPreview.vue";
+import SignoffSendConfirm from "./components/SignoffSendConfirm.vue";
 import TaskDetailDialog, {
   type TaskRef,
 } from "./components/TaskDetailDialog.vue";
@@ -637,6 +894,7 @@ import {
   type SignoffQuestion,
 } from "./signoffMeta";
 import { loadErrorMessage } from "./taskMeta";
+import { splitEmails, type SignoffSource } from "./useSignoffForm";
 
 interface SignoffItem extends SignoffQuestion {
   name: string;
@@ -649,37 +907,37 @@ interface SignoffItem extends SignoffQuestion {
   clarification_note?: string | null;
 }
 
-interface SignoffDetail {
+interface SignoffDetail extends SignoffSource {
   name: string;
   project: string;
   project_name: string;
+  customer_name?: string | null;
+  address_display?: string | null;
   module_title: string;
   /** Training, or UAT (Pass / Fail / Blocker against the SRS's tests) */
   signoff_type: "Training" | "UAT";
-  /** a UAT's last state on the ERP site */
+  /** a UAT's last state on the ERP site (Signed, Reopened) */
   crm_recorded?: string | null;
   crm_failed?: boolean;
-  template?: string | null;
   status: string;
-  training_date?: string | null;
-  trainer?: string | null;
   trainer_name?: string | null;
-  signatory_contact?: string | null;
   signatory_name: string;
   signatory_email: string;
+  signatory_designation?: string | null;
   link_open: boolean;
   link_sent_on?: string | null;
-  /** the one reminder for the link sent last, when it went out */
   reminder_sent_on?: string | null;
   /** the status in the customer's terms (Viewed) */
   customer_status?: string;
-  link_expires_on?: string | null;
+  remarks?: string | null;
+  sent_pdf?: { file_name: string; file_url: string } | null;
   signed_on?: string | null;
   signer_name?: string | null;
   signer_designation?: string | null;
   signer_email?: string | null;
-  signer_ip?: string | null;
-  audit_ref?: string | null;
+  signed_off_by?: string | null;
+  acceptance_reference?: string | null;
+  signed_copy?: string | null;
   signed_pdf?: { file_name: string; file_url: string } | null;
   counts: {
     total: number;
@@ -696,8 +954,23 @@ interface SignoffDetail {
     by_name?: string | null;
     at: string;
   }[];
-  can_manage: boolean;
   can_edit: boolean;
+  can_send: boolean;
+  can_clarify: boolean;
+  can_cancel: boolean;
+}
+
+interface SignoffMail {
+  name: string;
+  subject: string;
+  content: string;
+  sender: string;
+  sender_full_name?: string | null;
+  recipients: string;
+  cc?: string | null;
+  sent_or_received: "Sent" | "Received";
+  communication_date: string;
+  attachments: { name: string; file_name: string; file_url: string }[];
 }
 
 const props = defineProps<{ projectId: string; signoffId: string }>();
@@ -710,19 +983,36 @@ const detail = createResource({
   auto: true,
   onError() {},
 });
-watch(
-  () => props.signoffId,
-  () => detail.reload()
-);
+const mails = createResource({
+  url: "helpdesk.api.project_signoff.get_signoff_mails",
+  makeParams: () => ({ signoff: props.signoffId }),
+  auto: true,
+  onError() {},
+});
+function reloadAll() {
+  detail.reload();
+  mails.reload();
+}
+watch(() => props.signoffId, reloadAll);
 
 const s = computed(() => detail.data as SignoffDetail | undefined);
 const uat = computed(() => s.value?.signoff_type === "UAT");
-// signed or reopened here, but the ERP site's plan doesn't have it yet
+// the ERP site's words for the UAT's state now
+const erpState = computed(
+  () =>
+    ((
+      { "Signed Off": "Signed", Cancelled: "Reopened" } as Record<
+        string,
+        string
+      >
+    )[s.value?.status ?? ""])
+);
+// signed off or cancelled here, but the ERP site's plan doesn't have it yet
 const notRecorded = computed(
   () =>
     uat.value &&
-    ["Signed", "Reopened"].includes(s.value?.status ?? "") &&
-    s.value?.crm_recorded !== s.value?.status &&
+    !!erpState.value &&
+    s.value?.crm_recorded !== erpState.value &&
     // not while the first try is still queued: only once one failed
     !!s.value?.crm_failed
 );
@@ -738,96 +1028,95 @@ const itemNumber = computed(() =>
     (s.value?.items ?? []).map((item, i) => [item.name, i + 1])
   )
 );
+const addressText = computed(() =>
+  (s.value?.address_display || "").replace(/<br\s*\/?>/gi, "\n").trim()
+);
 
 const showAllLog = ref(false);
 const visibleLog = computed(() =>
   showAllLog.value ? s.value?.log ?? [] : (s.value?.log ?? []).slice(0, 8)
 );
 
-const linkLine = computed(() => {
+const sentLine = computed(() => {
   const d = s.value!;
-  if (d.status === "Signed")
+  if (d.status === "Signed Off")
     return {
       icon: LucideBadgeCheck,
-      text: __("Signed {0}", dateFormat(d.signed_on, "D MMM YYYY, h:mm A")),
+      text: __("Signed off {0}", dateFormat(d.signed_on, "D MMM YYYY")),
     };
-  if (d.link_open && d.reminder_sent_on)
+  if (d.status === "Sent" && d.reminder_sent_on)
     return {
-      icon: LucideLink,
+      icon: LucideSend,
       text: __(
-        "Reminder sent {0} with a new link; works until {1}",
-        dateFormat(d.reminder_sent_on, "D MMM YYYY"),
-        dateFormat(d.link_expires_on, "D MMM YYYY")
-      ),
-    };
-  if (d.link_open)
-    return {
-      icon: LucideLink,
-      text: __(
-        "Link sent {0}; works until {1}",
+        "Sent {0}; reminder sent {1}",
         dateFormat(d.link_sent_on, "D MMM YYYY"),
-        dateFormat(d.link_expires_on, "D MMM YYYY")
+        dateFormat(d.reminder_sent_on, "D MMM YYYY")
       ),
     };
-  if (d.link_sent_on && d.status !== "Draft")
+  if (d.status === "Sent")
     return {
-      icon: LucideLinkOff,
+      icon: LucideSend,
       text: __(
-        "No working link: it was revoked or has expired. Resend it to continue."
+        "Sent {0}; waiting for the customer's reply",
+        dateFormat(d.link_sent_on, "D MMM YYYY")
       ),
     };
-  return { icon: LucideLinkOff, text: __("Not sent to the customer yet") };
+  if (d.status === "Changes Requested")
+    return {
+      icon: LucideRotateCcw,
+      text: __("The customer asked for changes: edit it and send it again"),
+    };
+  if (d.status === "Cancelled")
+    return { icon: LucideCircleSlash, text: __("Cancelled") };
+  return { icon: LucideCircleDashed, text: __("Not sent to the customer yet") };
 });
 
-const showEdit = ref(false);
+function mailDoc(content: string) {
+  return `<!doctype html><html><head><meta charset="utf-8"><style>
+    body{font-family:-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;font-size:14px;
+    line-height:1.55;color:#1f2430;margin:12px;overflow-wrap:anywhere}</style></head>
+    <body>${content || ""}</body></html>`;
+}
+const openMail = ref<string | null>(null);
+
 const openTask = ref<TaskRef | null>(null);
 const busy = ref<string | null>(null);
 const confirming = ref<
-  "send" | "resend" | "revoke" | "delete" | "reopen" | null
+  "remind" | "signed" | "changes" | "cancel" | "revoke" | "delete" | null
 >(null);
-const reopenReason = ref("");
+const reason = ref("");
 const clarifying = ref<SignoffItem | null>(null);
 const clarifyNote = ref("");
 
 const menu = computed(() => {
   const d = s.value;
-  if (!d?.can_manage) return [];
+  if (!d) return [];
   const items = [];
-  if (d.link_open)
+  if (d.link_open && d.can_send)
     items.push({
-      label: __("Revoke link"),
+      label: __("Revoke questions link"),
       icon: LucideLinkOff,
       onClick: () => (confirming.value = "revoke"),
     });
-  if (d.status === "Signed")
-    items.push({
-      label: __("Reopen sign-off"),
-      icon: LucideRotateCcw,
-      onClick: () => {
-        reopenReason.value = "";
-        confirming.value = "reopen";
-      },
-    });
-  if (d.status === "Draft")
+  if (d.status === "Draft" && d.can_edit)
     items.push({
       label: __("Delete draft"),
       icon: LucideTrash2,
       onClick: () => (confirming.value = "delete"),
     });
+  if (d.can_cancel)
+    items.push({
+      label: __("Cancel sign-off"),
+      icon: LucideCircleSlash,
+      onClick: () => {
+        reason.value = "";
+        confirming.value = "cancel";
+      },
+    });
   return items;
 });
 
 const confirmCopy = computed(() => {
-  const email = s.value?.signatory_email ?? "";
-  if (confirming.value === "revoke")
-    return {
-      title: __("Revoke the link?"),
-      message: __(
-        "The link stops working at once, and the customer can't answer or sign until you send a new one."
-      ),
-      action: __("Revoke link"),
-      run: () => run("revoke", "revoke_signoff_link", {}, __("Link revoked")),
-    };
   if (confirming.value === "delete")
     return {
       title: __("Delete this draft?"),
@@ -847,13 +1136,12 @@ const confirmCopy = computed(() => {
       run: () => send(),
     };
   return {
-    title: __("Send a new link?"),
+    title: __("Revoke the questions link?"),
     message: __(
-      "{0} gets a new link and the earlier one stops working.",
-      email
+      "The link stops working at once, and the customer can't answer the questions until you send the mail again."
     ),
-    action: __("Send new link"),
-    run: () => send(),
+    action: __("Revoke link"),
+    run: () => run("revoke", "revoke_signoff_link", {}, __("Link revoked")),
   };
 });
 
@@ -872,7 +1160,7 @@ async function run(
     toast.success(success);
     confirming.value = null;
     clarifying.value = null;
-    await detail.reload();
+    reloadAll();
   } catch (e) {
     toast.error(errorText(e, __("That didn't work. Try again.")));
   } finally {
@@ -880,14 +1168,80 @@ async function run(
   }
 }
 
-function send() {
+function startChanges() {
+  reason.value = "";
+  confirming.value = "changes";
+}
+
+// ---------- mark signed off ----------
+
+const today = new Date().toISOString().slice(0, 10);
+const signedOff = reactive({ reply: "", date: today, contact: "", copy: "" });
+const contacts = ref<{ contact: string; full_name: string; email: string }[]>(
+  []
+);
+const replies = computed(
+  () =>
+    (mails.data as SignoffMail[] | undefined)?.filter(
+      (m) => m.sent_or_received === "Received"
+    ) ?? []
+);
+const replyOptions = computed(() => [
+  ...replies.value.map((m) => ({
+    label: `${dateFormat(m.communication_date, "D MMM, h:mm A")} · ${
+      m.sender_full_name || m.sender
+    }: ${m.subject}`,
+    value: m.name,
+  })),
+  { label: __("No reply in the mail history"), value: "" },
+]);
+const contactOptions = computed(() => {
+  const own = {
+    label: s.value?.signatory_name || "",
+    value: s.value?.signatory_contact || "",
+  };
+  return [
+    own,
+    ...contacts.value
+      .filter((c) => c.contact !== own.value)
+      .map((c) => ({ label: c.full_name, value: c.contact })),
+  ];
+});
+
+async function startSignedOff() {
+  const reply = replies.value[0];
+  Object.assign(signedOff, {
+    copy: "",
+    reply: reply?.name ?? "",
+    date: reply ? reply.communication_date.slice(0, 10) : today,
+    contact: s.value?.signatory_contact || "",
+  });
+  confirming.value = "signed";
+  try {
+    const form = await call("helpdesk.api.project_signoff.get_signoff_form", {
+      project: props.projectId,
+    });
+    contacts.value = form.contacts;
+  } catch {
+    // only the signatory can be picked then; that is the usual case anyway
+  }
+}
+
+function markSignedOff() {
   run(
-    "send",
-    "send_signoff_link",
-    {},
-    __("Link sent to {0}", s.value?.signatory_email ?? "")
+    "signed",
+    "mark_signed_off",
+    {
+      acceptance_reference: signedOff.reply || null,
+      signed_on: signedOff.date,
+      signed_off_by: signedOff.contact || null,
+      signed_copy: signedOff.reply ? null : signedOff.copy || null,
+    },
+    __("Marked signed off; the signed PDF is on the project")
   );
 }
+
+// ---------- clarify, delete ----------
 
 function startClarify(item: SignoffItem) {
   clarifyNote.value = "";

@@ -114,14 +114,14 @@
 			"fieldname": "project_type",
 			"fieldtype": "Select",
 			"label": "Project Type",
-			"options": "\nERP Implementation\nMobile App\nWebsite\nContent Calendar\nSupport\nOther",
+			"options": "\nERP Implementation\nMobile App\nWebsite\nContent Calendar\nDigital Marketing\nSupport\nOther",
 			"in_standard_filter": 1,
 			"description": "Helps the AI estimate how long this project's tasks take."
 		}
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-09-29 23:00:00.000000",
+	"modified": "2026-11-13 14:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "Project",

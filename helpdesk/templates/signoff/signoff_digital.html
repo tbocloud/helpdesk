@@ -1,0 +1,115 @@
+{#- Print format "Sign-off – Digital Marketing" (TBO's Sign-off requirements, Sign-off
+    document: Digital Marketing): its core is the deliverables table. Each section shows only
+    for the stages listed against it (HDProjectSignoff.shown_sections). -#}
+{%- if not (ctx is defined and ctx) -%}{%- set ctx = doc.document_context() -%}{%- endif -%}
+{% extends "helpdesk/templates/signoff/letter_base.html" %}
+{% import "helpdesk/templates/signoff/signoff_parts.html" as parts with context %}
+{% block doc_type %}{{ ctx.heading|e }}<br />{{ (doc.name or "")|e }}<br />{{
+ctx.date|e }}{% endblock %} {% block body %} {{ parts.header() }} {{
+parts.customer() }}
+
+<h2>{{ _("Engagement") }}</h2>
+<table class="facts">
+  {{ parts.fact(_("Project"), ctx.project_name) }} {{
+  parts.fact(_("Services"), doc.services) }} {{ parts.fact(_("Platforms"),
+  doc.platforms) }} {{ parts.fact(_("Account manager"), ctx.project_manager) }}
+</table>
+
+{% if "period" in ctx.shown %}
+<h2>{{ _("Period") }}</h2>
+<table class="facts">
+  {{ parts.fact(_("From"), ctx.dates.period_from) }} {{ parts.fact(_("To"),
+  ctx.dates.period_to) }} {% if ctx.content_calendar %}
+  <tr>
+    <th>{{ _("Content calendar") }}</th>
+    <td>
+      <a href="{{ ctx.content_calendar|e }}">{{ ctx.content_calendar|e }}</a>
+    </td>
+  </tr>
+  {% endif %}
+</table>
+{% endif %} {% if "deliverables" in ctx.shown and doc.deliverables %}
+<h2>{{ _("Deliverables") }}</h2>
+<table class="list grid">
+  <thead>
+    <tr>
+      <th>{{ _("Deliverable") }}</th>
+      <th>{{ _("Planned") }}</th>
+      <th>{{ _("Delivered") }}</th>
+      <th>{{ _("Approved by customer") }}</th>
+      <th>{{ _("Link or remarks") }}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in doc.deliverables %}
+    <tr>
+      <td>{{ _(row.deliverable_type)|e }}</td>
+      <td class="num">{{ row.planned_qty or 0 }}</td>
+      <td class="num">{{ row.delivered_qty or 0 }}</td>
+      <td>{{ _("Yes") if row.customer_approved else _("No") }}</td>
+      <td>
+        {{ (row.link or "")|e }}{% if row.link and row.remarks %}<br />{% endif
+        %}{{ (row.remarks or "")|e }}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %} {% if "performance" in ctx.shown %}
+<h2>{{ _("Performance summary") }}</h2>
+<table class="facts">
+  {{ parts.fact(_("Reach"), "{:,}".format(doc.reach) if doc.reach else "") }}
+  {{ parts.fact(_("Impressions"), "{:,}".format(doc.impressions) if
+  doc.impressions else "") }} {{ parts.fact(_("Engagement rate"),
+  ("%s%%"|format(doc.engagement_rate)) if doc.engagement_rate else "") }} {{
+  parts.fact(_("Followers gained"), "{:,}".format(doc.followers_gained) if
+  doc.followers_gained else "") }} {{ parts.fact(_("Website visits"),
+  "{:,}".format(doc.website_visits) if doc.website_visits else "") }} {{
+  parts.fact(_("Leads"), "{:,}".format(doc.leads) if doc.leads else "") }}
+</table>
+{% if doc.performance_summary %}
+<p>{{ doc.performance_summary|e }}</p>
+{% endif %} {% endif %} {% if "ad_spend" in ctx.shown %}
+<h2>{{ _("Ad spend") }}</h2>
+<table class="facts">
+  {{ parts.fact(_("Approved budget"), frappe.format(doc.approved_budget,
+  {"fieldtype": "Currency"}) if doc.approved_budget else "") }} {{
+  parts.fact(_("Actual spend"), frappe.format(doc.actual_spend, {"fieldtype":
+  "Currency"}) if doc.actual_spend else "") }} {{ parts.fact(_("Billed
+  through"), _(doc.billed_through) if doc.billed_through else "") }}
+</table>
+{% endif %} {% if "carry_forward" in ctx.shown and doc.carry_forward %}
+<h2>{{ _("Carry-forward items") }}</h2>
+<table class="list grid">
+  <thead>
+    <tr>
+      <th>{{ _("Item") }}</th>
+      <th>{{ _("Reason") }}</th>
+      <th>{{ _("Moved to") }}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in doc.carry_forward %}
+    <tr>
+      <td>{{ row.item|e }}</td>
+      <td>{{ (row.reason or "")|e }}</td>
+      <td>{{ (row.moved_to or "")|e }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %} {% if "next_plan" in ctx.shown and doc.next_period_plan %}
+<h2>{{ _("Next period plan") }}</h2>
+<p>{{ doc.next_period_plan|e }}</p>
+{% endif %} {% if "website" in ctx.shown %}
+<h2>{{ _("Website go-live") }}</h2>
+<table class="facts">
+  {{ parts.fact(_("Live URL"), doc.live_site_url) }} {{
+  parts.fact(_("Go-live date"), ctx.dates.go_live_date) }} {{
+  parts.fact(_("Pages delivered"), doc.pages_delivered) }}
+</table>
+{% endif %} {% if "attachments" in ctx.shown and ctx.delivery_report_name %}
+<h2>{{ _("Attachments") }}</h2>
+<p>{{ _("Delivery report") }}: {{ ctx.delivery_report_name|e }}</p>
+{% endif %} {{ parts.questions() }} {{ parts.declaration_and_signatures() }} {%
+endblock %}

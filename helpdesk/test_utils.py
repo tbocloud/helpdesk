@@ -4104,12 +4104,22 @@ def fake_request(test_case, cookies: dict | None = None):
     test_case.addCleanup(setattr, frappe.local, "request", previous)
 
 
-def fake_pdf_renderer():
-    """Patches PDF rendering so signing works without wkhtmltopdf; use it as a context manager."""
+def blank_pdf() -> bytes:
+    """A one-page PDF that parses: File opens uploaded PDFs, so a fake one must be real."""
     import io
-    from contextlib import ExitStack
 
     from pypdf import PdfWriter
+
+    writer = PdfWriter()
+    writer.add_blank_page(width=595, height=842)
+    pdf = io.BytesIO()
+    writer.write(pdf)
+    return pdf.getvalue()
+
+
+def fake_pdf_renderer():
+    """Patches PDF rendering so signing works without wkhtmltopdf; use it as a context manager."""
+    from contextlib import ExitStack
 
     stack = ExitStack()
     stack.enter_context(
@@ -4118,13 +4128,53 @@ def fake_pdf_renderer():
             return_value="/usr/bin/wkhtmltopdf",
         )
     )
-    # File parses uploaded PDFs, so the fake must be a real one
-    writer = PdfWriter()
-    writer.add_blank_page(width=595, height=842)
-    pdf = io.BytesIO()
-    writer.write(pdf)
-    stack.enter_context(patch("frappe.utils.pdf.get_pdf", return_value=pdf.getvalue()))
+    stack.enter_context(patch("frappe.utils.pdf.get_pdf", return_value=blank_pdf()))
     return stack
+
+
+def make_customer_address(customer: str, title: str, is_primary: bool = True):
+    """An Address linked to the HD Customer `customer` (the sign-off's customer address); a
+    site with no default Address Template gets one, since the address can't be shown without."""
+    if not frappe.db.exists("Address Template", {"is_default": 1}):
+        frappe.get_doc(
+            {
+                "doctype": "Address Template",
+                "country": frappe.db.get_value("Country", {}, "name") or "India",
+                "is_default": 1,
+                "template": "{{ address_line1 }}<br>{{ city }}<br>{{ country }}",
+            }
+        ).insert(ignore_permissions=True)
+    return frappe.get_doc(
+        {
+            "doctype": "Address",
+            "address_title": title,
+            "address_type": "Billing",
+            "address_line1": "12 Spice Market Road",
+            "city": "Kochi",
+            "country": frappe.db.get_value("Country", {}, "name") or "India",
+            "is_primary_address": 1 if is_primary else 0,
+            "links": [{"link_doctype": "HD Customer", "link_name": customer}],
+        }
+    ).insert(ignore_permissions=True)
+
+
+def receive_signoff_reply(signoff, sender: str, subject: str = "Re: sign-off"):
+    """The customer's reply landing in a sign-off's mail thread, as an incoming email
+    account files it: a received Communication referencing the sign-off."""
+    return frappe.get_doc(
+        {
+            "doctype": "Communication",
+            "communication_medium": "Email",
+            "communication_type": "Communication",
+            "sent_or_received": "Received",
+            "subject": subject,
+            "content": "<p>We accept. Please go ahead.</p>",
+            "sender": sender,
+            "sender_full_name": sender.split("@")[0],
+            "reference_doctype": signoff.doctype,
+            "reference_name": signoff.name,
+        }
+    ).insert(ignore_permissions=True)
 
 
 def forget_signoff_lead_access():

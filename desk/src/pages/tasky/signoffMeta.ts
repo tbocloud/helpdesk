@@ -1,10 +1,9 @@
 import LucideCircle from "~icons/lucide/circle";
 import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideCircleDashed from "~icons/lucide/circle-dashed";
-import LucideCircleDot from "~icons/lucide/circle-dot";
 import LucideCircleHelp from "~icons/lucide/circle-help";
+import LucideCircleSlash from "~icons/lucide/circle-slash";
 import LucideEye from "~icons/lucide/eye";
-import LucidePenLine from "~icons/lucide/pen-line";
 import LucideRotateCcw from "~icons/lucide/rotate-ccw";
 import LucideSend from "~icons/lucide/send";
 import LucideTriangleAlert from "~icons/lucide/triangle-alert";
@@ -16,10 +15,24 @@ export const PLACEHOLDERS = [
   "contact_salutation",
   "contact_name",
   "customer_name",
+  "customer_address",
   "project_name",
+  "erpnext_version",
+  "uat_site_url",
+  "live_site_url",
+  "uat_start_date",
+  "uat_end_date",
+  "go_live_date",
+  "support_start_date",
+  "support_end_date",
+  "srs_version",
+  "srs_date",
   "modules",
   "training_date",
   "trainer_name",
+  "services",
+  "period_from",
+  "period_to",
   "sign_off_link",
   "sender_name",
   "sender_designation",
@@ -43,26 +56,52 @@ export interface SignoffQuestion {
   response?: string;
 }
 
+// TBO's Sign-off requirements' statuses (docs/project-signoff.md, Statuses).
 // Labels are untranslated keys; callers pass them through __() at render time.
+export const SIGNOFF_STATUSES = [
+  "Draft",
+  "Sent",
+  "Changes Requested",
+  "Signed Off",
+  "Cancelled",
+];
 const SIGNOFF_STATUS: Record<string, StatusMeta> = {
   Draft: { label: "Draft", icon: LucideCircleDashed, tone: "neutral" },
   Sent: { label: "Sent", icon: LucideSend, tone: "neutral" },
-  // Sent, and the customer opened the link with their code (customer_status)
+  // Sent, and the customer opened the questions link with their code (customer_status)
   Viewed: { label: "Viewed", icon: LucideEye, tone: "info" },
-  "In progress": { label: "In progress", icon: LucideCircleDot, tone: "info" },
-  "Needs clarification": {
-    label: "Needs clarification",
-    icon: LucideCircleHelp,
+  "Changes Requested": {
+    label: "Changes Requested",
+    icon: LucideRotateCcw,
     tone: "warning",
   },
-  "Ready to sign": {
-    label: "Ready to sign",
-    icon: LucidePenLine,
-    tone: "info",
+  "Signed Off": {
+    label: "Signed Off",
+    icon: LucideCircleCheck,
+    tone: "success",
   },
-  Signed: { label: "Signed", icon: LucideCircleCheck, tone: "success" },
-  Reopened: { label: "Reopened", icon: LucideRotateCcw, tone: "warning" },
+  Cancelled: { label: "Cancelled", icon: LucideCircleSlash, tone: "neutral" },
 };
+
+// the ten stages of TBO's Sign-off requirements (HD Signoff Template's stage; their fields
+// and rules come from the server, hd_signoff_template.STAGES)
+export const SIGNOFF_STAGES = [
+  "SRS / Requirement Sign-off",
+  "Module Training Sign-off",
+  "UAT Sign-off",
+  "UAT Sign-off and Go-Live",
+  "Go-Live Confirmation",
+  "Project Completion / Handover",
+  "Content Calendar / Strategy Approval",
+  "Monthly Deliverables Sign-off",
+  "Campaign Completion Sign-off",
+  "Website / Landing Page Go-Live",
+];
+
+/** The details, mail and questions can be edited (before sending, or after changes were asked). */
+export function isEditableStatus(status?: string): boolean {
+  return status === "Draft" || status === "Changes Requested";
+}
 
 const RESPONSE: Record<string, StatusMeta> = {
   Pending: { label: "Pending", icon: LucideCircle, tone: "neutral" },

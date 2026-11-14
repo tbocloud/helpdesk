@@ -158,15 +158,16 @@
         </component>
       </li>
     </ol>
+    <!-- inside the one root, so the page's grid class (col-span) reaches the section -->
+    <SignoffFormDialog
+      v-if="uat.data?.project && uat.data.can_send"
+      v-model:open="showSend"
+      :project-id="uat.data.project"
+      uat
+      :lead="leadId"
+      @saved="uat.reload()"
+    />
   </section>
-  <SignoffFormDialog
-    v-if="uat.data?.project && uat.data.can_send"
-    v-model:open="showSend"
-    :project-id="uat.data.project"
-    uat
-    :lead="leadId"
-    @saved="uat.reload()"
-  />
 </template>
 
 <script setup lang="ts">
@@ -272,7 +273,7 @@ watch(
 const uatStatus = computed(() => uat.data?.signoff?.customer_status || "");
 const uatMeta = computed(() => signoffStatusMeta(uatStatus.value));
 const uatLabel = computed(() => __(uatMeta.value.label));
-const uatSigned = computed(() => uat.data?.signoff?.status === "Signed");
+const uatSigned = computed(() => uat.data?.signoff?.status === "Signed Off");
 const uatSigner = computed(() => {
   const s = uat.data?.signoff;
   return s?.signer_name

@@ -1,4 +1,7 @@
-"""The customer's training sign-off page at /project-signoff?token=...
+"""The customer's sign-off questions page at /project-signoff?token=...
+
+The customer answers the sign-off's questions here; they accept the sign-off itself by replying
+to our mail, and our coordinator marks it signed off (TBO's Sign-off requirements).
 
 The customer has no helpdesk login. Two things let them in, and every call checks
 both again:
@@ -30,8 +33,8 @@ from frappe.utils import (
 
 from helpdesk.helpdesk.doctype.hd_project_signoff.hd_project_signoff import (
     CODE_VERIFIED,
-    DRAFT,
-    SIGNED,
+    DONE,
+    SENT,
     HDProjectSignoff,
 )
 
@@ -61,7 +64,7 @@ def find_signoff(token: str):
 
 def link_state(doc) -> str:
     """'open', 'expired' or 'invalid'."""
-    if not doc or not doc.link_token_hash or doc.status == DRAFT:
+    if not doc or not doc.link_token_hash or doc.status != SENT:
         return "invalid"
     if not doc.link_expires_on or get_datetime(doc.link_expires_on) <= now_datetime():
         return "expired"
@@ -284,33 +287,6 @@ def save_response(token: str, item: str, response: str, comment: str = "") -> di
     return customer_view(doc)
 
 
-@frappe.whitelist(  # sign-off page: link token and verified code session are checked inside - nosemgrep
-    allow_guest=True, methods=["POST"]
-)
-@rate_limit(key="token", limit=10, seconds=10 * 60)
-def sign(token: str, full_name: str, designation: str, confirm: bool = False) -> dict:
-    doc, session = require_session(token)
-    if not frappe.utils.sbool(confirm):
-        frappe.throw(_("Tick the confirmation to sign."))
-    ip, agent = request_meta()
-    doc.sign_off(cstr(full_name), cstr(designation), session["email"], ip, agent)
-    return customer_view(doc)
-
-
-@frappe.whitelist(  # sign-off page: link token and verified code session are checked inside - nosemgrep
-    allow_guest=True, methods=["GET"]
-)
-def download_pdf(token: str):
-    """The signed record; private on the project, so it is streamed only to the verified signatory."""
-    doc, _session = require_session(token)
-    if doc.status != SIGNED or not doc.signed_pdf:
-        frappe.throw(_("There is no signed record yet."), frappe.DoesNotExistError)
-    file_doc = frappe.get_doc("File", doc.signed_pdf)
-    frappe.local.response.filename = file_doc.file_name
-    frappe.local.response.filecontent = file_doc.get_content()
-    frappe.local.response.type = "download"
-
-
 # --------------------------------------------------------------- page --
 
 
@@ -342,12 +318,9 @@ def words(doc) -> dict:
             "escalate": _("Blocker"),
             "trainer": _("Tested with"),
             "date": _("Tested on"),
-            "signed_heading": _("User acceptance signed off"),
-            "sign_heading": _("Sign off the acceptance tests"),
-            "confirm": _(
-                "I confirm that we tested the system as listed above and accept it."
+            "all_done": _(
+                "Every test has passed. Thank you. Please reply to our email to confirm your sign-off."
             ),
-            "sign_button": _("Sign off UAT"),
             "followup_label": _(
                 "What went wrong? Our team fixes it and asks you to test again."
             ),
@@ -360,10 +333,8 @@ def words(doc) -> dict:
             "followed_up": _("Our team fixed this."),
             "followed_up_note": _("Our team fixed this: {0}"),
             "again": _("Please test it again."),
-            "locked_one": _("Sign-off opens once every test has passed. 1 test left."),
-            "locked_many": _(
-                "Sign-off opens once every test has passed. {0} tests left."
-            ),
+            "left_one": _("1 test left."),
+            "left_many": _("{0} tests left."),
         }
     return {
         "title": _("Training sign-off"),
@@ -372,12 +343,9 @@ def words(doc) -> dict:
         "escalate": _("Escalate"),
         "trainer": _("Trainer"),
         "date": _("Training date"),
-        "signed_heading": _("Training signed off"),
-        "sign_heading": _("Sign off the training"),
-        "confirm": _(
-            "I confirm that the training listed above has been completed to our satisfaction."
+        "all_done": _(
+            "Every item is done. Thank you. Please reply to our email to confirm your sign-off."
         ),
-        "sign_button": _("Sign off training"),
         "followup_label": _("What needs explaining? Your trainer will follow up."),
         "escalate_label": _(
             "What should we escalate? It goes to your trainer and our project managers."
@@ -388,8 +356,8 @@ def words(doc) -> dict:
         "followed_up": _("Your trainer has followed up on this."),
         "followed_up_note": _("Your trainer followed up: {0}"),
         "again": _("Please answer it again."),
-        "locked_one": _("Sign-off opens once every item is Done. 1 item left."),
-        "locked_many": _("Sign-off opens once every item is Done. {0} items left."),
+        "left_one": _("1 item left."),
+        "left_many": _("{0} items left."),
     }
 
 
@@ -420,14 +388,5 @@ def customer_view(doc) -> dict:
             }
             for row in doc.items
         ],
-        "signed": (
-            {
-                "name": doc.signer_name,
-                "designation": doc.signer_designation,
-                "on": frappe.utils.format_datetime(doc.signed_on),
-                "has_pdf": bool(doc.signed_pdf),
-            }
-            if doc.status == SIGNED
-            else None
-        ),
+        "all_done": bool(doc.items) and all(row.response == DONE for row in doc.items),
     }
