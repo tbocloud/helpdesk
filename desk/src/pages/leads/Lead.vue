@@ -165,7 +165,7 @@
       </div>
     </header>
 
-    <div class="flex-1 overflow-auto">
+    <div class="relative flex-1 overflow-auto">
       <div class="mx-auto w-full max-w-6xl px-4 py-5 md:px-6">
         <TaskyState
           v-if="detail.error && !data"
@@ -256,6 +256,7 @@
                 :can-write="!!lead.can_write"
                 :can-call="!!lead.can_call"
                 :can-remove="!!lead.can_remove_numbers"
+                :batch-item="batchItem"
                 @changed="detail.reload()"
               />
             </section>
@@ -542,7 +543,7 @@ import {
   toast,
 } from "frappe-ui";
 import { computed, ref, useId, watch, type Component } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import LucideArrowRight from "~icons/lucide/arrow-right";
 import LucideBot from "~icons/lucide/bot";
 import LucideCalendar from "~icons/lucide/calendar";
@@ -595,7 +596,7 @@ import {
   type LeadTimelineEntry,
 } from "./leads";
 import { placeCall, placing } from "./callBox";
-import { startCall } from "./pendingCalls";
+import { queueChanged, startCall } from "./pendingCalls";
 
 const props = defineProps<{ leadId: string }>();
 
@@ -635,6 +636,16 @@ function timelineIcon(entry: LeadTimelineEntry): Component {
 }
 
 const router = useRouter();
+const route = useRoute();
+
+/** Opened from Today's calls: the call there it belongs to, so its result counts in the
+ * batch. Once a result is recorded it is done, and a later call here is an ordinary one. */
+const batchItem = computed(() =>
+  typeof route.query.item === "string" ? route.query.item : null
+);
+watch(queueChanged, () => {
+  if (batchItem.value) router.replace({ query: {} });
+});
 
 /** After a merge the lead that was kept is the one to see (the merged one is gone). */
 function merged(keep: string) {
@@ -678,6 +689,8 @@ function callWithMyOperator() {
     company: lead.value?.company_name,
     phone: leadPhone.value,
     number: null,
+    // opened from Today's calls: the result counts in that batch
+    item: batchItem.value,
     product: lead.value?.product,
   });
 }
@@ -688,6 +701,7 @@ function phoneCalled() {
     lead_name: leadName.value,
     phone: leadPhone.value,
     number: lead.value?.mobile_no || null,
+    item: batchItem.value,
     via: "phone",
   });
 }

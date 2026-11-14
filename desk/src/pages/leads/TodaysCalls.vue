@@ -88,24 +88,22 @@
         <Button :label="__('Try again')" @click="reload" />
       </div>
 
-      <div
-        class="grid items-start gap-4 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:gap-6"
+      <!-- the batch: which slot, how long is left, how far along, and the next one -->
+      <section
+        :aria-labelledby="ids.batch"
+        class="rounded-xl border border-outline-gray-2 bg-surface-base p-4"
       >
-        <!-- the batch: which slot, how long is left, how far along -->
-        <section
-          :aria-labelledby="ids.batch"
-          class="rounded-xl border border-outline-gray-2 bg-surface-base lg:col-start-1 lg:row-start-1"
-        >
-          <div class="p-4">
+        <div class="flex flex-wrap items-start gap-x-6 gap-y-3">
+          <div class="min-w-0 flex-1">
             <template v-if="shown.batch">
-              <div class="flex flex-wrap items-baseline gap-x-2">
+              <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                 <h3 :id="ids.batch" class="text-base-medium text-ink-gray-9">
                   {{ shown.batch.slot }}
                 </h3>
                 <span
-                  class="ml-auto inline-flex items-center gap-1.5 font-mono text-sm tabular-nums"
+                  class="inline-flex items-center gap-1.5 font-mono text-sm tabular-nums"
                   :class="
-                    hurry ? 'font-medium text-warning' : 'text-ink-gray-8'
+                    hurry ? 'font-medium text-warning' : 'text-ink-gray-7'
                   "
                   role="timer"
                 >
@@ -116,17 +114,19 @@
                   />
                   {{ timeLeftText(secondsLeft) }}
                 </span>
+                <span
+                  v-if="shown.batch.campaign_product"
+                  class="inline-flex items-center gap-1.5 text-sm text-ink-gray-7"
+                >
+                  <LucideBox
+                    class="size-4 text-ink-gray-6"
+                    aria-hidden="true"
+                  />
+                  {{ __("Calls for") }}: {{ shown.batch.campaign_product }}
+                </span>
               </div>
-              <!-- the product the next batches are for, when a manager set one -->
-              <p
-                v-if="shown.batch.campaign_product"
-                class="mt-1 inline-flex items-center gap-1.5 text-sm text-ink-gray-7"
-              >
-                <LucideBox class="size-4 text-ink-gray-6" aria-hidden="true" />
-                {{ __("Calls for") }}: {{ shown.batch.campaign_product }}
-              </p>
               <div
-                class="mt-3 h-1.5 overflow-hidden rounded-full"
+                class="mt-3 h-1.5 max-w-xl overflow-hidden rounded-full"
                 :class="TRACK.neutral"
                 role="progressbar"
                 :aria-valuemin="0"
@@ -197,7 +197,7 @@
             </template>
             <p
               v-if="shown.today && shown.today.size"
-              class="mt-2.5 font-mono text-p-xs tabular-nums text-ink-gray-6"
+              class="mt-2 font-mono text-p-xs tabular-nums text-ink-gray-6"
             >
               {{
                 __(
@@ -209,176 +209,157 @@
               }}
             </p>
           </div>
-        </section>
 
-        <!-- the call to make now -->
-        <div class="lg:col-start-2 lg:row-span-3 lg:row-start-1">
-          <CallRow
-            v-if="current"
-            :key="current.item"
-            :call="current"
-            :position="
-              __(
-                'Call {0} of {1}',
-                String(currentPosition),
-                String(queue.length)
-              )
-            "
-            :overdue="overdueItems.has(current.item)"
-            :can-call="!!shown.can_call"
-            :read-only="readOnly"
-            :dialing="dialing === current.lead"
-            @dial="dial"
-            @dialed="dialed"
-            @outcome="answer"
-          />
+          <!-- the next batch, or why not yet -->
           <div
-            v-else
-            class="flex flex-col items-center gap-1 rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-12 text-center"
+            v-if="!readOnly"
+            class="flex w-full flex-col gap-2 sm:w-auto sm:max-w-xs sm:items-end"
           >
-            <LucideCheckCheck class="size-6 text-success" aria-hidden="true" />
-            <p class="text-base-medium text-ink-gray-9">
-              {{
-                shown.batch
-                  ? __("Nothing left to call in this batch")
-                  : __("No call waiting")
-              }}
-            </p>
-            <p class="text-p-sm text-ink-gray-6">
-              {{
-                shown.scheduled.length
-                  ? __("Some calls come back later, listed below.")
-                  : readOnly
-                  ? __(
-                      "Their next batch comes when they ask for it or the next slot opens."
-                    )
-                  : __("Ask for the next batch when you are ready.")
-              }}
+            <Button
+              class="w-full sm:w-auto"
+              :variant="shown.next_batch?.allowed ? 'solid' : 'subtle'"
+              :label="__('Get next batch')"
+              :disabled="!shown.next_batch?.allowed || nextBatch.loading"
+              :loading="nextBatch.loading"
+              :aria-describedby="
+                !shown.next_batch?.allowed && shown.next_batch?.reason
+                  ? ids.reason
+                  : undefined
+              "
+              @click="getNext"
+            />
+            <p
+              v-if="!shown.next_batch?.allowed && shown.next_batch?.reason"
+              :id="ids.reason"
+              class="flex items-start gap-1.5 text-p-xs text-ink-gray-6 sm:text-right"
+              aria-live="polite"
+            >
+              <LucideInfo
+                class="mt-0.5 size-3.5 shrink-0 sm:hidden"
+                aria-hidden="true"
+              />
+              {{ shown.next_batch.reason }}
             </p>
           </div>
         </div>
+      </section>
 
-        <!-- the queue: pending first, then what was missed in its slot (kept, and still callable) -->
-        <section
-          :aria-labelledby="ids.pending"
-          class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base lg:col-start-1 lg:row-start-2"
+      <!-- the queue: pending first, then what was missed in its slot (kept, and still
+           callable); a row opens the lead, where the call is made -->
+      <section
+        :aria-labelledby="ids.pending"
+        class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
+      >
+        <h3
+          :id="ids.pending"
+          class="flex items-baseline justify-between border-b border-outline-gray-1 px-4 py-3 text-base-medium text-ink-gray-9"
         >
-          <h3
-            :id="ids.pending"
-            class="flex items-baseline justify-between border-b border-outline-gray-1 px-4 py-3 text-base-medium text-ink-gray-9"
+          {{ __("To call") }}
+          <span class="font-mono text-sm tabular-nums text-ink-gray-6">{{
+            queue.length
+          }}</span>
+        </h3>
+        <ol v-if="queue.length" role="list">
+          <li
+            v-for="(item, i) in queue"
+            :key="item.item"
+            class="border-b border-outline-gray-1 last:border-b-0"
           >
-            {{ __("To call") }}
-            <span class="font-mono text-sm tabular-nums text-ink-gray-6">{{
-              queue.length
-            }}</span>
-          </h3>
-          <ol v-if="queue.length" role="list">
-            <li
-              v-for="(item, i) in queue"
-              :key="item.item"
-              class="border-b border-outline-gray-1 last:border-b-0"
+            <router-link
+              :to="leadRoute(item)"
+              class="flex min-h-14 items-center gap-3 px-4 py-3 transition-colors hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-highlight"
             >
-              <button
-                type="button"
-                class="relative flex w-full items-center gap-3 px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-highlight"
-                :class="
-                  item.item === current?.item
-                    ? 'bg-brand-soft before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-brand'
-                    : 'hover:bg-surface-gray-1'
-                "
-                :aria-current="item.item === current?.item ? 'true' : undefined"
-                @click="pickedItem = item.item"
+              <span
+                class="w-6 shrink-0 font-mono text-sm tabular-nums text-ink-gray-6"
+                >{{ i + 1 }}</span
               >
+              <span class="flex min-w-0 flex-1 flex-col">
+                <span class="truncate text-base-medium text-ink-gray-9">{{
+                  queueName(item)
+                }}</span>
                 <span
-                  class="w-5 shrink-0 font-mono text-sm tabular-nums text-ink-gray-6"
-                  >{{ i + 1 }}</span
+                  v-if="queuePlace(item)"
+                  class="truncate text-sm text-ink-gray-6"
+                  >{{ queuePlace(item) }}</span
                 >
-                <span class="flex min-w-0 flex-1 flex-col">
-                  <span class="truncate text-base-medium text-ink-gray-9">{{
-                    queueName(item)
-                  }}</span>
-                  <span class="truncate text-sm text-ink-gray-6">{{
-                    queuePlace(item)
-                  }}</span>
-                </span>
-                <TaskyBadge
-                  v-if="overdueItems.has(item.item)"
-                  tone="danger"
-                  :icon="LucideAlarmClock"
-                  :label="__('Overdue')"
-                />
-                <TaskyBadge
-                  v-else-if="item.reason"
-                  :tone="item.retry_at ? 'warning' : 'neutral'"
-                  :label="item.reason"
-                />
-              </button>
-            </li>
-          </ol>
-          <p v-else class="px-4 py-6 text-center text-p-sm text-ink-gray-6">
-            {{ __("The queue is empty.") }}
-          </p>
-          <p
-            v-if="shown.scheduled.length"
-            class="flex items-center gap-1.5 border-t border-outline-gray-1 px-4 py-3 text-p-sm text-ink-gray-7"
-          >
-            <LucideCalendarClock class="size-4 shrink-0" aria-hidden="true" />
-            <span class="tabular-nums">
-              {{
-                __(
-                  "{0} come back later, the next at {1}",
-                  String(shown.scheduled.length),
-                  dayjs(shown.scheduled[0].retry_at).format("h:mm A")
-                )
-              }}
-            </span>
-          </p>
-          <p
-            v-if="shown.overdue.length"
-            class="border-t border-outline-gray-1 px-4 py-3 text-p-sm text-ink-gray-7"
-          >
+              </span>
+              <span
+                v-if="item.summary.phone"
+                class="hidden shrink-0 font-mono text-sm tabular-nums text-ink-gray-7 md:block"
+                >{{ item.summary.phone }}</span
+              >
+              <TaskyBadge
+                v-if="overdueItems.has(item.item)"
+                tone="danger"
+                :icon="LucideAlarmClock"
+                :label="__('Overdue')"
+              />
+              <TaskyBadge
+                v-else-if="item.reason"
+                :tone="item.retry_at ? 'warning' : 'neutral'"
+                :label="item.reason"
+              />
+              <LucideChevronRight
+                class="size-4 shrink-0 text-ink-gray-5"
+                aria-hidden="true"
+              />
+            </router-link>
+          </li>
+        </ol>
+        <div
+          v-else
+          class="flex flex-col items-center gap-1 px-4 py-12 text-center"
+        >
+          <LucideCheckCheck class="size-6 text-success" aria-hidden="true" />
+          <p class="text-base-medium text-ink-gray-9">
             {{
-              readOnly
-                ? __(
-                    "Not called in their slot. They stay here until they are called."
-                  )
-                : __(
-                    "Not called in their slot. They stay here until you call them."
-                  )
+              shown.batch
+                ? __("Nothing left to call in this batch")
+                : __("No call waiting")
             }}
           </p>
-        </section>
-
-        <!-- the next batch, or why not yet -->
-        <div
-          v-if="!readOnly"
-          class="flex flex-col gap-2 lg:col-start-1 lg:row-start-3"
-        >
-          <Button
-            class="w-full sm:w-auto sm:self-start"
-            size="lg"
-            :variant="shown.next_batch?.allowed ? 'solid' : 'subtle'"
-            :label="__('Get next batch')"
-            :disabled="!shown.next_batch?.allowed || nextBatch.loading"
-            :loading="nextBatch.loading"
-            :aria-describedby="
-              !shown.next_batch?.allowed && shown.next_batch?.reason
-                ? ids.reason
-                : undefined
-            "
-            @click="getNext"
-          />
-          <p
-            v-if="!shown.next_batch?.allowed && shown.next_batch?.reason"
-            :id="ids.reason"
-            class="flex items-start gap-1.5 text-p-sm text-ink-gray-7"
-            aria-live="polite"
-          >
-            <LucideInfo class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-            {{ shown.next_batch.reason }}
+          <p class="text-p-sm text-ink-gray-6">
+            {{
+              shown.scheduled.length
+                ? __("Some calls come back later.")
+                : readOnly
+                ? __(
+                    "Their next batch comes when they ask for it or the next slot opens."
+                  )
+                : __("Ask for the next batch when you are ready.")
+            }}
           </p>
         </div>
-      </div>
+        <p
+          v-if="shown.scheduled.length"
+          class="flex items-center gap-1.5 border-t border-outline-gray-1 px-4 py-3 text-p-sm text-ink-gray-7"
+        >
+          <LucideCalendarClock class="size-4 shrink-0" aria-hidden="true" />
+          <span class="tabular-nums">
+            {{
+              __(
+                "{0} come back later, the next at {1}",
+                String(shown.scheduled.length),
+                dayjs(shown.scheduled[0].retry_at).format("h:mm A")
+              )
+            }}
+          </span>
+        </p>
+        <p
+          v-if="shown.overdue.length"
+          class="border-t border-outline-gray-1 px-4 py-3 text-p-sm text-ink-gray-7"
+        >
+          {{
+            readOnly
+              ? __(
+                  "Not called in their slot. They stay here until they are called."
+                )
+              : __(
+                  "Not called in their slot. They stay here until you call them."
+                )
+          }}
+        </p>
+      </section>
     </template>
 
     <!-- a watcher: what they already called today, newest first -->
@@ -447,15 +428,6 @@
         </li>
       </ul>
     </section>
-
-    <CallOutcomeDialog
-      v-model:open="showOutcome"
-      :mode="flow"
-      :call="flowCall"
-      :stages="options?.stages ?? []"
-      :start-note="flowNote"
-      @answer="saveFlow"
-    />
   </div>
 </template>
 
@@ -466,12 +438,13 @@ import { FILL, TRACK } from "@/components/tone";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
 import { useDocumentVisibility, useIntervalFn, useNow } from "@vueuse/core";
-import { Button, call, dayjs, toast } from "frappe-ui";
+import { Button, dayjs, toast } from "frappe-ui";
 import { computed, ref, useId, watch } from "vue";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
 import LucideBox from "~icons/lucide/box";
 import LucideCalendarClock from "~icons/lucide/calendar-clock";
 import LucideCheckCheck from "~icons/lucide/check-check";
+import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideClock from "~icons/lucide/clock";
@@ -480,8 +453,6 @@ import LucideInfo from "~icons/lucide/info";
 import LucidePhoneOff from "~icons/lucide/phone-off";
 import LucidePhoneOutgoing from "~icons/lucide/phone-outgoing";
 import CallingFor from "./CallingFor.vue";
-import CallOutcomeDialog, { type OutcomeAnswer } from "./CallOutcomeDialog.vue";
-import CallRow from "./CallRow.vue";
 import {
   OUTCOME_LOOK,
   OUTCOMES,
@@ -489,16 +460,12 @@ import {
   useMemberCalls,
   useMyCalls,
   useNextBatch,
-  useRecordOutcome,
-  withOutcome,
   type CallCounts,
   type CallOutcome,
   type MyCalls,
   type QueueCall,
 } from "./callBatches";
-import { placeCall, placing } from "./callBox";
-import { loadPendingCalls, queueChanged, startCall } from "./pendingCalls";
-import { leadOptions, loadLeadOptions, type LeadOptions } from "./leads";
+import { queueChanged } from "./pendingCalls";
 
 const ids = {
   batch: `calls-batch-${useId()}`,
@@ -516,22 +483,19 @@ const outcomeLabel = (value: CallOutcome) =>
   OUTCOMES.find((o) => o.value === value)?.label ?? value;
 // under this many seconds left the clock turns to a warning
 const HURRY_SECONDS = 15 * 60;
-// a watcher wants it live; the caller's own answers already update it at once
+// a watcher wants it live; the caller's own results update it through queueChanged
 const REFRESH_MS = props.member ? 15_000 : 60_000;
 
 const myCalls = props.member ? useMemberCalls(props.member) : useMyCalls();
-loadLeadOptions();
-const options = computed(() => leadOptions.data as LeadOptions | undefined);
 
-// what the person sees: the server's queue, changed at once by their own answers
+// what the person sees: the last queue read, kept when a later read fails
 const shown = ref<MyCalls>();
 const fetchedAt = ref(Date.now());
-let inflight = 0;
 
 watch(
   () => myCalls.data as MyCalls | undefined,
   (data) => {
-    if (!data || inflight) return;
+    if (!data) return;
     shown.value = data;
     fetchedAt.value = Date.now();
   },
@@ -548,11 +512,11 @@ watch(queueChanged, reload);
 // calls made another way (MyOperator, the phone's log) count on the ERP site: ask again
 // every minute and whenever the tab comes back
 useIntervalFn(() => {
-  if (!document.hidden && !inflight) reload();
+  if (!document.hidden) reload();
 }, REFRESH_MS);
 const visibility = useDocumentVisibility();
 watch(visibility, (state) => {
-  if (state === "visible" && !inflight) reload();
+  if (state === "visible") reload();
 });
 
 const now = useNow({ interval: 1000 });
@@ -588,146 +552,25 @@ const progress = computed(() =>
     : 0
 );
 
-// the queue: what is to call now, then what was missed in its slot; one is the call on screen
+// the queue: what is to call now, then what was missed in its slot
 const queue = computed(() =>
   shown.value ? [...shown.value.pending, ...shown.value.overdue] : []
 );
 const overdueItems = computed(
   () => new Set((shown.value?.overdue ?? []).map((c) => c.item))
 );
-const pickedItem = ref("");
-const current = computed(
-  () => queue.value.find((c) => c.item === pickedItem.value) ?? queue.value[0]
-);
-const currentPosition = computed(() =>
-  current.value ? queue.value.indexOf(current.value) + 1 : 0
-);
 const queueName = (c: QueueCall) =>
   c.summary.lead_name || c.summary.name || c.lead;
 const queuePlace = (c: QueueCall) =>
   [c.summary.company_name, c.summary.district].filter(Boolean).join(" · ");
 
-// ---------- calling ----------
-
-const dialing = computed(() => placing.value?.lead || "");
-
-// the number last dialled for each call, when it was not the main one: the result names it
-const dialledNumbers = new Map<string, string>();
-
-/** The call box rings the person's phone, then the lead; without it the row's tel: link dials.
- * `number` is one of the lead's other numbers (none: the main one). */
-function dial(item: QueueCall, number?: string) {
-  rememberNumber(item, number);
-  placeCall({
-    lead: item.lead,
-    lead_name: queueName(item),
-    company: item.summary.company_name,
-    phone: number || item.summary.phone,
-    number: number || null,
-    item: item.item,
-    product: item.product || item.calling_for,
-    intro: item.intro_line,
-  });
-}
-
-/** A call from the phone's own dialler waits for its result, and the result sheet follows. */
-function dialed(item: QueueCall, number?: string) {
-  rememberNumber(item, number);
-  startCall({
-    lead: item.lead,
-    lead_name: queueName(item),
-    phone: number || item.summary.phone,
-    number: number || null,
-    item: item.item,
-    via: "phone",
-  });
-}
-
-function rememberNumber(item: QueueCall, number?: string) {
-  if (number) dialledNumbers.set(item.item, number);
-  else dialledNumbers.delete(item.item);
-}
-
-// ---------- outcomes ----------
-
-const recording = useRecordOutcome();
-const showOutcome = ref(false);
-const flow = ref<"Connected" | "Call back" | "Not interested" | null>(null);
-const flowCall = ref<QueueCall | null>(null);
-const flowNote = ref("");
-
-/** A button: the plain answers are saved at once, with the card's note; the others ask for more first. */
-function answer(item: QueueCall, outcome: CallOutcome, note = "") {
-  if (
-    outcome === "Connected" ||
-    outcome === "Call back" ||
-    outcome === "Not interested"
-  ) {
-    flow.value = outcome;
-    flowCall.value = item;
-    flowNote.value = note;
-    showOutcome.value = true;
-    return;
-  }
-  save(item, { outcome, note, callback_at: null, stage: null });
-}
-
-function saveFlow(answerValue: OutcomeAnswer) {
-  if (flowCall.value) save(flowCall.value, answerValue);
-}
-
-/** The counter goes down at once; the ERP site's answer settles it, and a refusal puts the
- * call back with the reason. Low risk: a call is logged, nothing is paid or deleted. */
-function save(item: QueueCall, value: OutcomeAnswer) {
-  if (!shown.value) return;
-  const before = shown.value;
-  shown.value = withOutcome(before, item);
-  inflight++;
-  recording.submit(
-    {
-      batch_item: item.item,
-      lead: item.lead,
-      outcome: value.outcome,
-      note: value.note || null,
-      callback_at: value.callback_at,
-      number: dialledNumbers.get(item.item) ?? null,
-    },
-    {
-      onSuccess() {
-        inflight--;
-        if (value.stage) moveStage(item, value);
-        settle();
-      },
-      onError(e: unknown) {
-        inflight--;
-        if (!inflight) shown.value = before;
-        toast.error(errorText(e, __("Couldn't save the call. Try again.")));
-        settle();
-      },
-    }
-  );
-}
-
-function moveStage(item: QueueCall, value: OutcomeAnswer) {
-  call("helpdesk.api.leads.set_stage", {
-    name: item.lead,
-    stage: value.stage,
-    note: value.note || null,
-  }).catch((e: unknown) =>
-    toast.error(
-      __(
-        "Call saved, but the lead didn't move: {0}",
-        errorText(e, __("Try again from the lead."))
-      )
-    )
-  );
-}
-
-/** Once nothing is in flight the queue is read again, which also brings a retry or call back. */
-function settle() {
-  loadPendingCalls();
-  if (!inflight) reload();
-}
+/** The lead's page, where the call is made; the batch item goes along so the result the
+ * call sheet asks for counts in this batch (a watcher only looks). */
+const leadRoute = (c: QueueCall) => ({
+  name: "Lead",
+  params: { leadId: c.lead },
+  query: readOnly.value ? undefined : { item: c.item },
+});
 
 // ---------- the next batch ----------
 

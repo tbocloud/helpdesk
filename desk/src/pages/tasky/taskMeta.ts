@@ -96,6 +96,7 @@ export const PROJECT_TYPES = [
   "Mobile App",
   "Website",
   "Content Calendar",
+  "Digital Marketing",
   "Support",
   "Other",
 ];

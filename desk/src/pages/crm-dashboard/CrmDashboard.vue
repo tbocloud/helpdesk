@@ -34,7 +34,7 @@
       </template>
     </LayoutHeader>
 
-    <div class="min-h-0 flex-1 overflow-y-auto bg-surface-gray-1">
+    <div class="relative min-h-0 flex-1 overflow-y-auto bg-surface-gray-1">
       <div class="mx-auto flex max-w-screen-2xl flex-col gap-5 p-4 md:p-5">
         <!-- nobody may open a dashboard yet -->
         <TaskyState

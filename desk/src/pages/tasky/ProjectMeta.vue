@@ -13,7 +13,7 @@
       </template>
     </ProjectNav>
 
-    <div class="flex-1 overflow-auto">
+    <div class="relative flex-1 overflow-auto">
       <div class="mx-auto w-full max-w-3xl px-4 py-5 md:px-6">
         <TaskyState
           v-if="connection.error && !connection.data"

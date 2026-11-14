@@ -107,7 +107,7 @@
       </template>
     </div>
 
-    <div class="min-h-0 flex-1 overflow-y-auto p-4 md:p-5">
+    <div class="relative min-h-0 flex-1 overflow-y-auto p-4 md:p-5">
       <div
         v-if="scope.data && !scope.data.sees_team && !scope.data.me"
         class="mx-auto max-w-md py-16 text-center"

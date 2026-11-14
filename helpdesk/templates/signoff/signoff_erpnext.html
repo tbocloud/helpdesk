@@ -1,0 +1,138 @@
+{#- Print format "Sign-off – ERPNext Implementation" (TBO's Sign-off
+requirements, Sign-off document: ERPNext Implementation). Each section shows
+only for the stages listed against it (HDProjectSignoff.shown_sections); opened
+from Frappe's print view it computes its own context. -#} {%- if not (ctx is
+defined and ctx) -%}{%- set ctx = doc.document_context() -%}{%- endif -%} {%
+extends "helpdesk/templates/signoff/letter_base.html" %} {% import
+"helpdesk/templates/signoff/signoff_parts.html" as parts with context %} {%
+block doc_type %}{{ ctx.heading|e }}<br />{{ (doc.name or "")|e }}<br />{{
+ctx.date|e }}{% endblock %} {% block body %} {{ parts.header() }} {{
+parts.customer() }}
+
+<h2>{{ _("Project") }}</h2>
+<table class="facts">
+  {{ parts.fact(_("Project"), ctx.project_name) }} {{ parts.fact(_("ERPNext
+  version"), doc.erpnext_version) }} {{ parts.fact(_("Project manager"),
+  ctx.project_manager) }} {{ parts.fact(_("Project coordinator"),
+  ctx.project_coordinator) }}
+</table>
+
+{% if "environment" in ctx.shown %}
+<h2>{{ _("Environment") }}</h2>
+<table class="facts">
+  {{ parts.fact(_("UAT site URL"), doc.uat_site_url) }} {{ parts.fact(_("Live
+  site URL"), doc.live_site_url) }}
+</table>
+{% endif %} {% if "requirement" in ctx.shown %}
+<h2>{{ _("Requirement reference") }}</h2>
+<table class="facts">
+  {{ parts.fact(_("SRS document"), doc.srs_reference) }} {{
+  parts.fact(_("Version"), doc.srs_version) }} {{ parts.fact(_("Date"),
+  ctx.dates.srs_date) }}
+</table>
+{% endif %} {% if "modules" in ctx.shown and doc.modules %}
+<h2>{{ _("Modules covered") }}</h2>
+<table class="list grid">
+  <thead>
+    <tr>
+      <th>{{ _("Module") }}</th>
+      <th>{{ _("Key processes covered") }}</th>
+      <th>{{ _("Status") }}</th>
+      <th>{{ _("Remarks") }}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in doc.modules %}
+    <tr>
+      <td>{{ row.module|e }}</td>
+      <td>{{ (row.processes_covered or "")|e }}</td>
+      <td>{{ _(row.status or "")|e }}</td>
+      <td>{{ (row.remarks or "")|e }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %} {% if "uat" in ctx.shown %}
+<h2>{{ _("UAT details") }}</h2>
+<table class="facts">
+  {{ parts.fact(_("UAT start date"), ctx.dates.uat_start_date) }} {{
+  parts.fact(_("UAT end date"), ctx.dates.uat_end_date) }} {{
+  parts.fact(_("Issues raised"), doc.issues_raised|string if doc.issues_raised
+  else "") }} {{ parts.fact(_("Issues resolved"), doc.issues_resolved|string if
+  doc.issues_resolved else "") }}
+</table>
+{% endif %} {% if "open_items" in ctx.shown and doc.open_items %}
+<h2>{{ _("Known exceptions accepted by the customer") }}</h2>
+<table class="list grid">
+  <thead>
+    <tr>
+      <th>{{ _("Issue") }}</th>
+      <th>{{ _("Severity") }}</th>
+      <th>{{ _("Agreed action") }}</th>
+      <th>{{ _("Target date") }}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in doc.open_items %}
+    <tr>
+      <td>{{ row.issue|e }}</td>
+      <td>{{ _(row.severity or "")|e }}</td>
+      <td>{{ (row.agreed_action or "")|e }}</td>
+      <td>{{ ctx.open_item_dates[loop.index0]|e }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %} {% if "training" in ctx.shown %}
+<h2>{{ _("Training") }}</h2>
+<table class="list grid">
+  <thead>
+    <tr>
+      <th>{{ _("Module") }}</th>
+      <th>{{ _("Date") }}</th>
+      <th>{{ _("Trainer") }}</th>
+      <th>{{ _("Attendees") }}</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>{{ doc.module_title|e }}</td>
+      <td>{{ ctx.training_date|e }}</td>
+      <td>{{ ctx.trainer_name|e }}</td>
+      <td>
+        {% for a in doc.attendees %}{{ a.attendee_name|e }}{% if a.designation
+        %} ({{ a.designation|e }}){% endif %}{% if not loop.last %}<br />{%
+        endif %}{% endfor %}
+      </td>
+    </tr>
+  </tbody>
+</table>
+{% endif %} {% if "migration" in ctx.shown %}
+<h2>{{ _("Data migration") }}</h2>
+<table class="facts">
+  <tr>
+    <th>{{ _("Masters migrated") }}</th>
+    <td>{{ _("Yes") if doc.masters_migrated else _("No") }}</td>
+  </tr>
+  <tr>
+    <th>{{ _("Opening balances migrated") }}</th>
+    <td>{{ _("Yes") if doc.opening_balances_migrated else _("No") }}</td>
+  </tr>
+  {{ parts.fact(_("Remarks"), doc.migration_remarks) }}
+</table>
+{% endif %} {% if "go_live" in ctx.shown %}
+<h2>{{ _("Go-Live") }}</h2>
+<table class="facts">
+  {{ parts.fact(_("Go-live date"), ctx.dates.go_live_date) }} {{
+  parts.fact(_("Live server"), doc.live_site_url) }}
+</table>
+{% endif %} {% if "support" in ctx.shown %}
+<h2>{{ _("Support") }}</h2>
+<table class="facts">
+  {{ parts.fact(_("Support start date"), ctx.dates.support_start_date) }} {{
+  parts.fact(_("Support end date"), ctx.dates.support_end_date) }} {{
+  parts.fact(_("Support channel"), _(doc.support_channel) if doc.support_channel
+  else "") }}
+</table>
+{% endif %} {{ parts.questions() }} {{ parts.declaration_and_signatures() }} {%
+endblock %}

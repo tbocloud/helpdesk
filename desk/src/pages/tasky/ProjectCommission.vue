@@ -2,7 +2,7 @@
   <div class="flex h-full flex-col">
     <ProjectNav :project-id="projectId" />
 
-    <div class="flex-1 overflow-auto">
+    <div class="relative flex-1 overflow-auto">
       <div
         class="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 py-5 md:px-6"
       >

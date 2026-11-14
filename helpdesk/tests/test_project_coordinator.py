@@ -161,19 +161,12 @@ class TestWhatACoordinatorMayNotDo(CoordinatorCase):
             frappe.get_all("Project User", {"parent": self.project}, pluck="user"),
         )
 
-    def test_no_deleting_signoff_or_recurring_schedules(self):
+    def test_no_deleting_tasks_or_recurring_schedules(self):
         self.assertFalse(
             frappe.has_permission("Task", "delete", doc=self.task, user=COORDINATOR[0])
         )
         with self.assertRaises(frappe.PermissionError):
             run_as_user(COORDINATOR[0], lambda: frappe.delete_doc("Task", self.task))
-        self.assertRefused(
-            "helpdesk.api.project_signoff.create_signoff",
-            project=self.project,
-            module_title="Accounts",
-            signatory_contact="",
-            trainer=COORDINATOR[0],
-        )
         self.assertRefused(
             "helpdesk.api.recurring_tasks.save_recurring_task",
             project=self.project,

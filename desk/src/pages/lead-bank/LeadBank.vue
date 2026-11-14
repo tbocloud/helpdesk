@@ -19,7 +19,7 @@
       </template>
     </LayoutHeader>
 
-    <div class="flex-1 overflow-y-auto overflow-x-hidden">
+    <div class="relative flex-1 overflow-y-auto overflow-x-hidden">
       <div class="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 py-5">
         <!-- the one primary action -->
         <section class="flex flex-col gap-2">

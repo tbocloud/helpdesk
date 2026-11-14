@@ -30,7 +30,7 @@
       </template>
     </LayoutHeader>
 
-    <div class="flex-1 overflow-auto">
+    <div class="relative flex-1 overflow-auto">
       <div class="mx-auto w-full max-w-6xl px-4 py-5 md:px-6">
         <p class="max-w-2xl text-p-sm text-ink-gray-6">
           {{
