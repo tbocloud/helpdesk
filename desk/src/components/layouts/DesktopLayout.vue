@@ -11,8 +11,8 @@
       <slot />
     </main>
     <Notifications />
-    <PendingCalls v-if="authStore.isSalesEmployee && authStore.canUseLeads" />
-    <CallBox v-if="authStore.isSalesEmployee && authStore.canUseLeads" />
+    <PendingCalls v-if="authStore.canUseLeads" />
+    <CallBox v-if="authStore.canUseLeads" />
   </div>
 </template>
 <script setup>
