@@ -1065,6 +1065,13 @@ class TestHDTicket(FrappeTestCase):
         contact1_ticket2 = make_ticket(customer=customer2.name, save=False)
         self.assertRaises(frappe.ValidationError, contact1_ticket2.save)
 
+    def test_reply_via_agent_without_recipients_goes_to_who_raised_the_ticket(self):
+        """Merge and estimate notices name no recipient; frappe.sendmail refuses a mail with none."""
+        ticket = make_ticket(raised_by="raiser@test.com")
+        with patch("frappe.sendmail") as sendmail:
+            ticket.reply_via_agent(message="Notice with no recipient")
+        self.assertEqual(sendmail.call_args.kwargs["recipients"], "raiser@test.com")
+
     def test_reply_via_agent_with_only_cc(self):
         """
         reply_via_agent should succeed when only cc is provided and to is empty/None
