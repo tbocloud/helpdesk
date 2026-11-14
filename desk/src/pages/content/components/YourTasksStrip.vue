@@ -58,6 +58,7 @@ import { computed } from "vue";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideClipboardList from "~icons/lucide/clipboard-list";
+import { copyLine } from "../constants";
 import { type ContentTasksData, dueText } from "../contentTasks";
 
 const props = defineProps<{ data?: ContentTasksData | null }>();
@@ -94,7 +95,7 @@ const next = computed(() => {
     .filter((t) => t.stage === "todo" || t.stage === "in_progress")
     .sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999"))[0];
   if (!task) return "";
-  const title = props.data?.posts[task.post]?.title || task.subject;
+  const title = copyLine(props.data?.posts[task.post]?.title) || task.subject;
   const due = dueText(task.due).text;
   return due
     ? __("next: {0} · {1}, {2}", __(task.role_label), title, due)
