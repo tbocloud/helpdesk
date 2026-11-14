@@ -7,9 +7,9 @@
     :aria-labelledby="titleId"
   >
     <div
-      class="flex flex-wrap items-center gap-2 border-b border-outline-gray-1 px-4 py-3"
+      class="flex flex-wrap items-center gap-2 border-b border-outline-gray-2 px-4 py-3"
     >
-      <h2 :id="titleId" class="text-base-medium text-ink-gray-9">
+      <h2 :id="titleId" class="text-base font-semibold text-ink-gray-9">
         {{ __("Documents") }}
       </h2>
       <!-- the UAT sign-off, sent and followed from here (docs/project-signoff.md, From the lead) -->

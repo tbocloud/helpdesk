@@ -5,9 +5,9 @@
     :aria-labelledby="headingId"
   >
     <div
-      class="flex flex-wrap items-center gap-2 border-b border-outline-gray-1 px-4 py-3"
+      class="flex flex-wrap items-center gap-2 border-b border-outline-gray-2 px-4 py-3"
     >
-      <h2 :id="headingId" class="text-base-medium text-ink-gray-9">
+      <h2 :id="headingId" class="text-base font-semibold text-ink-gray-9">
         {{ __("Photos") }}
         <span
           v-if="photos.length"
@@ -58,7 +58,7 @@
       </div>
     </div>
 
-    <div class="flex flex-col gap-3 px-4 py-4">
+    <div class="flex flex-col gap-3 px-4 py-3">
       <div
         v-if="list.loading && !data"
         role="status"

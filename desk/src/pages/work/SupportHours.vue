@@ -1,65 +1,67 @@
 <template>
   <div class="flex h-full flex-col">
-    <LayoutHeader>
-      <template #left-header>
-        <h1 class="text-lg-medium text-ink-gray-9">
-          {{ __("Support hours") }}
-        </h1>
-      </template>
+    <LayoutHeader
+      :title="__('Support hours')"
+      :subtitle="
+        __(
+          'How much of each running support contract\'s hours are used, most used first.'
+        )
+      "
+    >
       <template #right-header>
         <Button
-          variant="ghost"
+          size="md"
           :loading="list.loading && !!list.data"
           :aria-label="__('Refresh')"
           @click="list.reload()"
         >
           <template #icon>
-            <LucideRefreshCw class="size-4" aria-hidden="true" />
+            <LucideRefreshCw class="size-[18px]" aria-hidden="true" />
           </template>
         </Button>
         <Button
           variant="solid"
+          size="md"
           :label="__('Download CSV')"
           :tooltip="__('The contracts below as a spreadsheet, for billing')"
           @click="download"
         >
           <template #prefix>
-            <LucideFileSpreadsheet class="size-4" aria-hidden="true" />
+            <LucideFileSpreadsheet class="size-[18px]" aria-hidden="true" />
           </template>
         </Button>
       </template>
     </LayoutHeader>
 
     <div class="relative flex-1 overflow-auto">
-      <div class="mx-auto w-full max-w-6xl px-4 py-5 md:px-6">
-        <p class="max-w-2xl text-p-sm text-ink-gray-6">
-          {{
-            __(
-              "Every support contract running today and how much of this period's hours are used, most used first. Only billable time counts."
-            )
-          }}
+      <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
+        <p class="-mb-1 text-p-sm text-ink-gray-6">
+          {{ __("Only billable time counts.") }}
         </p>
 
-        <TaskyState
+        <div
           v-if="list.error && !list.data"
-          class="mt-5"
-          :icon="LucideCircleAlert"
-          :title="__('Couldn\'t load the support hours')"
-          :message="
-            errorText(list.error, __('Check your connection and try again.'))
-          "
-          error
+          class="rounded-xl border border-outline-gray-2 bg-surface-base"
         >
-          <Button :label="__('Retry')" @click="list.reload()" />
-        </TaskyState>
+          <TaskyState
+            class="py-10"
+            :icon="LucideCircleAlert"
+            :title="__('Couldn\'t load the support hours')"
+            :message="
+              errorText(list.error, __('Check your connection and try again.'))
+            "
+            error
+          >
+            <Button :label="__('Retry')" @click="list.reload()" />
+          </TaskyState>
+        </div>
 
         <template v-else>
           <section
             :aria-label="__('Contracts by how much is used')"
-            class="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3"
+            class="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4"
           >
             <StatTile
-              compact
               :label="__('Running today')"
               :value="data ? data.total : '–'"
               :icon="LucideHourglass"
@@ -68,7 +70,6 @@
               @click="stage = ''"
             />
             <StatTile
-              compact
               :label="__('Running low')"
               :value="data ? data.counts.warning : '–'"
               :sub="__('At or past the alert level')"
@@ -79,7 +80,6 @@
               @click="stage = stage === 'warning' ? '' : 'warning'"
             />
             <StatTile
-              compact
               :label="__('Used up')"
               :value="data ? data.counts.over : '–'"
               :sub="__('Extra hours to bill')"
@@ -92,40 +92,43 @@
             />
           </section>
 
-          <div class="mt-4 flex flex-wrap items-end gap-3">
-            <div class="w-full sm:w-52">
-              <FormControl
-                v-model="contractType"
-                type="select"
-                :label="__('Type')"
-                :options="typeOptions"
-              />
-            </div>
-          </div>
-
           <SectionCard
-            class="mt-4 overflow-hidden"
+            class="overflow-hidden"
             :title="__('Contracts')"
             :count="loading ? undefined : rows.length"
             :aria-busy="list.loading"
           >
+            <div
+              class="flex flex-wrap items-end gap-3 border-b border-outline-gray-2 px-4 py-4 md:px-4"
+            >
+              <div class="w-full sm:w-52">
+                <FormControl
+                  v-model="contractType"
+                  type="select"
+                  size="md"
+                  :label="__('Type')"
+                  :options="typeOptions"
+                />
+              </div>
+            </div>
             <div v-if="loading" :aria-label="__('Loading')">
               <div
                 v-for="i in 5"
                 :key="i"
-                class="flex items-center gap-4 border-b border-outline-gray-1 px-4 py-3.5 last:border-b-0"
+                class="flex items-center gap-4 border-b border-outline-gray-1 px-4 py-3 last:border-b-0"
               >
                 <span
-                  class="h-3.5 w-1/4 animate-pulse rounded bg-surface-gray-2"
+                  class="h-3.5 w-1/4 animate-pulse rounded bg-surface-gray-3"
                 />
                 <span
-                  class="ml-auto h-3.5 w-1/3 animate-pulse rounded bg-surface-gray-2"
+                  class="ml-auto h-3.5 w-1/3 animate-pulse rounded bg-surface-gray-3"
                 />
               </div>
             </div>
 
             <TaskyState
               v-else-if="!rows.length && (stage || contractType)"
+              class="py-10"
               :icon="LucideSearchX"
               :title="__('No contracts match')"
               :message="__('No running contract fits these filters.')"
@@ -134,6 +137,7 @@
             </TaskyState>
             <TaskyState
               v-else-if="!rows.length"
+              class="py-10"
               :icon="LucideHourglass"
               :title="__('No support contracts running')"
               :message="
@@ -160,27 +164,31 @@
                 </caption>
                 <thead>
                   <tr
-                    class="border-b border-outline-gray-2 bg-surface-gray-1 text-left text-xs text-ink-gray-5"
+                    class="h-11 border-b border-outline-gray-2 bg-surface-gray-1 text-left text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6"
                   >
-                    <th scope="col" class="px-4 py-2 font-normal">
+                    <th scope="col" class="px-3 pl-4 md:pl-4">
                       {{ __("Customer") }}
                     </th>
-                    <th scope="col" class="px-3 py-2 font-normal">
+                    <th scope="col" class="px-3">
                       {{ __("Current period") }}
                     </th>
-                    <th scope="col" class="w-1/5 px-3 py-2 font-normal">
+                    <th scope="col" class="w-1/5 px-3">
                       <span class="sr-only">{{ __("Share used") }}</span>
                     </th>
-                    <th scope="col" class="px-3 py-2 text-right font-normal">
+                    <th scope="col" class="px-3 text-right">
                       {{ __("Used") }}
                     </th>
-                    <th scope="col" class="px-3 py-2 text-right font-normal">
+                    <th scope="col" class="px-3 text-right">
                       {{ __("Hours") }}
                     </th>
-                    <th scope="col" class="px-4 py-2 text-right font-normal">
+                    <th
+                      scope="col"
+                      class="px-3 text-right"
+                      :class="canBill ? '' : 'pr-4 md:pr-4'"
+                    >
                       {{ __("Left") }}
                     </th>
-                    <th v-if="canBill" scope="col" class="px-4 py-2">
+                    <th v-if="canBill" scope="col" class="px-3 pr-4 md:pr-4">
                       <span class="sr-only">{{ __("Invoice") }}</span>
                     </th>
                   </tr>
@@ -189,30 +197,36 @@
                   <tr
                     v-for="row in rows"
                     :key="row.name"
-                    class="border-b border-outline-gray-1 last:border-b-0"
+                    class="border-b border-outline-gray-1 last:border-b-0 hover:bg-surface-gray-1"
                   >
                     <th
                       scope="row"
-                      class="max-w-[16rem] px-4 py-2.5 text-left font-normal"
+                      class="max-w-[16rem] px-3 py-3 pl-4 text-left font-normal md:pl-4"
                     >
-                      <RouterLink
-                        :to="customerLink(row)"
-                        class="block truncate rounded text-ink-gray-9 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
-                      >
-                        {{ row.customer }}
-                      </RouterLink>
-                      <span class="block truncate text-xs text-ink-gray-5">
-                        {{ row.contract_name }} · {{ __(row.contract_type) }}
-                      </span>
+                      <div class="flex min-w-0 items-center gap-2.5">
+                        <PersonAvatar :name="row.customer" size="md" neutral />
+                        <div class="min-w-0">
+                          <RouterLink
+                            :to="customerLink(row)"
+                            class="block truncate rounded font-semibold text-ink-gray-9 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+                          >
+                            {{ row.customer }}
+                          </RouterLink>
+                          <span class="block truncate text-xs text-ink-gray-5">
+                            {{ row.contract_name }} ·
+                            {{ __(row.contract_type) }}
+                          </span>
+                        </div>
+                      </div>
                     </th>
-                    <td class="px-3 py-2.5 tabular-nums text-ink-gray-7">
+                    <td class="px-3 py-3 tabular-nums text-ink-gray-7">
                       {{ periodText(row) }}
                     </td>
-                    <td class="px-3 py-2.5">
+                    <td class="px-3 py-3">
                       <SupportHoursMeter :period="row" :label="row.customer" />
                     </td>
                     <td
-                      class="px-3 py-2.5 text-right font-mono tabular-nums"
+                      class="px-3 py-3 text-right font-mono tabular-nums"
                       :class="INK[STAGE_TONE[row.stage]]"
                     >
                       <span class="inline-flex items-center justify-end gap-1">
@@ -227,15 +241,16 @@
                       <span class="sr-only">{{ STAGE_LABEL[row.stage] }}</span>
                     </td>
                     <td
-                      class="px-3 py-2.5 text-right font-mono tabular-nums text-ink-gray-8"
+                      class="px-3 py-3 text-right font-mono tabular-nums text-ink-gray-8"
                     >
                       {{ hours(row.used) }} / {{ hours(row.allowance) }}
                     </td>
                     <td
-                      class="px-4 py-2.5 text-right font-mono tabular-nums"
-                      :class="
-                        row.remaining < 0 ? 'text-danger' : 'text-ink-gray-8'
-                      "
+                      class="px-3 py-3 text-right font-mono tabular-nums"
+                      :class="[
+                        row.remaining < 0 ? 'text-danger' : 'text-ink-gray-8',
+                        canBill ? '' : 'pr-4 md:pr-4',
+                      ]"
                     >
                       {{
                         row.remaining < 0
@@ -243,7 +258,10 @@
                           : hours(row.remaining)
                       }}
                     </td>
-                    <td v-if="canBill" class="px-4 py-2.5 text-right">
+                    <td
+                      v-if="canBill"
+                      class="px-3 py-3 pr-4 text-right md:pr-4"
+                    >
                       <Button
                         variant="ghost"
                         :label="__('Invoice')"
@@ -311,7 +329,7 @@
             </template>
           </SectionCard>
 
-          <InvoiceList v-if="canBill" ref="invoiceList" class="mt-4" />
+          <InvoiceList v-if="canBill" ref="invoiceList" />
         </template>
 
         <InvoiceDraftDialog
@@ -332,6 +350,7 @@ import InvoiceDraftDialog from "@/components/invoicing/InvoiceDraftDialog.vue";
 import InvoiceList from "@/components/invoicing/InvoiceList.vue";
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import SectionCard from "@/components/SectionCard.vue";
+import PersonAvatar from "@/components/PersonAvatar.vue";
 import StatTile from "@/components/StatTile.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import { INK } from "@/components/tone";

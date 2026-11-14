@@ -11,6 +11,7 @@
     v-else-if="filter.type === 'Select'"
     class="form-control cursor-pointer [&_select]:cursor-pointer w-36"
     type="select"
+    size="md"
     :model-value="props.value || undefined"
     :options="filter.options"
     :placeholder="filter.label"
@@ -20,6 +21,7 @@
     v-else-if="filter.type === 'Link'"
     :value="props.value"
     :doctype="filter.options"
+    size="md"
     :placeholder="filter.label"
     @change="(data) => updateFilter(filter, data)"
     class="w-36"
@@ -36,6 +38,7 @@
     v-else
     :value="props.value"
     type="text"
+    size="md"
     :placeholder="filter.label"
     @input.stop="debouncedFn(filter, $event.target.value)"
   />

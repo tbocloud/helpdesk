@@ -1,8 +1,6 @@
 <template>
   <!-- the Customers and Contacts lists: link rows, bulk actions, paging and every state -->
-  <div
-    class="overflow-hidden rounded-lg border border-outline-gray-2 bg-surface-base"
-  >
+  <div class="overflow-hidden bg-surface-base">
     <!-- Selection: replaces the column header while rows are picked -->
     <div
       v-if="selected.size"
@@ -39,7 +37,7 @@
     </div>
     <div
       v-else-if="rows.length"
-      class="hidden items-center gap-3 border-b border-outline-gray-2 bg-surface-gray-1 px-4 py-2 text-xs text-ink-gray-5 md:flex"
+      class="hidden items-center gap-3 h-11 border-b border-outline-gray-2 bg-surface-gray-1 px-4 text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6 md:flex md:px-4"
     >
       <span v-if="canSelect" class="flex w-5 shrink-0 items-center">
         <input
@@ -66,14 +64,14 @@
       <div
         v-for="i in 6"
         :key="i"
-        class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-3.5 last:border-b-0"
+        class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-3.5 last:border-b-0 md:px-4"
       >
         <span
-          class="size-8 shrink-0 animate-pulse rounded-full bg-surface-gray-2"
+          class="size-8 shrink-0 animate-pulse rounded-full bg-surface-gray-3"
         />
         <div class="flex flex-1 flex-col gap-2">
-          <span class="h-3.5 w-2/5 animate-pulse rounded bg-surface-gray-2" />
-          <span class="h-3 w-1/4 animate-pulse rounded bg-surface-gray-2" />
+          <span class="h-3.5 w-2/5 animate-pulse rounded bg-surface-gray-3" />
+          <span class="h-3 w-1/4 animate-pulse rounded bg-surface-gray-3" />
         </div>
       </div>
     </div>
@@ -94,7 +92,7 @@
       <li
         v-for="row in rows"
         :key="row.name"
-        class="relative flex items-center gap-3 border-b border-outline-gray-1 px-4 py-3 transition-colors last:border-b-0 hover:bg-surface-gray-1"
+        class="relative flex items-center gap-3 border-b border-outline-gray-1 px-4 py-3 transition-colors md:px-4 last:border-b-0 hover:bg-surface-gray-1"
       >
         <!-- the whole row opens the record; the checkbox sits above the link -->
         <RouterLink
@@ -126,7 +124,7 @@
     <!-- Paging -->
     <div
       v-if="rows.length"
-      class="flex flex-wrap items-center justify-between gap-2 border-t border-outline-gray-2 px-4 py-2.5"
+      class="flex flex-wrap items-center justify-between gap-2 border-t border-outline-gray-2 px-4 py-3.5 md:px-4"
     >
       <span class="text-p-sm tabular-nums text-ink-gray-5">
         {{

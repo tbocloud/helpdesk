@@ -1,24 +1,25 @@
 <template>
   <div class="flex h-full flex-col">
-    <LayoutHeader>
-      <template #left-header>
-        <h1 class="text-lg-medium text-ink-gray-9">
-          {{ __("Customer report") }}
-        </h1>
-      </template>
+    <LayoutHeader
+      :title="__('Customer report')"
+      :subtitle="
+        __('One month of work per customer, for billing and customer reviews.')
+      "
+    >
       <template #right-header>
         <Button
-          variant="ghost"
+          size="md"
           :loading="report.loading && !!report.data"
           :aria-label="__('Refresh')"
           @click="report.reload()"
         >
           <template #icon>
-            <LucideRefreshCw class="size-4" aria-hidden="true" />
+            <LucideRefreshCw class="size-[18px]" aria-hidden="true" />
           </template>
         </Button>
         <Button
           variant="solid"
+          size="md"
           :label="__('Download CSV')"
           :tooltip="
             __('The report below as a spreadsheet, with the totals row')
@@ -26,24 +27,16 @@
           @click="download"
         >
           <template #prefix>
-            <LucideFileSpreadsheet class="size-4" aria-hidden="true" />
+            <LucideFileSpreadsheet class="size-[18px]" aria-hidden="true" />
           </template>
         </Button>
       </template>
     </LayoutHeader>
 
     <div class="relative flex-1 overflow-auto">
-      <div class="mx-auto w-full max-w-6xl px-4 py-5 md:px-6">
-        <p class="max-w-2xl text-p-sm text-ink-gray-6">
-          {{
-            __(
-              "One month of work per customer: tickets, response times, SLA, ratings, hours logged on their projects and tasks completed. Use it for billing and customer reviews."
-            )
-          }}
-        </p>
-
+      <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
         <div
-          class="mt-4 flex flex-wrap items-end gap-3"
+          class="flex flex-wrap items-end gap-3 rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-4 md:px-4"
           role="group"
           :aria-label="__('Report filters')"
         >
@@ -51,6 +44,7 @@
             <FormControl
               v-model="month"
               type="select"
+              size="md"
               :label="__('Month')"
               :options="monthOptions"
             />
@@ -75,23 +69,30 @@
           </Button>
         </div>
 
-        <TaskyState
+        <div
           v-if="report.error && !report.data"
-          class="mt-5"
-          :icon="LucideCircleAlert"
-          :title="__('Couldn\'t load the report')"
-          :message="
-            errorText(report.error, __('Check your connection and try again.'))
-          "
-          error
+          class="rounded-xl border border-outline-gray-2 bg-surface-base"
         >
-          <Button :label="__('Retry')" @click="report.reload()" />
-        </TaskyState>
+          <TaskyState
+            class="py-10"
+            :icon="LucideCircleAlert"
+            :title="__('Couldn\'t load the report')"
+            :message="
+              errorText(
+                report.error,
+                __('Check your connection and try again.')
+              )
+            "
+            error
+          >
+            <Button :label="__('Retry')" @click="report.reload()" />
+          </TaskyState>
+        </div>
 
         <template v-else>
           <section
             :aria-label="__('Totals for {0}', scopeLabel)"
-            class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5"
+            class="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4"
           >
             <StatTile
               :label="__('Tickets opened')"
@@ -133,7 +134,7 @@
           </section>
 
           <SectionCard
-            class="mt-6 overflow-hidden"
+            class="overflow-hidden"
             :title="__('By customer')"
             :count="loading ? undefined : rows.length"
             :description="
@@ -147,19 +148,20 @@
               <div
                 v-for="i in 5"
                 :key="i"
-                class="flex items-center gap-4 border-b border-outline-gray-1 px-4 py-3.5 last:border-b-0"
+                class="flex items-center gap-4 border-b border-outline-gray-1 px-4 py-3 last:border-b-0"
               >
                 <span
-                  class="h-3.5 w-1/4 animate-pulse rounded bg-surface-gray-2"
+                  class="h-3.5 w-1/4 animate-pulse rounded bg-surface-gray-3"
                 />
                 <span
-                  class="ml-auto h-3.5 w-1/3 animate-pulse rounded bg-surface-gray-2"
+                  class="ml-auto h-3.5 w-1/3 animate-pulse rounded bg-surface-gray-3"
                 />
               </div>
             </div>
 
             <TaskyState
               v-else-if="!rows.length && customer"
+              class="py-10"
               :icon="LucideSearchX"
               :title="__('Nothing for {0} in {1}', customer, monthLabel)"
               :message="
@@ -175,6 +177,7 @@
             </TaskyState>
             <TaskyState
               v-else-if="!rows.length"
+              class="py-10"
               :icon="LucideFileSpreadsheet"
               :title="__('Nothing in {0}', monthLabel)"
               :message="
@@ -198,16 +201,16 @@
                   </caption>
                   <thead>
                     <tr
-                      class="border-b border-outline-gray-2 bg-surface-gray-1 text-left text-xs text-ink-gray-5"
+                      class="h-11 border-b border-outline-gray-2 bg-surface-gray-1 text-left text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6"
                     >
-                      <th scope="col" class="px-4 py-2 font-normal">
+                      <th scope="col" class="px-3 pl-4 md:pl-4">
                         {{ __("Customer") }}
                       </th>
                       <th
                         v-for="col in COLUMNS"
                         :key="col.key"
                         scope="col"
-                        class="px-3 py-2 text-right font-normal"
+                        class="px-3 text-right last:pr-4 md:last:pr-5"
                         :title="col.hint"
                       >
                         {{ col.label }}
@@ -218,18 +221,27 @@
                     <tr
                       v-for="row in rows"
                       :key="row.customer"
-                      class="border-b border-outline-gray-1 last:border-b-0"
+                      class="border-b border-outline-gray-1 last:border-b-0 hover:bg-surface-gray-1"
                     >
                       <th
                         scope="row"
-                        class="max-w-[14rem] truncate px-4 py-2.5 text-left font-normal text-ink-gray-8"
+                        class="max-w-[14rem] px-3 py-3 pl-4 text-left font-medium text-ink-gray-9 md:pl-4"
                       >
-                        <CustomerName :customer="row.customer" />
+                        <span class="flex min-w-0 items-center gap-2.5">
+                          <PersonAvatar
+                            :name="row.customer"
+                            size="md"
+                            neutral
+                          />
+                          <span class="min-w-0 truncate">
+                            <CustomerName :customer="row.customer" />
+                          </span>
+                        </span>
                       </th>
                       <td
                         v-for="col in COLUMNS"
                         :key="col.key"
-                        class="px-3 py-2.5 text-right font-mono tabular-nums"
+                        class="px-3 py-3 text-right font-mono tabular-nums last:pr-4 md:last:pr-5"
                         :class="cellClass(row, col.key)"
                       >
                         {{ cell(row, col.key) }}
@@ -240,13 +252,16 @@
                     <tr
                       class="border-t border-outline-gray-2 bg-surface-gray-1 text-ink-gray-9"
                     >
-                      <th scope="row" class="px-4 py-2.5 text-left font-medium">
+                      <th
+                        scope="row"
+                        class="px-3 py-3 pl-4 text-left font-semibold md:pl-4"
+                      >
                         {{ __("Total") }}
                       </th>
                       <td
                         v-for="col in COLUMNS"
                         :key="col.key"
-                        class="px-3 py-2.5 text-right font-mono font-medium tabular-nums"
+                        class="px-3 py-3 text-right font-mono font-semibold tabular-nums last:pr-4 md:last:pr-5"
                       >
                         {{ cell(totals!, col.key) }}
                       </td>
@@ -285,7 +300,7 @@
             </template>
           </SectionCard>
 
-          <p class="mt-2 text-p-xs text-ink-gray-5">
+          <p class="-mt-2 text-p-xs text-ink-gray-6">
             {{
               __(
                 "Tickets count by the day they were opened or resolved; hours by the day they were logged. First reply and resolution are average hours. Ratings are out of 5."
@@ -302,6 +317,7 @@
 import Link from "@/components/frappe-ui/Link.vue";
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import SectionCard from "@/components/SectionCard.vue";
+import PersonAvatar from "@/components/PersonAvatar.vue";
 import StatTile from "@/components/StatTile.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";

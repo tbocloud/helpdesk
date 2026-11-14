@@ -1,6 +1,7 @@
 <template>
   <TaskyState
     v-if="error"
+    class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
     error
     :icon="LucideCircleAlert"
     :title="__('Couldn\'t load this list')"
@@ -12,7 +13,7 @@
   </TaskyState>
   <div
     v-else-if="loading && !items?.length"
-    class="overflow-hidden rounded-lg border border-outline-gray-2"
+    class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
     aria-busy="true"
     :aria-label="__('Loading')"
   >
@@ -21,12 +22,13 @@
       :key="i"
       class="flex h-14 items-center gap-3 border-t border-outline-gray-1 px-3 first:border-t-0"
     >
-      <div class="h-4 w-1/3 animate-pulse rounded bg-surface-gray-2" />
-      <div class="ms-auto h-4 w-16 animate-pulse rounded bg-surface-gray-2" />
+      <div class="h-4 w-1/3 animate-pulse rounded bg-surface-gray-3" />
+      <div class="ms-auto h-4 w-16 animate-pulse rounded bg-surface-gray-3" />
     </div>
   </div>
   <TaskyState
     v-else-if="!items?.length && filtered"
+    class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
     :icon="LucideSearchX"
     :title="__('Nothing matches')"
     :message="__('Try another search or filter.')"
@@ -37,15 +39,18 @@
   </TaskyState>
   <TaskyState
     v-else-if="!items?.length"
+    class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
     :icon="emptyIcon"
     :title="emptyTitle"
     :message="emptyMessage"
   />
   <div v-else class="flex flex-col gap-3">
-    <div class="overflow-hidden rounded-lg border border-outline-gray-2">
+    <div
+      class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
+    >
       <div
         v-if="$slots.header"
-        class="hidden items-center gap-3 border-b border-outline-gray-2 bg-surface-gray-1 px-3 py-2 text-sm text-ink-gray-6 sm:flex"
+        class="hidden h-11 items-center gap-3 border-b border-outline-gray-2 bg-surface-gray-1 px-3 text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6 sm:flex"
         aria-hidden="true"
       >
         <slot name="header" />

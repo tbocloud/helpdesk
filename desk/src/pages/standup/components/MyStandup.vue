@@ -1,6 +1,7 @@
 <template>
   <TaskyState
     v-if="resource.error && !data"
+    class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
     :icon="LucideCircleAlert"
     :title="__('Couldn\'t load your stand-up')"
     :message="
@@ -15,12 +16,13 @@
     <div
       v-for="i in 3"
       :key="i"
-      class="h-36 animate-pulse rounded-xl border border-outline-gray-2 bg-surface-gray-1"
+      class="h-36 animate-pulse rounded-xl bg-surface-gray-3"
     />
   </div>
 
   <TaskyState
     v-else-if="!data.enabled && !form"
+    class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
     :icon="LucideMessagesSquare"
     :title="__('The daily stand-up isn\'t switched on')"
     :message="
@@ -32,6 +34,7 @@
 
   <TaskyState
     v-else-if="!form"
+    class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
     :icon="LucideCalendarOff"
     :title="
       data.editable ? __('No stand-up today') : __('No stand-up that day')
@@ -154,7 +157,7 @@
 
     <div
       v-if="data.editable"
-      class="sticky bottom-0 z-10 -mx-4 flex items-center gap-3 border-t border-outline-gray-2 bg-surface-base px-4 py-3 sm:static sm:mx-0 sm:rounded-xl sm:border"
+      class="sticky bottom-0 z-10 -mx-4 flex items-center gap-3 border-t border-outline-gray-2 bg-surface-base px-4 py-3 sm:static sm:mx-0 sm:rounded-xl sm:border sm:px-5 sm:py-4"
     >
       <div class="flex min-h-11 items-center">
         <Checkbox v-model="form.needs_help" :label="__('I need help')" />

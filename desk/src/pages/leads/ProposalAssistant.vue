@@ -6,14 +6,14 @@
     @toggle="open = ($event.target as HTMLDetailsElement).open"
   >
     <summary
-      class="flex min-h-[44px] cursor-pointer items-center gap-2 px-4 text-base-medium text-ink-gray-9"
+      class="flex min-h-[56px] cursor-pointer items-center gap-2 px-5 text-base font-semibold text-ink-gray-9"
     >
       {{ __("Assistant") }}
       <span class="text-p-sm font-normal text-ink-gray-5">{{
         __("e.g. “add Payroll”, “make it 90 days”, “remove AMC”")
       }}</span>
     </summary>
-    <div class="flex flex-col gap-3 border-t border-outline-gray-1 p-4">
+    <div class="flex flex-col gap-3 border-t border-outline-gray-2 p-5">
       <ol
         v-if="chat.length"
         ref="logEl"

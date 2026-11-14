@@ -11,7 +11,7 @@
     <div
       v-if="created"
       role="status"
-      class="flex items-start gap-3 rounded-lg border border-outline-gray-2 px-4 py-3"
+      class="flex items-start gap-3 rounded-xl border border-outline-gray-2 px-4 py-3"
     >
       <LucideCircleCheck
         class="mt-0.5 size-4 shrink-0 text-success"
@@ -58,7 +58,7 @@
         <label
           v-for="option in modeOptions"
           :key="option.value"
-          class="flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2.5 focus-within:ring-2 focus-within:ring-outline-gray-4"
+          class="flex cursor-pointer items-start gap-3 rounded-xl border px-3 py-2.5 focus-within:ring-2 focus-within:ring-outline-gray-4"
           :class="
             mode === option.value
               ? 'border-outline-gray-4 bg-surface-gray-1'
@@ -96,14 +96,14 @@
         class="flex flex-col gap-2"
         :aria-label="__('Loading')"
       >
-        <span class="h-16 animate-pulse rounded-lg bg-surface-gray-2" />
-        <span class="h-28 animate-pulse rounded-lg bg-surface-gray-2" />
+        <span class="h-16 animate-pulse rounded-xl bg-surface-gray-3" />
+        <span class="h-28 animate-pulse rounded-xl bg-surface-gray-3" />
       </div>
 
       <div
         v-else-if="preview.error"
         role="alert"
-        class="flex flex-col items-start gap-2 rounded-lg bg-danger-soft px-3 py-2.5 text-p-sm text-danger"
+        class="flex flex-col items-start gap-2 rounded-xl bg-danger-soft px-3 py-2.5 text-p-sm text-danger"
       >
         <span class="flex items-start gap-2">
           <LucideCircleAlert
@@ -117,7 +117,7 @@
 
       <template v-else-if="data">
         <dl
-          class="grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-outline-gray-2 bg-surface-gray-2"
+          class="grid grid-cols-3 gap-px overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-gray-2"
           :class="preview.loading ? 'opacity-60' : ''"
           :aria-busy="preview.loading"
         >
@@ -135,7 +135,7 @@
 
         <p
           v-if="!data.lines.length"
-          class="rounded-lg border border-outline-gray-2 px-4 py-6 text-center text-p-sm text-ink-gray-6"
+          class="rounded-xl border border-outline-gray-2 px-4 py-6 text-center text-p-sm text-ink-gray-6"
         >
           {{
             data.hours_logged
@@ -150,7 +150,7 @@
 
         <div
           v-else
-          class="overflow-hidden rounded-lg border border-outline-gray-2"
+          class="overflow-hidden rounded-xl border border-outline-gray-2"
           :class="preview.loading ? 'opacity-60' : ''"
         >
           <table class="hidden w-full text-sm sm:table">
@@ -161,18 +161,18 @@
             </caption>
             <thead>
               <tr
-                class="border-b border-outline-gray-2 bg-surface-gray-1 text-left text-xs text-ink-gray-5"
+                class="h-11 border-b border-outline-gray-2 bg-surface-gray-1 text-left text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6"
               >
-                <th scope="col" class="px-3 py-2 font-normal">
+                <th scope="col" class="px-3 py-2 font-semibold">
                   {{ groupLabel }}
                 </th>
-                <th scope="col" class="px-3 py-2 text-right font-normal">
+                <th scope="col" class="px-3 py-2 text-right font-semibold">
                   {{ __("Hours") }}
                 </th>
-                <th scope="col" class="px-3 py-2 text-right font-normal">
+                <th scope="col" class="px-3 py-2 text-right font-semibold">
                   {{ __("Rate") }}
                 </th>
-                <th scope="col" class="px-3 py-2 text-right font-normal">
+                <th scope="col" class="px-3 py-2 text-right font-semibold">
                   {{ __("Amount") }}
                 </th>
               </tr>
@@ -181,7 +181,7 @@
               <tr
                 v-for="line in data.lines"
                 :key="`${line.project}-${line.task}`"
-                class="border-b border-outline-gray-1"
+                class="border-b border-outline-gray-1 hover:bg-surface-gray-1"
               >
                 <th
                   scope="row"
@@ -272,7 +272,7 @@
       <div
         v-if="create.error"
         role="alert"
-        class="flex items-start gap-2 rounded-lg bg-danger-soft px-3 py-2.5 text-p-sm text-danger"
+        class="flex items-start gap-2 rounded-xl bg-danger-soft px-3 py-2.5 text-p-sm text-danger"
       >
         <LucideCircleAlert class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
         <span>

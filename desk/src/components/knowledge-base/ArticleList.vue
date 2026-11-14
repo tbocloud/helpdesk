@@ -11,13 +11,13 @@
       :key="i"
       class="flex flex-col gap-2 px-4 py-3"
     >
-      <span class="h-4 w-2/3 animate-pulse rounded bg-surface-gray-2" />
-      <span class="h-3 w-1/3 animate-pulse rounded bg-surface-gray-2" />
+      <span class="h-4 w-2/3 animate-pulse rounded bg-surface-gray-3" />
+      <span class="h-3 w-1/3 animate-pulse rounded bg-surface-gray-3" />
     </li>
   </ul>
   <div
     v-else-if="error"
-    class="flex flex-wrap items-center gap-3 px-4 py-4 text-p-sm text-ink-gray-6"
+    class="flex flex-wrap items-center gap-3 px-4 py-3 text-p-sm text-ink-gray-6"
     role="alert"
   >
     <LucideCircleAlert class="size-4 shrink-0 text-danger" aria-hidden="true" />
@@ -26,7 +26,7 @@
     </span>
     <Button :label="__('Retry')" @click="emit('retry')" />
   </div>
-  <p v-else-if="!articles?.length" class="px-4 py-4 text-p-sm text-ink-gray-6">
+  <p v-else-if="!articles?.length" class="px-4 py-3 text-p-sm text-ink-gray-6">
     {{ emptyText }}
   </p>
   <ul v-else class="flex flex-col divide-y divide-outline-gray-1">

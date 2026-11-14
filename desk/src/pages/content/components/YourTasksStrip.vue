@@ -3,7 +3,7 @@
   <button
     v-if="mine.length"
     type="button"
-    class="flex min-h-[44px] w-full min-w-0 items-center gap-2.5 rounded-xl border border-outline-gray-2 bg-surface-base px-3 py-1.5 text-left text-sm transition-colors hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight sm:min-h-9"
+    class="flex min-h-[44px] w-full min-w-0 items-center gap-2.5 rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-2.5 text-left text-[13px] transition-colors hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight sm:min-h-9"
     :aria-label="__('Open your tasks. {0}', summary)"
     :title="summary"
     @click="emit('open')"

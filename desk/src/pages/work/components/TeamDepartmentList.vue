@@ -12,13 +12,14 @@
   >
     <TaskyState
       v-if="!departments.length"
+      class="py-10"
       :icon="LucideBuilding2"
       :title="__('No departments yet')"
       :message="__('Add them in Settings → Departments.')"
     />
     <template v-else>
       <div
-        class="hidden gap-3 border-b border-outline-gray-2 bg-surface-gray-1 px-4 py-2 text-xs text-ink-gray-5 lg:grid"
+        class="hidden h-11 items-center gap-3 border-b border-outline-gray-2 bg-surface-gray-1 px-5 text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6 lg:grid"
         :class="GRID"
         aria-hidden="true"
       >

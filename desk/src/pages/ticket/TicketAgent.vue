@@ -5,8 +5,11 @@
       :details-open="detailsOpen"
       @toggle-details="detailsOpen = !detailsOpen"
     />
-    <div class="h-full flex overflow-hidden">
-      <div class="flex min-w-0 flex-1 flex-col overflow-hidden">
+    <!-- the conversation and the side panel as two white cards on the canvas -->
+    <div class="flex h-full gap-4 overflow-hidden px-4 pb-4 pt-5 md:px-8">
+      <div
+        class="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
+      >
         <!-- Tabs & Communication Area -->
         <TicketActivityPanel />
       </div>

@@ -1,6 +1,7 @@
 <template>
   <TaskyState
     v-if="resource.error && !data"
+    class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
     :icon="LucideCircleAlert"
     :title="__('Couldn\'t load the history')"
     :message="
@@ -12,7 +13,7 @@
   </TaskyState>
   <div
     v-else-if="!data"
-    class="h-48 animate-pulse rounded-xl bg-surface-gray-2"
+    class="h-48 animate-pulse rounded-xl bg-surface-gray-3"
     aria-busy="true"
   />
   <SectionCard

@@ -1052,16 +1052,31 @@ doesn't show without its fields. The hub can be deployed before TBO Smart.
     to dates) and, for
     a team lead or a manager, **Owner** ("My team" / "Everyone" or one person). Both are in
     the URL (`period`, `from`, `to`, `owner`).
-  - **This period** (one bordered row of five cells: New leads, Contacted, Meetings held,
-    Proposals sent, Won with its value; each opens its leads). The second row holds **Needs
-    attention** now and Lost. **Needs attention** now: Overdue follow-ups (red), Gone quiet (no touch for
-    the ERP site's stale days, amber), Hot leads.
-  - **Pipeline now**: every open stage with its leads and their latest quotations' value, as
-    neutral bars (Won and Lost only when they have leads). **Funnel**: of the period's new
-    leads, how many got to Contacted, Meeting, Proposal and Won, with the win rate. **Why
-    leads were lost** (top five). **Hot leads** (the six best, each opens the lead). **By
-    owner** (new, contacted, meetings, proposals, won, open), **By segment** and **By
-    source** (new, open, won).
+  - **Header and tabs** (2026-11-14): on a report the page is titled for it ("Team overview",
+    "Daily report", …, each with a one-line subtitle), the reports (Overview, Daily report,
+    Outreach, Commission, Business) are the pills, and **Go to all leads →** opens the lists.
+    On a list the lists are the pills and the reports are links beside them.
+  - **Period card**: the period pills and Owner in one white card, with the range and whose
+    leads on the right ("Fri, 14 Nov 2026 · everyone's leads · tap any number…").
+  - **Pipeline progress** (one card, five numbered steps: New leads, Contacted, Meetings
+    held, Proposals sent, Won; each opens its leads). Each step has a bar and its share of
+    the step before ("9% of new leads"); New leads reads "Came in this period", Won adds its
+    value. This replaces the old Funnel panel, which showed the same steps.
+  - **Needs attention**: four cards, each with its icon and the next move under the number:
+    Overdue follow-ups (red, "Call these first →"), Gone quiet (no touch for the ERP site's
+    stale days, amber, "Re-engage →"), Hot leads ("Close them →"), Lost this period ("See
+    why →", or "Nothing lost, nice"). A zero says so instead of asking for action.
+  - **Two columns** below: on the left **Your plan for today** (the AI's rows, each with the
+    lead, why it's there as a chip, its stage pill, an Open button and the AI's **Next step**
+    in a box; the AI counts as tinted chips) and **Pipeline by stage**; on the right **New
+    leads by person** (the intake strip's by-person card, Today / Yesterday), **Pipeline
+    now** (open leads and win rate, with a link down to every stage) and **Why leads were
+    lost**. The plan's button opens the lead rather than calling, because the plan rows
+    carry no phone number.
+  - **Pipeline by stage**: every open stage with its leads and their latest quotations'
+    value, as neutral bars (Won and Lost only when they have leads). **Hot leads** (the six
+    best, each opens the lead). **By owner** (new, contacted, meetings, proposals, won,
+    open), **By segment** and **By source** (new, open, won).
   - **Every number opens its leads**: a tile, a stage, an owner's or a segment's number
     goes to the list with `metric` and the period (or a stage, owner, segment or source
     filter); the list shows what it was opened with ("Won, this month") and *Clear filters*
@@ -1070,7 +1085,7 @@ doesn't show without its fields. The hub can be deployed before TBO Smart.
     unfinished custom period, an empty line in each panel with nothing to show.
   - Colour: one brand accent (the selected period); green only for Won, red only for
     overdue, amber for gone quiet, each with its icon and label. No other colour.
-  - **Proposals & money** (`LeadsMoney.vue`, under Pipeline and Funnel, read by its own
+  - **Proposals & money** (`LeadsMoney.vue`, under the two columns, read by its own
     `get_proposal_money` with the same period and owner): four tiles, *Proposals sent* (their
     value, how many; opens the Proposals sent list), *Won* (value, leads), *Advances received*
     in the period, and *Still to collect* (with what is overdue); a note when proposals went

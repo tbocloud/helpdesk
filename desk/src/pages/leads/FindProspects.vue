@@ -21,16 +21,17 @@
     </LayoutHeader>
 
     <div class="relative flex-1 overflow-auto">
-      <div class="mx-auto w-full max-w-6xl px-4 py-5 md:px-6">
+      <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
         <div
           v-if="!options && leadOptions.loading"
-          class="h-80 animate-pulse rounded-xl bg-surface-gray-2"
+          class="h-80 animate-pulse rounded-xl bg-surface-gray-3"
           aria-busy="true"
           :aria-label="__('Loading')"
         />
 
         <TaskyState
           v-else-if="!prospecting"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
           :icon="LucideLock"
           :title="__('Find prospects isn\'t available to you')"
           :message="
@@ -44,7 +45,7 @@
 
         <div
           v-else
-          class="grid grid-cols-1 gap-4 lg:grid-cols-[26rem_1fr] lg:items-start"
+          class="grid grid-cols-1 gap-5 lg:grid-cols-[26rem_1fr] lg:items-start"
         >
           <!-- the search: estimate first, start only after seeing the price -->
           <form
@@ -52,7 +53,7 @@
             novalidate
             @submit.prevent="onSubmit"
           >
-            <h2 class="text-base-medium text-ink-gray-9">
+            <h2 class="text-base font-semibold text-ink-gray-9">
               {{ __("Search") }}
             </h2>
             <FormControl
@@ -130,7 +131,7 @@
             <!-- the price, then the one primary action: start -->
             <section
               v-if="estimated"
-              class="flex flex-col gap-2 rounded-lg border border-outline-gray-2 bg-surface-gray-1 p-3"
+              class="flex flex-col gap-2 rounded-xl border border-outline-gray-2 bg-surface-gray-1 p-3.5"
               :aria-label="__('Estimate')"
             >
               <dl class="grid grid-cols-2 gap-3">
@@ -177,6 +178,7 @@
               <Button
                 v-if="estimated"
                 variant="solid"
+                size="md"
                 type="submit"
                 :label="__('Start run')"
                 :loading="start.loading"
@@ -184,6 +186,7 @@
               <Button
                 v-else
                 variant="solid"
+                size="md"
                 type="submit"
                 :label="__('Estimate')"
                 :loading="estimate.loading"
@@ -194,13 +197,15 @@
 
           <!-- the runs, newest first; a running one updates by itself -->
           <section
-            class="min-w-0 rounded-xl border border-outline-gray-2 bg-surface-base"
+            class="min-w-0 overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
             :aria-label="__('Runs')"
           >
             <div
-              class="flex items-center gap-2 border-b border-outline-gray-1 px-4 py-3"
+              class="flex items-center gap-2 border-b border-outline-gray-2 px-4 py-3"
             >
-              <h2 class="text-base-medium text-ink-gray-9">{{ __("Runs") }}</h2>
+              <h2 class="text-base font-semibold text-ink-gray-9">
+                {{ __("Runs") }}
+              </h2>
               <Button
                 class="ml-auto"
                 variant="ghost"
@@ -216,15 +221,16 @@
 
             <div
               v-if="!runs.data && runs.loading"
-              class="flex flex-col gap-2 p-4"
+              class="flex flex-col gap-2 p-5"
               aria-busy="true"
               :aria-label="__('Loading')"
             >
-              <div class="h-14 animate-pulse rounded-lg bg-surface-gray-2" />
-              <div class="h-14 animate-pulse rounded-lg bg-surface-gray-2" />
+              <div class="h-14 animate-pulse rounded-xl bg-surface-gray-3" />
+              <div class="h-14 animate-pulse rounded-xl bg-surface-gray-3" />
             </div>
             <TaskyState
               v-else-if="runs.error && !runs.data"
+              class="py-10"
               error
               :icon="LucideCircleAlert"
               :title="__('Couldn\'t load the runs')"
@@ -239,12 +245,14 @@
             </TaskyState>
             <TaskyState
               v-else-if="!runs.data?.available"
+              class="py-10"
               :icon="LucideSearchX"
               :title="__('The ERP site can\'t find prospects yet')"
               :message="__('It needs the latest TBO Smart.')"
             />
             <TaskyState
               v-else-if="!runList.length"
+              class="py-10"
               :icon="LucideSearch"
               :title="__('No runs yet')"
               :message="
@@ -261,9 +269,10 @@
                   @click="openRun = run.name"
                 >
                   <span class="flex flex-wrap items-center gap-2">
-                    <span class="min-w-0 truncate text-base text-ink-gray-9">{{
-                      runTitle(run)
-                    }}</span>
+                    <span
+                      class="min-w-0 truncate text-[13px] font-semibold text-ink-gray-9"
+                      >{{ runTitle(run) }}</span
+                    >
                     <TaskyBadge
                       class="ml-auto"
                       :label="STATUS[run.status].label"
@@ -294,7 +303,7 @@
                 </button>
                 <div
                   v-if="run.status === 'Done' && run.count_created"
-                  class="px-4 pb-3"
+                  class="px-5 pb-4"
                 >
                   <DraftFirstMessages :run="run.name" size="sm" />
                 </div>

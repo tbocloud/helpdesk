@@ -3,7 +3,7 @@
   <!-- always in the flow: absolutely placed (as upstream did for empty lists) it lands on
        whatever sits above the list, like the tickets summary strip -->
   <div
-    class="relative flex items-center justify-between gap-2 px-5 pb-4 pt-3"
+    class="relative flex items-center justify-between gap-2 border-b border-outline-gray-2 px-4 py-4 md:px-4"
     v-if="showViewControls"
   >
     <QuickFilters v-if="!isMobileView" />
@@ -111,7 +111,7 @@
 
   <!-- List Footer -->
   <div
-    class="p-20 border-t sm:px-5 px-3 py-2"
+    class="border-t border-outline-gray-2 px-4 py-3.5 md:px-4"
     v-if="list.data?.data.length > 0"
   >
     <ListFooter

@@ -4,7 +4,7 @@
       <li v-for="chip in shown" :key="chip.key">
         <RouterLink
           :to="chip.to"
-          class="inline-flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+          class="inline-flex h-9 items-center gap-2 rounded-full border px-3.5 text-[13px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
           :class="CHIP_CLASSES[chip.tone]"
         >
           <component

@@ -1,41 +1,45 @@
 <template>
   <div class="flex h-full flex-col">
-    <LayoutHeader>
-      <template #left-header>
-        <div class="truncate text-lg-medium text-ink-gray-9">
-          {{ __("Projects") }}
-        </div>
-      </template>
+    <LayoutHeader
+      :title="__('Projects')"
+      :subtitle="
+        __(
+          'Every project you\'re on, by department. Open one to plan its tasks, or go straight to its board.'
+        )
+      "
+    >
       <!-- below sm the buttons show only their icons (the label stays as the
            accessible name), so they fit beside the title -->
       <template #right-header>
         <Button
-          :route="{ name: 'ProjectStatus' }"
-          :label="__('Project status')"
-        >
-          <template #prefix>
-            <LucideClipboardList class="size-4" aria-hidden="true" />
-          </template>
-          <span class="hidden sm:inline">{{ __("Project status") }}</span>
-        </Button>
-        <Button
-          variant="ghost"
+          size="md"
           :aria-label="__('Refresh')"
           :loading="projects.loading && !!projects.data"
           @click="reloadAll"
         >
           <template #icon>
-            <LucideRefreshCw class="size-4" aria-hidden="true" />
+            <LucideRefreshCw class="size-[18px]" aria-hidden="true" />
           </template>
+        </Button>
+        <Button
+          size="md"
+          :route="{ name: 'ProjectStatus' }"
+          :label="__('Project status')"
+        >
+          <template #prefix>
+            <LucideClipboardList class="size-[18px]" aria-hidden="true" />
+          </template>
+          <span class="hidden sm:inline">{{ __("Project status") }}</span>
         </Button>
         <Button
           v-if="authStore.isProjectManager"
           variant="solid"
+          size="md"
           :label="__('New project')"
           @click="showNewForm = true"
         >
           <template #prefix>
-            <LucidePlus class="size-4" aria-hidden="true" />
+            <LucidePlus class="size-[18px]" aria-hidden="true" />
           </template>
           <span class="hidden sm:inline">{{ __("New project") }}</span>
         </Button>
@@ -43,26 +47,14 @@
     </LayoutHeader>
 
     <div ref="panel" class="relative flex-1 overflow-auto">
-      <div class="mx-auto w-full max-w-6xl px-4 py-5 md:px-6">
-        <p class="text-p-sm text-ink-gray-6">
-          {{
-            __(
-              "Every project you're on, by department. Open one to plan its tasks, or go straight to its board."
-            )
-          }}
-        </p>
-
+      <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
         <!-- a shortcut back to what you were working on; nothing to show until you open one -->
-        <nav
-          v-if="recentProjects.length"
-          class="mt-4"
-          :aria-labelledby="`${listId}-recent`"
-        >
+        <nav v-if="recentProjects.length" :aria-labelledby="`${listId}-recent`">
           <h2
             :id="`${listId}-recent`"
-            class="flex items-center gap-1.5 text-sm font-medium text-ink-gray-7"
+            class="flex items-center gap-1.5 text-[13px] font-medium text-ink-gray-6"
           >
-            <LucideHistory class="size-4 text-ink-gray-5" aria-hidden="true" />
+            <LucideHistory class="size-4 text-ink-gray-6" aria-hidden="true" />
             {{ __("Recent") }}
           </h2>
           <ul
@@ -79,12 +71,12 @@
                   name: 'TaskyProject',
                   params: { projectId: project.name },
                 }"
-                class="flex w-48 flex-col rounded-lg border border-outline-gray-2 bg-surface-base px-3 py-2 transition-colors hover:border-outline-gray-3 hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+                class="flex w-52 flex-col gap-0.5 rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-3 transition-colors hover:border-outline-gray-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
               >
-                <span class="truncate text-sm text-ink-gray-9">
+                <span class="truncate text-[13px] font-medium text-ink-gray-9">
                   {{ project.project_name || project.name }}
                 </span>
-                <span class="truncate text-xs text-ink-gray-5">
+                <span class="truncate text-[12px] text-ink-gray-6">
                   {{ recentSubtitle(project) }}
                 </span>
               </router-link>
@@ -94,7 +86,7 @@
 
         <TaskyState
           v-if="projects.error && !projects.data"
-          class="mt-6"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
           error
           :icon="LucideCircleAlert"
           :title="__('Couldn\'t load projects')"
@@ -106,7 +98,7 @@
         <template v-else>
           <!-- Summary: the two that count work narrow the cards to what they count -->
           <div
-            class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3"
+            class="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4"
             role="group"
             :aria-label="__('Project summary')"
           >
@@ -114,6 +106,7 @@
               :label="__('Open projects')"
               :value="openInScope.length"
               :icon="LucideFolderOpen"
+              icon-tone="brand"
               :loading="isLoading"
             />
             <StatTile
@@ -143,37 +136,34 @@
 
           <!-- Filters -->
           <div
-            class="mt-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between"
+            class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between"
           >
-            <div class="-mx-1 min-w-0 overflow-x-auto px-1">
-              <TabButtons
+            <div class="max-w-full overflow-x-auto">
+              <ViewTabs
                 :model-value="activeStatus"
-                size="md"
                 :aria-label="__('Filter projects by status')"
                 :aria-controls="listId"
-                :options="STATUS_TABS.map((t) => ({ label: __(t), value: t }))"
+                :options="
+                  STATUS_TABS.map((t) => ({
+                    label: __(t),
+                    value: t,
+                    count: countFor(t),
+                  }))
+                "
                 @update:model-value="setStatus($event)"
-              >
-                <template #suffix="{ button, checked }">
-                  <span
-                    class="font-mono text-xs tabular-nums"
-                    :class="checked ? '' : 'text-ink-gray-5'"
-                  >
-                    {{ countFor(button.modelValue) }}
-                  </span>
-                </template>
-              </TabButtons>
+              />
             </div>
             <TextInput
               v-model="search"
               type="search"
-              class="w-full md:w-64"
+              size="md"
+              class="w-full md:w-80"
               :placeholder="__('Search projects or customers')"
               :aria-label="__('Search projects')"
             >
               <template #prefix>
                 <LucideSearch
-                  class="size-4 text-ink-gray-5"
+                  class="size-[18px] text-ink-gray-6"
                   aria-hidden="true"
                 />
               </template>
@@ -182,7 +172,7 @@
 
           <div
             v-if="departmentChips.length"
-            class="-mx-1 mt-3 flex gap-1.5 overflow-x-auto px-1 pb-1"
+            class="-mx-1 -mt-2 flex gap-2 overflow-x-auto px-1 pb-1"
             role="group"
             :aria-label="__('Filter projects by department')"
           >
@@ -191,16 +181,16 @@
               :key="chip.key"
               type="button"
               :aria-pressed="activeDepartment === chip.key"
-              class="flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+              class="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
               :class="
                 activeDepartment === chip.key
-                  ? 'border-outline-gray-4 bg-surface-gray-3 text-ink-gray-9'
-                  : 'border-outline-gray-2 text-ink-gray-6 hover:bg-surface-gray-2 hover:text-ink-gray-8'
+                  ? 'border-brand-soft-border bg-brand-soft text-brand-ink'
+                  : 'border-outline-gray-2 bg-surface-base text-ink-gray-7 hover:bg-surface-gray-2'
               "
               @click="activeDepartment = chip.key"
             >
               {{ chip.label }}
-              <span class="font-mono text-xs tabular-nums text-ink-gray-5">
+              <span class="font-mono text-xs tabular-nums opacity-80">
                 {{ departmentCount(chip.key) }}
               </span>
             </button>
@@ -208,7 +198,7 @@
 
           <div
             v-if="showTile"
-            class="mt-3 flex flex-wrap items-center gap-2 text-sm text-ink-gray-6"
+            class="-mt-2 flex flex-wrap items-center gap-2 text-sm text-ink-gray-6"
             role="status"
           >
             {{ showTile }}
@@ -228,22 +218,22 @@
             <!-- Loading -->
             <div
               v-if="listLoading"
-              class="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
+              class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
               :aria-label="__('Loading')"
             >
               <div
                 v-for="i in 6"
                 :key="i"
-                class="flex flex-col gap-4 rounded-lg border border-outline-gray-2 bg-surface-base p-4"
+                class="flex flex-col gap-4 rounded-xl border border-outline-gray-2 bg-surface-base p-4"
               >
                 <div
-                  class="h-4 w-3/5 animate-pulse rounded bg-surface-gray-2"
+                  class="h-4 w-3/5 animate-pulse rounded bg-surface-gray-3"
                 />
                 <div
-                  class="h-3 w-2/5 animate-pulse rounded bg-surface-gray-2"
+                  class="h-3 w-2/5 animate-pulse rounded bg-surface-gray-3"
                 />
                 <div
-                  class="h-1.5 w-full animate-pulse rounded-full bg-surface-gray-2"
+                  class="h-1.5 w-full animate-pulse rounded-full bg-surface-gray-3"
                 />
               </div>
             </div>
@@ -251,10 +241,11 @@
             <!-- Empty: first use, or filtered to nothing -->
             <div
               v-else-if="!visibleProjects.length"
-              class="mt-5 rounded-lg border border-outline-gray-2 bg-surface-base"
+              class="rounded-xl border border-outline-gray-2 bg-surface-base"
             >
               <TaskyState
                 v-if="!allProjects.length"
+                class="py-10"
                 :icon="LucideFolderKanban"
                 :title="__('No projects yet')"
                 :message="
@@ -280,6 +271,7 @@
               </TaskyState>
               <TaskyState
                 v-else
+                class="py-10"
                 :icon="LucideSearchX"
                 :title="__('No matching projects')"
                 :message="__('Try a different search, or clear the filters.')"
@@ -292,7 +284,7 @@
             </div>
 
             <!-- Cards, one section per department -->
-            <div v-else class="mt-5 flex flex-col gap-8">
+            <div v-else class="flex flex-col gap-8">
               <section
                 v-for="(group, groupIdx) in groups"
                 :key="group.key"
@@ -300,10 +292,12 @@
               >
                 <h2
                   :id="`department-heading-${groupIdx}`"
-                  class="flex items-center gap-2 text-base-semibold text-ink-gray-9"
+                  class="flex items-center gap-2 text-base font-semibold text-ink-gray-9"
                 >
                   {{ group.label }}
-                  <span class="font-mono text-sm tabular-nums text-ink-gray-5">
+                  <span
+                    class="min-w-[22px] rounded-full bg-surface-gray-4 px-[7px] py-px text-center text-xs font-semibold tabular-nums text-ink-gray-7"
+                  >
                     {{ group.projects.length }}
                     <span class="sr-only">{{ __("projects") }}</span>
                   </span>
@@ -370,12 +364,13 @@
 <script setup lang="ts">
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import StatTile from "@/components/StatTile.vue";
+import ViewTabs from "@/components/ViewTabs.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import { useScrollRestore } from "@/composables/scrollRestore";
 import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import { watchDebounced } from "@vueuse/core";
-import { Button, TabButtons, TextInput, createResource } from "frappe-ui";
+import { Button, TextInput, createResource } from "frappe-ui";
 import { computed, reactive, ref, useId, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
@@ -411,7 +406,7 @@ interface Department {
 }
 
 const STATUS_TABS = ["Open", "Completed", "Cancelled", "All"] as const;
-type StatusTab = typeof STATUS_TABS[number];
+type StatusTab = (typeof STATUS_TABS)[number];
 type Show = "" | "overdue" | "ending";
 
 const projects = createResource({

@@ -1,11 +1,17 @@
 <template>
   <div class="flex h-full flex-col">
-    <LayoutHeader>
+    <LayoutHeader
+      :title="__('Contacts')"
+      :subtitle="
+        __(
+          'The people who raise tickets and the customers they belong to; invite them to the portal from their page.'
+        )
+      "
+    >
       <template #left-header>
-        <h1 class="text-lg-medium text-ink-gray-9">{{ __("Contacts") }}</h1>
         <span
           v-if="total !== undefined"
-          class="font-mono text-sm tabular-nums text-ink-gray-5"
+          class="self-start font-mono text-sm tabular-nums text-ink-gray-5 md:mt-2.5"
         >
           {{ total }}
         </span>
@@ -13,39 +19,39 @@
       <template #right-header>
         <Button
           variant="solid"
+          size="md"
           :label="__('New contact')"
           @click="showNewContactModal = true"
         >
           <template #prefix>
-            <LucidePlus class="size-4" aria-hidden="true" />
+            <LucidePlus class="size-[18px]" aria-hidden="true" />
           </template>
         </Button>
       </template>
     </LayoutHeader>
 
     <div class="relative flex-1 overflow-auto">
-      <div class="mx-auto w-full max-w-6xl px-4 py-5 md:px-6">
-        <div
-          class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+      <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
+        <section
+          class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
+          :aria-label="__('Contacts')"
         >
-          <p class="max-w-xl text-p-sm text-ink-gray-6">
-            {{
-              __(
-                "The people who raise tickets, and the customers they belong to. Invite them to the portal from their page."
-              )
-            }}
-          </p>
-          <div class="flex gap-2">
+          <div
+            class="flex flex-wrap items-center gap-2.5 border-b border-outline-gray-2 px-4 py-4 md:px-4"
+            role="group"
+            :aria-label="__('Filter the contacts')"
+          >
             <TextInput
               v-model="search"
               type="search"
-              class="min-w-0 flex-1 sm:w-64 sm:flex-none"
+              size="md"
+              class="min-w-0 flex-[1_1_280px]"
               :placeholder="__('Search name, email or phone')"
               :aria-label="__('Search contacts')"
             >
               <template #prefix>
                 <LucideSearch
-                  class="size-4 text-ink-gray-5"
+                  class="size-[18px] text-ink-gray-6"
                   aria-hidden="true"
                 />
               </template>
@@ -53,131 +59,135 @@
             <FormControl
               v-model="sort"
               type="select"
-              class="w-36 shrink-0"
+              size="md"
+              class="w-full sm:w-44"
               :options="DIRECTORY_SORTS"
               :aria-label="__('Sort contacts')"
             />
           </div>
-        </div>
 
-        <DirectoryList
-          class="mt-4"
-          :columns="COLUMNS"
-          :grid-class="GRID"
-          :rows="rows"
-          :total="total"
-          :loading="loading"
-          :error="error"
-          :has-more="hasMore"
-          :row-to="(row) => ({ name: 'Contact', params: { id: row.name } })"
-          :row-label="(row) => String(row.full_name || row.name)"
-          :error-title="__('Couldn\'t load contacts')"
-          :deletable="hasPermission()"
-          doctype="Contact"
-          :noun="__('contacts')"
-          @more="more"
-          @retry="reload"
-          @deleted="reload"
-        >
-          <template #row="{ row }">
-            <div class="flex min-w-0 items-center gap-3">
-              <Avatar
-                size="lg"
-                shape="circle"
-                :label="String(row.full_name || row.name)"
-                :image="(row.image as string) || undefined"
-              />
-              <div class="min-w-0">
-                <div class="truncate text-sm text-ink-gray-9">
-                  {{ row.full_name || row.name }}
-                </div>
-                <div
-                  class="flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs text-ink-gray-5"
-                >
-                  <span v-if="row.email_id" class="truncate font-mono">
-                    {{ row.email_id }}
-                  </span>
-                  <span
-                    v-else-if="row.mobile_no"
-                    class="truncate font-mono tabular-nums"
+          <DirectoryList
+            :columns="COLUMNS"
+            :grid-class="GRID"
+            :rows="rows"
+            :total="total"
+            :loading="loading"
+            :error="error"
+            :has-more="hasMore"
+            :row-to="(row) => ({ name: 'Contact', params: { id: row.name } })"
+            :row-label="(row) => String(row.full_name || row.name)"
+            :error-title="__('Couldn\'t load contacts')"
+            :deletable="hasPermission()"
+            doctype="Contact"
+            :noun="__('contacts')"
+            @more="more"
+            @retry="reload"
+            @deleted="reload"
+          >
+            <template #row="{ row }">
+              <div class="flex min-w-0 items-center gap-3">
+                <Avatar
+                  size="md"
+                  shape="circle"
+                  :label="String(row.full_name || row.name)"
+                  :image="(row.image as string) || undefined"
+                />
+                <div class="min-w-0">
+                  <div
+                    class="truncate text-[13px] font-semibold text-ink-gray-9"
                   >
-                    {{ row.mobile_no }}
-                  </span>
-                  <!-- on small screens the customer and count fold into this line -->
-                  <template v-if="customerLabel(row)">
-                    <span class="md:hidden" aria-hidden="true">·</span>
-                    <span class="truncate md:hidden">
-                      {{ customerLabel(row) }}
+                    {{ row.full_name || row.name }}
+                  </div>
+                  <div
+                    class="flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs text-ink-gray-5"
+                  >
+                    <span v-if="row.email_id" class="truncate font-mono">
+                      {{ row.email_id }}
                     </span>
-                  </template>
-                  <template v-if="row.open_tickets">
-                    <span class="md:hidden" aria-hidden="true">·</span>
-                    <span class="tabular-nums md:hidden">
-                      {{ openTicketsLabel(row.open_tickets as number) }}
+                    <span
+                      v-else-if="row.mobile_no"
+                      class="truncate font-mono tabular-nums"
+                    >
+                      {{ row.mobile_no }}
                     </span>
-                  </template>
+                    <!-- on small screens the customer and count fold into this line -->
+                    <template v-if="customerLabel(row)">
+                      <span class="md:hidden" aria-hidden="true">·</span>
+                      <span class="truncate md:hidden">
+                        {{ customerLabel(row) }}
+                      </span>
+                    </template>
+                    <template v-if="row.open_tickets">
+                      <span class="md:hidden" aria-hidden="true">·</span>
+                      <span class="tabular-nums md:hidden">
+                        {{ openTicketsLabel(row.open_tickets as number) }}
+                      </span>
+                    </template>
+                  </div>
                 </div>
               </div>
-            </div>
-            <span
-              class="hidden truncate text-sm md:block"
-              :class="
-                customerLabel(row) ? 'text-ink-gray-8' : 'text-ink-gray-4'
-              "
-              :title="(row.customers as string[]).join(', ')"
-            >
-              {{ customerLabel(row) || __("None") }}
-            </span>
-            <span
-              class="hidden text-right font-mono text-sm tabular-nums md:block"
-              :class="row.open_tickets ? 'text-ink-gray-8' : 'text-ink-gray-4'"
-            >
-              {{ row.open_tickets }}
-            </span>
-            <span class="flex justify-end md:justify-start">
-              <TaskyBadge
-                v-if="row.portal"
-                v-bind="PORTAL_BADGE[row.portal as PortalStatus]"
-              />
-              <span v-else class="hidden text-sm text-ink-gray-4 md:inline">
-                {{ __("No access") }}
-              </span>
-            </span>
-          </template>
-
-          <template #empty>
-            <TaskyState
-              v-if="searching"
-              :icon="LucideSearchX"
-              :title="__('No contacts match “{0}”', search.trim())"
-              :message="
-                __('Check the spelling, or search by email or phone number.')
-              "
-            >
-              <Button :label="__('Clear search')" @click="search = ''" />
-            </TaskyState>
-            <TaskyState
-              v-else
-              :icon="LucideContact"
-              :title="__('No contacts yet')"
-              :message="
-                __(
-                  'Contacts are added when customers email in, or you can add one and link it to a customer.'
-                )
-              "
-            >
-              <Button
-                variant="solid"
-                :label="__('New contact')"
-                @click="showNewContactModal = true"
+              <span
+                class="hidden truncate text-sm md:block"
+                :class="
+                  customerLabel(row) ? 'text-ink-gray-8' : 'text-ink-gray-4'
+                "
+                :title="(row.customers as string[]).join(', ')"
               >
-                <template #prefix>
-                  <LucidePlus class="size-4" aria-hidden="true" />
-                </template>
-              </Button>
-            </TaskyState>
-          </template>
-        </DirectoryList>
+                {{ customerLabel(row) || __("None") }}
+              </span>
+              <span
+                class="hidden text-right font-mono text-sm tabular-nums md:block"
+                :class="
+                  row.open_tickets ? 'text-ink-gray-8' : 'text-ink-gray-4'
+                "
+              >
+                {{ row.open_tickets }}
+              </span>
+              <span class="flex justify-end md:justify-start">
+                <TaskyBadge
+                  v-if="row.portal"
+                  v-bind="PORTAL_BADGE[row.portal as PortalStatus]"
+                />
+                <span v-else class="hidden text-sm text-ink-gray-4 md:inline">
+                  {{ __("No access") }}
+                </span>
+              </span>
+            </template>
+
+            <template #empty>
+              <TaskyState
+                v-if="searching"
+                :icon="LucideSearchX"
+                :title="__('No contacts match “{0}”', search.trim())"
+                :message="
+                  __('Check the spelling, or search by email or phone number.')
+                "
+              >
+                <Button :label="__('Clear search')" @click="search = ''" />
+              </TaskyState>
+              <TaskyState
+                v-else
+                :icon="LucideContact"
+                :title="__('No contacts yet')"
+                :message="
+                  __(
+                    'Contacts are added when customers email in, or you can add one and link it to a customer.'
+                  )
+                "
+              >
+                <Button
+                  variant="solid"
+                  :label="__('New contact')"
+                  @click="showNewContactModal = true"
+                >
+                  <template #prefix>
+                    <LucidePlus class="size-4" aria-hidden="true" />
+                  </template>
+                </Button>
+              </TaskyState>
+            </template>
+          </DirectoryList>
+        </section>
       </div>
     </div>
     <NewContactDialog v-model="showNewContactModal" />

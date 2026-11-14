@@ -1,7 +1,7 @@
 <template>
-  <div class="flex border-b pr-5">
-    <div id="app-header" class="flex-1 w-full"></div>
-    <div class="flex items-start justify-center">
+  <div class="flex items-start gap-4 px-8 pt-5">
+    <div id="app-header" class="w-full min-w-0 flex-1"></div>
+    <div class="flex items-start justify-center empty:hidden">
       <CallUI :userEmail="user" />
     </div>
   </div>

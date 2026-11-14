@@ -1,54 +1,56 @@
 <template>
   <div class="flex h-full flex-col">
-    <LayoutHeader>
-      <template #left-header>
-        <div class="text-lg-medium text-ink-gray-9">{{ __("Timesheets") }}</div>
-      </template>
+    <LayoutHeader
+      :title="__('Timesheets')"
+      :subtitle="
+        scope === 'team'
+          ? __(
+              'Hours your team logged on the projects you lead or manage, as a record of the work. Pick dates to see a period.'
+            )
+          : __(
+              'Hours you logged against projects and tasks, as a record of your work. Pick dates to see a period.'
+            )
+      "
+    >
       <template #right-header>
         <Button
-          variant="ghost"
+          size="md"
           :aria-label="__('Refresh')"
           :loading="(timesheets.loading && !!timesheets.data) || days.loading"
           @click="reload"
         >
           <template #icon>
-            <LucideRefreshCw class="size-4" aria-hidden="true" />
+            <LucideRefreshCw class="size-[18px]" aria-hidden="true" />
           </template>
         </Button>
         <Button
+          size="md"
           :label="__('Download CSV')"
           :tooltip="__('One row per time log, with the filters below')"
           @click="downloadCsv"
         >
           <template #prefix>
-            <LucideDownload class="size-4" aria-hidden="true" />
+            <LucideDownload class="size-[18px]" aria-hidden="true" />
           </template>
         </Button>
-        <Button variant="solid" :label="__('Log time')" @click="openForm">
+        <Button
+          variant="solid"
+          size="md"
+          :label="__('Log time')"
+          @click="openForm"
+        >
           <template #prefix>
-            <LucidePlus class="size-4" aria-hidden="true" />
+            <LucidePlus class="size-[18px]" aria-hidden="true" />
           </template>
         </Button>
       </template>
     </LayoutHeader>
 
     <div class="relative flex-1 overflow-auto">
-      <div class="mx-auto w-full max-w-6xl px-4 py-5 md:px-6">
-        <p class="text-p-sm text-ink-gray-6">
-          {{
-            scope === "team"
-              ? __(
-                  "Hours your team logged on the projects you lead or manage, as a record of the work. Pick dates to see a period."
-                )
-              : __(
-                  "Hours you logged against projects and tasks, as a record of your work. Pick dates to see a period."
-                )
-          }}
-        </p>
-
+      <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
         <TaskyState
           v-if="timesheets.error && !timesheets.data"
-          class="mt-6"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
           error
           :icon="LucideCircleAlert"
           :title="__('Couldn\'t load the timesheets')"
@@ -65,16 +67,18 @@
         <template v-else>
           <!-- Whose and when -->
           <div
-            class="mt-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between"
+            class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between"
           >
-            <TabButtons
+            <div
               v-if="canSeeTeam"
-              v-model="scope"
-              class="self-start lg:self-auto"
-              size="md"
-              :aria-label="__('Whose timesheets')"
-              :options="SCOPES.map((o) => ({ label: o.label, value: o.key }))"
-            />
+              class="max-w-full self-start overflow-x-auto"
+            >
+              <ViewTabs
+                v-model="scope"
+                :aria-label="__('Whose timesheets')"
+                :options="SCOPES.map((o) => ({ label: o.label, value: o.key }))"
+              />
+            </div>
 
             <div
               class="flex flex-wrap items-end gap-3"
@@ -85,6 +89,7 @@
                 <FormControl
                   v-model="filters.agent"
                   type="select"
+                  size="md"
                   :label="__('Agent')"
                   :options="agentOptions"
                 />
@@ -93,6 +98,7 @@
                 <FormControl
                   v-model="filters.project"
                   type="select"
+                  size="md"
                   :label="__('Project')"
                   :options="projectFilterOptions"
                 />
@@ -101,6 +107,7 @@
                 <FormControl
                   v-model="filters.from_date"
                   type="date"
+                  size="md"
                   :label="__('From')"
                 />
               </div>
@@ -108,12 +115,14 @@
                 <FormControl
                   v-model="filters.to_date"
                   type="date"
+                  size="md"
                   :label="__('To')"
                 />
               </div>
               <Button
                 v-if="hasFilters"
                 variant="ghost"
+                size="md"
                 :label="__('Clear filters')"
                 @click="clearFilters"
               >
@@ -125,7 +134,9 @@
           </div>
 
           <!-- Summary of the period -->
-          <div class="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div
+            class="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4"
+          >
             <StatTile
               :label="__('Hours logged')"
               :value="summary.data ? formatHours(summary.data.hours) : '—'"
@@ -138,6 +149,7 @@
               :label="__('Timesheets')"
               :value="sheetCount"
               :icon="LucideFileClock"
+              icon-tone="brand"
               :loading="listLoading"
             />
             <StatTile
@@ -145,12 +157,13 @@
               :value="draftCount"
               :sub="drafts ? __('Not submitted yet') : undefined"
               :icon="LucideCircleDashed"
+              icon-tone="brand"
               :loading="listLoading"
             />
           </div>
 
           <div
-            class="mt-4 grid grid-cols-1 gap-4"
+            class="grid grid-cols-1 gap-5"
             :class="scope === 'team' ? 'lg:grid-cols-2' : ''"
           >
             <SectionCard
@@ -161,13 +174,13 @@
             >
               <div
                 v-if="summaryLoading"
-                class="flex flex-col gap-3 p-4"
+                class="flex flex-col gap-3 p-5"
                 :aria-label="__('Loading')"
               >
                 <div
                   v-for="i in 3"
                   :key="i"
-                  class="h-4 animate-pulse rounded bg-surface-gray-2"
+                  class="h-4 animate-pulse rounded bg-surface-gray-3"
                 />
               </div>
               <div
@@ -184,37 +197,39 @@
               </div>
               <p
                 v-else-if="!breakdown.rows.length"
-                class="px-4 py-3 text-p-sm text-ink-gray-5"
+                class="px-4 py-3 text-p-sm text-ink-gray-6"
               >
                 {{ __("No time logged in these dates.") }}
               </p>
-              <ul v-else role="list">
+              <ul v-else role="list" class="divide-y divide-outline-gray-1">
                 <li
                   v-for="row in breakdown.rows.slice(0, BREAKDOWN_ROWS)"
                   :key="row.key"
-                  class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5 border-b border-outline-gray-1 px-4 py-2.5 last:border-b-0"
+                  class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 px-5 py-3.5"
                 >
-                  <span class="truncate text-sm text-ink-gray-8">
+                  <span
+                    class="truncate text-[13px] font-medium text-ink-gray-9"
+                  >
                     {{ row.label }}
                   </span>
                   <span
-                    class="text-right font-mono text-sm tabular-nums text-ink-gray-8"
+                    class="text-right font-mono text-[13px] font-semibold tabular-nums text-ink-gray-9"
                   >
                     {{ formatHours(row.hours) }}
                   </span>
                   <span
-                    class="col-span-2 block h-1 overflow-hidden rounded-full bg-surface-gray-2"
+                    class="col-span-2 block h-2 overflow-hidden rounded-full bg-surface-gray-3"
                     aria-hidden="true"
                   >
                     <span
-                      class="block h-full rounded-full bg-surface-gray-6"
+                      class="block h-full rounded-full bg-brand"
                       :style="{ width: `${share(row.hours)}%` }"
                     />
                   </span>
                 </li>
                 <li
                   v-if="breakdown.rows.length > BREAKDOWN_ROWS"
-                  class="px-4 py-2.5 text-p-sm tabular-nums text-ink-gray-5"
+                  class="px-5 py-3 text-p-sm tabular-nums text-ink-gray-6"
                 >
                   {{ moreLabel(breakdown.rows) }}
                 </li>
@@ -224,7 +239,7 @@
 
           <!-- The timesheets, as a list or day by day -->
           <div
-            class="mt-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-2"
+            class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2"
           >
             <TabButtons
               v-model="view"
@@ -241,12 +256,12 @@
 
           <div
             v-if="view === 'day'"
-            class="mt-3 flex flex-col gap-4"
+            class="-mt-2 flex flex-col gap-5"
             :aria-busy="dayLoading"
           >
             <TaskyState
               v-if="rangeError"
-              class="rounded-xl border border-outline-gray-2 bg-surface-base"
+              class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
               :icon="LucideCalendarRange"
               :title="__('Pick a shorter period')"
               :message="rangeError"
@@ -256,17 +271,17 @@
               :title="__('Loading the days')"
               class="overflow-hidden"
             >
-              <div class="flex flex-col gap-3 p-4" :aria-label="__('Loading')">
+              <div class="flex flex-col gap-3 p-5" :aria-label="__('Loading')">
                 <div
                   v-for="i in 4"
                   :key="i"
-                  class="h-4 animate-pulse rounded bg-surface-gray-2"
+                  class="h-4 animate-pulse rounded bg-surface-gray-3"
                 />
               </div>
             </SectionCard>
             <TaskyState
               v-else-if="days.error"
-              class="rounded-xl border border-outline-gray-2 bg-surface-base"
+              class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
               error
               :icon="LucideCircleAlert"
               :title="__('Couldn\'t load the days')"
@@ -281,7 +296,7 @@
             </TaskyState>
             <TaskyState
               v-else-if="dayData?.too_many"
-              class="rounded-xl border border-outline-gray-2 bg-surface-base"
+              class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
               :icon="LucideCalendarRange"
               :title="__('Too many time logs to show day by day')"
               :message="
@@ -298,7 +313,7 @@
             </TaskyState>
             <TaskyState
               v-else-if="!dayPeople.length"
-              class="rounded-xl border border-outline-gray-2 bg-surface-base"
+              class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
               :icon="LucideSearchX"
               :title="__('No time logged in these dates')"
               :message="
@@ -339,7 +354,7 @@
                 class="border-b border-outline-gray-2 last:border-b-0"
               >
                 <h3
-                  class="flex items-baseline justify-between gap-4 bg-surface-gray-1 px-4 py-2 text-sm-medium text-ink-gray-8"
+                  class="flex items-baseline justify-between gap-4 bg-surface-gray-1 px-5 py-2.5 text-[12px] font-semibold text-ink-gray-8"
                 >
                   <span class="tabular-nums">{{ formatDay(day.date) }}</span>
                   <span class="font-mono tabular-nums">
@@ -351,15 +366,17 @@
                   <li
                     v-for="entry in day.entries"
                     :key="`${entry.project}-${entry.task}`"
-                    class="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 border-t border-outline-gray-1 px-4 py-2.5"
+                    class="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 border-t border-outline-gray-1 px-5 py-3.5"
                   >
                     <div class="min-w-0">
-                      <div class="break-words text-sm text-ink-gray-9">
+                      <div
+                        class="break-words text-[13px] font-medium text-ink-gray-9"
+                      >
                         {{ entryTitle(entry) }}
                       </div>
                       <div
                         v-if="entry.task && entry.project"
-                        class="mt-0.5 truncate text-xs text-ink-gray-5"
+                        class="mt-0.5 truncate text-xs text-ink-gray-6"
                         :title="entry.project_name || entry.project"
                       >
                         {{ entry.project_name || entry.project }}
@@ -395,11 +412,11 @@
                   )
                 : undefined
             "
-            class="mt-3 overflow-hidden"
+            class="-mt-2 overflow-hidden"
           >
             <div
               v-if="sheets.length"
-              class="hidden gap-4 border-b border-outline-gray-2 bg-surface-gray-1 px-4 py-2 text-xs text-ink-gray-5 md:grid"
+              class="hidden h-11 items-center gap-4 border-b border-outline-gray-2 bg-surface-gray-1 px-4 text-left text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6 md:grid md:px-4"
               :class="GRID"
               aria-hidden="true"
             >
@@ -415,23 +432,24 @@
               <div
                 v-for="i in 5"
                 :key="i"
-                class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-3.5 last:border-b-0"
+                class="flex h-14 items-center gap-3 border-b border-outline-gray-1 px-4 last:border-b-0 md:px-4"
               >
                 <div class="flex flex-1 flex-col gap-2">
                   <div
-                    class="h-3.5 w-2/5 animate-pulse rounded bg-surface-gray-2"
+                    class="h-3.5 w-2/5 animate-pulse rounded bg-surface-gray-3"
                   />
                   <div
-                    class="h-3 w-1/4 animate-pulse rounded bg-surface-gray-2"
+                    class="h-3 w-1/4 animate-pulse rounded bg-surface-gray-3"
                   />
                 </div>
-                <div class="h-3 w-10 animate-pulse rounded bg-surface-gray-2" />
+                <div class="h-3 w-10 animate-pulse rounded bg-surface-gray-3" />
               </div>
             </div>
 
             <!-- Empty: filtered to nothing, or nothing logged yet -->
             <TaskyState
               v-else-if="!sheets.length && hasFilters"
+              class="py-10"
               :icon="LucideSearchX"
               :title="__('No time logged in these dates')"
               :message="__('Try other dates, or clear the filters.')"
@@ -440,6 +458,7 @@
             </TaskyState>
             <TaskyState
               v-else-if="!sheets.length"
+              class="py-10"
               :icon="LucideClock"
               :title="
                 scope === 'team'
@@ -463,15 +482,15 @@
               <li
                 v-for="ts in sheets"
                 :key="ts.name"
-                class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 border-b border-outline-gray-1 px-4 py-3 last:border-b-0"
+                class="grid min-h-16 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 border-b border-outline-gray-1 px-4 py-3 last:border-b-0 hover:bg-surface-gray-1 md:px-4"
                 :class="GRID"
               >
                 <div class="min-w-0">
-                  <div class="truncate text-sm text-ink-gray-9">
+                  <div class="truncate text-[13px] font-medium text-ink-gray-9">
                     {{ ts.title || ts.name }}
                   </div>
                   <div
-                    class="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs text-ink-gray-5"
+                    class="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs text-ink-gray-6"
                   >
                     <span class="font-mono">{{ ts.name }}</span>
                     <template v-if="ts.project_name || ts.projects?.length">
@@ -497,9 +516,10 @@
                 </div>
                 <span
                   v-if="scope === 'team'"
-                  class="hidden truncate text-sm text-ink-gray-7 md:block"
+                  class="hidden min-w-0 items-center gap-2 text-[13px] text-ink-gray-8 md:flex"
                 >
-                  {{ ts.owner_name || ts.owner }}
+                  <PersonAvatar :name="ts.owner_name || ts.owner" size="md" />
+                  <span class="truncate">{{ ts.owner_name || ts.owner }}</span>
                 </span>
                 <span class="hidden md:block">
                   <TaskyBadge
@@ -513,12 +533,12 @@
                   />
                 </span>
                 <span
-                  class="text-right font-mono text-sm tabular-nums text-ink-gray-8"
+                  class="text-right font-mono text-[13px] font-semibold tabular-nums text-ink-gray-9"
                 >
                   {{ formatHours(ts.total_hours) }}
                 </span>
                 <span
-                  class="hidden text-right text-sm tabular-nums text-ink-gray-5 md:block"
+                  class="hidden text-right text-[12px] tabular-nums text-ink-gray-6 md:block"
                 >
                   {{ formatDate(ts.modified) }}
                 </span>
@@ -529,7 +549,7 @@
       </div>
     </div>
 
-    <Dialog v-model:open="showForm" :title="__('Log time')" size="lg">
+    <Dialog v-model:open="showForm" :title="__('Log time')" size="md">
       <form
         id="tasky-new-timesheet"
         class="flex flex-col gap-4"
@@ -607,7 +627,9 @@
 <script setup lang="ts">
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import SectionCard from "@/components/SectionCard.vue";
+import PersonAvatar from "@/components/PersonAvatar.vue";
 import StatTile from "@/components/StatTile.vue";
+import ViewTabs from "@/components/ViewTabs.vue";
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import { useAuthStore } from "@/stores/auth";

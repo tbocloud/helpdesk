@@ -33,7 +33,7 @@
         <div
           v-for="(item, index) in form.items"
           :key="item.key"
-          class="flex flex-col gap-3 rounded-lg border border-outline-gray-2 p-3"
+          class="flex flex-col gap-3 rounded-xl border border-outline-gray-2 p-3"
         >
           <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <FormControl

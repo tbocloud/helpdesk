@@ -38,22 +38,25 @@
       </div>
     </div>
 
-    <TaskyState
+    <div
       v-if="portfolio.error && !data"
-      class="mt-6"
-      :icon="LucideCircleAlert"
-      :title="__('Couldn\'t load the projects')"
-      :message="__('Check your connection and try again.')"
-      error
+      class="mt-5 rounded-xl border border-outline-gray-2 bg-surface-base"
     >
-      <Button :label="__('Retry')" @click="portfolio.reload()" />
-    </TaskyState>
+      <TaskyState
+        class="py-10"
+        :icon="LucideCircleAlert"
+        :title="__('Couldn\'t load the projects')"
+        :message="__('Check your connection and try again.')"
+        error
+      >
+        <Button :label="__('Retry')" @click="portfolio.reload()" />
+      </TaskyState>
+    </div>
 
     <template v-else>
       <!-- Summary -->
       <div
-        class="mt-5 grid grid-cols-2 gap-3"
-        :class="tiles.length === 4 ? 'lg:grid-cols-4' : 'lg:grid-cols-3'"
+        class="mt-5 grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4"
       >
         <StatTile
           v-for="tile in tiles"
@@ -68,8 +71,10 @@
       </div>
 
       <!-- Projects -->
-      <div class="mt-6 flex items-center justify-between gap-2">
-        <h2 class="text-base-medium text-ink-gray-8">{{ __("Projects") }}</h2>
+      <div class="mt-8 flex items-center justify-between gap-2">
+        <h2 class="text-base font-semibold text-ink-gray-9">
+          {{ __("Projects") }}
+        </h2>
         <span v-if="!isLoading" class="text-sm text-ink-gray-5">
           {{ __("Who is on each project, and what they're doing now") }}
         </span>
@@ -77,34 +82,35 @@
 
       <div
         v-if="isLoading"
-        class="mt-2 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
+        class="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
         aria-busy="true"
         :aria-label="__('Loading')"
       >
         <div
           v-for="i in 6"
           :key="i"
-          class="flex flex-col gap-4 rounded-lg border border-outline-gray-2 bg-surface-base p-4"
+          class="flex flex-col gap-4 rounded-xl border border-outline-gray-2 bg-surface-base p-4"
         >
-          <div class="h-4 w-3/5 animate-pulse rounded bg-surface-gray-2" />
-          <div class="h-3 w-2/5 animate-pulse rounded bg-surface-gray-2" />
+          <div class="h-4 w-3/5 animate-pulse rounded bg-surface-gray-3" />
+          <div class="h-3 w-2/5 animate-pulse rounded bg-surface-gray-3" />
           <div
-            class="h-1.5 w-full animate-pulse rounded-full bg-surface-gray-2"
+            class="h-1.5 w-full animate-pulse rounded-full bg-surface-gray-3"
           />
           <div v-for="j in 3" :key="j" class="flex items-center gap-2">
             <div
-              class="size-6 shrink-0 animate-pulse rounded-full bg-surface-gray-2"
+              class="size-6 shrink-0 animate-pulse rounded-full bg-surface-gray-3"
             />
-            <div class="h-3 flex-1 animate-pulse rounded bg-surface-gray-2" />
+            <div class="h-3 flex-1 animate-pulse rounded bg-surface-gray-3" />
           </div>
         </div>
       </div>
 
       <div
         v-else-if="!projects.length"
-        class="mt-2 rounded-lg border border-outline-gray-2 bg-surface-base"
+        class="mt-3 rounded-xl border border-outline-gray-2 bg-surface-base"
       >
         <TaskyState
+          class="py-10"
           :icon="LucideFolderKanban"
           :title="__('No projects to show')"
           :message="
@@ -133,13 +139,13 @@
       <ul
         v-else
         role="list"
-        class="mt-2 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
+        class="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
         :aria-busy="portfolio.loading"
       >
         <li
           v-for="(project, index) in projects"
           :key="project.name"
-          class="flex flex-col gap-3 rounded-lg border border-outline-gray-2 bg-surface-base p-4 transition-colors hover:border-outline-gray-3"
+          class="flex flex-col gap-3 rounded-xl border border-outline-gray-2 bg-surface-base p-4 transition-colors hover:border-outline-gray-3"
         >
           <!-- Name, customer, type -->
           <div class="min-w-0">
@@ -386,16 +392,16 @@
       <!-- People x projects -->
       <template v-if="isLoading || people.length">
         <div class="mt-8 flex items-center justify-between gap-2">
-          <h2 class="text-base-medium text-ink-gray-8">
+          <h2 class="text-base font-semibold text-ink-gray-9">
             {{ __("Who works on what") }}
           </h2>
           <span class="text-sm text-ink-gray-5">{{ __("Busiest first") }}</span>
         </div>
         <div
-          class="mt-2 overflow-hidden rounded-lg border border-outline-gray-2 bg-surface-base"
+          class="mt-3 overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
         >
           <div
-            class="hidden gap-3 border-b border-outline-gray-2 bg-surface-gray-1 px-4 py-2 text-xs text-ink-gray-5 md:grid"
+            class="hidden h-11 items-center gap-3 border-b border-outline-gray-2 bg-surface-gray-1 px-5 text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6 md:grid"
             :class="PEOPLE_GRID"
             aria-hidden="true"
           >
@@ -408,15 +414,15 @@
             <div
               v-for="i in 4"
               :key="i"
-              class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-3 last:border-b-0"
+              class="flex items-center gap-3 border-b border-outline-gray-1 px-5 py-3.5 last:border-b-0"
             >
               <div
-                class="size-6 shrink-0 animate-pulse rounded-full bg-surface-gray-2"
+                class="size-6 shrink-0 animate-pulse rounded-full bg-surface-gray-3"
               />
               <div
-                class="h-3.5 w-1/5 animate-pulse rounded bg-surface-gray-2"
+                class="h-3.5 w-1/5 animate-pulse rounded bg-surface-gray-3"
               />
-              <div class="h-5 w-1/3 animate-pulse rounded bg-surface-gray-2" />
+              <div class="h-5 w-1/3 animate-pulse rounded bg-surface-gray-3" />
             </div>
           </div>
 
@@ -424,7 +430,7 @@
             <li
               v-for="person in people"
               :key="person.user"
-              class="flex flex-col gap-2 border-b border-outline-gray-1 px-4 py-3 last:border-b-0 md:grid md:items-center md:gap-3"
+              class="flex flex-col gap-2 border-b border-outline-gray-1 px-5 py-3.5 last:border-b-0 md:grid md:items-center md:gap-3"
               :class="PEOPLE_GRID"
             >
               <RouterLink
@@ -433,7 +439,9 @@
                 :title="__('Open the work of {0}', person.full_name)"
               >
                 <UserAvatar :name="person.user" size="sm" />
-                <span class="truncate text-sm text-ink-gray-9 hover:underline">
+                <span
+                  class="truncate text-[13px] font-medium text-ink-gray-9 hover:underline"
+                >
                   {{ person.full_name }}
                 </span>
               </RouterLink>

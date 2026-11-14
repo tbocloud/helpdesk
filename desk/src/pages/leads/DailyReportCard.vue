@@ -1,7 +1,7 @@
 <template>
-  <article class="flex flex-col gap-4" :aria-labelledby="ids.title">
+  <article class="flex flex-col gap-5" :aria-labelledby="ids.title">
     <header class="flex flex-wrap items-center justify-between gap-3">
-      <h2 :id="ids.title" class="text-lg-medium text-ink-gray-9">
+      <h2 :id="ids.title" class="text-lg font-semibold text-ink-gray-9">
         {{
           __(
             "Daily sales performance · {0} · {1}",
@@ -27,11 +27,11 @@
     >
       <header class="section-head bg-info-soft">
         <LucidePhone class="size-4 text-info" aria-hidden="true" />
-        <h3 :id="ids.calls" class="text-base-medium text-ink-gray-9">
+        <h3 :id="ids.calls" class="text-base font-semibold text-ink-gray-9">
           {{ __("Daily call performance") }}
         </h3>
       </header>
-      <div class="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
+      <div class="grid grid-cols-1 gap-4 p-5 sm:grid-cols-3">
         <div class="figure">
           <span class="figure-value">{{ person.calls_total }}</span>
           <span class="figure-label">{{ __("Total calls made") }}</span>
@@ -48,11 +48,11 @@
           <span class="figure-label">{{ __("Follow-up leads") }}</span>
         </div>
       </div>
-      <div class="grid grid-cols-1 gap-3 px-4 pb-4 md:grid-cols-2">
+      <div class="grid grid-cols-1 gap-4 px-5 pb-5 md:grid-cols-2">
         <div class="sub border-l-success bg-success-soft">
           <div class="flex items-center gap-2">
             <LucideThumbsUp class="size-4 text-success" aria-hidden="true" />
-            <h4 class="text-sm-medium text-ink-gray-9">
+            <h4 class="text-[13px] font-semibold text-ink-gray-9">
               {{ __("Positive leads") }}
             </h4>
             <span
@@ -74,7 +74,7 @@
         <div class="sub border-l-warning bg-warning-soft">
           <div class="flex items-center gap-2">
             <LucideFileText class="size-4 text-warning" aria-hidden="true" />
-            <h4 class="text-sm-medium text-ink-gray-9">
+            <h4 class="text-[13px] font-semibold text-ink-gray-9">
               {{ __("New quotations") }}
             </h4>
             <span
@@ -113,11 +113,11 @@
     >
       <header class="section-head bg-brand-soft">
         <LucideTarget class="size-4 text-brand-ink" aria-hidden="true" />
-        <h3 :id="ids.leads" class="text-base-medium text-ink-gray-9">
+        <h3 :id="ids.leads" class="text-base font-semibold text-ink-gray-9">
           {{ __("New leads generated") }}
         </h3>
       </header>
-      <div class="flex flex-col gap-3 p-4">
+      <div class="flex flex-col gap-3 p-5">
         <div class="figure">
           <span class="figure-value">{{ person.new_leads.length }}</span>
           <span class="figure-label">{{ __("Total new leads") }}</span>
@@ -148,7 +148,7 @@
           class="size-4 text-ink-gray-7"
           aria-hidden="true"
         />
-        <h3 :id="ids.week" class="text-base-medium text-ink-gray-9">
+        <h3 :id="ids.week" class="text-base font-semibold text-ink-gray-9">
           {{ __("This week vs target") }}
         </h3>
         <span v-if="days" class="ml-auto text-xs text-ink-gray-6">{{
@@ -158,7 +158,7 @@
       <ul
         v-if="rings.length"
         role="list"
-        class="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 xl:grid-cols-4"
+        class="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 xl:grid-cols-4"
       >
         <li
           v-for="ring in rings"
@@ -172,7 +172,9 @@
             :status-text="ring.status"
           />
           <div class="flex min-w-0 flex-col">
-            <span class="text-sm-medium text-ink-gray-9">{{ ring.label }}</span>
+            <span class="text-[13px] font-semibold text-ink-gray-9">{{
+              ring.label
+            }}</span>
             <span class="font-mono text-xs tabular-nums text-ink-gray-6">{{
               __("{0} of {1}", String(ring.actual), String(ring.target))
             }}</span>
@@ -190,7 +192,7 @@
           </div>
         </li>
       </ul>
-      <p v-else class="p-4 text-p-sm text-ink-gray-6">
+      <p v-else class="p-5 text-p-sm text-ink-gray-6">
         {{
           __(
             "No weekly targets are set. Ask an admin to set them in Settings → CRM."
@@ -266,8 +268,8 @@ const rings = computed<Ring[]>(() =>
         status: behind
           ? __("Behind by {0} {1}", String(pace.behind), unit)
           : met
-            ? __("Target met")
-            : __("On track"),
+          ? __("Target met")
+          : __("On track"),
         icon: behind ? LucideClock : LucideCircleCheck,
       } satisfies Ring,
     ];
@@ -284,19 +286,19 @@ function leadRoute(name: string) {
   @apply overflow-hidden rounded-xl border border-l-4 bg-surface-base;
 }
 .section-head {
-  @apply flex items-center gap-2 px-4 py-2.5;
+  @apply flex items-center gap-2 px-5 py-3.5;
 }
 .figure {
   @apply flex min-w-0 flex-col;
 }
 .figure-value {
-  @apply font-mono text-3xl font-semibold tabular-nums text-ink-gray-9;
+  @apply font-mono text-[34px] font-bold leading-none tracking-[-0.02em] tabular-nums text-ink-gray-9;
 }
 .figure-label {
-  @apply text-sm text-ink-gray-7;
+  @apply mt-1.5 text-[13px] font-medium text-ink-gray-6;
 }
 .sub {
-  @apply flex flex-col gap-1.5 rounded-lg border-l-4 px-3 py-2.5;
+  @apply flex flex-col gap-1.5 rounded-xl border-l-4 px-4 py-3;
 }
 .links {
   @apply flex flex-col gap-0.5 text-sm;

@@ -2,43 +2,55 @@
   <div class="flex h-full flex-col">
     <LayoutHeader>
       <template #left-header>
-        <div class="flex min-w-0 items-center gap-2">
-          <h1 class="truncate text-lg-medium text-ink-gray-9">{{ title }}</h1>
-          <TaskyBadge
-            v-if="page.data && !page.data.is_active"
-            :label="__('Inactive')"
-          />
-          <Dropdown v-if="switchOptions.length > 1" :options="switchOptions">
-            <Button
-              variant="ghost"
-              :label="__('Switch dashboard')"
-              :aria-label="__('Switch dashboard')"
+        <!-- a dynamic name with its state and the dashboard switcher beside it -->
+        <div class="flex min-w-0 flex-col gap-1">
+          <div class="flex min-w-0 items-center gap-2">
+            <h1
+              class="truncate text-lg font-bold text-ink-gray-9 md:text-[28px] md:leading-[1.2] md:tracking-[-0.02em]"
             >
-              <template #icon>
-                <LucideChevronsUpDown class="size-4" aria-hidden="true" />
-              </template>
-            </Button>
-          </Dropdown>
+              {{ title }}
+            </h1>
+            <TaskyBadge
+              v-if="page.data && !page.data.is_active"
+              :label="__('Inactive')"
+            />
+            <Dropdown v-if="switchOptions.length > 1" :options="switchOptions">
+              <Button
+                variant="ghost"
+                :label="__('Switch dashboard')"
+                :aria-label="__('Switch dashboard')"
+              >
+                <template #icon>
+                  <LucideChevronsUpDown class="size-4" aria-hidden="true" />
+                </template>
+              </Button>
+            </Dropdown>
+          </div>
+          <p class="hidden text-[14px] text-ink-gray-6 md:block">
+            {{ __("Leads, sales and conversion for the period you pick.") }}
+          </p>
         </div>
       </template>
       <template #right-header>
         <Button
           v-if="canConfigure"
+          size="md"
           :label="__('Configure')"
           @click="openSettings"
         >
           <template #prefix>
-            <LucideSettings2 class="size-4" aria-hidden="true" />
+            <LucideSettings2 class="size-[18px]" aria-hidden="true" />
           </template>
         </Button>
       </template>
     </LayoutHeader>
 
-    <div class="relative min-h-0 flex-1 overflow-y-auto bg-surface-gray-1">
-      <div class="mx-auto flex max-w-screen-2xl flex-col gap-5 p-4 md:p-5">
+    <div class="relative min-h-0 flex-1 overflow-y-auto">
+      <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
         <!-- nobody may open a dashboard yet -->
         <TaskyState
           v-if="dashboards.data && !dashboards.data.dashboards.length"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
           :icon="LucideLayoutDashboard"
           :title="
             canConfigure
@@ -63,6 +75,7 @@
 
         <TaskyState
           v-else-if="page.error && !page.data"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
           error
           :icon="noAccess ? LucideLock : LucideCircleAlert"
           :title="
@@ -98,27 +111,28 @@
           aria-busy="true"
           :aria-label="__('Loading')"
         >
-          <div class="h-16 animate-pulse rounded-xl bg-surface-gray-2" />
+          <div class="h-16 animate-pulse rounded-xl bg-surface-gray-3" />
           <div
-            class="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-3"
+            class="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-4"
           >
             <div
               v-for="i in 6"
               :key="i"
-              class="h-[104px] animate-pulse rounded-xl bg-surface-gray-2"
+              class="h-[104px] animate-pulse rounded-xl bg-surface-gray-3"
             />
           </div>
           <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <div
               v-for="i in 2"
               :key="i"
-              class="h-80 animate-pulse rounded-xl bg-surface-gray-2"
+              class="h-80 animate-pulse rounded-xl bg-surface-gray-3"
             />
           </div>
         </div>
 
         <TaskyState
           v-else-if="page.data.setup_needed"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
           :icon="LucideDatabase"
           :title="
             canConfigure
@@ -145,6 +159,7 @@
 
         <TaskyState
           v-else-if="page.data.not_placed"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
           :icon="LucideNetwork"
           :title="__('You aren\'t placed in the organisation yet')"
           :message="
@@ -164,6 +179,7 @@
             <div class="flex flex-wrap items-end gap-3">
               <FormControl
                 variant="outline"
+                size="md"
                 :model-value="selectedPeriod"
                 type="select"
                 class="w-full sm:w-44"
@@ -174,6 +190,7 @@
               <template v-if="isCustom">
                 <FormControl
                   variant="outline"
+                  size="md"
                   :model-value="custom.from"
                   type="date"
                   class="w-full sm:w-40"
@@ -182,6 +199,7 @@
                 />
                 <FormControl
                   variant="outline"
+                  size="md"
                   :model-value="custom.to"
                   type="date"
                   class="w-full sm:w-40"
@@ -191,6 +209,7 @@
               </template>
               <FormControl
                 variant="outline"
+                size="md"
                 v-for="filter in shownFilters"
                 :key="filter.key"
                 :model-value="filter.value"
@@ -204,6 +223,7 @@
               <Button
                 v-if="moreFilters"
                 variant="outline"
+                size="md"
                 :aria-expanded="allFilters"
                 :label="
                   allFilters
@@ -213,12 +233,16 @@
                 @click="filtersOpen = !filtersOpen"
               >
                 <template #prefix>
-                  <LucideSlidersHorizontal class="size-4" aria-hidden="true" />
+                  <LucideSlidersHorizontal
+                    class="size-[18px]"
+                    aria-hidden="true"
+                  />
                 </template>
               </Button>
               <Button
                 v-if="anyFilter"
                 variant="ghost"
+                size="md"
                 :label="__('Clear filters')"
                 @click="clearFilters"
               />
@@ -239,7 +263,7 @@
             v-for="notice in page.data.notices"
             :key="notice.kind + notice.text"
             role="status"
-            class="flex flex-wrap items-start gap-2 rounded-md px-3 py-2 text-p-sm"
+            class="flex flex-wrap items-start gap-2 rounded-xl px-4 py-3.5 text-p-sm"
             :class="
               notice.tone === 'danger'
                 ? 'bg-danger-soft text-danger'
@@ -269,6 +293,7 @@
 
           <TaskyState
             v-if="isCustom && !customReady"
+            class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
             :icon="LucideCalendarRange"
             :title="__('Pick both dates')"
             :message="__('Choose a from and a to date to see that period.')"
@@ -279,11 +304,11 @@
             <section
               v-if="page.data.kpis.length"
               :aria-label="__('Key figures')"
-              class="flex flex-col gap-3"
+              class="flex flex-col gap-4"
               :class="page.loading ? 'opacity-60' : ''"
             >
               <div
-                class="grid grid-cols-1 gap-3"
+                class="grid grid-cols-1 gap-4"
                 :class="HEADLINE_COLS[headline.length]"
               >
                 <StatTile
@@ -304,14 +329,14 @@
               </div>
               <div
                 v-if="strip.length"
-                class="grid grid-cols-2 gap-3"
+                class="grid grid-cols-2 gap-4"
                 :class="STRIP_COLS[stripCols]"
               >
                 <StatTile
                   v-for="(card, i) in strip"
                   :key="i"
                   compact
-                  class="border-l-4"
+                  class="rounded-xl border-l-4"
                   :class="
                     TONE_SECTION[METRIC_LOOK[card.metric]?.tone || 'info']
                       .border

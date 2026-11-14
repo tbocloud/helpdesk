@@ -5,7 +5,7 @@
     :aria-labelledby="headingId"
   >
     <div class="flex flex-wrap items-center gap-2">
-      <h2 :id="headingId" class="text-base-medium text-ink-gray-9">
+      <h2 :id="headingId" class="text-base font-semibold text-ink-gray-9">
         {{ __("Modules") }}
       </h2>
       <span class="text-p-sm tabular-nums text-ink-gray-6">

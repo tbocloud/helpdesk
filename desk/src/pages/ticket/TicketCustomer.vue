@@ -12,6 +12,7 @@
         <!-- secondary: replying is the page's main action -->
         <Button
           v-if="!isClosed"
+          size="md"
           :label="__('Close ticket')"
           :loading="setValue.loading"
           :disabled="setValue.loading"
@@ -23,8 +24,13 @@
         </Button>
       </template>
     </LayoutHeader>
-    <div class="flex h-full w-full overflow-hidden">
-      <section class="flex min-w-0 flex-1 flex-col">
+    <!-- on wider screens the conversation and the details are white cards on the canvas -->
+    <div
+      class="flex h-full w-full overflow-hidden md:gap-4 md:px-8 md:pb-4 md:pt-5"
+    >
+      <section
+        class="flex min-w-0 flex-1 flex-col overflow-hidden bg-surface-base md:rounded-xl md:border md:border-outline-gray-2"
+      >
         <div
           v-if="outsideHourSettings.data?.show && !isDismissed"
           class="px-4 pt-4 md:px-10"
@@ -115,10 +121,10 @@
     aria-busy="true"
     :aria-label="__('Loading ticket')"
   >
-    <div class="h-6 w-2/3 animate-pulse rounded bg-surface-gray-2" />
-    <div class="h-4 w-1/3 animate-pulse rounded bg-surface-gray-2" />
-    <div class="h-20 w-full animate-pulse rounded-lg bg-surface-gray-2" />
-    <div class="h-32 w-full animate-pulse rounded-lg bg-surface-gray-2" />
+    <div class="h-6 w-2/3 animate-pulse rounded bg-surface-gray-3" />
+    <div class="h-4 w-1/3 animate-pulse rounded bg-surface-gray-3" />
+    <div class="h-20 w-full animate-pulse rounded-xl bg-surface-gray-3" />
+    <div class="h-32 w-full animate-pulse rounded-xl bg-surface-gray-3" />
   </div>
 </template>
 

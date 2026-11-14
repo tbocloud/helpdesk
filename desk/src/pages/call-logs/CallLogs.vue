@@ -1,25 +1,34 @@
 <template>
   <div class="flex flex-col">
-    <LayoutHeader>
-      <template #left-header>
-        <div class="text-lg-medium text-ink-gray-9">Call Logs</div>
-      </template>
+    <LayoutHeader
+      :title="__('Call Logs')"
+      :subtitle="
+        __('Every call made or taken, with who was on it and how it went.')
+      "
+    >
       <template #right-header>
         <Button
-          label="New Call Log"
-          theme="gray"
+          :label="__('New Call Log')"
           variant="solid"
+          size="md"
           @click="newCallLog"
           icon-left="lucide-plus"
         />
       </template>
     </LayoutHeader>
-    <ListViewBuilder
-      ref="listViewRef"
-      :options="options"
-      @row-click="openCallLog"
-      @empty-state-action="showCallLogModal = true"
-    />
+    <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
+      <section
+        class="relative min-h-60 overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
+        :aria-label="__('Call Logs')"
+      >
+        <ListViewBuilder
+          ref="listViewRef"
+          :options="options"
+          @row-click="openCallLog"
+          @empty-state-action="showCallLogModal = true"
+        />
+      </section>
+    </div>
     <CallLogDetailModal
       v-model="showCallLogDetailModal"
       v-model:callLogModal="showCallLogModal"

@@ -6,9 +6,9 @@
       </template>
       <template #right-header> </template>
     </LayoutHeader>
-    <div class="pt-6 mx-auto w-full max-w-4xl px-4 md:px-5">
+    <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
       <div
-        class="flex flex-col gap-3 rounded-lg border border-outline-gray-2 bg-surface-base w-full p-4"
+        class="mx-auto flex w-full max-w-4xl flex-col gap-3 rounded-xl border border-outline-gray-2 bg-surface-base p-4"
       >
         <div class="flex flex-wrap justify-between items-center gap-3 mb-3">
           <!-- Author Info -->
@@ -26,10 +26,15 @@
           </div>
           <!-- Action Buttons -->
           <div class="flex gap-2">
-            <Button :label="__('Discard')" @click="handleArticleDiscard" />
+            <Button
+              size="md"
+              :label="__('Discard')"
+              @click="handleArticleDiscard"
+            />
             <Button
               :label="__('Create article')"
               variant="solid"
+              size="md"
               :loading="newArticle.loading"
               @click="handleCreateArticle"
             />

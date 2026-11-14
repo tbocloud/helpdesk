@@ -2,14 +2,16 @@
   <div
     class="grid h-full place-items-center px-4 py-20 text-center text-lg text-ink-gray-5"
   >
-    <div class="space-y-4">
+    <div
+      class="w-full max-w-md space-y-4 rounded-xl border border-outline-gray-2 bg-surface-base px-6 py-10"
+    >
       <div class="flex justify-center items-center mx-auto">
         <LucideFileX class="size-10 text-ink-gray-4" />
       </div>
       <div class="flex flex-col gap-1">
-        <div class="text-lg-medium text-ink-gray-8">
+        <h1 class="text-xl font-bold text-ink-gray-9">
           {{ __("Page not found") }}
-        </div>
+        </h1>
         <div class="text-center text-p-base text-ink-gray-6 mt-1">
           {{
             __(
@@ -18,7 +20,7 @@
           }}
         </div>
       </div>
-      <Button :route="{ name: 'TicketsAgent' }" variant="subtle">
+      <Button :route="{ name: 'TicketsAgent' }" size="md">
         <template #prefix>
           <FeatherIcon name="arrow-left" class="size-4" />
         </template>

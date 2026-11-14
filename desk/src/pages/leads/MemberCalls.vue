@@ -32,9 +32,7 @@
     </LayoutHeader>
 
     <div class="relative flex-1 overflow-y-auto overflow-x-hidden">
-      <div
-        class="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-5 md:px-6"
-      >
+      <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
         <p
           class="flex items-center gap-2 text-p-sm text-ink-gray-7"
           role="note"

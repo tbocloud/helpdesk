@@ -1,18 +1,19 @@
 <template>
-  <!-- each tab toggles the list's ?filters= with the same conditions it counts -->
+  <!-- each tab toggles the list's ?filters= with the same conditions it counts;
+       ViewTabs' pills, kept as buttons so they stay reachable when no tab matches -->
   <nav
-    class="mx-3 flex gap-1 overflow-x-auto border-b border-outline-gray-2 sm:mx-5"
+    class="inline-flex max-w-full gap-1 overflow-x-auto rounded-full border border-outline-gray-2 bg-surface-base p-1"
     :aria-label="__('Ticket views')"
   >
     <button
       v-for="tab in TABS"
       :key="tab.key"
       type="button"
-      class="-mb-px inline-flex h-10 shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-highlight"
+      class="inline-flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-full px-3.5 text-[13px] font-medium transition-colors"
       :class="
         active === tab.key
-          ? 'border-brand font-medium text-ink-gray-9'
-          : 'border-transparent text-ink-gray-6 hover:text-ink-gray-9'
+          ? 'bg-surface-gray-10 text-ink-base'
+          : 'text-ink-gray-7 hover:bg-surface-gray-3'
       "
       :aria-current="active === tab.key ? 'page' : undefined"
       @click="failed[tab.key] ? count(tab.key) : toggle(tab.key)"
@@ -20,11 +21,13 @@
       {{ tab.label }}
       <span
         v-if="tab.counted"
-        class="font-mono text-xs tabular-nums"
+        class="min-w-[22px] rounded-full px-[7px] py-px text-center text-xs font-semibold tabular-nums"
         :class="
-          tab.key === 'slaBreached' && counts[tab.key]
-            ? 'text-danger'
-            : 'text-ink-gray-5'
+          active === tab.key
+            ? 'bg-white/20 text-ink-base'
+            : tab.key === 'slaBreached' && counts[tab.key]
+            ? 'bg-danger-soft text-danger'
+            : 'bg-surface-gray-4 text-ink-gray-7'
         "
         :title="
           failed[tab.key] ? __('Couldn\'t count. Select to retry.') : undefined

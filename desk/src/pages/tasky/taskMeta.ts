@@ -257,17 +257,6 @@ export function shortDate(date?: string | null) {
   return date ? dayjs(date).format("D MMM") : "—";
 }
 
-export function initials(name?: string | null) {
-  if (!name) return "";
-  return name
-    .split(/[\s@._-]+/)
-    .filter(Boolean)
-    .map((part) => part[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-}
-
 export const PENDING_REVIEW = "Pending Review";
 
 export function isPendingReview(task: { status?: string }) {

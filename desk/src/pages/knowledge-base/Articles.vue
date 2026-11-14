@@ -5,18 +5,20 @@
         <Breadcrumbs :items="breadcrumbs" class="-ml-0.5" />
       </template>
     </LayoutHeader>
-    <div class="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-6 md:px-6">
+    <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
       <div class="flex flex-col gap-1">
-        <h1 class="text-2xl font-semibold text-ink-gray-9">
+        <h1
+          class="text-2xl font-bold tracking-[-0.02em] text-ink-gray-9 md:text-[28px] md:leading-[1.2]"
+        >
           <span
             v-if="categoryName.loading"
-            class="inline-block h-7 w-48 animate-pulse rounded bg-surface-gray-2 align-middle"
+            class="inline-block h-7 w-48 animate-pulse rounded bg-surface-gray-3 align-middle"
           />
           <template v-else>{{ categoryTitle }}</template>
         </h1>
         <p
           v-if="articles.data?.length"
-          class="text-sm tabular-nums text-ink-gray-6"
+          class="text-[14px] tabular-nums text-ink-gray-6"
         >
           {{
             articles.data.length === 1
@@ -25,7 +27,9 @@
           }}
         </p>
       </div>
-      <div class="rounded-lg border border-outline-gray-2 bg-surface-base">
+      <div
+        class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
+      >
         <ArticleList
           :articles="articles.data"
           :loading="articles.loading"

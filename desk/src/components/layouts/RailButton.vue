@@ -3,9 +3,8 @@
   <Tooltip :text="label" placement="right" :hover-delay="0" :disabled="mobile">
     <button
       type="button"
-      class="relative grid shrink-0 place-items-center rounded-[10px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+      class="relative grid size-10 shrink-0 place-items-center rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
       :class="[
-        mobile ? 'size-11' : 'size-10',
         active
           ? 'bg-brand text-brand-on'
           : 'text-[color:var(--ink-rail)] hover:bg-[color:var(--rail-hover)] hover:text-[color:var(--ink-rail-hover)]',
@@ -19,7 +18,7 @@
       <slot />
       <span
         v-if="dot"
-        class="absolute end-1.5 top-1.5 size-2 rounded-full bg-brand ring-2 ring-[color:var(--surface-rail)]"
+        class="absolute end-2.5 top-2 size-[9px] rounded-full bg-[color:var(--rail-dot)] ring-2 ring-[color:var(--surface-rail)]"
         aria-hidden="true"
       />
     </button>

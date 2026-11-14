@@ -1,36 +1,32 @@
 <template>
   <div class="flex h-full flex-col">
-    <LayoutHeader>
-      <template #left-header>
-        <div class="text-lg-medium text-ink-gray-9">{{ __("Overview") }}</div>
-      </template>
+    <LayoutHeader
+      :title="__('Overview')"
+      :subtitle="
+        __(
+          'Open tasks and tickets across the projects you run: what\'s late, what may slip, and who is on it.'
+        )
+      "
+    >
       <template #right-header>
         <Button
-          variant="ghost"
+          size="md"
           :loading="overview.loading"
           :aria-label="__('Refresh')"
           @click="overview.reload()"
         >
           <template #icon>
-            <LucideRefreshCw class="size-4" aria-hidden="true" />
+            <LucideRefreshCw class="size-[18px]" aria-hidden="true" />
           </template>
         </Button>
       </template>
     </LayoutHeader>
 
     <div class="relative flex-1 overflow-auto">
-      <div class="mx-auto w-full max-w-7xl px-4 py-5 md:px-6">
-        <p class="text-p-sm text-ink-gray-6">
-          {{
-            __(
-              "Open tasks and tickets across the projects you run: what's late, what may slip, and who is on it."
-            )
-          }}
-        </p>
-
+      <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
         <!-- Filters: the grid fits one more filter without layout changes -->
         <div
-          class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-[repeat(auto-fit,minmax(12rem,1fr))]"
+          class="grid grid-cols-1 gap-3 rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-4 sm:grid-cols-[repeat(auto-fit,minmax(12rem,1fr))] md:px-4"
           role="group"
           :aria-label="__('Filter overview')"
         >
@@ -61,7 +57,7 @@
             :placeholder="__('All departments')"
           />
         </div>
-        <div v-if="hasFilters" class="mt-2 flex justify-end">
+        <div v-if="hasFilters" class="-mt-3 flex justify-end">
           <Button variant="ghost" :label="__('Clear filters')" @click="clear">
             <template #prefix>
               <LucideX class="size-4" aria-hidden="true" />
@@ -69,21 +65,25 @@
           </Button>
         </div>
 
-        <TaskyState
+        <div
           v-if="overview.error && !overview.data"
-          class="mt-6"
-          :icon="LucideCircleAlert"
-          :title="__('Couldn\'t load the overview')"
-          :message="__('Check your connection and try again.')"
-          error
+          class="rounded-xl border border-outline-gray-2 bg-surface-base"
         >
-          <Button :label="__('Retry')" @click="overview.reload()" />
-        </TaskyState>
+          <TaskyState
+            class="py-10"
+            :icon="LucideCircleAlert"
+            :title="__('Couldn\'t load the overview')"
+            :message="__('Check your connection and try again.')"
+            error
+          >
+            <Button :label="__('Retry')" @click="overview.reload()" />
+          </TaskyState>
+        </div>
 
         <template v-else>
           <!-- KPI row: buckets open their list below; the last two go to their page -->
           <div
-            class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6"
+            class="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4"
             :aria-label="__('Work at a glance')"
             role="group"
           >
@@ -118,14 +118,14 @@
           <!-- Dashboard: charts on top, what needs action below.
                Dense flow lets the two-column tablet layout fill its gaps. -->
           <div
-            class="mt-4 grid grid-cols-1 gap-4 md:grid-flow-row-dense md:grid-cols-2 lg:grid-cols-12"
+            class="grid grid-cols-1 gap-4 md:grid-flow-row-dense md:grid-cols-2 lg:grid-cols-12"
             :aria-busy="overview.loading"
           >
             <SectionCard :title="__('Active work')" class="lg:col-span-3">
-              <div class="p-4">
+              <div class="p-5">
                 <div
                   v-if="firstLoad"
-                  class="mx-auto size-44 animate-pulse rounded-full bg-surface-gray-2"
+                  class="mx-auto size-44 animate-pulse rounded-full bg-surface-gray-3"
                 />
                 <OverviewDonut
                   v-else
@@ -148,12 +148,12 @@
               "
               class="md:col-span-2 lg:col-span-6"
             >
-              <div class="flex h-full flex-col p-4">
+              <div class="flex h-full flex-col p-5">
                 <div v-if="firstLoad" class="flex flex-col gap-3 py-1">
                   <div
                     v-for="i in 5"
                     :key="i"
-                    class="h-4 animate-pulse rounded bg-surface-gray-2"
+                    class="h-4 animate-pulse rounded bg-surface-gray-3"
                     :style="{ width: `${90 - i * 12}%` }"
                   />
                 </div>
@@ -213,7 +213,7 @@
                       >
                         <span
                           v-if="firstLoad"
-                          class="inline-block h-6 w-6 animate-pulse rounded bg-surface-gray-2"
+                          class="inline-block h-6 w-6 animate-pulse rounded bg-surface-gray-3"
                         />
                         <template v-else>{{ counts[row.key] ?? 0 }}</template>
                       </span>
@@ -258,13 +258,13 @@
                 <div
                   v-for="i in 3"
                   :key="i"
-                  class="flex flex-col gap-2 border-b border-outline-gray-1 px-4 py-3.5 last:border-b-0"
+                  class="flex flex-col gap-2 border-b border-outline-gray-1 px-4 py-3 last:border-b-0"
                 >
                   <div
-                    class="h-3.5 w-3/5 animate-pulse rounded bg-surface-gray-2"
+                    class="h-3.5 w-3/5 animate-pulse rounded bg-surface-gray-3"
                   />
                   <div
-                    class="h-3 w-2/5 animate-pulse rounded bg-surface-gray-2"
+                    class="h-3 w-2/5 animate-pulse rounded bg-surface-gray-3"
                   />
                 </div>
               </div>
@@ -291,7 +291,7 @@
             </div>
           </div>
 
-          <FollowUpControl v-if="auth.isAdmin || auth.isManager" class="mt-6" />
+          <FollowUpControl v-if="auth.isAdmin || auth.isManager" />
 
           <!-- The selected bucket's list -->
           <SectionCard
@@ -300,11 +300,11 @@
             :title="activeTile.label"
             :count="firstLoad ? undefined : visibleItems.length"
             :description="activeTile.hint"
-            class="mt-6 scroll-mt-4 overflow-hidden"
+            class="scroll-mt-4 overflow-hidden"
             :aria-busy="overview.loading"
           >
             <div
-              class="hidden grid-cols-[1fr_9rem_8rem_9rem] gap-4 border-b border-outline-gray-2 bg-surface-gray-1 px-4 py-2 text-xs text-ink-gray-5 md:grid"
+              class="hidden h-11 grid-cols-[1fr_9rem_8rem_9rem] items-center gap-4 border-b border-outline-gray-2 bg-surface-gray-1 px-5 text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6 md:grid"
               aria-hidden="true"
             >
               <span>{{ __("Work") }}</span>
@@ -317,28 +317,29 @@
               <div
                 v-for="i in 6"
                 :key="i"
-                class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-3.5 last:border-b-0"
+                class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-3 last:border-b-0"
               >
-                <div class="size-4 animate-pulse rounded bg-surface-gray-2" />
+                <div class="size-4 animate-pulse rounded bg-surface-gray-3" />
                 <div class="flex flex-1 flex-col gap-2">
                   <div
-                    class="h-3.5 w-2/5 animate-pulse rounded bg-surface-gray-2"
+                    class="h-3.5 w-2/5 animate-pulse rounded bg-surface-gray-3"
                   />
                   <div
-                    class="h-3 w-1/4 animate-pulse rounded bg-surface-gray-2"
+                    class="h-3 w-1/4 animate-pulse rounded bg-surface-gray-3"
                   />
                 </div>
                 <div
-                  class="hidden size-6 animate-pulse rounded-full bg-surface-gray-2 md:block"
+                  class="hidden size-6 animate-pulse rounded-full bg-surface-gray-3 md:block"
                 />
                 <div
-                  class="hidden h-3 w-20 animate-pulse rounded bg-surface-gray-2 md:block"
+                  class="hidden h-3 w-20 animate-pulse rounded bg-surface-gray-3 md:block"
                 />
               </div>
             </div>
 
             <TaskyState
               v-else-if="!visibleItems.length"
+              class="py-10"
               :icon="LucideCircleCheck"
               :title="__('Nothing here')"
               :message="activeTile.empty"
