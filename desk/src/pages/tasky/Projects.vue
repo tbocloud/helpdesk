@@ -2,8 +2,12 @@
   <div class="flex h-full flex-col">
     <LayoutHeader>
       <template #left-header>
-        <div class="text-lg-medium text-ink-gray-9">{{ __("Projects") }}</div>
+        <div class="truncate text-lg-medium text-ink-gray-9">
+          {{ __("Projects") }}
+        </div>
       </template>
+      <!-- below sm the buttons show only their icons (the label stays as the
+           accessible name), so they fit beside the title -->
       <template #right-header>
         <Button
           :route="{ name: 'ProjectStatus' }"
@@ -12,6 +16,7 @@
           <template #prefix>
             <LucideClipboardList class="size-4" aria-hidden="true" />
           </template>
+          <span class="hidden sm:inline">{{ __("Project status") }}</span>
         </Button>
         <Button
           variant="ghost"
@@ -32,6 +37,7 @@
           <template #prefix>
             <LucidePlus class="size-4" aria-hidden="true" />
           </template>
+          <span class="hidden sm:inline">{{ __("New project") }}</span>
         </Button>
       </template>
     </LayoutHeader>

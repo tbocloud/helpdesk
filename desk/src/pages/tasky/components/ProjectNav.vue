@@ -19,14 +19,15 @@
         class="flex min-w-0 items-center gap-1.5 text-lg-medium"
         :aria-label="__('Breadcrumb')"
       >
+        <!-- below md the Back button stands in for this link, so the project name fits -->
         <router-link
           :to="{ name: 'TaskyProjects' }"
-          class="shrink-0 rounded text-ink-gray-5 transition-colors hover:text-ink-gray-8"
+          class="hidden shrink-0 rounded text-ink-gray-5 transition-colors hover:text-ink-gray-8 md:inline"
         >
           {{ __("Projects") }}
         </router-link>
         <LucideChevronRight
-          class="size-4 shrink-0 text-ink-gray-4"
+          class="hidden size-4 shrink-0 text-ink-gray-4 md:block"
           aria-hidden="true"
         />
         <span
@@ -40,7 +41,7 @@
     </template>
     <template #right-header>
       <slot name="actions" />
-      <!-- below md the secondary actions show only their icons in a 44px target
+      <!-- below lg the secondary actions show only their icons in a 44px target
            (the label stays as the accessible name), so they fit beside the breadcrumb -->
       <Button
         v-if="detail.data?.can_change_lead"
@@ -51,18 +52,20 @@
         <template #prefix
           ><LucidePencil class="size-4" aria-hidden="true"
         /></template>
-        <span class="hidden md:inline">{{ __("Edit project") }}</span>
+        <span class="hidden lg:inline">{{ __("Edit project") }}</span>
       </Button>
       <Dropdown v-if="detail.data?.can_change_lead" :options="leadOptions">
         <Button :loading="changingLead" :label="leadLabel">
           <template #prefix
             ><LucideUserStar class="size-4" aria-hidden="true"
           /></template>
-          <span class="hidden max-w-48 truncate md:inline">{{
+          <span class="hidden max-w-48 truncate lg:inline">{{
             leadLabel
           }}</span>
           <template #suffix
-            ><LucideChevronDown class="size-4" aria-hidden="true"
+            ><LucideChevronDown
+              class="hidden size-4 sm:block"
+              aria-hidden="true"
           /></template>
         </Button>
       </Dropdown>
@@ -82,6 +85,7 @@
         <template #prefix
           ><LucidePlus class="size-4" aria-hidden="true"
         /></template>
+        <span class="hidden sm:inline">{{ __("New task") }}</span>
       </Button>
     </template>
   </LayoutHeader>
