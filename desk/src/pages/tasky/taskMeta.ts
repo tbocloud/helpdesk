@@ -314,6 +314,24 @@ export function isAiDrafted(description: string, aiText: string | null) {
   );
 }
 
+/**
+ * A task description for the plain-text box. Tasks from sign-off, routines and the ERP desk
+ * store HTML; the box would show its tags, so keep only the text and its paragraph breaks.
+ */
+export function descriptionText(description?: string | null) {
+  if (!description || !/<[a-z][^>]*>/i.test(description))
+    return description || "";
+  const doc = new DOMParser().parseFromString(description, "text/html");
+  doc.querySelectorAll("br").forEach((el) => el.replaceWith("\n"));
+  doc
+    .querySelectorAll("p, div, li, blockquote, h1, h2, h3, h4, h5, h6, tr")
+    .forEach((el) => el.append("\n"));
+  return (doc.body.textContent || "")
+    .replace(/[ \t\u00a0]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 // A refused project reads like an outage otherwise, so say who can open it
 export function loadErrorMessage(...errors: unknown[]) {
   const denied = errors.some(
