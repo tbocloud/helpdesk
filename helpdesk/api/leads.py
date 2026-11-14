@@ -31,6 +31,8 @@ from helpdesk.integrations.crm.leads import (
 VIEWS = ("all", "mine", "call_today", "follow_up", "called")
 # when a lead's earliest open follow-up is due: the Follow-up view's cards
 DUE_BUCKETS = ("overdue", "today", "tomorrow", "week", "later")
+# the tabs with a Follow-up due date filter
+DUE_DAYS_VIEWS = ("follow_up", "mine")
 PERIODS = ("today", "yesterday", "week", "month", "quarter", "custom")
 # a day is a custom range of that one day on the ERP site, which an older TBO Smart reads too
 DAYS_AGO = {"today": 0, "yesterday": 1}
@@ -177,11 +179,15 @@ def list_leads(
     # the page sends null while the Created by filter is off
     created_by_me: bool | int | str | None = None,
     due: str | None = None,
+    due_from: str | None = None,
+    due_to: str | None = None,
 ) -> dict:
     """A page of leads. `view` called lists the leads called at least once, last called first
     (`from_date` and `to_date` without a `metric` keep those last called in those days);
     `created_by_me` keeps the leads the person created, whoever owns them now. `due` (Follow-up only) keeps the leads whose earliest open
-    follow-up is overdue, today, tomorrow, in the week after (`week`) or `later`. `industry`, `state`, `district`, `org_size`, `product`, `last_call_result`
+    follow-up is overdue, today, tomorrow, in the week after (`week`) or `later`. `due_from` and
+    `due_to` (Follow-up and Mine only; either may be left out) keep the leads whose earliest open
+    follow-up falls in those days, earliest first; on Follow-up they take the place of `due`. `industry`, `state`, `district`, `org_size`, `product`, `last_call_result`
     (the outcome of the lead's last call) and `last_reply_class` (how its last email reply
     was sorted) each take one value or a list (any of them); a
     list goes to the ERP site as JSON. `metric` with its period keeps the leads one number of the
@@ -192,6 +198,8 @@ def list_leads(
         frappe.throw(_("Pick All, Mine, Call today, Follow-up or Called."))
     if due and due not in DUE_BUCKETS:
         frappe.throw(_("Pick when the follow-ups are due."))
+    # only the tabs that show the dates, read before a BD's All becomes Mine
+    due_days = follow_up_days(due_from, due_to) if view in DUE_DAYS_VIEWS else {}
     mine = False
     if is_bd():
         # another BD may be calling the same lead: every list of a BD is the leads they own or
@@ -238,7 +246,8 @@ def list_leads(
         view=view,
         mine=1 if mine else None,
         created_by_me=1 if cint(created_by_me) else None,
-        **({"due": due} if due and view == "follow_up" else {}),
+        **({"due": due} if due and view == "follow_up" and not due_days else {}),
+        **due_days,
         # cint: a malformed number is 0, never a server error
         start=max(cint(start), 0),
         page_length=min(max(cint(page_length) or 20, 1), MAX_PAGE),
@@ -648,6 +657,19 @@ def check_period(
         )
     if dates_required and period == "custom" and not (from_date and to_date):
         frappe.throw(_("Pick both dates for your own period."))
+
+
+def follow_up_days(due_from: str | None, due_to: str | None) -> dict:
+    """The follow-up days as the ERP site takes them, only the sides given (an older ERP site
+    without them still answers while the filter is off)."""
+    days = {
+        key: str(getdate(value))
+        for key, value in (("due_from", due_from), ("due_to", due_to))
+        if value
+    }
+    if len(days) == 2 and days["due_to"] < days["due_from"]:
+        frappe.throw(_("The follow-up end date is before the start date."))
+    return days
 
 
 def erp_period(period: str, from_date: str | None, to_date: str | None) -> dict:

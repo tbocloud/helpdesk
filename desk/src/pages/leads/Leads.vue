@@ -204,6 +204,34 @@
               </Button>
             </div>
           </div>
+          <!-- the days a follow-up is due; on Follow-up they take the place of the cards -->
+          <div
+            v-if="hasDueDays"
+            class="flex flex-wrap items-end gap-3"
+            role="group"
+            :aria-label="__('Follow-up due between')"
+          >
+            <FormControl
+              v-model="filters.due_from"
+              type="date"
+              class="w-40"
+              :label="__('Follow-up due from')"
+              :max="filters.due_to || undefined"
+            />
+            <FormControl
+              v-model="filters.due_to"
+              type="date"
+              class="w-40"
+              :label="__('To')"
+              :min="filters.due_from || undefined"
+            />
+            <Button
+              v-if="filters.due_from || filters.due_to"
+              variant="ghost"
+              :label="__('Clear dates')"
+              @click="clearDueDays"
+            />
+          </div>
           <div
             v-if="created === 'custom'"
             class="flex flex-wrap items-end gap-3"
@@ -935,7 +963,31 @@ const filters = reactive({
   called: queryValue("called"),
   // the Follow-up card picked: when the follow-ups are due ("" overdue and today)
   due: queryValue("due"),
+  // Follow-up and My leads: the days the earliest open follow-up falls in (YYYY-MM-DD)
+  due_from: queryValue("due_from"),
+  due_to: queryValue("due_to"),
 });
+// the tabs with the follow-up days; the API sends them for these only too
+const hasDueDays = computed(
+  () => view.value === "follow_up" || view.value === "mine"
+);
+function clearDueDays() {
+  filters.due_from = "";
+  filters.due_to = "";
+}
+// a card and the days are two ways to pick the same list: picking one drops the other
+watch(
+  () => filters.due,
+  (due) => {
+    if (due) clearDueDays();
+  }
+);
+watch(
+  () => [filters.due_from, filters.due_to],
+  ([from, to]) => {
+    if (from || to) filters.due = "";
+  }
+);
 const CREATED_BY = [
   { label: __("Owned or created"), value: "" },
   { label: __("Created by me"), value: "me" },
@@ -1160,6 +1212,7 @@ const hasFilters = computed(
       filters.department ||
       filters.created_by ||
       filters.called ||
+      (hasDueDays.value && (filters.due_from || filters.due_to)) ||
       hasCategories.value ||
       extra.metric ||
       extraChips.value.length
@@ -1201,6 +1254,8 @@ function clearFilters() {
     created_by: "",
     called: "",
     due: "",
+    due_from: "",
+    due_to: "",
   });
   categories.value = emptyCategories();
   Object.assign(extra, {
@@ -1315,6 +1370,8 @@ const leads = createResource({
         ? 1
         : null,
     due: view.value === "follow_up" ? filters.due || null : null,
+    due_from: hasDueDays.value ? filters.due_from || null : null,
+    due_to: hasDueDays.value ? filters.due_to || null : null,
     view: isList.value ? view.value : "all",
     start: (page.value - 1) * PAGE_LENGTH,
     page_length: PAGE_LENGTH,
@@ -1423,6 +1480,8 @@ watch(
       created_by: queryValue("created_by"),
       called: queryValue("called"),
       due: queryValue("due"),
+      due_from: queryValue("due_from"),
+      due_to: queryValue("due_to"),
       page: queryPage(),
       extra: queryExtra(),
       categories: queryCategories(),
@@ -1439,6 +1498,8 @@ watch(
       filters.created_by === wanted.created_by &&
       filters.called === wanted.called &&
       (wanted.view !== "follow_up" || filters.due === wanted.due) &&
+      filters.due_from === wanted.due_from &&
+      filters.due_to === wanted.due_to &&
       page.value === wanted.page
     )
       return;
@@ -1453,6 +1514,8 @@ watch(
       created_by: wanted.created_by,
       called: wanted.called,
       due: wanted.due,
+      due_from: wanted.due_from,
+      due_to: wanted.due_to,
     });
     Object.assign(extra, wanted.extra);
     categories.value = wanted.categories;
@@ -1497,6 +1560,8 @@ watch(
         created_by: f.created_by || undefined,
         called: f.called || undefined,
         due: v === "follow_up" ? f.due || undefined : undefined,
+        due_from: hasDueDays.value ? f.due_from || undefined : undefined,
+        due_to: hasDueDays.value ? f.due_to || undefined : undefined,
         industry: c.industry.length ? c.industry : undefined,
         state: c.state.length ? c.state : undefined,
         district: c.district.length ? c.district : undefined,

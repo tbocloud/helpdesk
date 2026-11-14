@@ -557,6 +557,15 @@ on `list_leads`, kept in the URL); picking it again goes back to the list as bef
 and due today. `helpdesk.api.leads.get_follow_up_counts` (cached 60 seconds per person) reads TBO
 Smart's `get_follow_up_counts`; the cards stay out while an older TBO Smart can't count.
 
+**Follow-up due dates.** On *Follow-up* and *My leads*, **Follow-up due from** and **To** (two
+date fields under the toolbar, either may be left empty) keep the leads whose earliest open
+follow-up falls in those days, earliest first; **Clear dates** drops them, as does Clear all. On
+Follow-up the days and a card are two ways to pick the same list, so picking one drops the other.
+The days are kept in the URL (`due_from`, `due_to`) and sent only from these two tabs.
+`helpdesk.api.leads.list_leads` checks them (a real date, the end not before the start) and
+passes only the sides given to TBO Smart's `list_leads` (`due_from`, `due_to`), so an older TBO
+Smart still answers while they are empty.
+
 **Your calls on My leads.** At the top of *My leads*, a strip (`MyCallCounts.vue`) shows the
 person's own calls **Today**, **This week** (from Monday), **This month** and **All time**, each
 with how many connected; **By day** opens every day with calls in the last year, newest first
