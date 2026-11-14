@@ -70,18 +70,32 @@
                 <LucidePencil class="size-4" aria-hidden="true" />
               </template>
             </Button>
-            <Button
-              v-if="canCall"
-              variant="solid"
-              :label="__('Call')"
-              :loading="placing?.lead === leadId"
-              :tooltip="__('Rings your phone first, then the lead')"
-              @click="callWithMyOperator"
-            >
-              <template #prefix>
-                <LucidePhone class="size-4" aria-hidden="true" />
-              </template>
-            </Button>
+            <!-- Call dials the main number at once; with more numbers, the arrow
+                 beside it picks another -->
+            <div v-if="canCall" class="flex items-center gap-px">
+              <Button
+                variant="solid"
+                :label="__('Call')"
+                :loading="placing?.lead === leadId"
+                :tooltip="__('Rings your phone first, then the lead')"
+                :class="callChoices.length ? 'rounded-r-none' : ''"
+                @click="callWithMyOperator()"
+              >
+                <template #prefix>
+                  <LucidePhone class="size-4" aria-hidden="true" />
+                </template>
+              </Button>
+              <Dropdown v-if="callChoices.length" :options="callChoices">
+                <Button
+                  variant="solid"
+                  class="rounded-l-none"
+                  :aria-label="__('Call another number')"
+                  :disabled="placing?.lead === leadId"
+                >
+                  <LucideChevronDown class="size-4" aria-hidden="true" />
+                </Button>
+              </Dropdown>
+            </div>
           </div>
         </div>
 
@@ -542,7 +556,7 @@ import {
   FormControl,
   toast,
 } from "frappe-ui";
-import { computed, ref, useId, watch, type Component } from "vue";
+import { computed, nextTick, ref, useId, watch, type Component } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LucideArrowRight from "~icons/lucide/arrow-right";
 import LucideBot from "~icons/lucide/bot";
@@ -591,6 +605,7 @@ import {
   STAGE_PATH,
   unsavedNote,
   type LeadDetail,
+  type LeadNumber,
   type LeadOptions,
   type LeadStage,
   type LeadTimelineEntry,
@@ -677,23 +692,45 @@ const data = computed(() => detail.data as LeadDetail | undefined);
 const lead = computed(() => data.value?.lead);
 
 const leadName = computed(() => lead.value?.lead_name || props.leadId);
+
+// the call box's "Listen on the lead" opens the lead at that call (#call-<name>)
+watch(
+  () => [data.value, route.hash] as const,
+  async ([loaded, hash]) => {
+    if (!loaded || !hash.startsWith("#call-")) return;
+    await nextTick();
+    document.getElementById(hash.slice(1))?.scrollIntoView({ block: "center" });
+  },
+  { immediate: true }
+);
 const leadPhone = computed(
   () => lead.value?.mobile_no || lead.value?.phone || ""
 );
 
-/** The call box rings the person's phone, then the lead. */
-function callWithMyOperator() {
+/** The call box rings the person's phone, then the lead (`number`: null is the main one). */
+function callWithMyOperator(number: LeadNumber | null = null) {
   placeCall({
     lead: props.leadId,
     lead_name: leadName.value,
     company: lead.value?.company_name,
-    phone: leadPhone.value,
-    number: null,
+    phone: number?.number || leadPhone.value,
+    number: number?.number ?? null,
+    numbers: lead.value?.numbers,
     // opened from Today's calls: the result counts in that batch
     item: batchItem.value,
     product: lead.value?.product,
   });
 }
+/** With several usable numbers, a menu to call one of them; one number dials at once. */
+const callChoices = computed(() => {
+  const usable = (lead.value?.numbers ?? []).filter(isUsable);
+  if (usable.length < 2) return [];
+  return usable.map((n) => ({
+    label: [n.number, n.label, n.person].filter(Boolean).join(" · "),
+    onClick: () => callWithMyOperator(n),
+  }));
+});
+
 /** A call from the phone's own dialler waits for its result: the sheet asks how it went. */
 function phoneCalled() {
   startCall({
