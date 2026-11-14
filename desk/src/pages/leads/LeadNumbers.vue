@@ -201,6 +201,8 @@ const props = defineProps<{
   /** MyOperator can ring for this person; else the number's tel: link dials */
   canCall: boolean;
   canRemove: boolean;
+  /** the call in Today's calls this lead was opened from */
+  batchItem?: string | null;
 }>();
 const emit = defineEmits<{ (e: "changed"): void }>();
 
@@ -242,6 +244,7 @@ function remember(n: LeadNumber, via: "phone" | "myoperator") {
     lead_name: props.leadName,
     phone: n.number,
     number: n.number,
+    item: props.batchItem,
     via,
   });
 }
