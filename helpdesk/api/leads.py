@@ -1161,6 +1161,30 @@ def click_to_call(name: str, number: str | None = None) -> dict:
 
 
 @frappe.whitelist()
+def get_call_status(reference_id: str) -> dict:
+    """Where the signed-in person's click-to-call is, for the call box: `state` is
+    calling, ringing, ringing_lead, on_call or ended (the ERP site answers only the person
+    who placed the call)."""
+    require_leads()
+    return (
+        call(
+            "get_call_status",
+            api=TELEPHONY,
+            reference_id=(reference_id or "").strip(),
+        )
+        or {}
+    )
+
+
+@frappe.whitelist()
+def get_incoming_call() -> dict:
+    """{enabled, call}: the call coming in to the signed-in person now, for the incoming
+    notice; `enabled` false means they aren't set up for calling and the page stops asking."""
+    require_leads()
+    return call("get_incoming_call", api=TELEPHONY) or {}
+
+
+@frappe.whitelist()
 def call_recording(call: str) -> None:
     """A call's recording, streamed from the ERP site, which plays it only to people
     who may read the lead."""
