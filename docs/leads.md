@@ -288,6 +288,9 @@ The ERP site's `tbo_smart.api.telephony` takes the same `acting_user`:
 
 ## The call box
 
+The box and the "How did the call go?" sheet show for **everyone who can use Leads** (a manager or
+the owner pressing Call too), not only Sales Employees.
+
 Every **Call** that rings the person's phone (the lead page, Today's calls, the lead's numbers,
 the leads list) opens the **call box** instead of only a toast. It lives in the app shell
 (`CallBox.vue`, state in `callBox.ts`), so it survives moving between pages. **The conversation is
