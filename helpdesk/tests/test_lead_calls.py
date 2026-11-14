@@ -58,7 +58,7 @@ class TestLeadCalls(FrappeTestCase):
         )
         self.assertEqual(self.crm.lead_paths, [f"{TELEPHONY}.get_call_status"])
 
-    def test_the_box_asks_the_erp_site_to_look_for_its_call_as_the_signed_in_person(self):
+    def test_the_box_asks_the_erp_site_to_look_for_its_call(self):
         self.crm.lead_answers["refresh_call"] = {"stored": 1}
         frappe.set_user(BDE)
         self.assertEqual(leads_api.refresh_call(" 57305000 "), {"stored": 1})

@@ -1204,15 +1204,12 @@ def refresh_call(reference_id: str) -> dict:
     signed-in person's own recent calls up at the provider and stores the missing ones.
     `{stored}`; `{stored: 0}` while the ERP site's TBO Smart is older than this."""
     require_leads()
-    return (
-        call_if_deployed(
-            "refresh_call",
-            post=True,
-            api=TELEPHONY,
-            reference_id=(reference_id or "").strip(),
-        )
-        or {"stored": 0}
-    )
+    return call_if_deployed(
+        "refresh_call",
+        post=True,
+        api=TELEPHONY,
+        reference_id=(reference_id or "").strip(),
+    ) or {"stored": 0}
 
 
 @frappe.whitelist()
