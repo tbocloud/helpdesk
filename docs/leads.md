@@ -398,7 +398,12 @@ TBO Smart sends no industries, so the page stays as it was.
 leads are in; `callPlans.hasDistricts`), the Assign panel has a **District** list under Product
 (or Industry) that shows each district's balance: *Any district* with the total, then every
 district with its unassigned leads of the product (or industry) chosen, the fullest first
-(*Malappuram 40*). Picking a row chooses that district, and the product's counts follow it. The box says
+(*Malappuram 40*). When the people picked own open leads, a second column (*With Fidha V P*, or
+*With them* for several) shows how many of their leads are in each district, so a department
+whose pool is empty doesn't read as a list of zeros. It counts all their open leads (the ERP's
+district counts ignore the product), comes from one `get_department_leads` call per owner, and
+is fetched again only when that person's lead total changes, not on the 15-second reload.
+Picking a row chooses that district, and the product's counts follow it. The box says
 *40 unassigned PhoebiX leads in Malappuram*; **See leads** opens the Unassigned window on that
 product and district, **Give now** gives the next leads of both, and **Assign leads** saves the
 district with the plan, so the batches, *Calling for* and the 11:00 auto-assign take only that
