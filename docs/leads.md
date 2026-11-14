@@ -294,6 +294,14 @@ is handed a **batch** of leads per time slot and must call them within it. TBO S
 batches and keeps the outcomes ([call-batches.md](https://github.com/tbocloud/tbo_smart/blob/main/docs/call-batches.md));
 the hub shows them. Nothing is stored here.
 
+**Only new leads (TASK-2026-01848).** A batch holds leads at **New Lead** that nobody has called
+yet, hot first, then the newest; follow-ups, yesterday's unanswered calls and quiet leads are not
+handed out (they are on *Follow-up* and the lead page). A call is listed only while its lead is
+still at New Lead: an answer that moves the stage (Not Responding, Busy, Follow-up Required,
+Contacted, …) or a stage moved by hand takes it off. **Duplicates** stay out too: when two leads
+share a number (last 10 digits, a shared number aside), only the oldest is handed out and listed,
+so the client is called once (TBO Smart's `call-batches.md` §3, §5).
+
 **The tab.** *Today's calls* is the first tab of Leads for people in a department that hands out
 batches, and the page opens on it for Sales Employees. It **replaces Call today** for those people
 (an old `?view=call_today` link lands on it): both answer "who do I phone now", so they would be two
@@ -334,13 +342,13 @@ back, Not interested, Wrong number) are the same, so the names in brackets below
   at once. The counter drops the moment an outcome is chosen and is put back with the reason if the
   ERP site refuses;
 - calls that come back later (a retry two hours after Not answered or Busy, or a call back) wait
-  under the list and join it at their time;
+  under the list and join it at their time, while the lead is still at New Lead (with the lead
+  pipeline on, those answers move it on, so they rarely show);
 - **Get next batch**, disabled with the ERP site's reason in words under it (calls still pending,
   too many overdue, the day's limit reached, no slot open);
 - **Overdue** at the bottom: calls of a slot that ended, with a danger icon and the word
   *Overdue*. They stay, and are still callable. The ERP site lists a lead once (its latest missed
-  call), so the count is leads, not missed days. A lead comes first in a batch only for a
-  follow-up a person set; one the TBO AI scheduled after a call does not bring it back.
+  call), so the count is leads, not missed days.
 
 States: loading skeleton, error with retry (and a banner that keeps the last queue when an update
 fails), an older ERP site, a department without batches, no batch right now (with the next slot),
@@ -457,8 +465,8 @@ with zeros, the product and district as picked), so the batches and the 11:00 to
 nothing; they get only the leads given here: **Give now** (a number of the product and district
 picked) or **See leads** (pick them one by one). The people table's plan reads *By hand: no daily
 calls*. To go back to batches, set calls per slot and press Assign leads, or **Remove plan** for
-the department's default. Today's calls leaves out a lead moved to another stage since its call
-was handed out (TBO Smart's `call-batches.md`, "A lead dealt with leaves Today's calls").
+the department's default. Today's calls lists only leads still at New Lead, and no newer
+duplicate (TBO Smart's `call-batches.md`, "Only new leads are listed").
 
 **All of someone's leads back to the pool at once.** With people ticked who own open leads, the
 panel's footer has a quiet **Send their 555 leads back to the pool** (the count is theirs
