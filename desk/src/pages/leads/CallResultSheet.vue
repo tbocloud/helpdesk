@@ -154,6 +154,8 @@ const props = defineProps<{
   position: number;
   total: number;
   saving: boolean;
+  /** what was typed during the call, as the note to start from */
+  startNote?: string;
 }>();
 const emit = defineEmits<{
   (e: "update:open", value: boolean): void;
@@ -188,12 +190,12 @@ const WHY = [
 const step = ref<"result" | "Call back" | "Not interested">("result");
 const note = ref("");
 
-// each call starts on the six buttons with an empty note
+// each call starts on the six buttons, with the note typed during the call if there is one
 watch(
-  () => [props.open, props.call?.lead],
+  () => [props.open, props.call?.lead, props.startNote],
   () => {
     step.value = "result";
-    note.value = "";
+    note.value = props.startNote ?? "";
   }
 );
 

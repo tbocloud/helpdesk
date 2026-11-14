@@ -51,7 +51,7 @@
           v-if="canCall"
           variant="subtle"
           :aria-label="__('Call {0}', n.number)"
-          :tooltip="__('MyOperator rings your phone, then {0}', n.number)"
+          :tooltip="__('Rings your phone first, then {0}', n.number)"
           :loading="dialing === n.number"
           @click="dial(n)"
         >
@@ -62,7 +62,7 @@
           variant="subtle"
           :link="n.tel"
           :aria-label="__('Call {0}', n.number)"
-          @click="remember(n, 'phone')"
+          @click="remember(n)"
         >
           <LucidePhone class="size-4" aria-hidden="true" />
         </Button>
@@ -190,7 +190,8 @@ import LucidePhone from "~icons/lucide/phone";
 import LucidePhoneOff from "~icons/lucide/phone-off";
 import LucidePlus from "~icons/lucide/plus";
 import AddNumberDialog from "./AddNumberDialog.vue";
-import { isUsable, useClickToCall, type LeadNumber } from "./leads";
+import { isUsable, type LeadNumber } from "./leads";
+import { placeCall, placing } from "./callBox";
 import { startCall } from "./pendingCalls";
 
 const props = defineProps<{
@@ -230,27 +231,28 @@ function detail(n: LeadNumber) {
 
 // ---------- calling ----------
 
-const clickToCall = useClickToCall();
-const dialing = computed(() =>
-  clickToCall.loading
-    ? String((clickToCall.params as { number?: string })?.number)
-    : ""
-);
+const dialing = computed(() => placing.value?.number || "");
 
-/** The call waits for its result, which names the number that was dialled. */
-function remember(n: LeadNumber, via: "phone" | "myoperator") {
+/** A call from the phone's own dialler waits for its result, which names the number dialled. */
+function remember(n: LeadNumber) {
   startCall({
     lead: props.leadId,
     lead_name: props.leadName,
     phone: n.number,
     number: n.number,
     item: props.batchItem,
-    via,
+    via: "phone",
   });
 }
+/** The call box rings the person's phone, then the lead. */
 function dial(n: LeadNumber) {
-  clickToCall.submit({ name: props.leadId, number: n.number });
-  remember(n, "myoperator");
+  placeCall({
+    lead: props.leadId,
+    lead_name: props.leadName,
+    phone: n.number,
+    number: n.number,
+    item: props.batchItem,
+  });
 }
 
 // ---------- changing a number ----------

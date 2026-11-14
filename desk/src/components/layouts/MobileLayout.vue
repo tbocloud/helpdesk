@@ -6,9 +6,11 @@
       <slot />
     </div>
     <PendingCalls v-if="authStore.isSalesEmployee && authStore.canUseLeads" />
+    <CallBox v-if="authStore.isSalesEmployee && authStore.canUseLeads" />
   </div>
 </template>
 <script setup>
+import CallBox from "@/pages/leads/CallBox.vue";
 import PendingCalls from "@/pages/leads/PendingCalls.vue";
 import { useAuthStore } from "@/stores/auth";
 import MobileSidebar from "./MobileSidebar.vue";

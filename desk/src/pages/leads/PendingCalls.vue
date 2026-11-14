@@ -1,7 +1,7 @@
 <template>
   <!-- the reminder stays on every Leads screen until each call has a result -->
   <div
-    v-if="pendingCalls.length && !showSheet"
+    v-if="pendingCalls.length && !showSheet && !box.open"
     class="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
   >
     <div
@@ -36,6 +36,7 @@
     :position="index + 1"
     :total="pendingCalls.length"
     :saving="saving"
+    :start-note="prefill.lead === current?.lead ? prefill.note : ''"
     @answer="answer"
     @dismiss="dismiss"
     @add-number="showAddNumber = true"
@@ -58,8 +59,10 @@ import LucidePhoneCall from "~icons/lucide/phone-call";
 import type { CallOutcome } from "./callBatches";
 import AddNumberDialog from "./AddNumberDialog.vue";
 import CallResultSheet from "./CallResultSheet.vue";
+import { box } from "./callBox";
 import {
   askFor,
+  askNote,
   cameBack,
   dismissCall,
   loadPendingCalls,
@@ -96,9 +99,14 @@ const focused = useWindowFocus();
 watch(visibility, (state) => state === "visible" && cameBack());
 watch(focused, (state) => state && cameBack());
 
+// what the person typed in the call box goes into the result as its note
+const prefill = ref({ lead: "", note: "" });
+
 watch(askFor, (lead) => {
   if (!lead) return;
   askFor.value = "";
+  prefill.value = { lead, note: askNote.value };
+  askNote.value = "";
   // the list is read again on coming back: wait for it before looking the lead up
   loadPendingCalls().finally(() => {
     if (pendingCalls.value.some((c) => c.lead === lead)) open(lead);

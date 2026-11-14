@@ -630,15 +630,18 @@
                         v-if="options?.can_call && row.mobile_no"
                         variant="ghost"
                         :label="__('Call {0}', row.lead_name || row.name)"
-                        :tooltip="
-                          __('MyOperator rings your phone, then the lead')
+                        :tooltip="__('Rings your phone first, then the lead')"
+                        :loading="placing?.lead === row.name"
+                        :disabled="!!placing"
+                        @click="
+                          placeCall({
+                            lead: row.name,
+                            lead_name: row.lead_name || row.name,
+                            company: row.company_name,
+                            phone: row.mobile_no,
+                            number: null,
+                          })
                         "
-                        :loading="
-                          clickToCall.loading &&
-                          clickToCall.params?.name === row.name
-                        "
-                        :disabled="clickToCall.loading"
-                        @click="clickToCall.submit({ name: row.name })"
                       >
                         <template #icon>
                           <LucidePhone class="size-4" aria-hidden="true" />
@@ -795,6 +798,7 @@ import LeadsDailyReport from "./LeadsDailyReport.vue";
 import LeadsOverview from "./LeadsOverview.vue";
 import TodaysCalls from "./TodaysCalls.vue";
 import { batchesOn, OUTCOMES } from "./callBatches";
+import { placeCall, placing } from "./callBox";
 import { REPLY_LOOK, type ReplyClass } from "./outreach";
 import {
   categoryLabel,
@@ -804,7 +808,6 @@ import {
   lastCall,
   LEAD_VIEWS,
   loadLeadOptions,
-  useClickToCall,
   leadOptions,
   METRIC_LABELS,
   ownerName,
@@ -1259,7 +1262,6 @@ watch(options, (value) => {
   // an old link to a tab a BD doesn't have
   if (isBd.value && !BD_TABS.includes(view.value)) view.value = homeTab.value;
 });
-const clickToCall = useClickToCall();
 
 const stageOptions = computed(() => [
   { label: __("Any stage"), value: "" },

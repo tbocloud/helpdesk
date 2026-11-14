@@ -632,22 +632,6 @@ export const leadDepartments = createResource({
   url: "helpdesk.api.leads.get_lead_departments",
 });
 
-/** Asks MyOperator to ring the signed-in person's phone, then the lead. */
-export function useClickToCall() {
-  return createResource({
-    url: "helpdesk.api.leads.click_to_call",
-    method: "POST",
-    onSuccess(data: { message?: string }) {
-      toast.success(data?.message || __("MyOperator is calling your phone…"));
-    },
-    onError(e: unknown) {
-      toast.error(
-        errorText(e, __("Couldn't place the call. Try again in a minute."))
-      );
-    },
-  });
-}
-
 /** 125 → "2:05" */
 export function callLength(seconds?: number | null) {
   const total = Math.max(0, Math.round(seconds || 0));

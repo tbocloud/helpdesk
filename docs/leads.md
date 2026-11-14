@@ -286,6 +286,49 @@ The ERP site's `tbo_smart.api.telephony` takes the same `acting_user`:
   `helpdesk/api/myoperator.py` for the settings (hub admins and managers who use leads; the
   ERP site checks its own System Manager role).
 
+## The call box
+
+Every **Call** that rings the person's phone (the lead page, Today's calls, the lead's numbers,
+the leads list) opens the **call box** instead of only a toast. It lives in the app shell
+(`CallBox.vue`, state in `callBox.ts`), so it survives moving between pages. **The conversation is
+on the person's phone**; the box only shows where the call is and holds the note. There is no
+browser audio or softphone: CallerDesk's WebRTC needs per-agent credentials and a VPN we don't
+have.
+
+What it says, in order: *Calling your phone…* → *Pick up your phone* → *Ringing <lead>* →
+*On call 0:32* (a timer) → *Call ended · 2m 10s* or *Not answered*; a refusal shows CallerDesk's
+reason with **Try again**. It shows the lead's name, company, the number dialled, **Calling for:
+<product>** with the intro line when there is one, **Open the lead**, and a **Note for this
+call**. The note is not saved on its own: it opens as the note of the result sheet. **Minimise**
+turns the box into a small pill with the timer. It can be closed only once the call has a result;
+the sheet (`CallResultSheet`, the existing "How did the call go?") opens by itself when the call
+ends, and **Record the result** opens it again. Without the sheet's result the *You have N calls
+without a result* banner still catches the call.
+
+**Live status.** The ERP site keeps the call's live state on its TBO Call (from CallerDesk's
+**Live Call** events and the final Call Report: TBO Smart's `telephony-callerdesk.md` §3.1). The
+box asks `helpdesk.api.leads.get_call_status` (proxy of `tbo_smart.api.telephony.get_call_status`,
+as the signed-in person; only their own call) every 2.5 seconds **only while it is open**, backs
+off to 15 seconds after errors, and stops when the call ends. If no Live Call event ever arrives
+the box says *Calling your phone…* until the Call Report lands (usually within a minute of the
+call ending) then *Call ended*; after 45 seconds it already offers **Record the result**, and
+after 3 minutes without any sign of the call it stops asking and says *Can't see this call any
+more*. MyOperator calls only ever go from *Calling your phone…* to *Call ended*.
+
+**Sound.** A soft ring-back tone loops while the box says *Calling your phone…*, *Pick up your
+phone* or *Ringing <lead>*, and stops the moment the call is picked, ended or refused. It is made
+in the browser (Web Audio, no files), starts from the Call tap so browsers allow it, and has a
+**mute** button on the box, remembered on that device (`call-box-muted`). It is only a ring sound:
+the call itself is on the phone.
+
+**Incoming calls.** With CallerDesk's Live Call on, a telecaller with the hub open sees **Incoming
+call: <lead or number>** with **Open lead** and **Dismiss**, and a different, brighter ring (only
+where the browser lets the page play sound; otherwise silent). The hub asks
+`get_incoming_call` every 10 seconds, only while the tab is visible and only for people the ERP
+site says are set up for calling (`enabled`); the notice goes when the call is picked up or ends.
+
+Owner step: in CallerDesk, add **Live Call** to the webhook (same address, method POST).
+
 ## Today's calls
 
 Salespeople used to see every lead at once and cherry-picked, skipping many. For a department
@@ -617,8 +660,8 @@ the ERP site, and `get_my_calls` carries `focus` and `focus_options`.
 **Recording results** (`helpdesk/api/pending_calls.py`, `PendingCalls.vue`, `CallResultSheet.vue`).
 Tapping **Call** on a lead (the lead page's Call button or one of its numbers; opened from Today's calls it carries the batch item)
 remembers the lead. The cache holds it per person for 3 days, at most 50. When the person comes back
-to the page (`visibilitychange` or window focus; for MyOperator, 45 seconds later) the **result
-sheet** opens for it: six big buttons (Connected, Not answered, Busy, Call back, Not interested,
+to the page (`visibilitychange` or window focus; for a call the **call box** placed, when the box
+sees the call end) the **result sheet** opens for it: six big buttons (Connected, Not answered, Busy, Call back, Not interested,
 Wrong number), an optional note; Call back asks *In 1 hour / In 2 hours / Tomorrow 10:00*, Not
 interested asks why in one tap. A small banner, *You have N calls without a result*, stays on every
 screen for Sales Employees with **Add results**, which opens them one by one. The result goes to
@@ -1443,6 +1486,7 @@ trimmed product and sizes, clearing, no people refused before the ERP site is as
 `helpdesk/tests/test_lead_calls.py`: Call posted as the signed-in person to TBO Smart's
 telephony API, the recording streamed (audio only) and a refusal refused, the MyOperator
 settings for admins only and proxied.
+`helpdesk/tests/test_lead_calls.py` also covers the call box's `get_call_status` and `get_incoming_call` proxies (as the signed-in person, a refusal refused here too).
 `helpdesk/tests/test_outreach.py`: see [Outreach](#outreach).
 `helpdesk/tests/test_whatsapp_outreach.py`: see [whatsapp-outreach.md](whatsapp-outreach.md).
 `helpdesk/tests/test_prospects.py`: an estimate and a start proxied as the person (POST, the values as a set of fields), the runs read live, a refusal naming who may, an older ERP site (the list hides quietly, estimate and start say so), and no access without leads.
