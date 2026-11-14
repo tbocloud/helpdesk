@@ -80,6 +80,33 @@ class TestLeads(FrappeTestCase):
         with self.assertRaises(frappe.ValidationError):
             leads_api.list_leads(view="follow_up", due="soon")
 
+    def test_follow_ups_can_be_kept_to_the_days_they_are_due(self):
+        self.as_bde()
+
+        def sent(**kwargs):
+            leads_api.list_leads(**kwargs)
+            return [p for m, _post, p in self.crm.lead_calls if m == "list_leads"][-1]
+
+        days = sent(
+            view="follow_up", due="overdue", due_from="2026-11-20", due_to="2026-11-25"
+        )
+        self.assertEqual(
+            (days["due_from"], days["due_to"]), ("2026-11-20", "2026-11-25")
+        )
+        # the days take the place of the card
+        self.assertNotIn("due", days)
+        # one side is enough, on My leads too
+        days = sent(view="mine", due_to="2026-11-25")
+        self.assertEqual(days["due_to"], "2026-11-25")
+        self.assertNotIn("due_from", days)
+        # never on a tab that doesn't show them
+        days = sent(view="called", due_from="2026-11-20")
+        self.assertNotIn("due_from", days)
+        with self.assertRaises(frappe.ValidationError):
+            leads_api.list_leads(
+                view="follow_up", due_from="2026-11-25", due_to="2026-11-20"
+            )
+
     def test_leads_are_off_by_default(self):
         frappe.db.set_single_value("HD CRM Settings", "enable_leads", 0)
         self.as_bde()
