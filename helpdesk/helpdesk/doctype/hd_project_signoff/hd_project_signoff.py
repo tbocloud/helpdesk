@@ -1549,7 +1549,7 @@ class HDProjectSignoff(Document):
             else None,
             PRINT_FORMATS[self.kind()],
         ]
-        for name in filter(None, names):
+        for name in [n for n in names if n]:
             html = frappe.db.get_value(
                 "Print Format", {"name": name, "disabled": 0}, "html"
             )
@@ -1561,11 +1561,11 @@ class HDProjectSignoff(Document):
         """A document of the sign-off as HTML: the sign-off document (what goes out with the
         mail, previewed on the full page, and once signed off the signed record) through its
         print format, or (`template`) the project's completion letter."""
+        # the app's own fixed template, not user input - nosemgrep
         if template:
-            # the app's own fixed template, not user input - nosemgrep
-            return frappe.render_template(template, context)
-        # a print format is a System Manager's, as anywhere in Frappe - nosemgrep
-        return frappe.render_template(
+            return frappe.render_template(template, context)  # nosemgrep
+        # a print format is a System Manager's, as anywhere in Frappe
+        return frappe.render_template(  # nosemgrep
             self.document_source(), {"doc": self, "ctx": context}
         )
 
