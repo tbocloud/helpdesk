@@ -50,7 +50,9 @@ after two working days ([Reminders](#reminders)).
 Draft, Signed and Reopened are set by actions; the others follow the answers
 (`HDProjectSignoff.refresh_status`).
 
-**Viewed** is not stored: a Sent sign-off reads *Viewed* once the customer opened the link and
+**Viewed** is not stored (the history events it and the ERP retry read, "Code verified" and
+"Recorded / Not recorded on the ERP site", are stored untranslated so the reader's language
+doesn't matter; the history shows them translated): a Sent sign-off reads *Viewed* once the customer opened the link and
 verified their code since it was last sent (the history's *Code verified*;
 `HDProjectSignoff.customer_status`, `customer_status` in the API). The lists, the sign-off page
 and the lead page show it.
@@ -111,11 +113,16 @@ Item responses: **Pending**, **Done**, **Not clear**, **Escalated**.
    - checks the project: when **every** sign-off of the project is Signed, renders the
      **project completion letter** (every module with its training date, trainer, signer and
      audit reference), saves it on the project (Project `custom_signoff_letter`) and emails
-     it to the signatories, trainers and the project lead.
+     it to the signatories, trainers and the project lead. The check reads the project's
+     sign-offs locked (`for_update`), so two customers signing the last two modules at once
+     can't each see the other unsigned and both skip it. Deleting a draft that was the last
+     one not signed makes the letter then (when there isn't one yet).
 7. **Reopen** (Signed only; reason required): the reason, the previous signer and the old PDF
    are written to the history; signature fields are cleared; the signed PDF stays on the
-   project; the project's completion letter field is cleared. Signing again generates a new
-   PDF (and a new completion letter once all are signed).
+   project; the project's completion letter field is cleared. **The link is withdrawn** (and
+   with it the customer's session), so the customer can't sign the unchanged sign-off again;
+   once it is edited, **Resend link** sends a new one. Signing again generates a new PDF (and a
+   new completion letter once all are signed).
 
 ## Mail
 
@@ -138,7 +145,12 @@ draft or reopened.
   Sir/Madam Asha Menon").
 - **Filling in** (`preview_signoff_mail`): when the template is picked, and again whenever a
   field it uses changes, until the mail is changed by hand; then **Reapply template** puts the
-  template back after asking ("Your changes to the mail are lost"). A placeholder with nothing
+  template back after asking ("Your changes to the mail are lost"). A fill that arrives after
+  the mail was typed into is dropped, so typing is never overwritten. Editing a draft: its kept
+  mail goes on following its choices when it is still exactly what they fill in (a training
+  date set later fills in); a draft mail written by hand stays, and **Reapply template** (shown
+  for it, without asking when nothing was typed in the dialog) fills it in again. Switching
+  template replaces the earlier template's Always CC with the new one's. A placeholder with nothing
   to fill it stays in the text and **holds the mail back**: "Fill Training date: it is used in
   the mail." (the dialog's Send button says why it is off, and the server refuses it too:
   `check_mail_ready`).
@@ -164,7 +176,9 @@ the page is in view, so it moves to Signed without opening the project.
 - The card's one button: **Send for sign-off** when the project has no UAT sign-off and the
   person may send one, opening the same dialog for a UAT (its tests from the SRS, the first UAT
   template that fits the project, CC and mail filled in); **Open sign-off** for someone who can
-  open the project; otherwise the status in words ("UAT sign-off: Viewed").
+  open the project; otherwise the status in words ("UAT sign-off: Viewed"). From here it is
+  only **sent**, never kept as a draft (no Save as draft; `create_uat_signoff` refuses `lead`
+  without `send`): the lead's owner may not open the project, so a draft would be stranded.
 - **Who**: the lead's owner, the project's managers and lead, admins create and send it here;
   anyone who may see the lead sees the status and downloads the signed PDF
   (`download_lead_signoff_pdf`: the PDF is private on the project, which a salesperson can't
@@ -179,8 +193,9 @@ the page is in view, so it moves to Signed without opening the project.
 
 Every day at 10:30, on a working day (`helpdesk.follow_ups.WorkCalendar`: the weekly off,
 Saturdays off and holidays), `send_signoff_reminders` sends **one** polite reminder for each
-sign-off that is still **Sent** (nothing answered) two working days after its link went out,
-with a link that still works: the same mail with "Reminder:" before the subject and a first line
+sign-off that is still **Sent** (nothing answered, and not opened: a *Viewed* one gets none,
+since the reminder's new link would end the session the customer may be answering in) two
+working days after its link went out, with a link that still works: the same mail with "Reminder:" before the subject and a first line
 "A gentle reminder: we haven't heard from you yet. The link below replaces the one we sent
 before." It carries a new link (only the link's hash is stored, so the old one can't be sent
 again; the old one stops working), goes to the signatory only, in the name of whoever sent it,
@@ -216,7 +231,9 @@ or UAT, `crm_plan`), one portal, one flow.
   UAT's words.
 - **The ERP site is told**: signing (and reopening) queues `record_uat_on_erp` after the commit
   (`record_uat` on the plan: Signed with the signer, which **starts the warranty** the day after
-  and completes the lead's chain), so a slow ERP site never holds up the client.
+  and completes the lead's chain), so a slow ERP site never holds up the client. **Record on
+  the ERP site** is offered only once a try failed (`crm_failed`: the latest of "Recorded on
+  the ERP site" / "Not recorded on the ERP site" is the latter), not while the first is queued.
 - The portal's words come from `signoff_portal.words(doc)` (training or UAT), in `page_data`.
 
 ## Security
@@ -233,9 +250,11 @@ base template and helpers (`helpdesk/templates/portal_base.html`). Its endpoints
   site. An unknown, replaced or revoked token gets the same "isn't valid" answer.
 - **Email code**: 6 digits from `secrets`, sent only to the sign-off's signatory email, kept
   in Redis for 10 minutes (stored only after the email is handed over, so a failed send
-  leaves no code and no resend wait), compared in constant time, at most 5 wrong tries (then a new code
-  is needed), and a new code at most once a minute. `request_code` is rate-limited to 5 an
-  hour and `verify_code` to 15 per 10 minutes, per IP and token.
+  leaves no code and no resend wait), compared in constant time, at most 5 tries per code
+  (counted with an atomic Redis increment before the check, so parallel guesses each use a
+  try; then a new code is needed), and a new code at most once a minute. `request_code` is
+  rate-limited to 5 an hour and `verify_code` to 15 per 10 minutes, per IP and token. The
+  token must match exactly (no trimming), so a padded token can't get a fresh rate limit.
 - **Session**: a correct code starts a session in Redis (2 hours) behind an HttpOnly,
   SameSite=Lax (Secure on https) browser-session cookie. The session holds the sign-off, the
   token hash and the signatory email, and every call checks all three against the sign-off
@@ -254,7 +273,8 @@ base template and helpers (`helpdesk/templates/portal_base.html`). Its endpoints
   check (read on the Project); people who may see the lead, through
   `download_lead_signoff_pdf`.
 - The page shows the helpdesk's logo (HD Settings brand logo) in its top bar, its name when
-  there is none. On a phone the answer buttons and the main buttons are full width and 48px
+  there is none or it is a private file (a customer who isn't signed in can't load one: it
+  would show as a broken image; the same for the favicon). On a phone the answer buttons and the main buttons are full width and 48px
   tall.
 
 ## Where it is in the app
@@ -270,7 +290,8 @@ base template and helpers (`helpdesk/templates/portal_base.html`). Its endpoints
   setup, customer, mail; Save as draft / Send to customer).
 - **A sign-off** (`/helpdesk/projects/<project>/signoff/<name>`, route `TaskySignoff`,
   `ProjectSignoff.vue`): status, signatory, trainer, training date, template, link status;
-  actions by state (Edit and Send to customer for drafts; Resend link; Revoke link; Signed
+  actions by state (Edit and Send to customer for drafts, which asks once more who gets the
+  mail, as the dialog does; Resend link; Revoke link; Signed
   PDF; Reopen; Delete draft); counts; signature panel; the questions by section with each
   answer, the customer's comment, the clarification (who, when, note), the task (opens the
   task panel, with its meetings) and **Mark clarified**; the history.
@@ -370,7 +391,8 @@ off** from the customer's email reply. The customer signs on the page; that is t
 - `preview_signoff_mail(project, signoff_type, template?, signatory_contact?, module_title?,
   training_date?, trainer?, lead?)` → `{subject, body, cc, missing}`; nothing saved.
 - `get_signoff(signoff)` → the sign-off with items, history (newest first), counts,
-  `customer_status`, the mail, `reminder_sent_on`, `link_open`, `can_manage`, `can_edit`.
+  `customer_status`, the mail, `reminder_sent_on`, `link_open`, `crm_failed`, `can_manage`,
+  `can_edit`.
 - POST: `create_signoff(…, email_subject?, email_body?, cc_emails?, send?, lead?)`,
   `create_uat_signoff(project, signatory_contact, trainer, template?, email_subject?,
   email_body?, cc_emails?, send?, lead?)` (→ `{name, status}`; `send` 1 sends it at once),

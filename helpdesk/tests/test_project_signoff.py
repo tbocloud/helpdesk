@@ -10,6 +10,7 @@ from frappe.utils import add_days, getdate, now_datetime, nowdate
 from helpdesk.api import project_signoff as api
 from helpdesk.api import signoff_portal as portal
 from helpdesk.helpdesk.doctype.hd_project_signoff.hd_project_signoff import (
+    CODE_VERIFIED,
     HDProjectSignoff,
     send_signoff_reminders,
 )
@@ -179,19 +180,24 @@ class TestProjectSignoff(FrappeTestCase):
         key = portal.otp_key(doc.name)
         self.addCleanup(frappe.cache.delete_value, key)
         frappe.cache.set_value(
-            key,
-            {
-                "otp": "123456",
-                "sent_at": str(now_datetime()),
-                "attempts": portal.OTP_MAX_ATTEMPTS,
-            },
-            expires_in_sec=60,
+            key, {"otp": "123456", "sent_at": str(now_datetime())}, expires_in_sec=60
         )
+        # every try so far used (counted atomically, before the check)
+        tries = portal.otp_tries_key(doc.name)
+        frappe.cache.set(tries, portal.OTP_MAX_ATTEMPTS)
+        self.addCleanup(frappe.cache.delete, tries)
         with patch.object(portal, "start_session") as start:
             self.assertFalse(portal.verify_code(token, "123456")["success"])
             # the locked code is gone: asking again says it expired
             self.assertIn("expired", portal.verify_code(token, "123456")["message"])
             start.assert_not_called()
+
+    def test_a_padded_token_opens_nothing(self):
+        # the rate limits count by the raw token: a padded one mustn't open the sign-off
+        doc, token = self.sent()
+        self.assertEqual(portal.find_signoff(token).name, doc.name)
+        for padded in (f"{token} ", f" {token}", f"{token}\n"):
+            self.assertIsNone(portal.find_signoff(padded))
 
     def test_expired_or_revoked_link_is_refused(self):
         doc, token = self.sent()
@@ -407,6 +413,9 @@ class TestProjectSignoff(FrappeTestCase):
         reopened = [row for row in doc.log if row.event == "Reopened"]
         self.assertIn("Add the GST report", reopened[0].detail)
         self.assertEqual(reopened[0].by_email, PM[0])
+        # the customer can't sign the unchanged sign-off again on the old link
+        self.assertIsNone(doc.link_token_hash)
+        self.assertEqual(portal.link_state(portal.find_signoff(token)), "invalid")
 
     def test_completion_letter_once_every_signoff_is_signed(self):
         first, first_token = self.sent()
@@ -428,6 +437,18 @@ class TestProjectSignoff(FrappeTestCase):
         )
         rollup = run_as_user(PM[0], lambda: api.get_project_signoffs(self.project))
         self.assertEqual(rollup["completion_letter"]["name"], letter)
+
+    def test_deleting_the_last_unsigned_draft_makes_the_completion_letter(self):
+        doc, token = self.sent()
+        draft = self.signoff(module_title="Stock")
+        self.sign(self.answer_all_done(doc, token), token)
+        self.assertFalse(
+            frappe.db.get_value("Project", self.project, "custom_signoff_letter")
+        )
+        run_as_user(PM[0], lambda: api.delete_signoff(draft.name))
+        self.assertTrue(
+            frappe.db.get_value("Project", self.project, "custom_signoff_letter")
+        )
 
     # --- permissions ---
 
@@ -612,12 +633,17 @@ class TestProjectSignoff(FrappeTestCase):
         doc = frappe.get_doc("HD Project Signoff", name)
         self.assertEqual(doc.log[-1].event, "Not recorded on the ERP site")
         self.assertFalse(doc.crm_recorded)
+        # only now is Record on the ERP site offered (not while the first try is queued)
+        self.assertTrue(run_as_user(PM[0], lambda: api.get_signoff(name))["crm_failed"])
         # once it is back, Record on the ERP site sends the current state
         crm.lead_error = None
         frappe.db.set_value("HD Project Signoff", name, "status", "Signed")
         run_as_user(PM[0], lambda: api.record_uat_again(name))
         self.assertEqual(
             frappe.db.get_value("HD Project Signoff", name, "crm_recorded"), "Signed"
+        )
+        self.assertFalse(
+            run_as_user(PM[0], lambda: api.get_signoff(name))["crm_failed"]
         )
 
     def test_the_plan_link_is_not_changed_by_a_save(self):
@@ -755,7 +781,7 @@ class TestProjectSignoff(FrappeTestCase):
 
         self.assertEqual(status(), "Sent")
         doc.reload()
-        doc.log_event(frappe._("Code verified"), by_email=SIGNATORY)
+        doc.log_event(CODE_VERIFIED, by_email=SIGNATORY)
         doc.flags.signoff_action = True
         doc.save(ignore_permissions=True)
         self.assertEqual(status(), "Viewed")
@@ -809,6 +835,26 @@ class TestProjectSignoff(FrappeTestCase):
 
         # a link sent again by hand starts a new wait
         run_as_user(PM[0], lambda: api.send_signoff_link(doc.name))
+        self.assertFalse(
+            frappe.db.get_value("HD Project Signoff", doc.name, "reminder_sent_on")
+        )
+
+    def test_no_reminder_once_the_customer_opened_it(self):
+        # its new link would end the session they may be answering in
+        doc, _token = self.sent()
+        frappe.db.set_value(
+            "HD Project Signoff",
+            doc.name,
+            {"link_sent_on": add_days(now_datetime(), -3), "link_sent_by": PM[0]},
+        )
+        doc.reload()
+        doc.log_event(CODE_VERIFIED, by_email=SIGNATORY)
+        doc.flags.signoff_action = True
+        doc.save(ignore_permissions=True)
+        with patch("helpdesk.follow_ups.WorkCalendar", EveryDayWorkCalendar):
+            with patch("helpdesk.work_reminders.notify_users"):
+                send_signoff_reminders()
+        self.sendmail.assert_not_called()
         self.assertFalse(
             frappe.db.get_value("HD Project Signoff", doc.name, "reminder_sent_on")
         )
@@ -941,6 +987,20 @@ class TestProjectSignoff(FrappeTestCase):
         )
         run_as_user(OUTSIDER[0], lambda: api.download_lead_signoff_pdf("LEAD-SO-1"))
         self.assertTrue(frappe.local.response.filecontent)
+
+    def test_the_lead_page_sends_and_never_keeps_a_draft(self):
+        # the lead's owner may not open the project, so a draft there would be stranded
+        self.lead_project(owner=OUTSIDER[0])
+        with self.assertRaises(frappe.ValidationError):
+            run_as_user(
+                OUTSIDER[0],
+                lambda: api.create_uat_signoff(
+                    self.project, self.contact, TRAINER[0], lead="LEAD-SO-1", send=0
+                ),
+            )
+        self.assertFalse(
+            frappe.db.exists("HD Project Signoff", {"project": self.project})
+        )
 
     def test_others_see_the_lead_status_but_cannot_send(self):
         self.lead_project(owner=PM[0])

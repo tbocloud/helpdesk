@@ -44,6 +44,8 @@ NEEDS_CLARIFICATION = "Needs clarification"
 READY_TO_SIGN = "Ready to sign"
 SIGNED = "Signed"
 REOPENED = "Reopened"
+# the log event "Viewed" is read from: stored as is, so the language of the request doesn't matter
+CODE_VERIFIED = "Code verified"
 
 PENDING = "Pending"
 DONE = "Done"
@@ -624,7 +626,7 @@ class HDProjectSignoff(Document):
             return self.status
         sent = get_datetime(self.link_sent_on)
         opened = any(
-            row.event == _("Code verified") and get_datetime(row.at) >= sent
+            row.event == CODE_VERIFIED and get_datetime(row.at) >= sent
             for row in self.log
         )
         return "Viewed" if opened else self.status
@@ -633,9 +635,11 @@ class HDProjectSignoff(Document):
 
     def reminder_due(self, calendar) -> bool:
         """Sent and still unanswered after two working days, with a link that works, and not
-        reminded since that link went out."""
+        reminded since that link went out. Not once the customer opened it (Viewed): the
+        reminder's new link would end the session they may be answering in."""
         return bool(
             self.status == SENT
+            and self.customer_status() == SENT
             and not self.reminder_sent_on
             and self.link_is_open()
             and calendar.working_days_since(getdate(self.link_sent_on))
@@ -1007,6 +1011,10 @@ class HDProjectSignoff(Document):
         ):
             self.set(field, None)
         self.status = REOPENED
+        # the old link (and the customer's session on it) stops working: they could sign the
+        # unchanged sign-off again; a new link goes out once it is ready
+        self.link_token_hash = None
+        self.link_expires_on = None
         self.flags.signoff_action = True
         if not self.is_uat():
             # the project's training is no longer fully signed off (a UAT isn't in the letter)
@@ -1222,25 +1230,31 @@ class HDProjectSignoff(Document):
     # --- project roll-up ---
 
     def project_signoffs(self) -> list[dict]:
-        """The project's training sign-offs (the completion letter's; a UAT isn't one)."""
-        return frappe.get_all(
-            "HD Project Signoff",
-            filters={"project": self.project, "signoff_type": ("!=", UAT)},
-            fields=[
-                "name",
-                "module_title",
-                "status",
-                "training_date",
-                "trainer",
-                "signer_name",
-                "signer_designation",
-                "signatory_email",
-                "signed_on",
-                "audit_ref",
-            ],
-            order_by="signed_on asc, creation asc",
-            limit_page_length=0,
+        """The project's training sign-offs (the completion letter's; a UAT isn't one), read as
+        committed and locked, so two signing at once can't each see the other unsigned and
+        both skip the letter."""
+        signoff = frappe.qb.DocType("HD Project Signoff")
+        query = (
+            frappe.qb.from_(signoff)
+            .select(
+                signoff.name,
+                signoff.module_title,
+                signoff.status,
+                signoff.training_date,
+                signoff.trainer,
+                signoff.signer_name,
+                signoff.signer_designation,
+                signoff.signatory_email,
+                signoff.signed_on,
+                signoff.audit_ref,
+            )
+            .where(signoff.project == self.project)
+            .where(signoff.signoff_type != UAT)
+            .orderby(signoff.signed_on)
+            .orderby(signoff.creation)
+            .for_update()
         )
+        return query.run(as_dict=True)
 
     def complete_project_if_all_signed(self):
         """Every training sign-off of the project signed: the completion letter goes on the project and out by email."""
