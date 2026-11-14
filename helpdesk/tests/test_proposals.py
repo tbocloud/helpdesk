@@ -259,6 +259,139 @@ class TestProposals(FrappeTestCase):
             (False, {"lead": "CRM-LEAD-1", "acting_user": BDE}),
         )
 
+    def test_a_step_out_of_order_is_made_from_the_lead(self):
+        self.crm.lead_answers["create_document"] = {
+            "proposal": {"name": "SRS-2026-00001"},
+            "warnings": [],
+        }
+        proposals_api.create_document(document_type="SRS", lead="CRM-LEAD-1")
+        # neither a source nor a lead: nothing to make it for
+        with self.assertRaises(frappe.ValidationError):
+            proposals_api.create_document(document_type="SRS")
+        calls = [c for c in self.crm.lead_calls if c[0] == "create_document"]
+        self.assertEqual(
+            calls,
+            [
+                (
+                    "create_document",
+                    True,
+                    {"document_type": "SRS", "lead": "CRM-LEAD-1", "acting_user": BDE},
+                )
+            ],
+        )
+
+    def test_skipping_and_bringing_back_go_to_the_erp_site(self):
+        chain = {"steps": [], "next": None}
+        self.crm.lead_answers["skip_steps"] = chain
+        self.crm.lead_answers["bring_back_step"] = chain
+        self.assertEqual(
+            proposals_api.skip_steps(
+                "CRM-LEAD-1", '["Proposal", "BRD"]', "  Repeat client  "
+            ),
+            chain,
+        )
+        proposals_api.skip_steps("CRM-LEAD-1", ["SRS"], "Plan only", "Not used")
+        proposals_api.bring_back_step("CRM-LEAD-1", "BRD")
+        # refused here before anything is sent: no reason, no step, a reason too long,
+        # a status that isn't one
+        for bad in (
+            lambda: proposals_api.skip_steps("CRM-LEAD-1", ["BRD"], "   "),
+            lambda: proposals_api.skip_steps("CRM-LEAD-1", [], "Not needed"),
+            lambda: proposals_api.skip_steps("CRM-LEAD-1", ["BRD"], "x" * 501),
+            lambda: proposals_api.skip_steps("CRM-LEAD-1", ["BRD"], "x", "Done"),
+            lambda: proposals_api.skip_steps("CRM-LEAD-1", "BRD", "Not needed"),
+        ):
+            with self.assertRaises(frappe.ValidationError):
+                bad()
+        calls = [c for c in self.crm.lead_calls if c[0] != "get_proposal_options"]
+        self.assertEqual(
+            calls,
+            [
+                (
+                    "skip_steps",
+                    True,
+                    {
+                        "lead": "CRM-LEAD-1",
+                        "document_types": '["Proposal","BRD"]',
+                        "reason": "Repeat client",
+                        "status": "Skipped",
+                        "acting_user": BDE,
+                    },
+                ),
+                (
+                    "skip_steps",
+                    True,
+                    {
+                        "lead": "CRM-LEAD-1",
+                        "document_types": '["SRS"]',
+                        "reason": "Plan only",
+                        "status": "Not used",
+                        "acting_user": BDE,
+                    },
+                ),
+                (
+                    "bring_back_step",
+                    True,
+                    {"lead": "CRM-LEAD-1", "document_type": "BRD", "acting_user": BDE},
+                ),
+            ],
+        )
+
+    def test_the_erp_sites_reason_for_a_refused_skip_reaches_the_page(self):
+        self.crm.lead_answers["skip_steps"] = LeadsError(
+            "BRD is Sent. It can't be skipped, only revised."
+        )
+        with self.assertRaises(frappe.ValidationError) as caught:
+            proposals_api.skip_steps("CRM-LEAD-1", ["BRD"], "Not needed")
+        self.assertIn("only revised", str(caught.exception))
+
+    def test_the_project_straight_from_the_lead(self):
+        self.crm.lead_answers["get_lead"] = {
+            "lead": {
+                "name": "CRM-LEAD-9",
+                "company_name": "Malabar Spices",
+                "lead_owner": "Administrator",
+                "tbo_lead_type": "ERP / Software",
+            }
+        }
+        self.crm.lead_answers["link_project"] = {"steps": [], "next": None}
+        frappe.set_user("Administrator")
+        result = proposals_api.create_project_from_lead("CRM-LEAD-9")
+        project = frappe.get_doc("Project", result["project"])
+        self.assertEqual(
+            (project.project_name, project.custom_crm_lead, project.custom_crm_plan),
+            ("Malabar Spices - ERP / Software", "CRM-LEAD-9", None),
+        )
+        link = next(c[2] for c in self.crm.lead_calls if c[0] == "link_project")
+        self.assertEqual(
+            (link["lead"], link["project"], "plan" in link, "proposal" in link),
+            ("CRM-LEAD-9", project.name, False, False),
+        )
+        # again: the same project
+        self.assertEqual(
+            proposals_api.create_project_from_lead("CRM-LEAD-9")["project"],
+            project.name,
+        )
+        self.assertEqual(
+            frappe.db.count("Project", {"custom_crm_lead": "CRM-LEAD-9"}), 1
+        )
+
+    def test_a_project_the_erp_site_refuses_is_not_left_behind(self):
+        self.crm.lead_answers["get_lead"] = {
+            "lead": {
+                "name": "CRM-LEAD-8",
+                "lead_name": "Asha",
+                "lead_owner": "Administrator",
+            }
+        }
+        self.crm.lead_answers["link_project"] = LeadsError(
+            "This lead's project is made from its implementation plan."
+        )
+        frappe.set_user("Administrator")
+        with self.assertRaises(frappe.ValidationError):
+            proposals_api.create_project_from_lead("CRM-LEAD-8")
+        self.assertFalse(frappe.db.exists("Project", {"custom_crm_lead": "CRM-LEAD-8"}))
+
     def test_text_that_isnt_a_website_is_refused_here(self):
         for typed in ("build propsol", "not a site", "http://", "client"):
             with self.assertRaises(frappe.ValidationError) as caught:

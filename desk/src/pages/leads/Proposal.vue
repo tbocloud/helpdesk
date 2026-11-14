@@ -125,6 +125,30 @@
 
         <div v-else class="grid grid-cols-1 gap-4 xl:grid-cols-2">
           <div class="flex min-w-0 flex-col gap-4">
+            <!-- a revision made because the client asked for changes: what they asked -->
+            <div
+              v-if="proposal.changes_asked"
+              role="status"
+              class="flex items-start gap-2 rounded-lg bg-info-soft px-3 py-2 text-p-sm text-info"
+            >
+              <LucideMessageSquareText
+                class="mt-0.5 size-4 shrink-0"
+                aria-hidden="true"
+              />
+              <div class="flex min-w-0 flex-col gap-1">
+                <span class="font-medium">{{
+                  __(
+                    "Changes asked by {0} on {1}",
+                    proposal.changes_asked.by || __("the client"),
+                    shortDate(proposal.changes_asked.on)
+                  )
+                }}</span>
+                <span class="break-words text-ink-gray-8">{{
+                  proposal.changes_asked.reason ||
+                  __("No reason given. Ask the client what to change.")
+                }}</span>
+              </div>
+            </div>
             <!-- why Send is off, in the ERP site's words -->
             <div
               v-if="
@@ -562,6 +586,7 @@
 </template>
 
 <script setup lang="ts">
+import { shortDate } from "@/pages/tasky/taskMeta";
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import { useScreenSize } from "@/composables/screen";
 import TaskyBadge from "@/components/TaskyBadge.vue";
@@ -582,6 +607,7 @@ import { useRouter } from "vue-router";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleCheck from "~icons/lucide/circle-check";
+import LucideMessageSquareText from "~icons/lucide/message-square-text";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideSend from "~icons/lucide/send";
 import LucideShare2 from "~icons/lucide/share-2";
