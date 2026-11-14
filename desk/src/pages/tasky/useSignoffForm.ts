@@ -60,6 +60,8 @@ export interface SignoffTemplate {
   project_type?: string | null;
   stage?: string | null;
   attach_pdf_default?: number;
+  /** the template's Always CC, comma separated */
+  default_cc?: string | null;
 }
 
 export interface SignoffContact {
@@ -209,6 +211,8 @@ export function useSignoffForm(opts: {
   const previewing = ref(false);
   const mailError = ref("");
   const confirmReapply = ref(false);
+  // who the current template copies, so a template picked instead takes them off again
+  let templateCc: string[] = [];
   // the questions came from the template, so another template may replace them
   const questionsFromTemplate = ref(true);
   // carried over from the dialog: keep it exactly as it was typed
@@ -222,8 +226,14 @@ export function useSignoffForm(opts: {
     }),
     onSuccess(data: FormOptions) {
       if (editing.value || carried) {
-        // a draft made before mails were kept starts from its template's
-        if (editing.value && !form.subject) refreshMail(true);
+        if (editing.value) {
+          // its template's Always CC is in the draft's CC: a template picked instead replaces it
+          const own = data.templates.find((t) => t.name === form.template);
+          templateCc = (own?.default_cc ?? "").split(/[,;\s]+/).filter(Boolean);
+          // a draft made before mails were kept starts from its template's
+          if (form.subject) followIfUntouched();
+          else refreshMail(true);
+        }
         return;
       }
       form.cc = data.default_cc.join(", ");
@@ -242,6 +252,7 @@ export function useSignoffForm(opts: {
     errorMessage.value = "";
     mailError.value = "";
     confirmReapply.value = false;
+    templateCc = [];
     carried = !!from;
     const s = opts.signoff?.();
     if (from) {
@@ -538,6 +549,39 @@ export function useSignoffForm(opts: {
 
   // an answer for older choices must not land over the newest one
   let asked = 0;
+
+  function mailParams() {
+    return {
+      project: opts.projectId(),
+      signoff_type: isUat.value ? "UAT" : "Training",
+      template: form.template || null,
+      signatory_contact: form.signatory_contact || null,
+      module_title: form.module_title,
+      training_date: form.training_date || null,
+      trainer: form.trainer || null,
+      customer_address: form.customer_address || null,
+      details: detailPayload(),
+      lead: opts.lead?.() || null,
+    };
+  }
+
+  /** A draft's kept mail that is still exactly what its choices fill in was never written by
+   * hand: it goes on following them (a date set later fills in, a new signatory is greeted). */
+  async function followIfUntouched() {
+    try {
+      const mail: Mail = await call(
+        "helpdesk.api.project_signoff.preview_signoff_mail",
+        mailParams()
+      );
+      if (
+        mail.subject.trim() === form.subject.trim() &&
+        mailWords(mail.body) === mailWords(form.body)
+      )
+        autoFill.value = true;
+    } catch {
+      // the draft keeps its mail; Reapply template is there
+    }
+  }
   async function refreshMail(force = false) {
     if (!data.value?.customer) return;
     if (!force && (!autoFill.value || mailEdited.value)) return;
@@ -547,29 +591,23 @@ export function useSignoffForm(opts: {
     try {
       const mail: Mail = await call(
         "helpdesk.api.project_signoff.preview_signoff_mail",
-        {
-          project: opts.projectId(),
-          signoff_type: isUat.value ? "UAT" : "Training",
-          template: form.template || null,
-          signatory_contact: form.signatory_contact || null,
-          module_title: form.module_title,
-          training_date: form.training_date || null,
-          trainer: form.trainer || null,
-          customer_address: form.customer_address || null,
-          details: detailPayload(),
-          lead: opts.lead?.() || null,
-        }
+        mailParams()
       );
-      if (ask !== asked) return;
+      // typed into while it was being filled: what was typed stays
+      if (ask !== asked || (!force && mailEdited.value)) return;
       form.subject = mail.subject;
       form.body = mail.body;
       baseline.value = { subject: mail.subject, body: mail.body };
       autoFill.value = true;
-      // the template's own CC join who is already copied
-      const cc = new Set(ccList.value.map((e) => e.toLowerCase()));
-      form.cc = [...ccList.value, ...mail.cc.filter((e) => !cc.has(e))].join(
-        ", "
-      );
+      // the template's own CC join who is already copied, replacing an earlier template's
+      const earlier = new Set(templateCc.map((e) => e.toLowerCase()));
+      const kept = ccList.value.filter((e) => !earlier.has(e.toLowerCase()));
+      const cc = new Set(kept.map((e) => e.toLowerCase()));
+      form.cc = [
+        ...kept,
+        ...mail.cc.filter((e) => !cc.has(e.toLowerCase())),
+      ].join(", ");
+      templateCc = mail.cc;
     } catch (e) {
       if (ask === asked)
         mailError.value = errorText(e, __("Couldn't fill in the mail."));
@@ -595,6 +633,11 @@ export function useSignoffForm(opts: {
   function reapply() {
     confirmReapply.value = false;
     refreshMail(true);
+  }
+  // words written by hand are lost: asked first; a kept draft mail isn't anyone's typing
+  function askReapply() {
+    if (mailEdited.value) confirmReapply.value = true;
+    else reapply();
   }
 
   /** What the mail still needs, in the words of the fields that fill it. */
@@ -788,6 +831,8 @@ export function useSignoffForm(opts: {
     detailPayload,
     pullDeliverables,
     reapply,
+    askReapply,
+    autoFill,
     submit,
   });
 }

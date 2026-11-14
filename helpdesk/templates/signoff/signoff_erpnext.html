@@ -1,27 +1,27 @@
-{#- Print format "Sign-off – ERPNext Implementation" (TBO's Sign-off requirements, Sign-off
-    document: ERPNext Implementation). Each section shows only for the stages listed against
-    it (HDProjectSignoff.shown_sections); opened from Frappe's print view it computes its own
-    context. -#}
-{%- if not (ctx is defined and ctx) -%}{%- set ctx = doc.document_context() -%}{%- endif -%}
-{% extends "helpdesk/templates/signoff/letter_base.html" %}
-{% import "helpdesk/templates/signoff/signoff_parts.html" as parts with context %}
-{% block doc_type %}{{ ctx.heading|e }}<br />{{ (doc.name or "")|e }}<br />{{
+{#- Print format "Sign-off – ERPNext Implementation" (TBO's Sign-off
+requirements, Sign-off document: ERPNext Implementation). Each section shows
+only for the stages listed against it (HDProjectSignoff.shown_sections); opened
+from Frappe's print view it computes its own context. -#} {%- if not (ctx is
+defined and ctx) -%}{%- set ctx = doc.document_context() -%}{%- endif -%} {%
+extends "helpdesk/templates/signoff/letter_base.html" %} {% import
+"helpdesk/templates/signoff/signoff_parts.html" as parts with context %} {%
+block doc_type %}{{ ctx.heading|e }}<br />{{ (doc.name or "")|e }}<br />{{
 ctx.date|e }}{% endblock %} {% block body %} {{ parts.header() }} {{
 parts.customer() }}
 
 <h2>{{ _("Project") }}</h2>
 <table class="facts">
-  {{ parts.fact(_("Project"), ctx.project_name) }} {{
-  parts.fact(_("ERPNext version"), doc.erpnext_version) }} {{
-  parts.fact(_("Project manager"), ctx.project_manager) }} {{
-  parts.fact(_("Project coordinator"), ctx.project_coordinator) }}
+  {{ parts.fact(_("Project"), ctx.project_name) }} {{ parts.fact(_("ERPNext
+  version"), doc.erpnext_version) }} {{ parts.fact(_("Project manager"),
+  ctx.project_manager) }} {{ parts.fact(_("Project coordinator"),
+  ctx.project_coordinator) }}
 </table>
 
 {% if "environment" in ctx.shown %}
 <h2>{{ _("Environment") }}</h2>
 <table class="facts">
-  {{ parts.fact(_("UAT site URL"), doc.uat_site_url) }} {{
-  parts.fact(_("Live site URL"), doc.live_site_url) }}
+  {{ parts.fact(_("UAT site URL"), doc.uat_site_url) }} {{ parts.fact(_("Live
+  site URL"), doc.live_site_url) }}
 </table>
 {% endif %} {% if "requirement" in ctx.shown %}
 <h2>{{ _("Requirement reference") }}</h2>
@@ -131,8 +131,8 @@ parts.customer() }}
 <table class="facts">
   {{ parts.fact(_("Support start date"), ctx.dates.support_start_date) }} {{
   parts.fact(_("Support end date"), ctx.dates.support_end_date) }} {{
-  parts.fact(_("Support channel"), _(doc.support_channel) if
-  doc.support_channel else "") }}
+  parts.fact(_("Support channel"), _(doc.support_channel) if doc.support_channel
+  else "") }}
 </table>
 {% endif %} {{ parts.questions() }} {{ parts.declaration_and_signatures() }} {%
 endblock %}

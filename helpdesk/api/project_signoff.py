@@ -18,6 +18,7 @@ from frappe.utils import cint, cstr, get_datetime, get_fullname
 
 from helpdesk.helpdesk.doctype.hd_project_signoff.hd_project_signoff import (
     CANCELLED,
+    CODE_VERIFIED,
     DETAIL_FIELDS,
     DETAIL_LABELS,
     DETAIL_TABLES,
@@ -45,6 +46,9 @@ from helpdesk.tasky.permissions import (
 )
 
 SIGNOFF = "HD Project Signoff"
+# history events the page reads back: stored as is, whatever the language of the request
+RECORDED_ON_ERP = "Recorded on the ERP site"
+NOT_RECORDED_ON_ERP = "Not recorded on the ERP site"
 # what a reworded question loses
 RESET_ANSWER = {
     "response": "Pending",
@@ -304,6 +308,8 @@ def get_signoff(signoff: str) -> dict:
         "signoff_type": doc.signoff_type,
         # a UAT's state on the ERP site; differs from `status` until recorded
         "crm_recorded": doc.crm_recorded,
+        # the ERP site refused or was out of reach since: "Record on the ERP site" is offered
+        "crm_failed": _erp_record_failed(doc),
         "template": doc.template,
         "status": doc.status,
         "customer_status": doc.customer_status(),
@@ -394,6 +400,7 @@ def create_signoff(
     mail; a send that fails saves nothing. `items` (from the full page) are its questions;
     without them, the template's are copied in."""
     project = _project_for(project, lead, manage=True)
+    _check_lead_sends(lead, send)
     _check_template(template, TRAINING)
     doc = frappe.get_doc(
         {
@@ -434,6 +441,7 @@ def create_uat_signoff(
     section, its steps and expected result the help text). A draft, edited and sent like
     any sign-off, or (`send`) sent at once with its mail."""
     project = _project_for(project, lead, manage=True)
+    _check_lead_sends(lead, send)
     _check_template(template, UAT)
     plan = frappe.db.get_value("Project", project, "custom_crm_plan")
     if not plan:
@@ -560,9 +568,19 @@ def record_uat_on_erp(signoff: str, status: str, signed_by: str | None = None) -
     doc.reload()
     doc.crm_recorded = status
     doc.flags.signoff_action = True
-    doc.log_event(_("Recorded on the ERP site"), detail=_(status))
+    doc.log_event(RECORDED_ON_ERP, detail=_(status))
     doc.save(ignore_permissions=True)
     return True
+
+
+def _erp_record_failed(doc) -> bool:
+    """A UAT whose latest try to record it on the ERP site failed (not one still queued)."""
+    tries = [
+        row.event
+        for row in doc.log
+        if row.event in (RECORDED_ON_ERP, NOT_RECORDED_ON_ERP)
+    ]
+    return bool(tries) and tries[-1] == NOT_RECORDED_ON_ERP
 
 
 def _not_recorded(doc, status: str, error) -> bool:
@@ -570,7 +588,7 @@ def _not_recorded(doc, status: str, error) -> bool:
     doc.reload()
     doc.flags.signoff_action = True
     doc.log_event(
-        _("Not recorded on the ERP site"),
+        NOT_RECORDED_ON_ERP,
         detail=_("{0}: {1}").format(_(status), str(error)),
     )
     doc.save(ignore_permissions=True)
@@ -890,6 +908,23 @@ def delete_signoff(signoff: str) -> None:
             _("Only a draft sign-off can be deleted. A System Manager can cancel it.")
         )
     frappe.delete_doc(SIGNOFF, doc.name, ignore_permissions=True)
+    if doc.is_training() and not frappe.db.get_value(
+        "Project", doc.project, "custom_signoff_letter"
+    ):
+        # it may have been the last training not signed off: the completion letter is due now
+        for name in frappe.get_all(
+            SIGNOFF,
+            filters={
+                "project": doc.project,
+                "signoff_type": ("!=", UAT),
+                "status": SIGNED_OFF,
+            },
+            pluck="name",
+        ):
+            signed = frappe.get_doc(SIGNOFF, name)
+            if signed.is_training():
+                signed.complete_project_if_all_signed()
+                break
 
 
 # --- templates ---
@@ -1082,6 +1117,15 @@ def _project_for(project: str, lead: str | None = None, manage: bool = False) ->
     return project
 
 
+def _check_lead_sends(lead: str | None, send: int | str):
+    """From the lead page a sign-off goes out at once: a draft there would be stranded, since
+    the lead's owner may not open the project to send it."""
+    if lead and not cint(send):
+        frappe.throw(
+            _("From the lead page a sign-off is sent at once, not kept as a draft.")
+        )
+
+
 def _check_template(template: str | None, signoff_type: str):
     if not template:
         return
@@ -1111,7 +1155,7 @@ def _viewed_since_sent(signoffs: list) -> set[str]:
         .select(log.parent, Max(log.at).as_("opened"))
         .where(log.parenttype == SIGNOFF)
         .where(log.parent.isin(list(sent)))
-        .where(log.event == _("Code verified"))
+        .where(log.event == CODE_VERIFIED)
         .groupby(log.parent)
         .run(as_dict=True)
     )
@@ -1199,6 +1243,7 @@ def _active_templates() -> list[dict]:
             template.project_type,
             template.stage,
             template.attach_pdf_default,
+            template.default_cc,
         )
         .where(template.is_active == 1)
         .orderby(template.template_name)
@@ -1243,7 +1288,7 @@ def _customer_contacts(customer: str) -> list[dict]:
 def _customer_addresses(customer: str) -> list[dict]:
     """The customer's addresses (Frappe's, linked to the HD Customer), the primary first,
     then billing ones, each with how it reads."""
-    from frappe.contacts.doctype.address.address import get_address_display
+    from frappe.contacts.doctype.address.address import render_address
 
     address = frappe.qb.DocType("Address")
     link = frappe.qb.DocType("Dynamic Link")
@@ -1275,7 +1320,8 @@ def _customer_addresses(customer: str) -> list[dict]:
             "title": r.address_title or r.name,
             "type": r.address_type,
             "is_primary": bool(r.is_primary_address),
-            "display": get_address_display(r.name) or "",
+            # the project's own customer's address: reading it needs the project, not Address
+            "display": render_address(r.name, check_permissions=False) or "",
         }
         for r in rows
     ]

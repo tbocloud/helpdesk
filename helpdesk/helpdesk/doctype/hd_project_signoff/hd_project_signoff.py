@@ -59,6 +59,8 @@ SENT = "Sent"
 CHANGES_REQUESTED = "Changes Requested"
 SIGNED_OFF = "Signed Off"
 CANCELLED = "Cancelled"
+# the log event "Viewed" is read from: stored as is, so the language of the request doesn't matter
+CODE_VERIFIED = "Code verified"
 
 PENDING = "Pending"
 DONE = "Done"
@@ -463,6 +465,16 @@ class HDProjectSignoff(Document):
             found.append(email)
         return found
 
+    @staticmethod
+    def mail_addresses(*users: str | None) -> list[str]:
+        """Our people as mail addresses, without repeats. A user that isn't an email
+        (Administrator) is left out: one bad address and Frappe drops the whole mail."""
+        found = []
+        for user in users:
+            if user and user not in found and frappe.utils.validate_email_address(user):
+                found.append(user)
+        return found
+
     def mail_body_text(self) -> str:
         return frappe.utils.strip_html(self.email_body or "").strip()
 
@@ -666,9 +678,10 @@ class HDProjectSignoff(Document):
     def formatted_address(self) -> str:
         if not self.customer_address:
             return ""
-        from frappe.contacts.doctype.address.address import get_address_display
+        from frappe.contacts.doctype.address.address import render_address
 
-        return get_address_display(self.customer_address) or ""
+        # validated to be the customer's own; sending needs the project, not Address
+        return render_address(self.customer_address, check_permissions=False) or ""
 
     def send_mail(self, reminder: bool = False):
         """Send the sign-off mail (or, `reminder`, the same mail again with "Reminder:"), save.
@@ -986,7 +999,7 @@ class HDProjectSignoff(Document):
             return self.status
         sent = get_datetime(self.link_sent_on)
         opened = any(
-            row.event == _("Code verified") and get_datetime(row.at) >= sent
+            row.event == CODE_VERIFIED and get_datetime(row.at) >= sent
             for row in self.log
         )
         return "Viewed" if opened else self.status
@@ -994,9 +1007,12 @@ class HDProjectSignoff(Document):
     # --- the reminder (docs/project-signoff.md, Reminders) ---
 
     def reminder_due(self, calendar) -> bool:
-        """Sent two working days ago and not reminded since."""
+        """Sent and still unanswered after two working days, and not reminded since. Not once
+        the customer opened it (Viewed): the reminder's new link would end the session they may
+        be answering in."""
         return bool(
             self.status == SENT
+            and self.customer_status() == SENT
             and not self.reminder_sent_on
             and self.link_sent_on
             and calendar.working_days_since(getdate(self.link_sent_on))
@@ -1726,7 +1742,8 @@ class HDProjectSignoff(Document):
     def email_signed_pdf(self, file_name: str, content: bytes):
         """The signed record to the signatory, copied to our people (who sent it, the trainer
         and the project lead), in the sign-off's thread."""
-        ours = {self.link_sent_by, self.trainer, self.project_lead()}
+        # one address that isn't an email (Administrator) and Frappe drops the whole mail
+        ours = self.mail_addresses(self.link_sent_by, self.trainer, self.project_lead())
         self.deliver(
             (
                 _("{0} training signed off")
@@ -1752,29 +1769,32 @@ class HDProjectSignoff(Document):
 
     def project_signoffs(self) -> list[dict]:
         """The project's training sign-offs that count (the completion letter's; a UAT, another
-        stage or a cancelled one doesn't). A stage-less one made before stages is a training."""
-        rows = frappe.get_all(
-            "HD Project Signoff",
-            filters={
-                "project": self.project,
-                "signoff_type": ("!=", UAT),
-                "status": ("!=", CANCELLED),
-            },
-            fields=[
-                "name",
-                "stage",
-                "module_title",
-                "status",
-                "training_date",
-                "trainer",
-                "signer_name",
-                "signer_designation",
-                "signatory_email",
-                "signed_on",
-                "acceptance_reference",
-            ],
-            order_by="signed_on asc, creation asc",
-            limit_page_length=0,
+        stage or a cancelled one doesn't), read as committed and locked, so two signing at once
+        can't each see the other unsigned and both skip the letter. A stage-less one made before
+        stages is a training."""
+        signoff = frappe.qb.DocType("HD Project Signoff")
+        rows = (
+            frappe.qb.from_(signoff)
+            .select(
+                signoff.name,
+                signoff.stage,
+                signoff.module_title,
+                signoff.status,
+                signoff.training_date,
+                signoff.trainer,
+                signoff.signer_name,
+                signoff.signer_designation,
+                signoff.signatory_email,
+                signoff.signed_on,
+                signoff.acceptance_reference,
+            )
+            .where(signoff.project == self.project)
+            .where(signoff.signoff_type != UAT)
+            .where(signoff.status != CANCELLED)
+            .orderby(signoff.signed_on)
+            .orderby(signoff.creation)
+            .for_update()
+            .run(as_dict=True)
         )
         return [r for r in rows if r.stage in (None, "", TRAINING_STAGE)]
 
@@ -1818,11 +1838,11 @@ class HDProjectSignoff(Document):
         frappe.db.set_value(
             "Project", self.project, "custom_signoff_letter", letter.name
         )
-        recipients = {s.signatory_email for s in signoffs} | {
-            s.trainer for s in signoffs if s.trainer
-        }
-        if project.project_lead:
-            recipients.add(project.project_lead)
+        recipients = self.mail_addresses(
+            *(s.signatory_email for s in signoffs),
+            *(s.trainer for s in signoffs),
+            project.project_lead,
+        )
         frappe.sendmail(
             recipients=sorted(recipients),
             subject=_("{0}: all training signed off").format(

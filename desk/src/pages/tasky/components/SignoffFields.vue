@@ -193,11 +193,11 @@
           >{{ __("Filling in…") }}</span
         >
         <Button
-          v-else-if="f.mailEdited && !f.confirmReapply"
+          v-else-if="(f.mailEdited || !f.autoFill) && !f.confirmReapply"
           variant="ghost"
           size="sm"
           :label="__('Reapply template')"
-          @click="f.confirmReapply = true"
+          @click="f.askReapply()"
         />
       </div>
       <div

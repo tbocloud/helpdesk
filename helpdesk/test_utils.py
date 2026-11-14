@@ -4104,12 +4104,22 @@ def fake_request(test_case, cookies: dict | None = None):
     test_case.addCleanup(setattr, frappe.local, "request", previous)
 
 
-def fake_pdf_renderer():
-    """Patches PDF rendering so signing works without wkhtmltopdf; use it as a context manager."""
+def blank_pdf() -> bytes:
+    """A one-page PDF that parses: File opens uploaded PDFs, so a fake one must be real."""
     import io
-    from contextlib import ExitStack
 
     from pypdf import PdfWriter
+
+    writer = PdfWriter()
+    writer.add_blank_page(width=595, height=842)
+    pdf = io.BytesIO()
+    writer.write(pdf)
+    return pdf.getvalue()
+
+
+def fake_pdf_renderer():
+    """Patches PDF rendering so signing works without wkhtmltopdf; use it as a context manager."""
+    from contextlib import ExitStack
 
     stack = ExitStack()
     stack.enter_context(
@@ -4118,17 +4128,22 @@ def fake_pdf_renderer():
             return_value="/usr/bin/wkhtmltopdf",
         )
     )
-    # File parses uploaded PDFs, so the fake must be a real one
-    writer = PdfWriter()
-    writer.add_blank_page(width=595, height=842)
-    pdf = io.BytesIO()
-    writer.write(pdf)
-    stack.enter_context(patch("frappe.utils.pdf.get_pdf", return_value=pdf.getvalue()))
+    stack.enter_context(patch("frappe.utils.pdf.get_pdf", return_value=blank_pdf()))
     return stack
 
 
 def make_customer_address(customer: str, title: str, is_primary: bool = True):
-    """An Address linked to the HD Customer `customer` (the sign-off's customer address)."""
+    """An Address linked to the HD Customer `customer` (the sign-off's customer address); a
+    site with no default Address Template gets one, since the address can't be shown without."""
+    if not frappe.db.exists("Address Template", {"is_default": 1}):
+        frappe.get_doc(
+            {
+                "doctype": "Address Template",
+                "country": frappe.db.get_value("Country", {}, "name") or "India",
+                "is_default": 1,
+                "template": "{{ address_line1 }}<br>{{ city }}<br>{{ country }}",
+            }
+        ).insert(ignore_permissions=True)
     return frappe.get_doc(
         {
             "doctype": "Address",

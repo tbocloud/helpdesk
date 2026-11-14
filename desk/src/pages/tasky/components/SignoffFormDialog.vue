@@ -109,7 +109,9 @@
           </Button>
           <Button :label="__('Cancel')" @click="emit('update:open', false)" />
           <template v-if="f.data?.customer">
+            <!-- from the lead page it goes out at once: its owner may not open the project to send a draft -->
             <Button
+              v-if="!lead"
               :label="__('Save as draft')"
               :loading="f.saving === 'draft'"
               :disabled="!!f.saving"

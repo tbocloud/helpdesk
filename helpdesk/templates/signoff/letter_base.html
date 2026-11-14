@@ -1,6 +1,7 @@
-{#- a sign-off document passes everything in `ctx` (its print format); the completion letter
-    passes brand and title themselves -#}
-{%- if ctx is defined and ctx -%}{%- set brand = ctx.brand -%}{%- set title = ctx.title -%}{%- endif -%}
+{#- a sign-off document passes everything in `ctx` (its print format); the
+completion letter passes brand and title themselves -#} {%- if ctx is defined
+and ctx -%}{%- set brand = ctx.brand -%}{%- set title = ctx.title -%}{%- endif
+-%}
 <!DOCTYPE html>
 <html>
   <head>

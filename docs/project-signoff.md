@@ -106,7 +106,7 @@ tables are read-only like the mail.
 | Status | Meaning |
 | --- | --- |
 | Draft | Made, not sent; details, mail and questions can be edited. |
-| Sent | The mail went out. Read-only except the status actions. Reads **Viewed** once the customer opened the questions link with their code since it was sent (`customer_status`). |
+| Sent | The mail went out. Read-only except the status actions. Reads **Viewed** once the customer opened the questions link with their code since it was sent (`customer_status`). The history events it and the ERP retry read ("Code verified", "Recorded / Not recorded on the ERP site") are stored untranslated, so the reader's language doesn't matter; the history shows them translated. |
 | Changes Requested | The customer asked for changes (`remarks`); editable again, and the next send is a new mail in the same thread. The questions link stops until then. |
 | Signed Off | The customer accepted; marked by us with the reply. Final: read-only, can't be deleted. |
 | Cancelled | Withdrawn by a System Manager, with a reason (`remarks`). |
@@ -198,7 +198,10 @@ Item answers: **Pending**, **Done**, **Not clear**, **Escalated**.
      UAT's state goes to its plan ([UAT](#uat));
    - when **every** training sign-off of the project (not cancelled) is signed off, the
      **project completion letter** is rendered, saved on the project (`custom_signoff_letter`) and
-     mailed to the signatories, trainers and the project lead.
+     mailed to the signatories, trainers and the project lead. The check reads the project's
+     sign-offs locked (`for_update`), so two customers signing off the last two modules at once
+     can't each see the other unsigned and both skip it. Deleting a draft that was the last one
+     not signed off makes the letter then (when there isn't one yet).
 9. **Mark changes requested** (Sent only): what the customer asked for (required). It becomes
    editable; sending it again is a new mail in the same thread ("Mail sent again").
 10. **Send reminder** (Sent only): the same mail again with "Reminder:" before the subject and a
@@ -241,11 +244,19 @@ lists, link) and CC, kept on the sign-off (`email_subject`, `email_body`, `cc_em
   mail.").
 - **Filling in** (`preview_signoff_mail`, with the details): when the template is picked, and
   again whenever a field it uses changes, until the mail is changed by hand; then **Reapply template** puts it back after
-  asking ("Your changes to the mail are lost").
+  asking ("Your changes to the mail are lost"). A fill that arrives after the mail was typed into
+  is dropped, so typing is never overwritten. Editing a draft: its kept mail goes on following its
+  choices when it is still exactly what they fill in (a date set later fills in); a draft mail
+  written by hand stays, and **Reapply template** (shown for it, without asking when nothing was
+  typed in the dialog) fills it in again. Switching template replaces the earlier template's
+  Always CC with the new one's.
 - **The link** goes where `{{ sign_off_link }}` is, else at the end, with how the one-time code
   works, when the sign-off has questions; without questions no link goes.
 - **To** is only the signatory: to send to someone else, add them as a contact of the customer
   first. **CC** starts as the project lead and the person sending, plus the template's Always CC.
+- A user that isn't an email address (Administrator) is left out of the CC of the signed record
+  and of the completion letter's recipients (`mail_addresses`): one bad address and Frappe drops
+  the whole mail.
 
 ## From the lead
 
@@ -255,7 +266,10 @@ in the customer's terms (*Sent*, *Viewed*, *Changes Requested*, *Signed Off*, wi
 and a **Signed PDF** link), read again every 30 seconds while the page is in view.
 
 - The card's one button: **Send for sign-off** when the project has no UAT sign-off and the person
-  may send one, opening the dialog for a UAT (no Edit in full page from here); **Open sign-off**
+  may send one, opening the dialog for a UAT (no Edit in full page from here). From here it is
+  only **sent**, never kept as a draft (no Save as draft; `create_uat_signoff` and
+  `create_signoff` refuse `lead` without `send`): the lead's owner may not open the project, so a
+  draft would be stranded; **Open sign-off**
   for someone who can open the project; otherwise the status in words.
 - **Who**: the lead's owner (not in the requirements' roles; kept from before), and those who send
   sign-offs; anyone who may see the lead sees the status and downloads the signed PDF
@@ -267,7 +281,9 @@ and a **Signed PDF** link), read again every 30 seconds while the page is in vie
 
 Besides **Send reminder** by hand, every day at 10:30 on a working day
 (`helpdesk.follow_ups.WorkCalendar`), `send_signoff_reminders` sends **one** reminder for each
-sign-off still **Sent** two working days after it went out and not reminded since, in the name of
+sign-off still **Sent** two working days after it went out and not reminded since (not once the
+customer opened it: a *Viewed* one gets none, since the reminder's new link would end the session
+they may be answering in), in the name of
 whoever sent it, who is notified. It is written on the history ("Reminder sent") and in
 `reminder_sent_on`; sending the mail again after changes were requested starts a new wait. One
 that fails is logged and doesn't stop the others.
@@ -288,7 +304,9 @@ For a project the hub made from an implementation plan on the ERP site (`custom_
   ERP site's word "Signed" and who signed off (`record_uat` on the plan, which **starts the
   warranty**); cancelling a signed-off one sends "Reopened" (`HDProjectSignoff.erp_state`). A
   state the ERP site couldn't take is written on the history, and **Record on the ERP site**
-  sends it again. A UAT isn't in the completion letter.
+  sends it again; it is offered only once a try failed (`crm_failed`: the latest of "Recorded on
+  the ERP site" / "Not recorded on the ERP site" is the latter), not while the first is queued.
+  A UAT isn't in the completion letter.
 
 ## Security
 
@@ -301,7 +319,10 @@ The questions page is `/project-signoff?token=…` (`helpdesk/www/project-signof
   (with the link) is kept as the Communication, readable by those who may read the sign-off, as
   the email queue kept it before.
 - **Email code**: 6 digits, only to the signatory's email, 10 minutes in Redis, compared in
-  constant time, at most 5 wrong tries, a new code at most once a minute; rate-limited.
+  constant time, at most 5 tries per code (counted with an atomic Redis increment before the
+  check, so parallel guesses each use a try; then a new code is needed), a new code at most once
+  a minute; rate-limited. The token must match exactly (no trimming), so a padded token can't
+  get a fresh rate limit.
 - **Session**: a correct code starts a 2-hour session in Redis behind an HttpOnly, SameSite=Lax
   cookie, bound to the sign-off, the token hash and the signatory's email.
 - **Endpoints**: `save_response` only (and the code ones). There is no signing and no download on
@@ -313,6 +334,9 @@ The questions page is `/project-signoff?token=…` (`helpdesk/www/project-signof
   through Frappe's private-file check, people who may see the lead through
   `download_lead_signoff_pdf`. The previews render in sandboxed frames, so a mail's HTML runs
   nothing.
+- The page shows the helpdesk's logo (HD Settings brand logo) in its top bar, its name when there
+  is none or it is a private file (a customer who isn't signed in can't load one: it would show
+  as a broken image; the same for the favicon).
 
 ## Where it is in the app
 

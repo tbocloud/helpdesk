@@ -556,7 +556,7 @@
                       >
                     </span>
                     <span class="min-w-0 flex-1 text-ink-gray-8">
-                      <span class="font-medium">{{ entry.event }}</span>
+                      <span class="font-medium">{{ __(entry.event) }}</span>
                       <template v-if="entry.item && itemNumber[entry.item]">
                         ·
                         {{
@@ -918,6 +918,7 @@ interface SignoffDetail extends SignoffSource {
   signoff_type: "Training" | "UAT";
   /** a UAT's last state on the ERP site (Signed, Reopened) */
   crm_recorded?: string | null;
+  crm_failed?: boolean;
   status: string;
   trainer_name?: string | null;
   signatory_name: string;
@@ -1009,7 +1010,11 @@ const erpState = computed(
 // signed off or cancelled here, but the ERP site's plan doesn't have it yet
 const notRecorded = computed(
   () =>
-    uat.value && !!erpState.value && s.value?.crm_recorded !== erpState.value
+    uat.value &&
+    !!erpState.value &&
+    s.value?.crm_recorded !== erpState.value &&
+    // not while the first try is still queued: only once one failed
+    !!s.value?.crm_failed
 );
 // in the customer's terms: Sent turns Viewed once they opened the link with their code
 const status = computed(() =>
@@ -1118,6 +1123,17 @@ const confirmCopy = computed(() => {
       message: __("The customer has never seen it. This can't be undone."),
       action: __("Delete draft"),
       run: () => remove(),
+    };
+  if (confirming.value === "send")
+    return {
+      title: __("Send the sign-off?"),
+      message: __(
+        "The mail goes to {0} ({1}) with their link to sign.",
+        s.value?.signatory_name ?? "",
+        email
+      ),
+      action: __("Send"),
+      run: () => send(),
     };
   return {
     title: __("Revoke the questions link?"),
