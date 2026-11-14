@@ -241,7 +241,7 @@ Closed – Won. **Meeting** is one step for Meeting Scheduled and the First, Sec
 Completed; while the lead is in one of them the step shows that stage's name. Done steps are
 `brand-soft` with a check, the current one `brand` (`aria-current="step"`), later ones gray. Every
 other stage (Not Responding, Positive / Interested, Follow-up Required, On Hold, Closed – Lost, Not
-Interested, Wrong Number, and any stage the ERP site adds) is a side stage: **Move to…** at the end
+Interested, Wrong Number, Small Business, and any stage the ERP site adds) is a side stage: **Move to…** at the end
 of the row lists the ones the ERP site allows from here, and a lead in a side stage shows it as a
 "Now" pill (the list's stage tone and icon). Only what the ERP site allows from here moves the
 lead: a step opens the Move stage dialog with its first allowed stage picked (the current Meeting
