@@ -59,7 +59,7 @@
         </Tabs>
 
         <!-- Desktop: summary and conversation scroll together -->
-        <div v-else class="min-h-0 flex-1 overflow-y-auto">
+        <div v-else class="relative min-h-0 flex-1 overflow-y-auto">
           <TicketCustomerSummary :is-closed="isClosed" @reply="openReply" />
           <TicketConversation />
         </div>

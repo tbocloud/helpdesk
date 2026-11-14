@@ -13,7 +13,7 @@
       </template>
     </ProjectNav>
 
-    <div class="flex-1 overflow-auto">
+    <div class="relative flex-1 overflow-auto">
       <div
         class="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-5 md:px-6"
       >

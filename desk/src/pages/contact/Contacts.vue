@@ -23,7 +23,7 @@
       </template>
     </LayoutHeader>
 
-    <div class="flex-1 overflow-auto">
+    <div class="relative flex-1 overflow-auto">
       <div class="mx-auto w-full max-w-6xl px-4 py-5 md:px-6">
         <div
           class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"

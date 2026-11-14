@@ -39,7 +39,7 @@
       </template>
     </LayoutHeader>
 
-    <div class="min-h-0 flex-1 overflow-y-auto">
+    <div class="relative min-h-0 flex-1 overflow-y-auto">
       <div class="mx-auto flex max-w-4xl flex-col gap-4 px-4 py-5 md:px-6">
         <TabButtons
           v-model="tab"
