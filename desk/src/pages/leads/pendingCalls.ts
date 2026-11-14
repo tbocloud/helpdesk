@@ -28,10 +28,6 @@ export const DISMISS_REASONS = [
   { value: "Tapped by mistake", label: __("Tapped by mistake") },
 ];
 
-/** MyOperator rings the person's phone; the page stays open, so the sheet comes up on its own
- * after this long, when the call is likely over. */
-const MYOPERATOR_ASK_AFTER_MS = 45_000;
-
 const list = createResource({
   url: "helpdesk.api.pending_calls.get_pending_calls",
 });
@@ -43,12 +39,13 @@ export const pendingCalls = computed<PendingCall[]>(
 
 /** The lead whose result sheet should open now (set when the person comes back from a call). */
 export const askFor = ref("");
+/** What the person typed in the call box: the sheet opens with it as the note. */
+export const askNote = ref("");
 /** Bumped when a call of Today's calls is answered from the call result sheet: the queue
  * reads again at once, so the call can't be answered twice from its row. */
 export const queueChanged = ref(0);
 // a call placed from the phone's dialler: the page loses focus, and the sheet opens on return
 let awaitingReturn = "";
-let timer: ReturnType<typeof setTimeout> | undefined;
 
 export function loadPendingCalls() {
   return list.reload();
@@ -77,14 +74,8 @@ export function startCall(placed: {
     .then((answer: PendingAnswer) => setPendingCalls(answer))
     // a reminder only: a failure must never stop the call
     .catch(() => {});
-  if (placed.via === "phone") {
-    awaitingReturn = placed.lead;
-  } else {
-    clearTimeout(timer);
-    timer = setTimeout(() => {
-      askFor.value = placed.lead;
-    }, MYOPERATOR_ASK_AFTER_MS);
-  }
+  // MyOperator rings the person's phone: the call box says when it is over
+  if (placed.via === "phone") awaitingReturn = placed.lead;
 }
 
 /** The person is back on the page: ask about the call they left to make. */

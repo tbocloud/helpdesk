@@ -496,13 +496,9 @@ import {
   type MyCalls,
   type QueueCall,
 } from "./callBatches";
+import { placeCall, placing } from "./callBox";
 import { loadPendingCalls, queueChanged, startCall } from "./pendingCalls";
-import {
-  leadOptions,
-  loadLeadOptions,
-  useClickToCall,
-  type LeadOptions,
-} from "./leads";
+import { leadOptions, loadLeadOptions, type LeadOptions } from "./leads";
 
 const ids = {
   batch: `calls-batch-${useId()}`,
@@ -613,41 +609,43 @@ const queuePlace = (c: QueueCall) =>
 
 // ---------- calling ----------
 
-const clickToCall = useClickToCall();
-const dialing = computed(() =>
-  clickToCall.loading ? (clickToCall.params?.name as string) : ""
-);
+const dialing = computed(() => placing.value?.lead || "");
 
 // the number last dialled for each call, when it was not the main one: the result names it
 const dialledNumbers = new Map<string, string>();
 
-/** MyOperator rings the person's phone, then the lead; without it the row's tel: link dials.
+/** The call box rings the person's phone, then the lead; without it the row's tel: link dials.
  * `number` is one of the lead's other numbers (none: the main one). */
 function dial(item: QueueCall, number?: string) {
-  clickToCall.submit({ name: item.lead, number: number || null });
-  remember(item, "myoperator", number);
-}
-
-function dialed(item: QueueCall, number?: string) {
-  remember(item, "phone", number);
-}
-
-/** A call placed: it waits for its result, and the result sheet follows. */
-function remember(
-  item: QueueCall,
-  via: "phone" | "myoperator",
-  number?: string
-) {
-  if (number) dialledNumbers.set(item.item, number);
-  else dialledNumbers.delete(item.item);
-  startCall({
+  rememberNumber(item, number);
+  placeCall({
     lead: item.lead,
-    lead_name: item.summary.lead_name || item.summary.name,
+    lead_name: queueName(item),
+    company: item.summary.company_name,
     phone: number || item.summary.phone,
     number: number || null,
     item: item.item,
-    via,
+    product: item.product || item.calling_for,
+    intro: item.intro_line,
   });
+}
+
+/** A call from the phone's own dialler waits for its result, and the result sheet follows. */
+function dialed(item: QueueCall, number?: string) {
+  rememberNumber(item, number);
+  startCall({
+    lead: item.lead,
+    lead_name: queueName(item),
+    phone: number || item.summary.phone,
+    number: number || null,
+    item: item.item,
+    via: "phone",
+  });
+}
+
+function rememberNumber(item: QueueCall, number?: string) {
+  if (number) dialledNumbers.set(item.item, number);
+  else dialledNumbers.delete(item.item);
 }
 
 // ---------- outcomes ----------

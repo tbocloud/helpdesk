@@ -74,8 +74,8 @@
               v-if="canCall"
               variant="solid"
               :label="__('Call')"
-              :loading="clickToCall.loading"
-              :tooltip="__('MyOperator rings your phone, then the lead')"
+              :loading="placing?.lead === leadId"
+              :tooltip="__('Rings your phone first, then the lead')"
               @click="callWithMyOperator"
             >
               <template #prefix>
@@ -589,12 +589,12 @@ import {
   stageTone,
   STAGE_PATH,
   unsavedNote,
-  useClickToCall,
   type LeadDetail,
   type LeadOptions,
   type LeadStage,
   type LeadTimelineEntry,
 } from "./leads";
+import { placeCall, placing } from "./callBox";
 import { startCall } from "./pendingCalls";
 
 const props = defineProps<{ leadId: string }>();
@@ -665,24 +665,31 @@ watch(
 const data = computed(() => detail.data as LeadDetail | undefined);
 const lead = computed(() => data.value?.lead);
 
-const clickToCall = useClickToCall();
+const leadName = computed(() => lead.value?.lead_name || props.leadId);
+const leadPhone = computed(
+  () => lead.value?.mobile_no || lead.value?.phone || ""
+);
 
-/** A call placed from this lead waits for its result: the sheet asks how it went. */
-function remember(via: "phone" | "myoperator") {
-  startCall({
+/** The call box rings the person's phone, then the lead. */
+function callWithMyOperator() {
+  placeCall({
     lead: props.leadId,
-    lead_name: lead.value?.lead_name || props.leadId,
-    phone: lead.value?.mobile_no || lead.value?.phone || "",
-    number: lead.value?.mobile_no || null,
-    via,
+    lead_name: leadName.value,
+    company: lead.value?.company_name,
+    phone: leadPhone.value,
+    number: null,
+    product: lead.value?.product,
   });
 }
-function callWithMyOperator() {
-  clickToCall.submit({ name: props.leadId });
-  remember("myoperator");
-}
+/** A call from the phone's own dialler waits for its result: the sheet asks how it went. */
 function phoneCalled() {
-  remember("phone");
+  startCall({
+    lead: props.leadId,
+    lead_name: leadName.value,
+    phone: leadPhone.value,
+    number: lead.value?.mobile_no || null,
+    via: "phone",
+  });
 }
 const canCall = computed(
   () =>
