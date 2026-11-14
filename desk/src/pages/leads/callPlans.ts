@@ -25,11 +25,20 @@ export interface PlanMember {
   /** calls per slot label: the plan's, else the slot's size */
   sizes: Record<string, number>;
   total: number;
+  /** each slot's calls by district, Mixed last (absent from an older TBO Smart, which can't
+   * split a slot) */
+  slot_districts?: Record<string, PlanShare[]>;
   has_plan: boolean;
   /** today's batches: calls handed and called, retries not counted */
   today: { size: number; called: number };
   /** open leads they own in the department */
   leads: number;
+}
+
+/** Part of a slot: the calls taken from one district ("" is Mixed: any district). */
+export interface PlanShare {
+  district: string;
+  calls: number;
 }
 
 /** One open lead of a department, as the hand-out list shows it. */
@@ -181,6 +190,72 @@ export function leadsReady(
       : department.unassigned,
     product
   );
+}
+
+/** A plan can split each slot by district once the ERP site sends `slot_districts`. */
+export function splitsSlots(department: PlanDepartment | undefined) {
+  return !!department?.members.some((m) => m.slot_districts);
+}
+
+/** Default: the department's slot sizes; custom: a plan of their own; hand: a plan of no
+ * calls, so they get only the leads given to them. */
+export type PlanKind = "default" | "custom" | "hand";
+
+export function planKind(
+  department: PlanDepartment,
+  member: PlanMember
+): PlanKind {
+  if (!member.has_plan) return "default";
+  const none =
+    !!department.slots.length &&
+    department.slots.every((slot) => !member.sizes[slot.label]);
+  return none ? "hand" : "custom";
+}
+
+/** {slot label: shares} of the member's plan; a slot not split is one share of the plan's
+ * district (or Mixed). */
+export function memberShares(
+  department: PlanDepartment,
+  member: PlanMember
+): Record<string, PlanShare[]> {
+  return Object.fromEntries(
+    department.slots.map((slot) => {
+      const calls = member.sizes[slot.label] ?? slot.size;
+      const shares = member.slot_districts?.[slot.label] ?? [
+        { district: member.district || "", calls },
+      ];
+      return [slot.label, shares.filter((share) => share.calls > 0)];
+    })
+  );
+}
+
+export function districtLabel(district: string) {
+  return district || __("Mixed");
+}
+
+/** "Idukki 20, Mixed 10", or "none". */
+export function sharesText(shares: PlanShare[]) {
+  return shares.length
+    ? shares.map((s) => `${districtLabel(s.district)} ${s.calls}`).join(", ")
+    : __("none");
+}
+
+/** The slot whose batch comes next: the one starting after `now` today, else tomorrow's first,
+ * in words ("the Afternoon slot at 14:00"); "" without slots. */
+export function nextSlotText(department: PlanDepartment, now = new Date()) {
+  const slots = [...department.slots].sort((a, b) =>
+    a.start_time.localeCompare(b.start_time)
+  );
+  if (!slots.length) return "";
+  const clock = now.toTimeString().slice(0, 5);
+  const next = slots.find((slot) => slot.start_time.slice(0, 5) > clock);
+  return next
+    ? __("the {0} slot at {1}", next.label, next.start_time.slice(0, 5))
+    : __(
+        "tomorrow's {0} slot at {1}",
+        slots[0].label,
+        slots[0].start_time.slice(0, 5)
+      );
 }
 
 /** Why leads waiting in the pool will not be handed to anyone, or null when someone gets them. */
