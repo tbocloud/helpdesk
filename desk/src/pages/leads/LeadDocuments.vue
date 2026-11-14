@@ -12,8 +12,16 @@
       <h2 :id="titleId" class="text-base-medium text-ink-gray-9">
         {{ __("Documents") }}
       </h2>
+      <!-- a lost lead: nothing moves, and it says why -->
+      <p
+        v-if="chain.blocked"
+        class="ml-auto flex items-center gap-1.5 text-sm text-ink-gray-6"
+      >
+        <LucideLock class="size-4 shrink-0" aria-hidden="true" />
+        {{ chain.blocked }}
+      </p>
       <!-- the UAT sign-off, sent and followed from here (docs/project-signoff.md, From the lead) -->
-      <template v-if="chain.next?.action === 'uat' && uat.data?.project">
+      <template v-else-if="chain.next?.action === 'uat' && uat.data?.project">
         <Button
           v-if="!uat.data.signoff && uat.data.can_send"
           class="ml-auto"
@@ -63,11 +71,18 @@
         </template>
       </Button>
       <p
-        v-else-if="!chain.next"
+        v-else-if="!chain.next && !chain.note"
         class="ml-auto flex items-center gap-1.5 text-sm text-success"
       >
         <LucideCircleCheck class="size-4" aria-hidden="true" />
-        {{ __("Every document is accepted") }}
+        {{
+          anySkipped
+            ? __("Every step is done or skipped")
+            : __("Every document is accepted")
+        }}
+      </p>
+      <p v-else-if="!chain.next" class="ml-auto text-sm text-ink-gray-6">
+        {{ chain.note }}
       </p>
       <p
         v-else-if="deliveryStep(chain.next.action)"
@@ -84,7 +99,7 @@
       <li
         v-for="(step, i) in chain.steps"
         :key="step.document_type"
-        class="flex min-w-0"
+        class="relative flex min-w-0"
       >
         <component
           :is="opens(step) ? 'router-link' : 'div'"
@@ -92,6 +107,7 @@
           :aria-current="isNext(step) ? 'step' : undefined"
           class="flex min-h-[44px] min-w-0 flex-1 flex-col gap-1.5 rounded-lg border px-3 py-2"
           :class="[
+            menuFor(step).length ? 'pr-12 sm:pr-10' : '',
             isNext(step)
               ? 'border-brand bg-brand-soft'
               : 'border-outline-gray-2',
@@ -105,6 +121,11 @@
               v-if="step.done || (step.document_type === 'UAT' && uatSigned)"
               class="size-4 shrink-0 text-success"
               :aria-label="__('Done')"
+            />
+            <LucideCircleMinus
+              v-else-if="step.skipped || step.implicit"
+              class="size-4 shrink-0 text-ink-gray-5"
+              :aria-label="step.status_label || __('Skipped')"
             />
             <span
               v-else
@@ -144,10 +165,37 @@
               {{ __("Signed PDF") }}
             </a>
           </span>
+          <!-- skipped or not used: gray, with who, when and why -->
+          <span
+            v-else-if="step.skipped || step.implicit"
+            class="flex min-w-0 flex-col gap-1"
+          >
+            <TaskyBadge
+              :label="step.status_label || __('Skipped')"
+              tone="neutral"
+              class="self-start"
+            />
+            <span
+              v-if="step.skipped"
+              class="truncate text-xs text-ink-gray-6"
+              :title="step.skipped.reason"
+            >
+              {{
+                __(
+                  "{0}, {1}: {2}",
+                  step.skipped.by_name || step.skipped.by,
+                  shortDate(step.skipped.on),
+                  step.skipped.reason
+                )
+              }}
+            </span>
+          </span>
           <span v-else class="flex min-w-0 flex-wrap items-center gap-1.5">
             <TaskyBadge
               :label="step.status_label || __('Not started')"
-              :tone="step.status ? proposalTone(step.status) : 'neutral'"
+              :tone="
+                step.status ? proposalTone(step.status as ProposalStatus) : 'neutral'
+              "
             />
             <span
               v-if="step.quotation_status && !step.done"
@@ -156,8 +204,83 @@
             >
           </span>
         </component>
+        <!-- beside the card, not in it: a link can't hold a button -->
+        <Dropdown
+          v-if="menuFor(step).length"
+          :options="menuFor(step)"
+          class="absolute right-1 top-1"
+        >
+          <Button
+            variant="ghost"
+            class="size-11 sm:size-8"
+            :aria-label="__('More for {0}', step.label)"
+          >
+            <template #icon>
+              <LucideEllipsis class="size-4" aria-hidden="true" />
+            </template>
+          </Button>
+        </Dropdown>
       </li>
     </ol>
+    <!-- a chain started further on: the steps before it, marked not used in one go -->
+    <div
+      v-if="chain.can_steer && unusedSteps.length"
+      class="flex flex-wrap items-center gap-2 border-t border-outline-gray-1 px-4 py-2"
+    >
+      <p class="text-p-sm text-ink-gray-6">
+        {{
+          __(
+            "{0} weren't used: the documents started further on.",
+            unusedSteps.map((s) => s.label).join(", ")
+          )
+        }}
+      </p>
+      <Button
+        variant="subtle"
+        class="ml-auto"
+        :label="__('Mark them not used')"
+        @click="askSkip(unusedSteps, 'Not used')"
+      />
+    </div>
+    <!-- skip one step, or mark earlier ones not used: a short reason is required -->
+    <Dialog
+      :open="skipping.open"
+      size="md"
+      :title="skipping.title"
+      @update:open="(value: boolean) => !value && closeSkip()"
+    >
+      <form class="flex flex-col gap-4" @submit.prevent="confirmSkip">
+        <p class="text-p-sm text-ink-gray-7">{{ skipping.text }}</p>
+        <FormControl
+          v-model="skipping.reason"
+          type="textarea"
+          :label="__('Why? (required)')"
+          :placeholder="__('e.g. Repeat client, the scope is already agreed')"
+          :rows="2"
+          maxlength="500"
+          required
+        />
+        <ErrorMessage
+          v-if="skipping.error"
+          :message="skipping.error"
+          role="alert"
+        />
+        <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button
+            :label="__('Cancel')"
+            :disabled="skip.loading"
+            @click="closeSkip"
+          />
+          <Button
+            type="submit"
+            variant="solid"
+            :label="skipping.confirm"
+            :loading="skip.loading"
+            :disabled="!skipping.reason.trim()"
+          />
+        </div>
+      </form>
+    </Dialog>
     <!-- inside the one root, so the page's grid class (col-span) reaches the section -->
     <SignoffFormDialog
       v-if="uat.data?.project && uat.data.can_send"
@@ -172,17 +295,29 @@
 
 <script setup lang="ts">
 import TaskyBadge from "@/components/TaskyBadge.vue";
+import { shortDate } from "@/pages/tasky/taskMeta";
 import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
 import SignoffFormDialog from "@/pages/tasky/components/SignoffFormDialog.vue";
 import { signoffStatusMeta } from "@/pages/tasky/signoffMeta";
 import { useDocumentVisibility, useIntervalFn } from "@vueuse/core";
-import { Button, createResource, toast } from "frappe-ui";
-import { computed, ref, useId, watch } from "vue";
+import {
+  Button,
+  createResource,
+  Dialog,
+  Dropdown,
+  ErrorMessage,
+  FormControl,
+  toast,
+} from "frappe-ui";
+import { computed, reactive, ref, useId, watch } from "vue";
 import { useRouter } from "vue-router";
 import LucideArrowRight from "~icons/lucide/arrow-right";
 import LucideCircleCheck from "~icons/lucide/circle-check";
+import LucideCircleMinus from "~icons/lucide/circle-minus";
+import LucideEllipsis from "~icons/lucide/ellipsis";
+import LucideLock from "~icons/lucide/lock";
 import LucideDownload from "~icons/lucide/download";
 import LucidePlus from "~icons/lucide/plus";
 import LucideSend from "~icons/lucide/send";
@@ -191,12 +326,18 @@ import {
   type DocumentChain,
   type DocumentStep,
   type Proposal,
+  type ProposalStatus,
+  type StepSkipStatus,
 } from "./proposals";
 
 const props = defineProps<{
   leadId: string;
   chain?: DocumentChain | null;
   canWrite: boolean;
+}>();
+const emit = defineEmits<{
+  /** a step skipped or brought back: the lead's chain is read again */
+  changed: [];
 }>();
 const router = useRouter();
 const authStore = useAuthStore();
@@ -349,9 +490,193 @@ const createProposalProject = createResource({
   },
 });
 
+const createLeadProject = createResource({
+  url: "helpdesk.api.proposals.create_project_from_lead",
+  method: "POST",
+  onSuccess(d: { project: string }) {
+    toast.success(__("Project {0} created", d.project));
+    router.push({ name: "TaskyProject", params: { projectId: d.project } });
+  },
+  onError(e: unknown) {
+    toast.error(errorText(e, __("Couldn't create the project. Try again.")));
+  },
+});
+
 const busy = computed(
-  () => create.loading || createProject.loading || createProposalProject.loading
+  () =>
+    create.loading ||
+    createProject.loading ||
+    createProposalProject.loading ||
+    createLeadProject.loading
 );
+
+// ---------- a flexible chain: make a step out of order, skip one, bring one back ----------
+
+const anySkipped = computed(
+  () => !!props.chain?.steps.some((s) => s.skipped || s.implicit)
+);
+/** shown Not used because the chain started further on, not marked yet */
+const unusedSteps = computed(
+  () =>
+    props.chain?.steps.filter(
+      (s) => s.implicit && s.actions?.includes("skip")
+    ) ?? []
+);
+
+function isDelivery(step: DocumentStep) {
+  return DELIVERY_TYPES.has(step.document_type);
+}
+
+/** Make this step now: in its place in the chain, or out of order (the ERP site says who may). */
+function createStep(step: DocumentStep) {
+  if (busy.value) return;
+  const next = props.chain?.next;
+  if (next?.document_type === step.document_type) return runNext();
+  if (step.document_type === "Proposal")
+    router.push({ name: "LeadNewProposal", params: { leadId: props.leadId } });
+  else if (step.document_type === "Project")
+    createLeadProject.submit({ lead: props.leadId });
+  else createDocument(step.document_type, step.source);
+}
+
+function menuFor(step: DocumentStep) {
+  if (props.chain?.blocked || !props.canWrite) return [];
+  if (authStore.isSalesEmployee && isDelivery(step)) return [];
+  const actions = step.actions ?? [];
+  const options = [];
+  if (actions.includes("create") && !isNext(step))
+    options.push({
+      label:
+        step.document_type === "Proposal"
+          ? __("New proposal")
+          : __("Create {0}", step.label),
+      icon: "plus",
+      onClick: () => createStep(step),
+    });
+  if (actions.includes("skip"))
+    options.push({
+      label: __("Skip…"),
+      icon: "skip-forward",
+      onClick: () => askSkip([step], "Skipped"),
+    });
+  if (actions.includes("bring_back"))
+    options.push({
+      label: __("Bring back"),
+      icon: "rotate-ccw",
+      onClick: () =>
+        bringBack.submit({
+          lead: props.leadId,
+          document_type: step.document_type,
+        }),
+    });
+  return options;
+}
+
+/** The step that opens once these are skipped: the first after them still to do. */
+function stepAfter(skipped: DocumentStep[]) {
+  const steps = props.chain?.steps ?? [];
+  const last = Math.max(...skipped.map((s) => steps.indexOf(s)));
+  return steps
+    .slice(last + 1)
+    .find((s) => !s.done && !s.skipped && !s.implicit);
+}
+
+const skipping = reactive({
+  open: false,
+  steps: [] as DocumentStep[],
+  status: "Skipped" as StepSkipStatus,
+  title: "",
+  text: "",
+  confirm: "",
+  reason: "",
+  error: "",
+});
+
+function askSkip(steps: DocumentStep[], status: StepSkipStatus) {
+  const after = stepAfter(steps);
+  const names = steps.map((s) => s.label).join(", ");
+  Object.assign(skipping, {
+    open: true,
+    steps,
+    status,
+    reason: "",
+    error: "",
+    title:
+      status === "Skipped"
+        ? __("Skip {0}?", names)
+        : __("Mark {0} not used?", names),
+    text:
+      status === "Skipped"
+        ? after
+          ? __(
+              "The next step, {0}, opens. You can bring {1} back later.",
+              after.label,
+              names
+            )
+          : __(
+              "Nothing after it is left to do. You can bring {0} back later.",
+              names
+            )
+        : __(
+            "They show as Not used, with your reason, on the lead and in reports."
+          ),
+    confirm: status === "Skipped" ? __("Skip {0}", names) : __("Mark not used"),
+  });
+}
+
+function closeSkip() {
+  if (!skip.loading) skipping.open = false;
+}
+
+const skip = createResource({
+  url: "helpdesk.api.proposals.skip_steps",
+  method: "POST",
+  onSuccess() {
+    toast.success(
+      skipping.status === "Skipped"
+        ? __("{0} skipped", skipping.steps.map((s) => s.label).join(", "))
+        : __("Marked not used")
+    );
+    skipping.open = false;
+    emit("changed");
+  },
+  onError(e: unknown) {
+    skipping.error = errorText(e, __("Couldn't skip it. Try again."));
+  },
+});
+
+function confirmSkip() {
+  const reason = skipping.reason.trim();
+  if (!reason || skip.loading) return;
+  skipping.error = "";
+  skip.submit({
+    lead: props.leadId,
+    document_types: JSON.stringify(skipping.steps.map((s) => s.document_type)),
+    reason,
+    status: skipping.status,
+  });
+}
+
+const bringBack = createResource({
+  url: "helpdesk.api.proposals.bring_back_step",
+  method: "POST",
+  onSuccess() {
+    toast.success(__("Brought back"));
+    emit("changed");
+  },
+  onError(e: unknown) {
+    toast.error(errorText(e, __("Couldn't bring it back. Try again.")));
+  },
+});
+
+/** Made from its accepted source, or from the lead when there is none. */
+function createDocument(documentType: string, source?: string | null) {
+  create.submit(
+    source
+      ? { source, document_type: documentType }
+      : { lead: props.leadId, document_type: documentType }
+  );
+}
 
 function runNext() {
   const next = props.chain?.next;
@@ -360,9 +685,11 @@ function runNext() {
     router.push({ name: "LeadNewProposal", params: { leadId: props.leadId } });
   else if (next.action === "open" && next.name) open(next.name);
   else if (next.action === "create")
-    create.submit({ source: next.source, document_type: next.document_type });
+    createDocument(next.document_type, next.source);
   else if (next.action === "create_project" && next.source_type === "Proposal")
     createProposalProject.submit({ proposal: next.source });
+  else if (next.action === "create_project" && next.source_type === "Lead")
+    createLeadProject.submit({ lead: props.leadId });
   else if (next.action === "create_project")
     createProject.submit({ plan: next.source });
   else if (next.action === "uat" && next.name)
