@@ -58,6 +58,17 @@ class TestLeadCalls(FrappeTestCase):
         )
         self.assertEqual(self.crm.lead_paths, [f"{TELEPHONY}.get_call_status"])
 
+    def test_the_box_asks_the_erp_site_to_look_for_its_call(self):
+        self.crm.lead_answers["refresh_call"] = {"stored": 1}
+        frappe.set_user(BDE)
+        self.assertEqual(leads_api.refresh_call(" 57305000 "), {"stored": 1})
+        ((method, post, params),) = self.crm.lead_calls
+        self.assertEqual(
+            (method, post, params["acting_user"], params["reference_id"]),
+            ("refresh_call", True, BDE, "57305000"),
+        )
+        self.assertEqual(self.crm.lead_paths, [f"{TELEPHONY}.refresh_call"])
+
     def test_another_persons_call_status_is_refused_here_too(self):
         self.crm.lead_error = CRMError("no", 403, "PermissionError", "Not yours")
         frappe.set_user(BDE)

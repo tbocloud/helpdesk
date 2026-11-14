@@ -1,5 +1,9 @@
 <template>
-  <div class="flex min-w-0 flex-col gap-2">
+  <!-- scroll-mt: the call box links here (#call-<name>) -->
+  <div
+    :id="entry.call ? `call-${entry.call}` : undefined"
+    class="flex min-w-0 scroll-mt-24 flex-col gap-2"
+  >
     <p class="flex flex-wrap items-center gap-x-2 gap-y-1">
       <span class="sr-only">{{ __("Call") }}: </span>
       <span
@@ -25,6 +29,15 @@
       :src="recordingUrl"
       :aria-label="__('Recording of this call')"
     />
+
+    <!-- an answered call: say where its recording is -->
+    <p
+      v-else-if="recordingNote"
+      class="flex items-center gap-1.5 text-p-sm text-ink-gray-6"
+    >
+      <LucideAudioLines class="size-4 shrink-0" aria-hidden="true" />
+      {{ recordingNote }}
+    </p>
 
     <details
       v-if="entry.summary"
@@ -100,6 +113,7 @@
 import { __ } from "@/translation";
 import { dayjs } from "frappe-ui";
 import { computed } from "vue";
+import LucideAudioLines from "~icons/lucide/audio-lines";
 import LucideBot from "~icons/lucide/bot";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import { callLength, type LeadTimelineEntry } from "./leads";
@@ -122,6 +136,14 @@ const title = computed(() => {
   if (missed.value) return incoming ? __("Missed call") : __("Unanswered call");
   if (!props.entry.direction) return __("Call");
   return incoming ? __("Incoming call") : __("Outgoing call");
+});
+
+// only an answered call has a recording to wait for or to miss; an older TBO Smart says nothing
+const recordingNote = computed(() => {
+  if (missed.value || props.entry.status === "voicemail") return "";
+  if (props.entry.recording_state === "pending")
+    return __("Recording is being saved…");
+  return props.entry.recording_state === "none" ? __("Not recorded") : "";
 });
 
 // the hub streams it from the ERP site, which checks the person may read the lead

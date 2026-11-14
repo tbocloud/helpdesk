@@ -165,7 +165,62 @@
       {{ __("It goes into how the call went, when you record the result.") }}
     </p>
 
+    <!-- the call didn't connect: the lead's other numbers, one tap each -->
+    <div
+      v-if="canTryAnother"
+      class="flex flex-col gap-2"
+      role="group"
+      :aria-label="__('Try another number')"
+    >
+      <p class="text-base-medium text-ink-gray-9">
+        {{ __("Try another number") }}
+      </p>
+      <Button
+        v-for="n in otherNumbers"
+        :key="n.id"
+        class="!h-auto min-h-12 !justify-start !whitespace-normal py-2 text-left"
+        @click="tryNumber(n)"
+      >
+        <template #prefix>
+          <LucidePhone class="size-4" aria-hidden="true" />
+        </template>
+        <span class="flex min-w-0 flex-col items-start">
+          <span class="font-mono tabular-nums">{{ n.number }}</span>
+          <span class="text-p-sm text-ink-gray-6">{{ numberAbout(n) }}</span>
+        </span>
+      </Button>
+    </div>
+
+    <!-- the recording is on the lead's timeline, at this call -->
+    <p
+      v-if="box.phase === 'ended' && box.answered && recordingNote"
+      class="flex flex-wrap items-center gap-x-2 gap-y-1 text-p-sm text-ink-gray-8"
+    >
+      <LucideAudioLines
+        class="size-4 shrink-0 text-ink-gray-6"
+        aria-hidden="true"
+      />
+      <span>{{ recordingNote }}</span>
+      <router-link
+        v-if="box.recording === 'saved' && box.call"
+        class="inline-flex min-h-8 items-center rounded underline decoration-outline-gray-3 underline-offset-2 hover:text-ink-gray-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+        :to="{
+          name: 'Lead',
+          params: { leadId: box.call.lead },
+          hash: `#call-${box.callName}`,
+        }"
+        >{{ __("Listen on the lead") }}</router-link
+      >
+    </p>
+
     <div class="flex flex-wrap justify-end gap-2">
+      <Button
+        v-if="isWaiting(box.phase) && box.phase !== 'placing'"
+        variant="outline"
+        :label="__('Stop waiting')"
+        :tooltip="__('Your phone never rang, or you dialled by mistake')"
+        @click="stopWaiting()"
+      />
       <Button
         v-if="box.phase === 'refused'"
         variant="solid"
@@ -191,6 +246,7 @@ import { __ } from "@/translation";
 import { useDocumentVisibility, useIntervalFn, useNow } from "@vueuse/core";
 import { Button, FormControl } from "frappe-ui";
 import { computed, nextTick, onMounted, ref, useId, watch } from "vue";
+import LucideAudioLines from "~icons/lucide/audio-lines";
 import LucideExternalLink from "~icons/lucide/external-link";
 import LucideMinus from "~icons/lucide/minus";
 import LucidePhone from "~icons/lucide/phone";
@@ -207,10 +263,13 @@ import {
   closeBox,
   isWaiting,
   minimise,
+  canTryAnother,
+  otherNumbers,
   placeCall,
   RECORD_AFTER_MS,
   recordResult,
   resultPending,
+  stopWaiting,
 } from "./callBox";
 import {
   checkIncoming,
@@ -218,7 +277,7 @@ import {
   incoming,
   INCOMING_POLL_MS,
 } from "./incomingCall";
-import { callLength } from "./leads";
+import { callLength, type LeadNumber } from "./leads";
 
 const titleId = useId();
 const panel = ref<HTMLElement | null>(null);
@@ -227,7 +286,10 @@ const pill = ref<HTMLElement | null>(null);
 // the clock runs only while the box is open
 const now = useNow({ interval: 1000, controls: false });
 
-const over = computed(() => box.phase === "ended" || box.phase === "timeout");
+const over = computed(
+  () =>
+    box.phase === "ended" || box.phase === "timeout" || box.phase === "stopped"
+);
 /** without live updates the box can't tell the call is over: offer the result anyway */
 const tooLong = computed(
   () =>
@@ -255,7 +317,7 @@ const status = computed(() => {
         tone: "text-ink-gray-7",
         title: __("Calling your phone…"),
         hint: __(
-          "Your phone rings first, then {0}. The call is on your phone, not on this screen.",
+          "Your phone rings first, then {0}. The call is on your phone, not on this screen. Hang up on your phone to end the call.",
           name
         ),
       };
@@ -264,21 +326,25 @@ const status = computed(() => {
         icon: LucidePhoneIncoming,
         tone: "text-ink-gray-8",
         title: __("Pick up your phone"),
-        hint: __("Your phone is ringing. The call is on your phone."),
+        hint: __(
+          "Your phone is ringing. The call is on your phone. Hang up on your phone to end the call."
+        ),
       };
     case "ringing_lead":
       return {
         icon: LucidePhoneCall,
         tone: "text-ink-gray-8",
         title: __("Ringing {0}", name),
-        hint: __("Stay on the line."),
+        hint: __("Stay on the line. Hang up on your phone to end the call."),
       };
     case "on_call":
       return {
         icon: LucidePhone,
         tone: "text-success",
         title: __("On call {0}", elapsed.value),
-        hint: __("Talk on your phone. Write notes here."),
+        hint: __(
+          "Talk on your phone. Write notes here. Hang up on your phone to end the call."
+        ),
       };
     case "ended":
       return box.answered
@@ -294,6 +360,15 @@ const status = computed(() => {
             title: __("Not answered"),
             hint: __("Record the result so the lead is called again."),
           };
+    case "stopped":
+      return {
+        icon: LucidePhoneOff,
+        tone: "text-ink-gray-7",
+        title: __("Stopped waiting"),
+        hint: __(
+          "Record the result, or say it was a mistake. If the call did connect, it still shows on the lead."
+        ),
+      };
     case "timeout":
       return {
         icon: LucidePhoneOff,
@@ -310,6 +385,28 @@ const status = computed(() => {
       };
   }
 });
+
+const recordingNote = computed(() =>
+  box.recording === "saved"
+    ? __("Recording saved.")
+    : box.recording === "pending"
+    ? __("Recording is being saved…")
+    : ""
+);
+
+/** "Decision-maker · Anil", the label and person that tell numbers apart */
+function numberAbout(n: LeadNumber) {
+  return [n.label, n.person].filter(Boolean).join(" · ");
+}
+
+/** The same lead, another of its numbers: the box shows the new call. */
+function tryNumber(n: LeadNumber) {
+  if (!box.call) return;
+  placeCall(
+    { ...box.call, number: n.number, phone: n.number, numbers: box.numbers },
+    true
+  );
+}
 
 const elapsed = computed(() => callLength((+now.value - box.onCallAt) / 1000));
 const pillText = computed(() => (box.phase === "on_call" ? elapsed.value : ""));

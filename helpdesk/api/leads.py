@@ -1198,6 +1198,20 @@ def get_call_status(reference_id: str) -> dict:
     )
 
 
+@frappe.whitelist(methods=["POST"])
+def refresh_call(reference_id: str) -> dict:
+    """The call box's last try when it can't see a call any more: the ERP site looks the
+    signed-in person's own recent calls up at the provider and stores the missing ones.
+    `{stored}`; `{stored: 0}` while the ERP site's TBO Smart is older than this."""
+    require_leads()
+    return call_if_deployed(
+        "refresh_call",
+        post=True,
+        api=TELEPHONY,
+        reference_id=(reference_id or "").strip(),
+    ) or {"stored": 0}
+
+
 @frappe.whitelist()
 def get_incoming_call() -> dict:
     """{enabled, call}: the call coming in to the signed-in person now, for the incoming
