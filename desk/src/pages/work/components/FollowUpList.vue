@@ -29,7 +29,7 @@
       </div>
     </li>
   </ul>
-  <p v-else class="flex items-center gap-2 px-4 py-6 text-p-sm text-ink-gray-6">
+  <p v-else class="flex items-center gap-2 px-5 py-6 text-p-sm text-ink-gray-6">
     <LucideCircleCheck class="size-4 text-success" aria-hidden="true" />
     {{ empty }}
   </p>

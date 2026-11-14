@@ -51,18 +51,22 @@
       </Button>
     </div>
 
-    <TaskyState
+    <div
       v-if="capacity.error && !data"
-      class="mt-6"
-      :icon="LucideCircleAlert"
-      :title="__('Couldn\'t load the team\'s capacity')"
-      :message="
-        errorText(capacity.error, __('Check your connection and try again.'))
-      "
-      error
+      class="mt-5 rounded-xl border border-outline-gray-2 bg-surface-base"
     >
-      <Button :label="__('Retry')" @click="capacity.reload()" />
-    </TaskyState>
+      <TaskyState
+        class="py-10"
+        :icon="LucideCircleAlert"
+        :title="__('Couldn\'t load the team\'s capacity')"
+        :message="
+          errorText(capacity.error, __('Check your connection and try again.'))
+        "
+        error
+      >
+        <Button :label="__('Retry')" @click="capacity.reload()" />
+      </TaskyState>
+    </div>
 
     <template v-else>
       <p class="mt-4 text-p-sm text-ink-gray-6">
@@ -78,13 +82,13 @@
         </template>
         <span
           v-else
-          class="inline-block h-3.5 w-2/3 animate-pulse rounded bg-surface-gray-2"
+          class="inline-block h-3.5 w-2/3 animate-pulse rounded bg-surface-gray-3"
         />
       </p>
 
       <!-- Summary: a flag tile narrows the people below to those it counts -->
       <div
-        class="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4"
+        class="mt-4 grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4"
         role="group"
         :aria-label="__('Show people')"
       >
@@ -119,7 +123,7 @@
         />
       </div>
 
-      <div class="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-3">
+      <div class="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-3">
         <!-- People -->
         <SectionCard
           :id="listId"
@@ -132,6 +136,7 @@
             <FormControl
               v-model="sort"
               type="select"
+              size="md"
               class="w-40"
               :options="SORTS"
               :aria-label="__('Sort people')"
@@ -146,22 +151,23 @@
             <div
               v-for="i in 5"
               :key="i"
-              class="flex items-center gap-3 px-4 py-3.5"
+              class="flex items-center gap-3 px-4 py-3"
             >
               <div
-                class="size-8 shrink-0 animate-pulse rounded-full bg-surface-gray-2"
+                class="size-8 shrink-0 animate-pulse rounded-full bg-surface-gray-3"
               />
               <div
-                class="h-3.5 w-1/4 animate-pulse rounded bg-surface-gray-2"
+                class="h-3.5 w-1/4 animate-pulse rounded bg-surface-gray-3"
               />
               <div
-                class="ml-auto h-2 w-1/3 animate-pulse rounded-full bg-surface-gray-2"
+                class="ml-auto h-2 w-1/3 animate-pulse rounded-full bg-surface-gray-3"
               />
             </div>
           </div>
 
           <TaskyState
             v-else-if="!everyone.length"
+            class="py-10"
             :icon="LucideUsers"
             :title="__('No one to plan for yet')"
             :message="
@@ -181,6 +187,7 @@
 
           <TaskyState
             v-else-if="!people.length"
+            class="py-10"
             :icon="LucideUsers"
             :title="__('No one here right now')"
             :message="loadTile?.empty"
@@ -195,11 +202,11 @@
                 :class="ROW_GRID"
               >
                 <div class="flex min-w-0 items-center gap-3">
-                  <UserAvatar :name="person.user" size="lg" />
+                  <UserAvatar :name="person.user" size="md" />
                   <div class="min-w-0 flex-1">
                     <RouterLink
                       :to="{ name: 'MyWork', query: { user: person.user } }"
-                      class="block truncate rounded text-base text-ink-gray-9 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+                      class="block truncate rounded text-[13px] font-semibold text-ink-gray-9 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
                       :title="__('Open the work of {0}', person.full_name)"
                     >
                       {{ person.full_name }}
@@ -310,7 +317,7 @@
           :description="roomDescription"
           :aria-busy="capacity.loading"
         >
-          <div class="flex flex-col gap-3 p-4">
+          <div class="flex flex-col gap-3 p-5">
             <FormControl
               v-model.number="extraHours"
               type="number"
@@ -324,16 +331,16 @@
               "
             />
           </div>
-          <div v-if="isLoading" class="flex flex-col gap-3 px-4 pb-4">
+          <div v-if="isLoading" class="flex flex-col gap-3 px-5 pb-5">
             <div
               v-for="i in 3"
               :key="i"
-              class="h-8 animate-pulse rounded bg-surface-gray-2"
+              class="h-8 animate-pulse rounded bg-surface-gray-3"
             />
           </div>
           <p
             v-else-if="!room.length"
-            class="px-4 pb-4 text-p-sm text-ink-gray-6"
+            class="px-5 pb-5 text-p-sm text-ink-gray-6"
             role="status"
           >
             {{ roomEmpty }}
@@ -349,7 +356,7 @@
             >
               <RouterLink
                 :to="{ name: 'MyWork', query: { user: entry.person.user } }"
-                class="flex min-h-11 items-center gap-3 px-4 py-2.5 transition-colors hover:bg-surface-gray-1 focus-visible:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-gray-4"
+                class="flex min-h-11 items-center gap-3 px-5 py-3 transition-colors hover:bg-surface-gray-1 focus-visible:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-gray-4"
               >
                 <UserAvatar :name="entry.person.user" size="md" />
                 <span class="min-w-0 flex-1 truncate text-sm text-ink-gray-8">
@@ -373,7 +380,7 @@
           </ul>
           <p
             v-if="room.length > ROOM_LIMIT"
-            class="border-t border-outline-gray-1 px-4 py-2 text-sm text-ink-gray-5"
+            class="border-t border-outline-gray-1 px-5 py-2.5 text-sm text-ink-gray-5"
           >
             {{ __("{0} more", String(room.length - ROOM_LIMIT)) }}
           </p>
@@ -381,27 +388,27 @@
       </div>
 
       <!-- Where the hours go -->
-      <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div class="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
         <SectionCard
           v-for="group in groups"
           :key="group.key"
           :title="group.title"
           :description="__('Planned hours in the window')"
         >
-          <div v-if="isLoading" class="flex flex-col gap-3 p-4">
+          <div v-if="isLoading" class="flex flex-col gap-3 p-5">
             <div
               v-for="i in 3"
               :key="i"
-              class="h-6 animate-pulse rounded bg-surface-gray-2"
+              class="h-6 animate-pulse rounded bg-surface-gray-3"
             />
           </div>
           <p
             v-else-if="!group.rows.length"
-            class="p-4 text-p-sm text-ink-gray-6"
+            class="p-5 text-p-sm text-ink-gray-6"
           >
             {{ __("No planned work in these weeks.") }}
           </p>
-          <ul v-else role="list" class="flex flex-col gap-3 p-4">
+          <ul v-else role="list" class="flex flex-col gap-3 p-5">
             <li
               v-for="row in group.rows.slice(0, GROUP_LIMIT)"
               :key="row.key"
@@ -434,7 +441,7 @@
           </ul>
           <p
             v-if="group.rows.length > GROUP_LIMIT"
-            class="border-t border-outline-gray-1 px-4 py-2 text-sm text-ink-gray-5"
+            class="border-t border-outline-gray-1 px-5 py-2.5 text-sm text-ink-gray-5"
           >
             {{ __("{0} more", String(group.rows.length - GROUP_LIMIT)) }}
           </p>

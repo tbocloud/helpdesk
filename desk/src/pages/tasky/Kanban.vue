@@ -1,30 +1,34 @@
 <template>
   <div class="flex h-full flex-col">
     <!-- without a project it's the person's own board, across all their projects -->
-    <LayoutHeader v-if="!projectId">
-      <template #left-header>
-        <div class="text-lg-medium text-ink-gray-9">{{ __("My board") }}</div>
-      </template>
+    <LayoutHeader
+      v-if="!projectId"
+      :title="__('My board')"
+      :subtitle="
+        __('Your tasks from every project, by status. Drag a card to move it.')
+      "
+    >
       <template #right-header>
-        <div class="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            :label="__('Refresh')"
-            :loading="kanban.loading && !!kanban.data"
-            @click="kanban.reload()"
-          >
-            <template #icon><LucideRefreshCw class="size-4" /></template>
-          </Button>
-          <Button
-            variant="solid"
-            :label="__('New task')"
-            @click="showNewTask = true"
-          >
-            <template #prefix
-              ><LucidePlus class="size-4" aria-hidden="true"
-            /></template>
-          </Button>
-        </div>
+        <Button
+          size="md"
+          :label="__('Refresh')"
+          :loading="kanban.loading && !!kanban.data"
+          @click="kanban.reload()"
+        >
+          <template #icon>
+            <LucideRefreshCw class="size-[18px]" aria-hidden="true" />
+          </template>
+        </Button>
+        <Button
+          variant="solid"
+          size="md"
+          :label="__('New task')"
+          @click="showNewTask = true"
+        >
+          <template #prefix
+            ><LucidePlus class="size-[18px]" aria-hidden="true"
+          /></template>
+        </Button>
       </template>
     </LayoutHeader>
     <ProjectNav
@@ -36,12 +40,14 @@
     >
       <template #actions>
         <Button
-          variant="ghost"
+          size="md"
           :label="__('Refresh')"
           :loading="kanban.loading && !!kanban.data"
           @click="kanban.reload()"
         >
-          <template #icon><LucideRefreshCw class="size-4" /></template>
+          <template #icon>
+            <LucideRefreshCw class="size-[18px]" aria-hidden="true" />
+          </template>
         </Button>
       </template>
     </ProjectNav>
@@ -49,6 +55,7 @@
     <div class="min-h-0 flex-1 overflow-hidden">
       <TaskyState
         v-if="kanban.error && !kanban.data"
+        class="mx-4 mt-5 rounded-xl border border-outline-gray-2 bg-surface-base py-14 md:mx-8"
         error
         :icon="LucideCircleAlert"
         :title="__('Couldn\'t load the board')"
@@ -60,24 +67,24 @@
       <!-- Loading -->
       <div
         v-else-if="!kanban.data"
-        class="flex h-full gap-3 overflow-x-auto p-4"
+        class="flex h-full gap-4 overflow-x-auto px-4 pb-6 pt-5 md:px-8"
         aria-busy="true"
       >
         <div
           v-for="col in columnList"
           :key="col.key"
-          class="flex w-72 shrink-0 flex-col gap-2 rounded-xl border border-outline-gray-1 bg-surface-gray-1 p-2"
+          class="flex w-72 shrink-0 flex-col gap-2.5"
         >
           <div
-            class="mx-1 my-1.5 h-4 w-24 animate-pulse rounded bg-surface-gray-3"
+            class="mx-1 my-2 h-4 w-24 animate-pulse rounded bg-surface-gray-3"
           />
           <div
             v-for="i in 3"
             :key="i"
-            class="flex flex-col gap-2 rounded-lg border border-outline-gray-2 bg-surface-base p-3"
+            class="flex flex-col gap-2 rounded-xl border border-outline-gray-2 bg-surface-base p-4"
           >
-            <div class="h-3.5 w-4/5 animate-pulse rounded bg-surface-gray-2" />
-            <div class="h-3 w-1/3 animate-pulse rounded bg-surface-gray-2" />
+            <div class="h-3.5 w-4/5 animate-pulse rounded bg-surface-gray-3" />
+            <div class="h-3 w-1/3 animate-pulse rounded bg-surface-gray-3" />
           </div>
         </div>
       </div>
@@ -85,10 +92,10 @@
       <div v-else class="flex h-full flex-col">
         <p
           v-if="totalTasks === 0"
-          class="mx-4 mt-4 flex items-center gap-2 rounded-lg border border-outline-gray-2 bg-surface-base px-3 py-2.5 text-p-sm text-ink-gray-6"
+          class="mx-4 mt-5 flex items-center gap-2 rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-3 text-p-sm text-ink-gray-6 md:mx-8"
         >
           <LucideInfo
-            class="size-4 shrink-0 text-ink-gray-5"
+            class="size-4 shrink-0 text-ink-gray-6"
             aria-hidden="true"
           />
           {{
@@ -104,7 +111,7 @@
 
         <div
           ref="board"
-          class="flex min-h-0 flex-1 gap-3 overflow-x-auto p-4"
+          class="flex min-h-0 flex-1 gap-4 overflow-x-auto px-4 pb-6 pt-5 md:px-8"
           @dragover="scrollNearEdge"
           @dragleave="onBoardDragLeave"
           @drop="stopEdgeScroll"
@@ -112,11 +119,11 @@
           <section
             v-for="col in orderedColumns.map((key) => ({ key }))"
             :key="col.key"
-            class="relative flex w-72 shrink-0 flex-col rounded-xl border bg-surface-gray-1 transition-colors"
+            class="relative flex w-72 shrink-0 flex-col rounded-2xl p-2 transition-colors"
             :class="[
               dragOverCol === col.key
-                ? 'border-outline-gray-4 bg-surface-gray-2'
-                : 'border-outline-gray-1',
+                ? 'bg-surface-gray-4 ring-2 ring-inset ring-brand/40'
+                : 'bg-surface-gray-3',
               { 'opacity-50': draggingColumn === col.key },
             ]"
             :aria-labelledby="`col-${col.key}`"
@@ -131,7 +138,7 @@
               aria-hidden="true"
             />
             <header
-              class="group flex cursor-grab items-center justify-between gap-2 px-3 py-2.5 active:cursor-grabbing"
+              class="group flex cursor-grab items-center justify-between gap-2 px-2 py-2.5 active:cursor-grabbing"
               draggable="true"
               :title="__('Drag to move this column')"
               @dragstart="onColumnDragStart($event, col.key)"
@@ -139,18 +146,11 @@
             >
               <h2
                 :id="`col-${col.key}`"
-                class="flex items-center gap-2 text-sm font-medium text-ink-gray-8"
+                class="flex items-center gap-2.5 text-[13px] font-semibold text-ink-gray-9"
               >
-                <component
-                  :is="taskStatusMeta(col.key).icon"
-                  class="size-4"
-                  :class="
-                    col.key === 'Working'
-                      ? 'text-info'
-                      : col.key === ON_HOLD
-                      ? 'text-warning'
-                      : 'text-ink-gray-5'
-                  "
+                <span
+                  class="size-2 shrink-0 rounded-full"
+                  :class="columnTone(col.key).dot"
                   aria-hidden="true"
                 />
                 {{ __(taskStatusMeta(col.key).label) }}
@@ -170,7 +170,7 @@
                 <LucideGripHorizontal class="size-4" aria-hidden="true" />
               </button>
               <span
-                class="rounded bg-surface-gray-3 px-1.5 font-mono text-xs tabular-nums text-ink-gray-6"
+                class="min-w-[24px] rounded-full bg-surface-base px-[7px] py-0.5 text-center text-xs font-semibold tabular-nums text-ink-gray-9 shadow-[0_1px_2px_rgb(15_23_42/0.06)]"
                 :aria-label="
                   __('{0} tasks', String(columnTasks[col.key]?.length ?? 0))
                 "
@@ -180,13 +180,19 @@
             </header>
 
             <div
-              class="flex min-h-[120px] flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2"
+              class="flex min-h-[120px] flex-1 flex-col gap-2.5 overflow-y-auto px-1 pb-1"
               role="list"
             >
               <div
                 v-if="!columnTasks[col.key]?.length"
-                class="flex flex-1 items-center justify-center rounded-lg border border-dashed border-outline-gray-3 px-3 py-6 text-center text-xs text-ink-gray-5"
+                class="flex min-h-[420px] flex-1 flex-col items-center justify-center gap-2.5 rounded-xl border-2 border-dashed border-outline-gray-3 bg-surface-gray-1 px-6 py-6 text-center text-[13px] text-ink-gray-6"
               >
+                <component
+                  :is="taskStatusMeta(col.key).icon"
+                  class="size-6"
+                  :class="columnTone(col.key).icon"
+                  aria-hidden="true"
+                />
                 {{
                   col.key === "Completed"
                     ? __("Drop a task here to complete it")
@@ -201,10 +207,10 @@
                 :key="task.name"
                 role="listitem"
                 :draggable="col.key !== 'Completed'"
-                class="relative rounded-lg border border-outline-gray-2 bg-surface-base p-3 shadow-sm transition-[box-shadow,opacity]"
+                class="relative rounded-xl border border-outline-gray-2 bg-surface-base p-4 transition-[border-color,opacity]"
                 :class="{
                   'opacity-50': draggingTask === task.name,
-                  'cursor-grab hover:border-outline-gray-3 active:cursor-grabbing':
+                  'cursor-grab hover:border-outline-gray-4 active:cursor-grabbing':
                     col.key !== 'Completed',
                 }"
                 @dragstart="onDragStart($event, task)"
@@ -233,7 +239,7 @@
                   <button
                     v-if="canEdit(task)"
                     type="button"
-                    class="min-w-0 flex-1 rounded text-left text-sm leading-snug underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+                    class="min-w-0 flex-1 rounded text-left text-[13px] font-medium leading-snug underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
                     :class="
                       col.key === 'Completed'
                         ? 'text-ink-gray-5 line-through'
@@ -246,7 +252,7 @@
                   </button>
                   <span
                     v-else
-                    class="min-w-0 flex-1 text-sm leading-snug"
+                    class="min-w-0 flex-1 text-[13px] font-medium leading-snug"
                     :class="
                       col.key === 'Completed'
                         ? 'text-ink-gray-5 line-through'
@@ -288,7 +294,7 @@
                 </p>
                 <p
                   v-if="createdByName(task, true) || assignedByName(task)"
-                  class="mt-1 truncate pl-5 text-xs text-ink-gray-5"
+                  class="mt-1 truncate pl-5 text-xs text-ink-gray-6"
                 >
                   <template v-if="createdByName(task, true)">
                     {{ __("Created by {0}", createdByName(task, true)) }}
@@ -389,10 +395,10 @@
                   </button>
                 </div>
 
-                <div class="mt-2.5 flex items-center gap-2">
+                <div class="mt-3 flex items-center gap-2">
                   <span
                     v-if="task.category"
-                    class="truncate rounded bg-surface-gray-2 px-1.5 py-0.5 text-xs text-ink-gray-6"
+                    class="truncate rounded-full bg-surface-gray-2 px-2 py-0.5 text-xs font-medium text-ink-gray-7"
                   >
                     {{ task.category }}
                   </span>
@@ -460,14 +466,9 @@
                       class="flex min-w-0 items-center gap-1.5"
                       :title="task.assigned_to"
                     >
-                      <span
-                        class="flex size-6 shrink-0 items-center justify-center rounded-full bg-surface-gray-3 text-2xs font-medium text-ink-gray-7"
-                        aria-hidden="true"
-                      >
-                        {{
-                          initials(task.assigned_to_name || task.assigned_to)
-                        }}
-                      </span>
+                      <PersonAvatar
+                        :name="task.assigned_to_name || task.assigned_to"
+                      />
                       <!-- the visible name is what screen readers announce -->
                       <span
                         class="max-w-[9rem] truncate text-xs text-ink-gray-7"
@@ -480,7 +481,7 @@
 
                 <div
                   v-if="canCoordinate && isPendingReview(task)"
-                  class="mt-2.5 flex items-center justify-end gap-1.5 border-t border-outline-gray-1 pt-2.5"
+                  class="mt-3 flex items-center justify-end gap-1.5 border-t border-outline-gray-1 pt-3"
                 >
                   <Button
                     size="sm"
@@ -611,6 +612,7 @@ import MilestoneMark from "./components/MilestoneMark.vue";
 import MoveTaskDialog from "./components/MoveTaskDialog.vue";
 import NewTaskDialog from "./components/NewTaskDialog.vue";
 import LayoutHeader from "@/components/LayoutHeader.vue";
+import PersonAvatar from "@/components/PersonAvatar.vue";
 import ProjectNav from "./components/ProjectNav.vue";
 import RecurringTaskDialog from "./components/RecurringTaskDialog.vue";
 import RequestHelpDialog from "./components/RequestHelpDialog.vue";
@@ -633,7 +635,6 @@ import {
   formatElapsed,
   holdDays,
   holdDurationLabel,
-  initials,
   isClosed,
   isOnHold,
   isOverdue,
@@ -649,6 +650,19 @@ import { useApproveTask } from "./useApproveTask";
 
 // no project: the current user's own tasks across every project (sidebar's Board)
 const props = defineProps<{ projectId?: string }>();
+
+// each column's colour: a dot by its name and its icon in the empty drop zone; the
+// status name is always beside it (full class strings, so Tailwind finds them)
+const COLUMN_TONES: Record<string, { dot: string; icon: string }> = {
+  Open: { dot: "bg-surface-gray-6", icon: "text-ink-gray-4" },
+  Working: { dot: "bg-info", icon: "text-info" },
+  "Pending Review": { dot: "bg-violet", icon: "text-violet" },
+  [ON_HOLD]: { dot: "bg-hot-fill", icon: "text-hot-fill" },
+  Completed: { dot: "bg-success", icon: "text-success" },
+};
+function columnTone(key: string) {
+  return COLUMN_TONES[key] ?? COLUMN_TONES.Open;
+}
 
 const nav = ref<InstanceType<typeof ProjectNav> | null>(null);
 const canManage = computed(() => !!nav.value?.canManage);

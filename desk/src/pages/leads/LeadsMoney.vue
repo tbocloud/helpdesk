@@ -6,9 +6,9 @@
     :aria-busy="loading"
   >
     <header
-      class="flex flex-wrap items-baseline justify-between gap-2 border-b border-outline-gray-1 px-4 py-3"
+      class="flex flex-wrap items-baseline justify-between gap-2 border-b border-outline-gray-2 px-4 py-3"
     >
-      <h2 :id="ids.heading" class="text-base-medium text-ink-gray-9">
+      <h2 :id="ids.heading" class="text-base font-semibold text-ink-gray-9">
         {{ __("Proposals & money") }}
       </h2>
       <span class="text-xs text-ink-gray-6">{{
@@ -20,7 +20,7 @@
     <div
       v-if="!m"
       role="alert"
-      class="flex flex-wrap items-center gap-3 px-4 py-4"
+      class="flex flex-wrap items-center gap-3 px-4 py-3"
     >
       <LucideCircleAlert
         class="size-4 shrink-0 text-danger"
@@ -38,7 +38,7 @@
     </div>
 
     <template v-else>
-      <div class="grid grid-cols-2 gap-3 p-4 lg:grid-cols-4">
+      <div class="grid grid-cols-2 gap-3 p-5 lg:grid-cols-4">
         <StatTile
           compact
           :label="__('Proposals sent')"
@@ -78,7 +78,7 @@
       </div>
       <p
         v-if="t.unpriced_sent"
-        class="-mt-1 flex items-start gap-2 px-4 pb-3 text-p-xs text-ink-gray-6"
+        class="-mt-1 flex items-start gap-2 px-5 pb-3 text-p-xs text-ink-gray-6"
       >
         <LucideInfo
           class="mt-0.5 size-3.5 shrink-0 text-ink-gray-5"
@@ -101,11 +101,11 @@
         <div class="flex min-w-0 flex-col">
           <h3
             :id="ids.months"
-            class="px-4 pb-1 pt-3 text-sm-medium text-ink-gray-8"
+            class="px-5 pb-1 pt-3 text-sm-medium text-ink-gray-8"
           >
             {{ __("Expected by month") }}
           </h3>
-          <p v-if="!months.length" class="px-4 py-3 text-p-sm text-ink-gray-6">
+          <p v-if="!months.length" class="px-5 py-3 text-p-sm text-ink-gray-6">
             {{ __("Nothing left to collect.") }}
           </p>
           <ul
@@ -117,7 +117,7 @@
             <li
               v-for="row in months"
               :key="row.key"
-              class="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)_auto] items-center gap-3 px-4 py-1.5"
+              class="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)_auto] items-center gap-3 px-5 py-1.5"
             >
               <span
                 class="flex min-w-0 items-center gap-1 text-sm"
@@ -153,7 +153,7 @@
           class="flex min-w-0 flex-col border-t border-outline-gray-1 lg:border-t-0"
         >
           <div
-            class="flex flex-wrap items-center justify-between gap-2 px-4 pb-1 pt-3"
+            class="flex flex-wrap items-center justify-between gap-2 px-5 pb-1 pt-3"
           >
             <h3 :id="ids.splits" class="text-sm-medium text-ink-gray-8">
               {{ __("Payment splits") }}
@@ -183,7 +183,7 @@
               </template>
             </Button>
           </div>
-          <p v-if="!splits.length" class="px-4 py-3 text-p-sm text-ink-gray-6">
+          <p v-if="!splits.length" class="px-5 py-3 text-p-sm text-ink-gray-6">
             {{
               __(
                 "No proposal or order is waiting on a payment. Splits show here once a proposal goes out."
@@ -193,7 +193,7 @@
           <template v-else>
             <!-- column heads, on wide screens; each row reads on its own on a phone -->
             <div
-              class="hidden grid-cols-[minmax(0,1.6fr)_minmax(0,1.4fr)_6rem_6.5rem_7.5rem] gap-3 px-4 py-1.5 text-xs text-ink-gray-6 md:grid"
+              class="hidden grid-cols-[minmax(0,1.6fr)_minmax(0,1.4fr)_6rem_6.5rem_7.5rem] gap-3 px-5 py-1.5 text-xs text-ink-gray-6 md:grid"
               aria-hidden="true"
             >
               <span>{{ __("Client") }}</span>
@@ -210,7 +210,7 @@
               >
                 <router-link
                   :to="{ name: 'Lead', params: { leadId: row.lead } }"
-                  class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-4 py-2 transition-colors hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-gray-4 md:grid-cols-[minmax(0,1.6fr)_minmax(0,1.4fr)_6rem_6.5rem_7.5rem]"
+                  class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-5 py-2 transition-colors hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-gray-4 md:grid-cols-[minmax(0,1.6fr)_minmax(0,1.4fr)_6rem_6.5rem_7.5rem]"
                 >
                   <span class="flex min-w-0 flex-col">
                     <span class="truncate text-sm text-ink-gray-9">{{
@@ -287,7 +287,7 @@
               v-if="
                 splits.length > LIMIT || (m.splits_total ?? 0) > splits.length
               "
-              class="flex flex-wrap items-center justify-between gap-2 border-t border-outline-gray-1 px-4 py-2"
+              class="flex flex-wrap items-center justify-between gap-2 border-t border-outline-gray-1 px-5 py-2"
             >
               <span class="font-mono text-xs tabular-nums text-ink-gray-6">{{
                 __(

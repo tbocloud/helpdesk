@@ -1,45 +1,39 @@
 <template>
   <div class="flex h-full flex-col">
-    <LayoutHeader>
-      <template #left-header>
-        <div class="text-lg-medium text-ink-gray-9">{{ __("Home") }}</div>
-      </template>
+    <LayoutHeader :title="greeting(userFirstName || '')" :subtitle="todayLabel">
       <template #right-header>
-        <!-- one tap from Home on the phone (docs/lead-bank.md) -->
         <Button
-          v-if="canUseLeadBank"
-          variant="solid"
-          :label="__('Add a lead')"
-          :route="{ name: 'LeadBankAdd' }"
-        >
-          <template #prefix>
-            <LucideCamera class="size-4" aria-hidden="true" />
-          </template>
-        </Button>
-        <Button
-          variant="ghost"
+          size="md"
           :loading="home.loading"
           :aria-label="__('Refresh')"
           @click="home.reload()"
         >
           <template #icon>
-            <LucideRefreshCw class="size-4" aria-hidden="true" />
+            <LucideRefreshCw class="size-[18px]" aria-hidden="true" />
+          </template>
+        </Button>
+        <!-- one tap from Home on the phone (docs/lead-bank.md) -->
+        <Button
+          v-if="canUseLeadBank"
+          variant="solid"
+          size="md"
+          :label="__('Add a lead')"
+          :route="{ name: 'LeadBankAdd' }"
+        >
+          <template #prefix>
+            <LucideCamera class="size-[18px]" aria-hidden="true" />
           </template>
         </Button>
       </template>
     </LayoutHeader>
 
     <div class="relative flex-1 overflow-y-auto overflow-x-hidden">
-      <div
-        class="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5 md:px-6"
-      >
-        <!-- greeting, date and the few things that need a look today -->
-        <header class="flex flex-wrap items-end gap-x-6 gap-y-3">
+      <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
+        <!-- the header greets and dates the day; under it, the few things that need a look today -->
+        <div class="flex flex-wrap items-end gap-x-6 gap-y-3">
           <div class="flex min-w-0 flex-1 basis-80 flex-col gap-1">
-            <h1 class="text-2xl font-semibold text-ink-gray-9">
-              {{ greeting(userFirstName || "") }}
-            </h1>
-            <p class="text-p-sm text-ink-gray-6">{{ todayLabel }}</p>
+            <!-- the header's date line is hidden on phones -->
+            <p class="text-p-sm text-ink-gray-6 md:hidden">{{ todayLabel }}</p>
             <p
               v-if="nextHoliday || onLeaveToday"
               class="flex flex-wrap items-center gap-x-4 gap-y-1 text-p-sm text-ink-gray-6"
@@ -90,7 +84,7 @@
               <RouterLink
                 v-if="pill.to"
                 :to="pill.to"
-                class="inline-flex h-6 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-xs font-medium tabular-nums focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+                class="inline-flex h-[26px] items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-xs font-semibold tabular-nums focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
                 :class="TONE_CLASSES[pill.tone]"
               >
                 <span
@@ -101,7 +95,7 @@
               </RouterLink>
               <span
                 v-else
-                class="inline-flex h-6 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-xs font-medium tabular-nums"
+                class="inline-flex h-[26px] items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-xs font-semibold tabular-nums"
                 :class="TONE_CLASSES[pill.tone]"
               >
                 <span
@@ -112,7 +106,7 @@
               </span>
             </li>
           </ul>
-        </header>
+        </div>
 
         <FollowUpStrip v-if="data" :summary="data.follow_ups" />
 
@@ -132,6 +126,7 @@
 
         <TaskyState
           v-if="home.error && !data"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
           :icon="LucideCircleAlert"
           :title="__('Couldn\'t load the dashboard')"
           :message="__('Check your connection and try again.')"
@@ -141,8 +136,16 @@
         </TaskyState>
 
         <div v-else-if="!data" class="flex flex-col gap-5" aria-hidden="true">
-          <div class="h-9 w-full animate-pulse rounded-md bg-surface-gray-2" />
-          <div class="h-48 w-full animate-pulse rounded-lg bg-surface-gray-2" />
+          <div
+            class="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4"
+          >
+            <div
+              v-for="i in 4"
+              :key="i"
+              class="h-[138px] animate-pulse rounded-xl bg-surface-gray-3"
+            />
+          </div>
+          <div class="h-48 w-full animate-pulse rounded-xl bg-surface-gray-3" />
         </div>
 
         <template v-else>
@@ -338,7 +341,7 @@ const nextHoliday = computed(() => {
 const onLeaveToday = computed(() => {
   const people = data.value?.calendar?.on_leave_today;
   if (!people?.length) return "";
-  const span = (p: typeof people[number]) =>
+  const span = (p: (typeof people)[number]) =>
     p.half_day
       ? __("half day")
       : dayjs(p.to_date).isSame(dayjs(), "day")

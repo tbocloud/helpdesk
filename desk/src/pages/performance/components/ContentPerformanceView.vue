@@ -1,8 +1,8 @@
 <template>
-  <div class="flex flex-col gap-4">
+  <div class="flex flex-col gap-5">
     <p
       v-if="!data.team.length"
-      class="rounded-xl border border-dashed border-outline-gray-3 px-4 py-14 text-center text-p-sm text-ink-gray-5"
+      class="rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-14 text-center text-p-sm text-ink-gray-6"
     >
       {{ __("Nobody had content posts due in this period.") }}
     </p>
@@ -43,7 +43,7 @@
             @click="emit('select', row.employee)"
           >
             <div class="flex items-start gap-2.5">
-              <Avatar size="lg" :image="row.image" :label="row.employee_name" />
+              <Avatar size="md" :image="row.image" :label="row.employee_name" />
               <div class="min-w-0 flex-1">
                 <div class="truncate text-sm font-semibold text-ink-gray-9">
                   {{ row.employee_name }}
@@ -130,7 +130,7 @@
             }}
           </span>
         </header>
-        <div class="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <div class="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4">
           <Tile
             :tone="scoreTone(s.avg_score)"
             :label="__('Avg. post score')"
@@ -183,7 +183,9 @@
         <section
           class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base xl:col-span-2"
         >
-          <header class="flex flex-wrap items-start justify-between gap-2 p-4">
+          <header
+            class="flex flex-wrap items-start justify-between gap-2 px-4 py-4 md:px-4"
+          >
             <div>
               <h3 class="text-base font-semibold text-ink-gray-9">
                 {{
@@ -207,25 +209,43 @@
           <div class="overflow-x-auto">
             <table class="w-full min-w-[720px] text-left text-sm">
               <thead
-                class="border-y border-outline-gray-2 bg-surface-gray-1 text-xs text-ink-gray-5"
+                class="border-y border-outline-gray-2 bg-surface-gray-1 text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6"
               >
                 <tr>
-                  <th scope="col" class="px-4 py-2 font-medium">
+                  <th
+                    scope="col"
+                    class="h-11 px-3 font-semibold first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5"
+                  >
                     {{ __("Date") }}
                   </th>
-                  <th scope="col" class="px-4 py-2 font-medium">
+                  <th
+                    scope="col"
+                    class="h-11 px-3 font-semibold first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5"
+                  >
                     {{ __("Post") }}
                   </th>
-                  <th scope="col" class="px-4 py-2 font-medium">
+                  <th
+                    scope="col"
+                    class="h-11 px-3 font-semibold first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5"
+                  >
                     {{ __("Channel") }}
                   </th>
-                  <th scope="col" class="px-4 py-2 font-medium">
+                  <th
+                    scope="col"
+                    class="h-11 px-3 font-semibold first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5"
+                  >
                     {{ __("Role") }}
                   </th>
-                  <th scope="col" class="px-4 py-2 font-medium">
+                  <th
+                    scope="col"
+                    class="h-11 px-3 font-semibold first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5"
+                  >
                     {{ __("Score") }}
                   </th>
-                  <th scope="col" class="px-4 py-2 font-medium">
+                  <th
+                    scope="col"
+                    class="h-11 px-3 font-semibold first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5"
+                  >
                     {{ __("Timing") }}
                   </th>
                 </tr>
@@ -234,14 +254,16 @@
                 <tr
                   v-for="p in sortedPosts"
                   :key="p.name"
-                  class="border-b border-outline-gray-1 last:border-0"
+                  class="border-b border-outline-gray-1 last:border-0 hover:bg-surface-gray-1"
                 >
                   <td
-                    class="whitespace-nowrap px-4 py-2.5 font-mono text-xs tabular-nums text-ink-gray-7"
+                    class="whitespace-nowrap px-3 py-3 first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5 font-mono text-xs tabular-nums text-ink-gray-7"
                   >
                     {{ dayjs(p.publish_on).format("ddd D MMM") }}
                   </td>
-                  <td class="max-w-[16rem] px-4 py-2.5">
+                  <td
+                    class="max-w-[16rem] px-3 py-3 first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5"
+                  >
                     <div class="truncate font-medium text-ink-gray-9">
                       {{ p.title }}
                     </div>
@@ -257,7 +279,9 @@
                       </template>
                     </div>
                   </td>
-                  <td class="whitespace-nowrap px-4 py-2.5">
+                  <td
+                    class="whitespace-nowrap px-3 py-3 first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5"
+                  >
                     <span
                       v-for="(c, i) in p.platforms"
                       :key="c"
@@ -270,12 +294,14 @@
                     >
                   </td>
                   <td
-                    class="whitespace-nowrap px-4 py-2.5 text-xs text-ink-gray-6"
+                    class="whitespace-nowrap px-3 py-3 first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5 text-xs text-ink-gray-6"
                     :title="p.roles.map((r: string) => ROLE_LABEL[r]).join(', ')"
                   >
                     {{ roleText(p.roles) }}
                   </td>
-                  <td class="px-4 py-2.5">
+                  <td
+                    class="px-3 py-3 first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5"
+                  >
                     <div class="flex items-center gap-2">
                       <b
                         class="w-7 text-right text-sm font-semibold tabular-nums"
@@ -287,7 +313,9 @@
                       </div>
                     </div>
                   </td>
-                  <td class="whitespace-nowrap px-4 py-2.5">
+                  <td
+                    class="whitespace-nowrap px-3 py-3 first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5"
+                  >
                     <span
                       class="inline-flex h-6 items-center gap-1 rounded-full px-2 text-xs font-medium"
                       :class="TIMING[p.timing].class"
@@ -306,7 +334,7 @@
           </div>
           <div
             v-if="missedDates.length"
-            class="m-4 rounded-lg border border-dashed border-warning bg-warning-soft px-3 py-2 text-p-sm text-warning"
+            class="m-4 rounded-xl border border-dashed border-warning bg-warning-soft px-3 py-2 text-p-sm text-warning"
           >
             <b class="font-semibold">{{ __("Missed slots:") }}</b>
             {{ missedDates.join(", ") }}

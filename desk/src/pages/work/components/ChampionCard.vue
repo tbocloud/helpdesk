@@ -1,7 +1,7 @@
 <template>
   <!-- the one gold card: an award, so it gets the champion tone (theme.css) -->
   <section
-    class="relative flex min-w-0 flex-col gap-4 rounded-xl border border-champion-border bg-champion-soft p-5"
+    class="relative flex min-w-0 flex-col gap-4 rounded-xl border border-champion-border bg-champion-soft p-4"
     :aria-labelledby="headingId"
   >
     <h2
@@ -25,10 +25,10 @@
     </span>
 
     <div v-if="loading" class="flex items-center gap-3" aria-busy="true">
-      <div class="size-14 animate-pulse rounded-full bg-surface-gray-2" />
+      <div class="size-14 animate-pulse rounded-full bg-surface-gray-3" />
       <div class="flex flex-1 flex-col gap-2">
-        <div class="h-4 w-1/3 animate-pulse rounded bg-surface-gray-2" />
-        <div class="h-3 w-2/3 animate-pulse rounded bg-surface-gray-2" />
+        <div class="h-4 w-1/3 animate-pulse rounded bg-surface-gray-3" />
+        <div class="h-3 w-2/3 animate-pulse rounded bg-surface-gray-3" />
       </div>
     </div>
 

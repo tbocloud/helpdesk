@@ -7,20 +7,23 @@
     >
       <template #actions>
         <Button
-          variant="ghost"
+          size="md"
           :label="__('Refresh')"
           :loading="tasks.loading && !!tasks.data"
           @click="tasks.reload()"
         >
-          <template #icon><LucideRefreshCw class="size-4" /></template>
+          <template #icon
+            ><LucideRefreshCw class="size-[18px]" aria-hidden="true"
+          /></template>
         </Button>
       </template>
     </ProjectNav>
 
     <div class="relative flex-1 overflow-auto">
-      <div class="mx-auto w-full max-w-6xl px-4 py-5 md:px-6">
+      <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
         <TaskyState
           v-if="tasks.error && !tasks.data"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
           error
           :icon="LucideCircleAlert"
           :title="__('Couldn\'t load the timeline')"
@@ -31,10 +34,10 @@
 
         <div
           v-else
-          class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base shadow-sm"
+          class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
         >
           <div
-            class="hidden grid-cols-[1fr_9rem_8rem_7rem] gap-4 border-b border-outline-gray-2 bg-surface-gray-1 px-4 py-2 text-xs text-ink-gray-5 md:grid"
+            class="hidden h-11 grid-cols-[1fr_9rem_8rem_7rem] items-center gap-4 border-b border-outline-gray-2 bg-surface-gray-1 px-5 text-left text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6 md:grid"
           >
             <span>{{ __("Task") }}</span>
             <span>{{ __("Phase") }}</span>
@@ -47,15 +50,15 @@
             <div
               v-for="i in 6"
               :key="i"
-              class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-3.5 last:border-b-0"
+              class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-3 last:border-b-0"
               aria-hidden="true"
             >
-              <div class="size-4 animate-pulse rounded bg-surface-gray-2" />
+              <div class="size-4 animate-pulse rounded bg-surface-gray-3" />
               <div
-                class="h-3.5 w-2/5 animate-pulse rounded bg-surface-gray-2"
+                class="h-3.5 w-2/5 animate-pulse rounded bg-surface-gray-3"
               />
               <div
-                class="ml-auto h-3 w-16 animate-pulse rounded bg-surface-gray-2"
+                class="ml-auto h-3 w-16 animate-pulse rounded bg-surface-gray-3"
               />
             </div>
           </template>
@@ -63,6 +66,7 @@
           <!-- Empty -->
           <TaskyState
             v-else-if="!sortedTasks.length"
+            class="py-10"
             :icon="LucideCalendarRange"
             :title="__('No tasks in this project')"
             :message="
@@ -78,7 +82,7 @@
             >
               <h2
                 :id="`tl-${group.key}`"
-                class="flex items-center gap-2 border-b border-outline-gray-2 bg-surface-gray-1 px-4 py-1.5 text-xs font-medium text-ink-gray-6"
+                class="flex items-center gap-2 border-b border-outline-gray-2 bg-surface-gray-1 px-5 py-2 text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6"
               >
                 {{ group.label }}
                 <span class="font-mono tabular-nums text-ink-gray-5">{{
@@ -89,7 +93,7 @@
                 <li
                   v-for="task in group.tasks"
                   :key="task.name"
-                  class="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1 border-b border-outline-gray-1 px-4 py-2.5 last:border-b-0 md:grid-cols-[1fr_9rem_8rem_7rem]"
+                  class="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1 border-b border-outline-gray-1 px-5 py-3 last:border-b-0 hover:bg-surface-gray-1 md:grid-cols-[1fr_9rem_8rem_7rem]"
                 >
                   <div class="flex min-w-0 items-center gap-2.5">
                     <component
@@ -106,7 +110,7 @@
                       "
                     />
                     <span
-                      class="truncate text-sm"
+                      class="truncate text-[13px] font-medium"
                       :class="
                         isClosed(task)
                           ? 'text-ink-gray-5 line-through'

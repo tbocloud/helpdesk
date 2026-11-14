@@ -1,7 +1,8 @@
 <template>
-  <div class="flex flex-col gap-4">
+  <div class="flex flex-col gap-5">
     <TaskyState
       v-if="outbox.error && !shown"
+      class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
       error
       :icon="LucideCircleAlert"
       :title="__('Couldn\'t load the outbox')"
@@ -14,16 +15,17 @@
 
     <div
       v-else-if="!shown"
-      class="flex flex-col gap-3"
+      class="flex flex-col gap-5"
       aria-busy="true"
       :aria-label="__('Loading')"
     >
-      <div class="h-12 animate-pulse rounded-xl bg-surface-gray-2" />
-      <div class="h-56 animate-pulse rounded-xl bg-surface-gray-2" />
+      <div class="h-12 animate-pulse rounded-xl bg-surface-gray-3" />
+      <div class="h-56 animate-pulse rounded-xl bg-surface-gray-3" />
     </div>
 
     <TaskyState
       v-else-if="!shown.available"
+      class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
       :icon="LucideCloudOff"
       :title="__('Outreach isn\'t available yet')"
       :message="__('The ERP site needs the latest TBO Smart.')"
@@ -31,6 +33,7 @@
 
     <TaskyState
       v-else-if="!shown.enabled"
+      class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
       :icon="LucideMailX"
       :title="__('Outreach is switched off')"
       :message="
@@ -85,7 +88,7 @@
       <p
         v-if="shown.drafting"
         role="status"
-        class="flex items-center gap-2 rounded-lg border border-outline-gray-2 bg-surface-base px-3 py-2 text-p-sm text-ink-gray-8"
+        class="flex items-center gap-2 rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-3 text-p-sm text-ink-gray-8"
       >
         <LucideLoader
           class="size-4 animate-spin text-ink-gray-6"
@@ -103,7 +106,7 @@
       <p
         v-if="!shown.email_ready && hasEmail"
         role="alert"
-        class="flex items-start gap-2 rounded-lg border border-outline-gray-2 bg-warning-soft px-3 py-2 text-p-sm text-ink-gray-9"
+        class="flex items-start gap-2 rounded-xl border border-outline-gray-2 bg-warning-soft px-4 py-3 text-p-sm text-ink-gray-9"
       >
         <LucideTriangleAlert
           class="mt-0.5 size-4 shrink-0 text-warning"
@@ -119,7 +122,7 @@
       <p
         v-if="outbox.error"
         role="alert"
-        class="flex flex-wrap items-center gap-3 rounded-lg border border-outline-gray-2 bg-surface-base px-3 py-2 text-p-sm text-ink-gray-8"
+        class="flex flex-wrap items-center gap-3 rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-3 text-p-sm text-ink-gray-8"
       >
         <LucideCircleAlert
           class="size-4 shrink-0 text-danger"
@@ -131,7 +134,7 @@
 
       <div
         v-if="rows.length && canSelect"
-        class="flex flex-wrap items-center gap-3 rounded-lg border border-outline-gray-2 bg-surface-base px-4 py-2"
+        class="flex flex-wrap items-center gap-3 rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-3"
       >
         <Checkbox
           :model-value="allPicked"
@@ -161,6 +164,7 @@
 
       <TaskyState
         v-if="!rows.length"
+        class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
         :icon="LucideInbox"
         :title="empty.title"
         :message="empty.message"

@@ -1,6 +1,6 @@
 <template>
   <div class="flex h-full w-full min-w-0 flex-col">
-    <div class="px-4 pb-5 pt-6 sm:px-8 sm:pt-8">
+    <div class="px-4 pb-5 pt-6 sm:pe-16 sm:ps-8 sm:pt-8">
       <SettingsLayoutHeader
         :title="title"
         :description="description"
@@ -64,9 +64,11 @@
         :aria-label="__('Loading')"
       >
         <div v-for="i in 3" :key="i" class="flex flex-col gap-2">
-          <div class="h-4 w-40 animate-pulse rounded bg-surface-gray-2" />
-          <div class="h-3 w-2/3 animate-pulse rounded bg-surface-gray-2" />
-          <div class="h-8 w-full animate-pulse rounded bg-surface-gray-1" />
+          <div class="h-4 w-40 animate-pulse rounded bg-surface-gray-3" />
+          <div class="h-3 w-2/3 animate-pulse rounded bg-surface-gray-3" />
+          <div
+            class="h-10 w-full animate-pulse rounded-[10px] bg-surface-gray-3"
+          />
         </div>
       </div>
       <slot v-else name="content" />

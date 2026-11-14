@@ -53,7 +53,7 @@
         v-for="i in 3"
         :key="i"
         aria-hidden="true"
-        class="aspect-square animate-pulse rounded-lg bg-surface-gray-2"
+        class="aspect-square animate-pulse rounded-lg bg-surface-gray-3"
       />
     </div>
     <div

@@ -3,7 +3,9 @@
     class="mt-4 flex flex-col gap-3 rounded-xl border border-outline-gray-2 bg-surface-base p-4"
     :aria-label="__('Ads')"
   >
-    <h3 class="text-base-medium text-ink-gray-9">{{ __("Paid ads") }}</h3>
+    <h3 class="text-base font-semibold text-ink-gray-9">
+      {{ __("Paid ads") }}
+    </h3>
 
     <template v-if="!conn.ads_allowed">
       <p class="flex items-start gap-2 text-p-sm text-ink-gray-7">
@@ -33,7 +35,7 @@
       </p>
       <div
         v-if="accounts.loading"
-        class="h-16 animate-pulse rounded-lg bg-surface-gray-1"
+        class="h-16 animate-pulse rounded-[10px] bg-surface-gray-3"
         aria-busy="true"
       />
       <p v-else-if="accounts.error" role="alert" class="text-p-sm text-danger">

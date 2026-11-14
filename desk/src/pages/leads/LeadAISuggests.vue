@@ -5,9 +5,9 @@
     :aria-labelledby="titleId"
   >
     <header
-      class="flex flex-wrap items-center gap-2 border-b border-outline-gray-1 px-4 py-3"
+      class="flex flex-wrap items-center gap-2 border-b border-outline-gray-2 px-4 py-3"
     >
-      <h2 :id="titleId" class="text-base-medium text-ink-gray-9">
+      <h2 :id="titleId" class="text-base font-semibold text-ink-gray-9">
         {{ ai?.enabled ? __("AI suggests") : __("Lead health") }}
       </h2>
       <span
@@ -38,7 +38,7 @@
 
     <div
       v-if="!ai && suggestions.loading"
-      class="flex flex-col gap-2 px-4 py-4"
+      class="flex flex-col gap-2 px-4 py-3"
       aria-busy="true"
       :aria-label="__('Loading')"
     >
@@ -49,7 +49,7 @@
     <div
       v-else-if="!ai && suggestions.error"
       role="alert"
-      class="flex flex-col items-start gap-2 px-4 py-4"
+      class="flex flex-col items-start gap-2 px-4 py-3"
     >
       <p class="text-p-sm text-ink-gray-7">
         {{
@@ -66,7 +66,7 @@
       <p
         v-if="actionError"
         role="alert"
-        class="px-4 py-3 text-p-sm text-danger"
+        class="px-5 py-3 text-p-sm text-danger"
       >
         {{ actionError }}
       </p>
@@ -74,7 +74,7 @@
       <!-- how the ERP site sorted the lead's last email reply -->
       <div
         v-if="lastReply?.class && REPLY_LOOK[lastReply.class]"
-        class="flex flex-col gap-1.5 px-4 py-3"
+        class="flex flex-col gap-1.5 px-5 py-3"
       >
         <div class="flex flex-wrap items-center gap-2">
           <span class="text-xs text-ink-gray-5">{{ __("Last reply") }}</span>
@@ -97,7 +97,7 @@
 
       <!-- the AI's read -->
       <template v-if="ai.enabled && ai.open">
-        <div v-if="!insight" class="flex flex-col items-start gap-2 px-4 py-4">
+        <div v-if="!insight" class="flex flex-col items-start gap-2 px-4 py-3">
           <p class="text-p-sm text-ink-gray-6">
             {{
               ai.ai_ready
@@ -118,7 +118,7 @@
         </div>
 
         <template v-else>
-          <div class="flex flex-col gap-2 px-4 py-3">
+          <div class="flex flex-col gap-2 px-5 py-3">
             <p v-if="insight.summary" class="text-p-sm text-ink-gray-8">
               {{ insight.summary }}
             </p>
@@ -145,7 +145,7 @@
           </div>
 
           <!-- the next best action, already the follow-up when nothing else was planned -->
-          <div v-if="insight.next_action" class="flex gap-3 px-4 py-3">
+          <div v-if="insight.next_action" class="flex gap-3 px-5 py-3">
             <component
               :is="CHANNEL_ICONS[insight.next_action.channel]"
               class="mt-0.5 size-4 shrink-0 text-ink-gray-5"
@@ -169,7 +169,7 @@
           <!-- a stage to move to: only a person moves it -->
           <div
             v-if="insight.suggested_stage"
-            class="flex flex-col gap-2 px-4 py-3"
+            class="flex flex-col gap-2 px-5 py-3"
           >
             <p class="text-p-sm text-ink-gray-8">
               {{ __("Move to {0}?", insight.suggested_stage) }}
@@ -194,7 +194,7 @@
         </template>
 
         <!-- a message to send: edited and sent by the person, from their own app -->
-        <div class="flex flex-col gap-2 px-4 py-3">
+        <div class="flex flex-col gap-2 px-5 py-3">
           <template v-if="draft">
             <FormControl
               v-if="draft.channel === 'email'"
@@ -278,7 +278,7 @@
       </template>
 
       <!-- rules, not AI: shown with AI runs leads off too -->
-      <div v-if="ai.health" class="flex flex-col gap-1.5 px-4 py-3">
+      <div v-if="ai.health" class="flex flex-col gap-1.5 px-5 py-3">
         <TaskyBadge
           class="self-start"
           :label="HEALTH[ai.health.status].label"
@@ -295,7 +295,7 @@
         </ul>
       </div>
 
-      <div v-if="ai.duplicates.length" class="flex flex-col gap-1.5 px-4 py-3">
+      <div v-if="ai.duplicates.length" class="flex flex-col gap-1.5 px-5 py-3">
         <h3 class="text-xs text-ink-gray-5">
           {{ __("Maybe the same customer") }}
         </h3>

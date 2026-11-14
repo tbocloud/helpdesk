@@ -1,14 +1,14 @@
 <template>
-  <div class="flex flex-col gap-4">
+  <div class="flex flex-col gap-5">
     <p
       v-if="!data.customers.length"
-      class="rounded-xl border border-dashed border-outline-gray-3 px-4 py-14 text-center text-p-sm text-ink-gray-5"
+      class="rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-14 text-center text-p-sm text-ink-gray-6"
     >
       {{ __("No content posts were due in this period.") }}
     </p>
 
     <template v-else>
-      <div class="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <div class="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4">
         <StatTile
           :label="__('Customers')"
           :value="String(sum.customers)"
@@ -107,7 +107,7 @@
       <section
         class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
       >
-        <header class="p-4">
+        <header class="px-4 py-4 md:px-4">
           <h2 class="text-base font-semibold text-ink-gray-9">
             {{ __("Customers") }}
           </h2>
@@ -115,31 +115,55 @@
         <div class="overflow-x-auto">
           <table class="w-full min-w-[760px] text-left text-sm">
             <thead
-              class="border-y border-outline-gray-2 bg-surface-gray-1 text-xs text-ink-gray-5"
+              class="border-y border-outline-gray-2 bg-surface-gray-1 text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6"
             >
               <tr>
-                <th scope="col" class="px-4 py-2 font-medium">
+                <th
+                  scope="col"
+                  class="h-11 px-3 font-semibold first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5"
+                >
                   {{ __("Customer") }}
                 </th>
-                <th scope="col" class="px-4 py-2 text-right font-medium">
+                <th
+                  scope="col"
+                  class="h-11 px-3 text-right font-semibold first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5"
+                >
                   {{ __("Posts") }}
                 </th>
-                <th scope="col" class="px-4 py-2 text-right font-medium">
+                <th
+                  scope="col"
+                  class="h-11 px-3 text-right font-semibold first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5"
+                >
                   {{ __("Published") }}
                 </th>
-                <th scope="col" class="px-4 py-2 text-right font-medium">
+                <th
+                  scope="col"
+                  class="h-11 px-3 text-right font-semibold first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5"
+                >
                   {{ __("On time") }}
                 </th>
-                <th scope="col" class="px-4 py-2 text-right font-medium">
+                <th
+                  scope="col"
+                  class="h-11 px-3 text-right font-semibold first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5"
+                >
                   {{ __("Missed") }}
                 </th>
-                <th scope="col" class="px-4 py-2 text-right font-medium">
+                <th
+                  scope="col"
+                  class="h-11 px-3 text-right font-semibold first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5"
+                >
                   {{ __("Changes") }}
                 </th>
-                <th scope="col" class="px-4 py-2 text-right font-medium">
+                <th
+                  scope="col"
+                  class="h-11 px-3 text-right font-semibold first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5"
+                >
                   {{ __("Team") }}
                 </th>
-                <th scope="col" class="w-48 px-4 py-2 font-medium">
+                <th
+                  scope="col"
+                  class="w-48 h-11 px-3 font-semibold first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5"
+                >
                   {{ __("Avg. score") }}
                 </th>
               </tr>
@@ -160,7 +184,7 @@
                 @keydown.enter="emit('select', row.customer)"
               >
                 <td
-                  class="px-4 py-2.5 font-medium"
+                  class="px-3 py-3 first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5 font-medium"
                   :class="
                     row.customer === detail?.customer
                       ? 'text-brand-ink'
@@ -169,28 +193,40 @@
                 >
                   {{ row.customer || __("No customer") }}
                 </td>
-                <td class="px-4 py-2.5 text-right tabular-nums text-ink-gray-8">
+                <td
+                  class="px-3 py-3 first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5 text-right tabular-nums text-ink-gray-8"
+                >
                   {{ row.posts }}
                 </td>
-                <td class="px-4 py-2.5 text-right tabular-nums text-ink-gray-8">
+                <td
+                  class="px-3 py-3 first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5 text-right tabular-nums text-ink-gray-8"
+                >
                   {{ row.published }}
                 </td>
                 <td
-                  class="px-4 py-2.5 text-right font-semibold tabular-nums"
+                  class="px-3 py-3 first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5 text-right font-semibold tabular-nums"
                   :class="onTimeClass(row.on_time_pct)"
                 >
                   {{ pctText(row.on_time_pct) }}
                 </td>
-                <td class="px-4 py-2.5 text-right tabular-nums">
+                <td
+                  class="px-3 py-3 first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5 text-right tabular-nums"
+                >
                   <CountPill :value="row.missed" tone="danger" />
                 </td>
-                <td class="px-4 py-2.5 text-right tabular-nums">
+                <td
+                  class="px-3 py-3 first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5 text-right tabular-nums"
+                >
                   <CountPill :value="row.change_requests" tone="warning" />
                 </td>
-                <td class="px-4 py-2.5 text-right tabular-nums text-ink-gray-8">
+                <td
+                  class="px-3 py-3 first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5 text-right tabular-nums text-ink-gray-8"
+                >
                   {{ row.people }}
                 </td>
-                <td class="px-4 py-2.5">
+                <td
+                  class="px-3 py-3 first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5"
+                >
                   <div class="flex items-center gap-2">
                     <b
                       class="w-7 text-right text-sm font-semibold tabular-nums"
@@ -222,7 +258,7 @@
         >
           <header class="mb-4 flex flex-wrap items-center gap-3">
             <div
-              class="flex size-11 items-center justify-center rounded-lg bg-surface-gray-2 text-ink-gray-6"
+              class="flex size-11 items-center justify-center rounded-xl bg-surface-gray-2 text-ink-gray-6"
               aria-hidden="true"
             >
               <LucideBuilding2 class="size-5" />
@@ -242,7 +278,9 @@
               </p>
             </div>
           </header>
-          <div class="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+          <div
+            class="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4"
+          >
             <Tile
               :tone="scoreTone(ds.avg_score)"
               :label="__('Avg. post score')"
@@ -301,7 +339,7 @@
             </p>
             <p
               v-if="!detail.people.length"
-              class="rounded-lg border border-dashed border-outline-gray-3 px-3 py-6 text-center text-p-sm text-ink-gray-5"
+              class="rounded-xl border border-dashed border-outline-gray-3 px-3 py-6 text-center text-p-sm text-ink-gray-5"
             >
               {{ __("Nobody is on these posts yet.") }}
             </p>
@@ -317,7 +355,7 @@
                 >
                   <div class="flex min-w-0 items-center gap-2.5">
                     <Avatar
-                      size="lg"
+                      size="md"
                       :image="p.image"
                       :label="p.employee_name"
                     />
@@ -395,7 +433,9 @@
         <section
           class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
         >
-          <header class="flex flex-wrap items-start justify-between gap-2 p-4">
+          <header
+            class="flex flex-wrap items-start justify-between gap-2 px-4 py-4 md:px-4"
+          >
             <div>
               <h3 class="text-base font-semibold text-ink-gray-9">
                 {{ __("Posts ({0})", String(detail.posts.length)) }}
@@ -413,27 +453,42 @@
           <div class="overflow-x-auto">
             <table class="w-full min-w-[820px] text-left text-sm">
               <thead
-                class="border-y border-outline-gray-2 bg-surface-gray-1 text-xs text-ink-gray-5"
+                class="border-y border-outline-gray-2 bg-surface-gray-1 text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6"
               >
                 <tr>
-                  <th scope="col" class="px-4 py-2 font-medium">
+                  <th
+                    scope="col"
+                    class="h-11 px-3 font-semibold first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5"
+                  >
                     {{ __("Date") }}
                   </th>
-                  <th scope="col" class="px-4 py-2 font-medium">
+                  <th
+                    scope="col"
+                    class="h-11 px-3 font-semibold first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5"
+                  >
                     {{ __("Post") }}
                   </th>
-                  <th scope="col" class="px-4 py-2 font-medium">
+                  <th
+                    scope="col"
+                    class="h-11 px-3 font-semibold first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5"
+                  >
                     {{ __("Channel") }}
                   </th>
-                  <th scope="col" class="px-4 py-2 font-medium">
+                  <th
+                    scope="col"
+                    class="h-11 px-3 font-semibold first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5"
+                  >
                     {{ __("Team") }}
                   </th>
-                  <th scope="col" class="px-4 py-2 font-medium">
+                  <th
+                    scope="col"
+                    class="h-11 px-3 font-semibold first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5"
+                  >
                     {{ __("Score") }}
                   </th>
                   <th
                     scope="col"
-                    class="whitespace-nowrap px-4 py-2 font-medium"
+                    class="h-11 whitespace-nowrap px-3 font-semibold first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5"
                   >
                     {{ __("Timing") }}
                   </th>
@@ -443,14 +498,16 @@
                 <tr
                   v-for="p in sortedPosts"
                   :key="p.name"
-                  class="border-b border-outline-gray-1 last:border-0"
+                  class="border-b border-outline-gray-1 last:border-0 hover:bg-surface-gray-1"
                 >
                   <td
-                    class="whitespace-nowrap px-4 py-2.5 font-mono text-xs tabular-nums text-ink-gray-7"
+                    class="whitespace-nowrap px-3 py-3 first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5 font-mono text-xs tabular-nums text-ink-gray-7"
                   >
                     {{ dayjs(p.publish_on).format("ddd D MMM") }}
                   </td>
-                  <td class="max-w-[16rem] px-4 py-2.5">
+                  <td
+                    class="max-w-[16rem] px-3 py-3 first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5"
+                  >
                     <div class="truncate font-medium text-ink-gray-9">
                       {{ p.title }}
                     </div>
@@ -466,7 +523,9 @@
                       </template>
                     </div>
                   </td>
-                  <td class="whitespace-nowrap px-4 py-2.5">
+                  <td
+                    class="whitespace-nowrap px-3 py-3 first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5"
+                  >
                     <span
                       v-for="(c, i) in p.platforms"
                       :key="c"
@@ -478,7 +537,9 @@
                       </template></span
                     >
                   </td>
-                  <td class="px-4 py-2.5 text-xs text-ink-gray-6">
+                  <td
+                    class="px-3 py-3 first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5 text-xs text-ink-gray-6"
+                  >
                     <span v-if="!teamOf(p).length" class="text-ink-gray-4"
                       >—</span
                     >
@@ -492,7 +553,9 @@
                       <span class="text-ink-gray-5"> · {{ m.short }}</span>
                     </span>
                   </td>
-                  <td class="px-4 py-2.5">
+                  <td
+                    class="px-3 py-3 first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5"
+                  >
                     <div class="flex items-center gap-2">
                       <b
                         class="w-7 text-right text-sm font-semibold tabular-nums"
@@ -510,7 +573,9 @@
                       />
                     </div>
                   </td>
-                  <td class="whitespace-nowrap px-4 py-2.5">
+                  <td
+                    class="whitespace-nowrap px-3 py-3 first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5"
+                  >
                     <span
                       class="inline-flex h-6 items-center gap-1 rounded-full px-2 text-xs font-medium"
                       :class="TIMING[p.timing].class"

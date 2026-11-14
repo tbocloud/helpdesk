@@ -1,6 +1,6 @@
 <template>
   <section :aria-labelledby="headingId" class="flex flex-col gap-3">
-    <h3 :id="headingId" class="text-base-medium text-ink-gray-8">
+    <h3 :id="headingId" class="text-base font-semibold text-ink-gray-9">
       {{ __("Activity") }}
     </h3>
 
@@ -38,7 +38,7 @@
         v-for="i in 3"
         :key="i"
         aria-hidden="true"
-        class="h-4 animate-pulse rounded bg-surface-gray-2"
+        class="h-4 animate-pulse rounded bg-surface-gray-3"
       />
     </div>
     <div

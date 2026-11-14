@@ -1,10 +1,10 @@
 <template>
   <section
-    class="flex flex-col gap-3 rounded-lg border border-outline-gray-2 bg-surface-base p-4 sm:flex-row sm:items-center sm:justify-between"
+    class="flex flex-col gap-3 rounded-xl border border-outline-gray-2 bg-surface-base p-4 sm:flex-row sm:items-center sm:justify-between"
     :aria-labelledby="headingId"
   >
     <div class="flex min-w-0 flex-col gap-1">
-      <h2 :id="headingId" class="text-base-medium text-ink-gray-9">
+      <h2 :id="headingId" class="text-base font-semibold text-ink-gray-9">
         {{ __("Was this article helpful?") }}
       </h2>
       <p class="text-p-sm text-ink-gray-6">
@@ -25,7 +25,7 @@
         v-for="option in options"
         :key="option.value"
         type="button"
-        class="inline-flex h-11 items-center gap-1.5 rounded-md border px-3 sm:h-9 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4 disabled:opacity-60"
+        class="inline-flex h-11 items-center gap-1.5 rounded-[10px] border px-3 sm:h-10 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4 disabled:opacity-60"
         :class="
           _feedback === option.value
             ? 'border-brand bg-brand-soft text-brand-ink'

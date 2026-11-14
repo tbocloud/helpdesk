@@ -36,7 +36,7 @@
           :tone="proposalTone(proposal.status)"
         />
         <Dropdown :options="shareOptions">
-          <Button :label="__('Share')">
+          <Button size="md" :label="__('Share')">
             <template #prefix>
               <LucideShare2 class="size-4" aria-hidden="true" />
             </template>
@@ -44,6 +44,7 @@
         </Dropdown>
         <Button
           v-if="editable"
+          size="md"
           :label="dirty ? __('Save changes') : __('Saved')"
           :disabled="!dirty"
           :loading="saveResource.loading"
@@ -51,6 +52,7 @@
         />
         <Button
           v-else-if="isDraft && proposal.can_write"
+          size="md"
           :label="__('Reopen')"
           :tooltip="__('Change it again; mark it ready before sending')"
           :loading="readyResource.loading"
@@ -58,6 +60,7 @@
         />
         <Button
           v-else-if="proposal.can_write && proposal.is_latest"
+          size="md"
           :label="isMobileView ? __('Revise') : __('Create revision')"
           :loading="revisionResource.loading"
           @click="revisionResource.submit({ name: proposalId })"
@@ -66,6 +69,7 @@
         <Button
           v-if="editable && canSendStatus"
           variant="solid"
+          size="md"
           :label="__('Mark ready')"
           :disabled="!!proposal.share_blockers.length || dirty"
           :tooltip="readyTooltip"
@@ -79,6 +83,7 @@
         <Button
           v-else-if="proposal.can_write && canSendStatus"
           variant="solid"
+          size="md"
           :label="proposal.status === 'Draft' ? __('Send') : __('Send again')"
           :disabled="!!proposal.send_blockers.length || dirty"
           :tooltip="sendTooltip"
@@ -92,9 +97,10 @@
     </LayoutHeader>
 
     <div class="relative flex-1 overflow-auto">
-      <div class="mx-auto w-full max-w-7xl px-4 py-5 md:px-6">
+      <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
         <TaskyState
           v-if="detail.error && !proposal"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
           error
           :icon="LucideCircleAlert"
           :title="__('Couldn\'t load the document')"
@@ -111,20 +117,16 @@
 
         <div
           v-else-if="!proposal"
-          class="grid grid-cols-1 gap-4 xl:grid-cols-2"
+          class="grid grid-cols-1 gap-5 xl:grid-cols-2"
           aria-busy="true"
           :aria-label="__('Loading')"
         >
-          <div
-            class="h-96 animate-pulse rounded-xl border border-outline-gray-2 bg-surface-gray-1"
-          />
-          <div
-            class="h-96 animate-pulse rounded-xl border border-outline-gray-2 bg-surface-gray-1"
-          />
+          <div class="h-96 animate-pulse rounded-xl bg-surface-gray-3" />
+          <div class="h-96 animate-pulse rounded-xl bg-surface-gray-3" />
         </div>
 
-        <div v-else class="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          <div class="flex min-w-0 flex-col gap-4">
+        <div v-else class="grid grid-cols-1 gap-5 xl:grid-cols-2">
+          <div class="flex min-w-0 flex-col gap-5">
             <!-- why Send is off, in the ERP site's words -->
             <div
               v-if="
@@ -133,7 +135,7 @@
                 proposal.send_blockers.length
               "
               role="status"
-              class="flex items-start gap-2 rounded-lg bg-warning-soft px-3 py-2 text-p-sm text-warning"
+              class="flex items-start gap-2 rounded-xl bg-warning-soft px-4 py-3 text-p-sm text-warning"
             >
               <LucideTriangleAlert
                 class="mt-0.5 size-4 shrink-0"
@@ -149,7 +151,7 @@
             <p
               v-if="isDraft && proposal.ready_on"
               role="status"
-              class="flex items-start gap-2 rounded-lg bg-success-soft px-3 py-2 text-p-sm text-success"
+              class="flex items-start gap-2 rounded-xl bg-success-soft px-4 py-3 text-p-sm text-success"
             >
               <LucideCircleCheck
                 class="mt-0.5 size-4 shrink-0"
@@ -163,7 +165,7 @@
             </p>
             <p
               v-if="!isDraft"
-              class="rounded-lg border border-outline-gray-2 bg-surface-gray-1 px-3 py-2 text-p-sm text-ink-gray-7"
+              class="rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-3 text-p-sm text-ink-gray-7"
             >
               {{
                 proposal.is_latest
@@ -230,7 +232,7 @@
               <p
                 v-else-if="options?.enabled && options?.can_edit_templates"
                 role="status"
-                class="flex items-start gap-2 rounded-lg bg-warning-soft px-3 py-2 text-p-sm text-warning"
+                class="flex items-start gap-2 rounded-xl bg-warning-soft px-3.5 py-2.5 text-p-sm text-warning"
               >
                 <LucideTriangleAlert
                   class="mt-0.5 size-4 shrink-0"
@@ -301,12 +303,12 @@
               class="rounded-xl border border-outline-gray-2 bg-surface-base"
             >
               <summary
-                class="flex min-h-[44px] cursor-pointer items-center px-4 text-base-medium text-ink-gray-9"
+                class="flex min-h-[56px] cursor-pointer items-center rounded-xl px-4 text-base font-semibold text-ink-gray-9"
               >
                 {{ __("Client, requirements and scoping") }}
               </summary>
               <div
-                class="flex flex-col gap-5 border-t border-outline-gray-1 p-4"
+                class="flex flex-col gap-5 border-t border-outline-gray-2 p-5"
               >
                 <ClientProfileForm
                   v-model="form.client_profile"
@@ -422,11 +424,11 @@
 
             <section
               v-if="proposal.revisions.length > 1"
-              class="rounded-xl border border-outline-gray-2 bg-surface-base"
+              class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
               :aria-label="__('Versions')"
             >
               <h2
-                class="border-b border-outline-gray-1 px-4 py-3 text-base-medium text-ink-gray-9"
+                class="border-b border-outline-gray-2 px-4 py-3 text-base font-semibold text-ink-gray-9"
               >
                 {{ __("Versions") }}
               </h2>
@@ -442,7 +444,7 @@
                       params: { leadId, proposalId: r.name },
                     }"
                     :aria-current="r.name === proposalId ? 'page' : undefined"
-                    class="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-highlight"
+                    class="flex items-center gap-3 px-5 py-3.5 hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-highlight"
                     :class="r.name === proposalId ? 'bg-brand-soft' : ''"
                   >
                     <span class="text-base text-ink-gray-8 tabular-nums">{{
@@ -464,7 +466,7 @@
 
           <div class="min-w-0">
             <div class="xl:sticky xl:top-0">
-              <h2 class="mb-2 text-sm font-medium text-ink-gray-6">
+              <h2 class="mb-2 text-[13px] font-medium text-ink-gray-6">
                 {{ __("What the client sees") }}
               </h2>
               <ProposalPreview
@@ -495,7 +497,7 @@
       @saved="onPriced"
     />
 
-    <Dialog v-model:open="showSend" :title="__('Send to the client')" size="lg">
+    <Dialog v-model:open="showSend" :title="__('Send to the client')" size="md">
       <form
         :id="sendFormId"
         class="flex flex-col gap-4"

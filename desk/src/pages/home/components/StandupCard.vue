@@ -1,15 +1,16 @@
 <template>
   <!-- the morning's one ask: check the filled-in stand-up and submit it -->
   <section
-    class="flex flex-wrap items-center gap-3 rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-3"
+    class="flex flex-wrap items-center gap-4 rounded-xl border border-outline-gray-2 bg-surface-base p-4"
     :aria-label="__('Your stand-up')"
   >
-    <LucideMessagesSquare
-      class="size-5 shrink-0 text-ink-gray-5"
-      aria-hidden="true"
-    />
+    <span
+      class="grid size-9 shrink-0 place-items-center rounded-[10px] bg-brand-soft text-brand-ink"
+    >
+      <LucideMessagesSquare class="size-[18px]" aria-hidden="true" />
+    </span>
     <div class="min-w-0 flex-1">
-      <p class="text-base-medium text-ink-gray-9">
+      <p class="text-base font-semibold text-ink-gray-9">
         {{ __("Your stand-up is ready") }}
       </p>
       <p class="text-p-sm text-ink-gray-6">
@@ -23,7 +24,8 @@
     </div>
     <Button
       variant="solid"
-      class="!h-11 max-sm:w-full"
+      size="md"
+      class="max-sm:w-full"
       :label="__('Open stand-up')"
       @click="router.push({ name: 'Standup' })"
     />

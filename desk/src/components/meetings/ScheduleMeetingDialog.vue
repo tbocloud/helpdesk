@@ -3,7 +3,7 @@
   <Dialog
     v-model:open="open"
     :title="started ? __('Teams meeting started') : __('Teams meeting')"
-    size="lg"
+    size="md"
     :dismissible="false"
   >
     <!-- Meet now: the link is ready -->
@@ -16,7 +16,7 @@
         }}
       </p>
       <div
-        class="flex items-center gap-2 rounded-md border border-outline-gray-2 bg-surface-gray-1 px-3 py-2"
+        class="flex items-center gap-2 rounded-xl border border-outline-gray-2 bg-surface-gray-1 px-3 py-2"
       >
         <LucideVideo
           class="size-4 shrink-0 text-ink-gray-5"
@@ -190,7 +190,7 @@
       <div
         v-if="errorMessage"
         role="alert"
-        class="flex items-start gap-2 rounded-md bg-danger-soft px-3 py-2 text-p-sm text-danger"
+        class="flex items-start gap-2 rounded-xl bg-danger-soft px-3 py-2 text-p-sm text-danger"
       >
         <LucideCircleAlert class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
         <span>{{ errorMessage }}</span>

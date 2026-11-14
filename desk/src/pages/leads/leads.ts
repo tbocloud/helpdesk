@@ -694,6 +694,55 @@ export const STAGE_PATH: { stages: string[]; label?: string }[] = [
   { stages: ["Closed – Won"] },
 ];
 
+// full class strings, so Tailwind finds them
+const STAGE_PILL: Record<string, string> = {
+  new: "bg-info-soft text-info",
+  contacted: "bg-warning-soft text-warning",
+  meeting: "bg-success-soft text-success",
+  proposal: "bg-violet-soft text-violet",
+  won: "bg-success-soft text-success",
+  lost: "bg-surface-gray-3 text-ink-gray-7",
+  warning: "bg-warning-soft text-warning",
+  danger: "bg-danger-soft text-danger",
+  neutral: "bg-surface-gray-3 text-ink-gray-7",
+};
+
+/** The stage pill's colours, from the Leads redesign (ui-guidelines §8): blue for a new
+ * lead, amber once contacted, green through the meetings and for won, violet once a
+ * proposal is out, gray for lost; a call stage keeps its own tone. Always with the
+ * stage's name beside it. */
+export function stagePillClass(
+  options: LeadOptions | undefined,
+  stage?: string
+) {
+  const found = options?.stages.find((s) => s.name === stage);
+  const type = (found?.type || "").toLowerCase();
+  if (type === "won") return STAGE_PILL.won;
+  if (type === "lost") return STAGE_PILL.lost;
+  if (stage && stage in CALL_STAGES)
+    return STAGE_PILL[stageTone(options, stage)];
+  const step = STAGE_PATH.findIndex((p) => p.stages.includes(stage || ""));
+  if (step === 0) return STAGE_PILL.new;
+  if (step === 1) return STAGE_PILL.contacted;
+  if (step === 2) return STAGE_PILL.meeting;
+  if (step === 3 || step === 4) return STAGE_PILL.proposal;
+  if (step === 5) return STAGE_PILL.won;
+  return STAGE_PILL.neutral;
+}
+
+/** A lead score's band, as the redesign draws it: hot from 70, warm from 40, else cold. */
+export function scoreBand(score: number) {
+  if (score >= 70)
+    return { label: __("Hot"), fill: "bg-hot-fill", ink: "text-hot" };
+  if (score >= 40)
+    return { label: __("Warm"), fill: "bg-warm-fill", ink: "text-warning" };
+  return {
+    label: __("Cold"),
+    fill: "bg-surface-gray-6",
+    ink: "text-ink-gray-6",
+  };
+}
+
 /** "5m", "3h", "2d": how long ago, compactly, for a chip. */
 export function shortAgo(when?: string | null) {
   if (!when) return "";

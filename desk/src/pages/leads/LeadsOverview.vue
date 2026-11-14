@@ -1,46 +1,63 @@
 <template>
-  <div class="flex flex-col gap-5">
+  <div class="flex flex-col gap-4">
     <!-- the period and whose leads: kept in the URL, so a view can be shared -->
     <div
-      class="flex flex-wrap items-end gap-3"
+      class="flex flex-col gap-2 rounded-xl border border-outline-gray-2 bg-surface-base p-4"
       role="group"
       :aria-label="__('Period and owner')"
     >
-      <div class="overflow-x-auto">
-        <TabButtons
-          :model-value="period"
-          size="md"
-          :aria-label="__('Period')"
-          :options="PERIODS"
-          @update:model-value="setPeriod($event as OverviewPeriod)"
-        />
+      <div class="flex flex-wrap items-end gap-3">
+        <div class="overflow-x-auto">
+          <TabButtons
+            :model-value="period"
+            size="md"
+            :aria-label="__('Period')"
+            :options="PERIODS"
+            @update:model-value="setPeriod($event as OverviewPeriod)"
+          />
+        </div>
+        <template v-if="period === 'custom'">
+          <FormControl
+            v-model="custom.from"
+            type="date"
+            class="w-40"
+            :label="__('From')"
+          />
+          <FormControl
+            v-model="custom.to"
+            type="date"
+            class="w-40"
+            :label="__('To')"
+          />
+        </template>
+        <label
+          v-if="data && data.scope !== 'own'"
+          class="flex items-center gap-2 text-[13px] text-ink-gray-6"
+        >
+          {{ data.scope === "team" ? __("Team member") : __("Owner") }}
+          <FormControl
+            v-model="owner"
+            type="select"
+            class="w-48"
+            :options="ownerOptions"
+          />
+        </label>
       </div>
-      <template v-if="period === 'custom'">
-        <FormControl
-          v-model="custom.from"
-          type="date"
-          class="w-40"
-          :label="__('From')"
-        />
-        <FormControl
-          v-model="custom.to"
-          type="date"
-          class="w-40"
-          :label="__('To')"
-        />
-      </template>
-      <FormControl
-        v-if="data && data.scope !== 'own'"
-        v-model="owner"
-        type="select"
-        class="w-full sm:w-56"
-        :label="data.scope === 'team' ? __('Team member') : __('Owner')"
-        :options="ownerOptions"
-      />
+      <p v-if="data" class="text-right text-[12px] text-ink-gray-6">
+        <strong class="font-semibold text-ink-gray-9">{{
+          periodParts.range
+        }}</strong>
+        · {{ periodParts.whose }} ·
+        {{ __("tap any number to open those leads") }}
+        <span v-if="overviewPage.loading" class="sr-only" aria-live="polite">{{
+          __("Updating")
+        }}</span>
+      </p>
     </div>
 
     <TaskyState
       v-if="period === 'custom' && !customReady"
+      class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
       :icon="LucideCalendarRange"
       :title="__('Pick both dates')"
       :message="__('Choose a from and a to date to see that period.')"
@@ -48,6 +65,7 @@
 
     <TaskyState
       v-else-if="overviewPage.error && !data"
+      class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
       error
       :icon="LucideCircleAlert"
       :title="__('Couldn\'t load the overview')"
@@ -68,11 +86,11 @@
       aria-busy="true"
       :aria-label="__('Loading')"
     >
-      <div class="h-24 animate-pulse rounded-xl bg-surface-gray-2" />
-      <div class="h-20 animate-pulse rounded-xl bg-surface-gray-2" />
+      <div class="h-[130px] animate-pulse rounded-xl bg-surface-gray-3" />
+      <div class="h-[130px] animate-pulse rounded-xl bg-surface-gray-3" />
       <div class="grid gap-5 lg:grid-cols-[3fr_2fr]">
-        <div class="h-80 animate-pulse rounded-xl bg-surface-gray-2" />
-        <div class="h-80 animate-pulse rounded-xl bg-surface-gray-2" />
+        <div class="h-80 animate-pulse rounded-xl bg-surface-gray-3" />
+        <div class="h-80 animate-pulse rounded-xl bg-surface-gray-3" />
       </div>
     </div>
 
@@ -97,244 +115,345 @@
         </p>
         <Button :label="__('Try again')" @click="refresh()" />
       </div>
-      <p class="text-p-sm text-ink-gray-6">
-        {{ periodText }}
-        <span v-if="overviewPage.loading" class="sr-only" aria-live="polite">{{
-          __("Updating")
-        }}</span>
-      </p>
-
-      <!-- what happened in the period, and what needs a person now: one bordered row each -->
-      <section
-        class="cells grid-cols-2 sm:grid-cols-3 lg:grid-cols-5"
-        :aria-label="__('This period')"
-      >
-        <router-link
-          v-for="cell in periodCells"
-          :key="cell.key"
-          :to="cell.to"
-          class="cell"
+      <!-- how far the period's new leads got, step by step; each number opens its leads -->
+      <section class="panel p-4" :aria-labelledby="ids.progress">
+        <header
+          class="mb-4 flex flex-wrap items-baseline justify-between gap-2"
         >
-          <span class="text-sm text-ink-gray-6">{{ cell.label }}</span>
-          <span
-            class="mt-1.5 font-mono text-2xl tabular-nums"
-            :class="cell.tone ? INK[cell.tone] : 'text-ink-gray-9'"
-            >{{ cell.value }}</span
+          <h2
+            :id="ids.progress"
+            class="text-base font-semibold text-ink-gray-9"
           >
-          <span v-if="cell.sub" class="mt-0.5 text-xs text-ink-gray-6">{{
-            cell.sub
+            {{ __("Pipeline progress") }}
+          </h2>
+          <span class="text-[12px] text-ink-gray-6">{{
+            __("From new lead to won")
           }}</span>
-        </router-link>
-      </section>
-
-      <section
-        class="cells grid-cols-2 lg:grid-cols-4"
-        :aria-label="__('Needs attention')"
-      >
-        <router-link
-          v-for="cell in attentionCells"
-          :key="cell.key"
-          :to="cell.to"
-          class="cell"
-        >
-          <span class="text-sm text-ink-gray-6">{{ cell.label }}</span>
-          <span
-            class="mt-1.5 font-mono text-2xl tabular-nums"
-            :class="cell.tone ? INK[cell.tone] : 'text-ink-gray-9'"
-            >{{ cell.value }}</span
-          >
-          <span v-if="cell.sub" class="mt-0.5 text-xs text-ink-gray-6">{{
-            cell.sub
-          }}</span>
-        </router-link>
-      </section>
-
-      <!-- AI runs leads: the day's plan, picked from Call today, follow-ups and hot leads -->
-      <section v-if="ai?.enabled" class="panel" :aria-labelledby="ids.plan">
-        <header class="panel-head">
-          <div class="flex min-w-0 flex-col">
-            <h2 :id="ids.plan" class="text-base-medium text-ink-gray-9">
-              {{
-                owner && data.scope !== "own"
-                  ? __("Their plan for today")
-                  : __("Your plan for today")
-              }}
-            </h2>
-            <span class="text-xs text-ink-gray-6">{{
-              __(
-                "Follow-ups due, Call today and hot leads, each with the AI's next step"
-              )
-            }}</span>
-          </div>
-          <nav
-            class="flex flex-wrap gap-x-3 gap-y-1 text-sm"
-            :aria-label="__('What the AI sees')"
-          >
-            <router-link
-              v-for="count in AI_COUNTS"
-              :key="count.metric"
-              :to="list(count.metric, false)"
-              class="num-link font-sans"
-              >{{ count.label(ai[count.metric] ?? 0) }}</router-link
-            >
-          </nav>
         </header>
-        <p v-if="!ai.ai_ready" class="px-4 pt-3 text-p-sm text-ink-gray-6">
-          {{
-            __(
-              "The AI isn't set up on the ERP site, so there are no new next steps. Ask an admin to add a provider in TBO Smart Settings."
-            )
-          }}
-        </p>
-        <p
-          v-if="!ai.plan?.rows.length"
-          class="px-4 py-4 text-p-sm text-ink-gray-6"
+        <ol
+          class="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3 lg:grid-cols-5"
         >
-          {{ __("Nothing due today: no follow-ups and no hot leads waiting.") }}
-        </p>
-        <ol v-else role="list" class="flex flex-col py-1">
-          <li v-for="row in ai.plan.rows" :key="row.name">
+          <li v-for="(step, index) in progress" :key="step.key">
             <router-link
-              :to="{ name: 'Lead', params: { leadId: row.name } }"
-              class="row-link flex flex-col gap-0.5 px-4 py-2.5 sm:flex-row sm:items-center sm:gap-4"
+              :to="step.to"
+              class="group flex flex-col gap-1.5 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
             >
-              <span class="flex min-w-0 flex-col sm:w-64 sm:shrink-0">
-                <span class="truncate text-sm text-ink-gray-9">{{
-                  row.lead_name || row.name
-                }}</span>
-                <span class="truncate text-xs text-ink-gray-6">{{
-                  [row.why, row.tbo_stage].filter(Boolean).join(" · ")
-                }}</span>
+              <span
+                class="flex items-center gap-2 text-[12.5px] text-ink-gray-7"
+              >
+                <span
+                  class="grid size-5 shrink-0 place-items-center rounded-full bg-surface-gray-3 text-[10.5px] font-semibold tabular-nums text-ink-gray-7"
+                  aria-hidden="true"
+                  >{{ index + 1 }}</span
+                >
+                {{ step.label }}
               </span>
               <span
-                class="min-w-0 flex-1 text-sm"
-                :class="row.next_action ? 'text-ink-gray-8' : 'text-ink-gray-5'"
+                class="text-[26px] font-bold leading-tight tabular-nums text-ink-gray-9 group-hover:text-brand-ink"
+                >{{ step.value }}</span
               >
-                {{ row.next_action || __("No next step from the AI yet") }}
+              <span
+                class="block h-1.5 overflow-hidden rounded-full bg-surface-gray-3"
+                aria-hidden="true"
+              >
                 <span
-                  v-if="row.next_action && row.next_due"
-                  class="text-xs tabular-nums text-ink-gray-6"
-                >
-                  · {{ dayjs(row.next_due).format("D MMM") }}</span
-                >
+                  class="block h-full rounded-full"
+                  :class="step.key === 'won' ? 'bg-success' : 'bg-brand'"
+                  :style="{ width: `${step.bar}%` }"
+                />
               </span>
+              <span class="text-[12px] tabular-nums text-ink-gray-6">{{
+                step.note
+              }}</span>
             </router-link>
           </li>
         </ol>
       </section>
 
-      <div class="grid gap-5 lg:grid-cols-[3fr_2fr]">
-        <!-- the pipeline now, stage by stage -->
-        <section class="panel" :aria-labelledby="ids.pipeline">
-          <header class="panel-head">
-            <h2 :id="ids.pipeline" class="text-base-medium text-ink-gray-9">
-              {{ __("Pipeline now") }}
-            </h2>
-            <span class="font-mono text-sm tabular-nums text-ink-gray-7">
-              {{ __("{0} open", String(t.open)) }}
-              <template v-if="t.open_value">
-                · {{ amount(t.open_value) }}</template
-              >
-            </span>
-          </header>
-          <ul role="list" class="flex flex-col py-1">
-            <li v-for="row in pipeline" :key="row.stage">
-              <router-link
-                :to="stageLink(row.stage)"
-                class="row-link grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 px-4 py-2 sm:grid-cols-[12rem_minmax(0,1fr)_auto]"
-              >
-                <span class="truncate text-sm text-ink-gray-8">{{
-                  row.stage
-                }}</span>
-                <span
-                  class="order-last col-span-2 block h-1.5 overflow-hidden rounded-full bg-surface-gray-2 sm:order-none sm:col-span-1"
-                  aria-hidden="true"
-                >
-                  <span
-                    class="block h-full rounded-full bg-surface-gray-7"
-                    :style="{ width: `${share(row.count, pipelineMax)}%` }"
-                  />
-                </span>
-                <span
-                  class="text-right font-mono text-sm tabular-nums text-ink-gray-9"
-                >
-                  {{ row.count }}
-                  <span
-                    v-if="row.value"
-                    class="block text-xs text-ink-gray-6 sm:ml-2 sm:inline"
-                    >{{ amount(row.value) }}</span
-                  >
-                </span>
-              </router-link>
-            </li>
-          </ul>
-        </section>
+      <!-- what needs a person now, each with the next move -->
+      <section class="flex flex-col gap-3" :aria-labelledby="ids.attention">
+        <h2 :id="ids.attention" class="text-base font-semibold text-ink-gray-9">
+          {{ __("Needs attention") }}
+        </h2>
+        <div class="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4">
+          <StatTile
+            v-for="cell in attentionCells"
+            :key="cell.key"
+            :to="cell.to"
+            :label="cell.label"
+            :value="cell.value"
+            :icon="cell.icon"
+            :icon-tone="cell.iconTone"
+            :value-tone="cell.tone || 'neutral'"
+          >
+            <span
+              class="mt-1 text-[12px] font-semibold"
+              :class="cell.actionInk"
+              >{{ cell.action }}</span
+            >
+          </StatTile>
+        </div>
+      </section>
 
-        <div class="flex min-w-0 flex-col gap-5">
-          <!-- how far this period's new leads got -->
-          <section class="panel" :aria-labelledby="ids.funnel">
-            <header class="panel-head">
-              <h2 :id="ids.funnel" class="text-base-medium text-ink-gray-9">
-                {{ __("Funnel") }}
-              </h2>
-              <span class="text-sm tabular-nums text-ink-gray-7">
-                {{ __("{0}% won", String(t.conversion_rate)) }}
-              </span>
-            </header>
-            <p v-if="!t.new" class="px-4 py-4 text-p-sm text-ink-gray-6">
-              {{ __("No new leads in this period yet.") }}
-            </p>
-            <ol v-else class="flex flex-col gap-2 px-4 py-3">
-              <li
-                v-for="step in data.funnel"
-                :key="step.step"
-                class="flex flex-col gap-1"
-              >
-                <div class="flex items-baseline justify-between gap-3 text-sm">
-                  <span class="text-ink-gray-8">{{
-                    FUNNEL_LABELS[step.step]
-                  }}</span>
-                  <span class="font-mono tabular-nums text-ink-gray-9">
-                    {{ step.count }}
-                    <span class="text-xs text-ink-gray-6"
-                      >{{ step.rate }}%</span
-                    >
-                  </span>
-                </div>
+      <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div class="flex min-w-0 flex-col gap-4">
+          <!-- AI runs leads: the day's plan, picked from Call today, follow-ups and hot leads -->
+          <section v-if="ai?.enabled" class="panel" :aria-labelledby="ids.plan">
+            <header class="flex flex-col gap-3 px-4 pb-3 pt-4">
+              <div class="flex items-start gap-3">
                 <span
-                  class="block h-1.5 overflow-hidden rounded-full bg-surface-gray-2"
+                  class="grid size-9 shrink-0 place-items-center rounded-lg bg-brand-soft text-brand-ink"
                   aria-hidden="true"
                 >
-                  <span
-                    class="block h-full rounded-full"
-                    :class="
-                      step.step === 'won' ? 'bg-success' : 'bg-surface-gray-7'
-                    "
-                    :style="{ width: `${Math.min(step.rate, 100)}%` }"
-                  />
+                  <LucideSparkles class="size-4" />
                 </span>
-              </li>
-            </ol>
-            <p class="px-4 pb-3 text-p-xs text-ink-gray-6">
+                <div class="flex min-w-0 flex-col gap-0.5">
+                  <h2
+                    :id="ids.plan"
+                    class="text-base font-semibold text-ink-gray-9"
+                  >
+                    {{
+                      owner && data.scope !== "own"
+                        ? __("Their plan for today")
+                        : __("Your plan for today")
+                    }}
+                  </h2>
+                  <span class="text-[12px] text-ink-gray-6">{{
+                    __(
+                      "Follow-ups due, Call today and hot leads, each with the AI's next step"
+                    )
+                  }}</span>
+                </div>
+              </div>
+              <nav
+                class="flex flex-wrap gap-2"
+                :aria-label="__('What the AI sees')"
+              >
+                <router-link
+                  v-for="count in AI_COUNTS"
+                  :key="count.metric"
+                  :to="list(count.metric, false)"
+                  class="inline-flex h-7 items-center rounded-full px-3 text-[12px] font-semibold tabular-nums transition-colors hover:brightness-95"
+                  :class="count.tone"
+                  >{{ count.label(ai[count.metric] ?? 0) }}</router-link
+                >
+              </nav>
+            </header>
+            <p
+              v-if="!ai.ai_ready"
+              class="border-t border-outline-gray-1 px-4 py-3 text-p-sm text-ink-gray-6"
+            >
               {{
                 __(
-                  "Win rate {0}%: won of the leads closed in this period.",
-                  String(t.win_rate)
+                  "The AI isn't set up on the ERP site, so there are no new next steps. Ask an admin to add a provider in TBO Smart Settings."
                 )
               }}
             </p>
+            <p
+              v-if="!ai.plan?.rows.length"
+              class="border-t border-outline-gray-1 px-4 py-4 text-p-sm text-ink-gray-6"
+            >
+              {{
+                __("Nothing due today: no follow-ups and no hot leads waiting.")
+              }}
+            </p>
+            <ol
+              v-else
+              role="list"
+              class="divide-y divide-outline-gray-1 border-t border-outline-gray-1"
+            >
+              <li
+                v-for="row in ai.plan.rows"
+                :key="row.name"
+                class="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-start"
+              >
+                <div class="flex min-w-0 flex-1 items-start gap-3">
+                  <PersonAvatar
+                    :name="row.lead_name || row.name"
+                    size="lg"
+                    neutral
+                  />
+                  <div class="flex min-w-0 flex-col items-start gap-1.5">
+                    <router-link
+                      :to="{ name: 'Lead', params: { leadId: row.name } }"
+                      class="truncate rounded text-[13px] font-semibold text-ink-gray-9 hover:text-brand-ink"
+                      >{{ row.lead_name || row.name }}</router-link
+                    >
+                    <span
+                      v-if="row.why"
+                      class="inline-flex h-[22px] items-center rounded-md px-2 text-[11px] font-semibold"
+                      :class="
+                        /overdue/i.test(row.why)
+                          ? 'bg-danger-soft text-danger'
+                          : 'bg-surface-gray-3 text-ink-gray-7'
+                      "
+                      >{{ row.why }}</span
+                    >
+                    <span
+                      v-if="row.tbo_stage"
+                      class="inline-flex h-[22px] items-center rounded-md px-2 text-[11px] font-semibold"
+                      :class="stagePillClass(leadOptions.data, row.tbo_stage)"
+                      >{{ stageLabel(leadOptions.data, row.tbo_stage) }}</span
+                    >
+                    <Button
+                      variant="solid"
+                      :label="__('Open')"
+                      :route="{ name: 'Lead', params: { leadId: row.name } }"
+                      class="mt-1"
+                    >
+                      <template #prefix>
+                        <LucidePhone class="size-3.5" aria-hidden="true" />
+                      </template>
+                    </Button>
+                  </div>
+                </div>
+                <div
+                  class="flex min-w-0 gap-2 rounded-lg border border-outline-gray-2 bg-surface-gray-1 px-3 py-2.5 sm:w-[46%] sm:shrink-0"
+                >
+                  <LucideSparkles
+                    class="mt-0.5 size-3.5 shrink-0 text-ink-gray-6"
+                    aria-hidden="true"
+                  />
+                  <div class="flex min-w-0 flex-col gap-0.5">
+                    <span
+                      class="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-ink-gray-6"
+                      >{{ __("Next step") }}</span
+                    >
+                    <span
+                      class="text-[12.5px]"
+                      :class="
+                        row.next_action ? 'text-ink-gray-8' : 'text-ink-gray-6'
+                      "
+                    >
+                      {{
+                        row.next_action || __("No next step from the AI yet")
+                      }}
+                      <span
+                        v-if="row.next_action && row.next_due"
+                        class="tabular-nums text-ink-gray-6"
+                      >
+                        · {{ dayjs(row.next_due).format("D MMM") }}</span
+                      >
+                    </span>
+                  </div>
+                </div>
+              </li>
+            </ol>
+          </section>
+          <!-- the pipeline now, stage by stage: every open lead where it sits -->
+          <section class="panel" :aria-labelledby="ids.pipeline">
+            <header class="panel-head">
+              <h2
+                :id="ids.pipeline"
+                class="text-base font-semibold text-ink-gray-9"
+              >
+                {{ __("Pipeline by stage") }}
+              </h2>
+              <span class="font-mono text-sm tabular-nums text-ink-gray-7">
+                {{ __("{0} open", String(t.open)) }}
+                <template v-if="t.open_value">
+                  · {{ amount(t.open_value) }}</template
+                >
+              </span>
+            </header>
+            <ul role="list" class="flex flex-col py-1">
+              <li v-for="row in pipeline" :key="row.stage">
+                <router-link
+                  :to="stageLink(row.stage)"
+                  class="row-link grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 px-5 py-2 sm:grid-cols-[12rem_minmax(0,1fr)_auto]"
+                >
+                  <span class="truncate text-sm text-ink-gray-8">{{
+                    row.stage
+                  }}</span>
+                  <span
+                    class="order-last col-span-2 block h-1.5 overflow-hidden rounded-full bg-surface-gray-2 sm:order-none sm:col-span-1"
+                    aria-hidden="true"
+                  >
+                    <span
+                      class="block h-full rounded-full bg-surface-gray-7"
+                      :style="{ width: `${share(row.count, pipelineMax)}%` }"
+                    />
+                  </span>
+                  <span
+                    class="text-right font-mono text-sm tabular-nums text-ink-gray-9"
+                  >
+                    {{ row.count }}
+                    <span
+                      v-if="row.value"
+                      class="block text-xs text-ink-gray-6 sm:ml-2 sm:inline"
+                      >{{ amount(row.value) }}</span
+                    >
+                  </span>
+                </router-link>
+              </li>
+            </ul>
+          </section>
+        </div>
+
+        <div class="flex min-w-0 flex-col gap-4">
+          <!-- who took the period's new leads, the strip the lists show above them -->
+          <LeadIntakeStrip
+            v-if="intake?.available"
+            :intake="intake"
+            people-only
+          />
+
+          <!-- the pipeline in two numbers, and the way to it -->
+          <section
+            class="panel flex flex-col gap-3 p-4"
+            :aria-labelledby="ids.pipelineNow"
+          >
+            <h2
+              :id="ids.pipelineNow"
+              class="text-base font-semibold text-ink-gray-9"
+            >
+              {{ __("Pipeline now") }}
+            </h2>
+            <div class="grid grid-cols-2 gap-2.5">
+              <router-link
+                :to="list('open', false)"
+                class="flex flex-col gap-1 rounded-lg bg-surface-gray-2 px-3 py-2.5 transition-colors hover:bg-surface-gray-3"
+              >
+                <span class="text-[12px] text-ink-gray-6">{{
+                  __("Open leads")
+                }}</span>
+                <span
+                  class="text-[22px] font-bold tabular-nums text-ink-gray-9"
+                  >{{ t.open.toLocaleString() }}</span
+                >
+              </router-link>
+              <div
+                class="flex flex-col gap-1 rounded-lg bg-surface-gray-2 px-3 py-2.5"
+                :title="__('Won of the leads closed in this period')"
+              >
+                <span class="text-[12px] text-ink-gray-6">{{
+                  __("Win rate")
+                }}</span>
+                <span class="text-[22px] font-bold tabular-nums text-ink-gray-9"
+                  >{{ t.win_rate }}%</span
+                >
+              </div>
+            </div>
+            <a
+              :href="`#${ids.pipeline}`"
+              class="text-[12px] font-semibold text-brand-ink hover:text-brand-ink-hover"
+              >{{ __("Every stage") }} <span aria-hidden="true">↓</span></a
+            >
           </section>
 
           <!-- why leads were lost -->
           <section class="panel" :aria-labelledby="ids.lost">
             <header class="panel-head">
-              <h2 :id="ids.lost" class="text-base-medium text-ink-gray-9">
+              <h2
+                :id="ids.lost"
+                class="text-base font-semibold text-ink-gray-9"
+              >
                 {{ __("Why leads were lost") }}
               </h2>
             </header>
             <p
               v-if="!data.lost_reasons.length"
-              class="px-4 py-4 text-p-sm text-ink-gray-6"
+              class="px-4 py-3 text-p-sm text-ink-gray-6"
             >
               {{ __("No leads lost in this period.") }}
             </p>
@@ -342,7 +461,7 @@
               <li
                 v-for="r in data.lost_reasons.slice(0, 5)"
                 :key="r.reason"
-                class="flex items-center justify-between gap-3 px-4 py-1.5 text-sm"
+                class="flex items-center justify-between gap-3 px-5 py-1.5 text-sm"
               >
                 <span class="truncate text-ink-gray-8">{{ r.reason }}</span>
                 <span class="font-mono tabular-nums text-ink-gray-9">{{
@@ -373,7 +492,7 @@
         :aria-labelledby="ids.hot"
       >
         <header class="panel-head">
-          <h2 :id="ids.hot" class="text-base-medium text-ink-gray-9">
+          <h2 :id="ids.hot" class="text-base font-semibold text-ink-gray-9">
             {{ __("Hot leads") }}
           </h2>
           <router-link
@@ -391,7 +510,7 @@
           >
             <router-link
               :to="{ name: 'Lead', params: { leadId: lead.name } }"
-              class="row-link flex items-center gap-3 px-4 py-2.5"
+              class="row-link flex items-center gap-3 px-5 py-2.5"
             >
               <span class="flex min-w-0 flex-1 flex-col">
                 <span class="truncate text-sm text-ink-gray-9">{{
@@ -423,30 +542,30 @@
         :aria-labelledby="ids.owners"
       >
         <header class="panel-head">
-          <h2 :id="ids.owners" class="text-base-medium text-ink-gray-9">
+          <h2 :id="ids.owners" class="text-base font-semibold text-ink-gray-9">
             {{ __("By owner") }}
           </h2>
         </header>
         <p
           v-if="!data.by_owner.length"
-          class="px-4 py-4 text-p-sm text-ink-gray-6"
+          class="px-4 py-3 text-p-sm text-ink-gray-6"
         >
           {{ __("Nobody has leads in this period yet.") }}
         </p>
         <div v-else class="overflow-x-auto">
-          <table class="w-full min-w-[36rem] text-sm">
+          <table class="w-full min-w-[36rem] text-[13px]">
             <thead>
               <tr
-                class="bg-surface-gray-1 text-left text-xs font-medium text-ink-gray-6"
+                class="h-11 border-b border-outline-gray-2 bg-surface-gray-1 text-left text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6"
               >
-                <th scope="col" class="px-4 py-2 font-medium">
+                <th scope="col" class="pl-4 pr-3 md:pl-4">
                   {{ __("Owner") }}
                 </th>
                 <th
                   v-for="col in OWNER_COLUMNS"
                   :key="col.key"
                   scope="col"
-                  class="px-3 py-2 text-right font-medium"
+                  class="px-3 text-right last:pr-4 md:last:pr-5"
                 >
                   {{ col.label }}
                 </th>
@@ -456,18 +575,21 @@
               <tr
                 v-for="row in data.by_owner"
                 :key="row.user"
-                class="border-t border-outline-gray-1"
+                class="border-b border-outline-gray-1 last:border-b-0 hover:bg-surface-gray-1"
               >
                 <th
                   scope="row"
-                  class="max-w-[14rem] truncate px-4 py-2 text-left font-normal text-ink-gray-9"
+                  class="max-w-[16rem] py-3 pl-4 pr-3 text-left font-medium text-ink-gray-9 md:pl-4"
                 >
-                  {{ row.full_name }}
+                  <span class="flex min-w-0 items-center gap-2.5">
+                    <PersonAvatar :name="row.full_name" size="md" />
+                    <span class="truncate">{{ row.full_name }}</span>
+                  </span>
                 </th>
                 <td
                   v-for="col in OWNER_COLUMNS"
                   :key="col.key"
-                  class="px-3 py-2 text-right"
+                  class="px-3 py-3 text-right last:pr-4 md:last:pr-5"
                 >
                   <router-link
                     :to="ownerLink(row.user, col.metric)"
@@ -492,7 +614,7 @@
           <header class="panel-head">
             <h2
               :id="`${ids.prefix}-${block.key}`"
-              class="text-base-medium text-ink-gray-9"
+              class="text-base font-semibold text-ink-gray-9"
             >
               {{ block.title }}
             </h2>
@@ -502,7 +624,7 @@
           </header>
           <p
             v-if="!data[block.key].length"
-            class="px-4 py-4 text-p-sm text-ink-gray-6"
+            class="px-4 py-3 text-p-sm text-ink-gray-6"
           >
             {{ __("No leads to group yet.") }}
           </p>
@@ -510,7 +632,7 @@
             <li
               v-for="row in data[block.key]"
               :key="row.value || '-'"
-              class="flex items-center gap-3 px-4 py-1.5 text-sm"
+              class="flex items-center gap-3 px-5 py-1.5 text-sm"
             >
               <span
                 class="min-w-0 flex-1 truncate"
@@ -569,7 +691,9 @@
 
 <script setup lang="ts">
 import { money } from "@/components/invoicing/invoices";
-import { INK, type Tone } from "@/components/tone";
+import PersonAvatar from "@/components/PersonAvatar.vue";
+import StatTile from "@/components/StatTile.vue";
+import type { Tone } from "@/components/tone";
 import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
@@ -580,12 +704,20 @@ import {
   FormControl,
   TabButtons,
 } from "frappe-ui";
-import { computed, reactive, useId, watch } from "vue";
+import { computed, reactive, useId, watch, type Component } from "vue";
 import { useRoute, useRouter, type RouteLocationRaw } from "vue-router";
 import LucideCalendarRange from "~icons/lucide/calendar-range";
+import LucideAlarmClock from "~icons/lucide/alarm-clock";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
+import LucideFlame from "~icons/lucide/flame";
+import LucideMoon from "~icons/lucide/moon";
+import LucidePhone from "~icons/lucide/phone";
+import LucideSparkles from "~icons/lucide/sparkles";
+import LucideTrendingDown from "~icons/lucide/trending-down";
+import LeadIntakeStrip from "./LeadIntakeStrip.vue";
 import LeadsAnalysis from "./LeadsAnalysis.vue";
 import LeadsMoney from "./LeadsMoney.vue";
+import { leadOptions, stageLabel, stagePillClass } from "./leads";
 import type {
   LeadAnalysis,
   LeadIntake,
@@ -604,13 +736,6 @@ const PERIODS: { value: OverviewPeriod; label: string }[] = [
   { value: "quarter", label: __("This quarter") },
   { value: "custom", label: __("Custom") },
 ];
-const FUNNEL_LABELS: Record<LeadOverview["funnel"][number]["step"], string> = {
-  created: __("Came in"),
-  contacted: __("Contacted"),
-  meeting: __("Meeting"),
-  proposal: __("Proposal"),
-  won: __("Won"),
-};
 const OWNER_COLUMNS: {
   key:
     | "new"
@@ -632,12 +757,23 @@ const OWNER_COLUMNS: {
 const AI_COUNTS: {
   metric: "high_intent" | "unhappy" | "stage_suggested";
   label: (n: number) => string;
+  /** the chip's colours; its words always say what it counts */
+  tone: string;
 }[] = [
-  { metric: "high_intent", label: (n) => __("{0} high intent", String(n)) },
-  { metric: "unhappy", label: (n) => __("{0} unhappy", String(n)) },
+  {
+    metric: "high_intent",
+    label: (n) => __("{0} high intent", String(n)),
+    tone: "bg-warning-soft text-hot",
+  },
+  {
+    metric: "unhappy",
+    label: (n) => __("{0} unhappy", String(n)),
+    tone: "bg-danger-soft text-danger",
+  },
   {
     metric: "stage_suggested",
     label: (n) => __("{0} stage moves to check", String(n)),
+    tone: "bg-info-soft text-info",
   },
 ];
 const BREAKDOWNS = [
@@ -660,7 +796,9 @@ const router = useRouter();
 const ids = {
   prefix: useId(),
   pipeline: useId(),
-  funnel: useId(),
+  progress: useId(),
+  attention: useId(),
+  pipelineNow: useId(),
   lost: useId(),
   hot: useId(),
   owners: useId(),
@@ -770,9 +908,13 @@ type Cell = {
   key: string;
   label: string;
   value: number;
-  sub?: string;
   tone?: Tone;
   to: RouteLocationRaw;
+  icon?: Component;
+  iconTone?: Tone | "hot";
+  /** the next move, under the number */
+  action?: string;
+  actionInk?: string;
 };
 
 const periodCells = computed<Cell[]>(() => [
@@ -781,21 +923,12 @@ const periodCells = computed<Cell[]>(() => [
     key: "contacted",
     label: __("Contacted"),
     value: t.value.contacted,
-    sub: t.value.new
-      ? __("{0}% of new", String(share(t.value.contacted, t.value.new)))
-      : undefined,
     to: list("contacted"),
   },
   {
     key: "meetings",
     label: __("Meetings held"),
     value: t.value.meetings,
-    sub: t.value.contacted
-      ? __(
-          "{0}% of contacted",
-          String(share(t.value.meetings, t.value.contacted))
-        )
-      : undefined,
     to: list("meetings"),
   },
   {
@@ -808,7 +941,6 @@ const periodCells = computed<Cell[]>(() => [
     key: "won",
     label: __("Won"),
     value: t.value.won,
-    sub: t.value.won ? amount(t.value.won_value) : undefined,
     tone: t.value.won ? "success" : undefined,
     to: list("won"),
   },
@@ -820,6 +952,10 @@ const attentionCells = computed<Cell[]>(() => [
     value: t.value.overdue,
     tone: t.value.overdue ? "danger" : undefined,
     to: list("overdue", false),
+    icon: LucideAlarmClock,
+    iconTone: "danger",
+    action: t.value.overdue ? __("Call these first →") : __("All caught up"),
+    actionInk: t.value.overdue ? "text-danger" : "text-ink-gray-6",
   },
   {
     key: "stale",
@@ -827,20 +963,64 @@ const attentionCells = computed<Cell[]>(() => [
     value: t.value.stale,
     tone: t.value.stale ? "warning" : undefined,
     to: list("stale", false),
+    icon: LucideMoon,
+    iconTone: "warning",
+    action: t.value.stale ? __("Re-engage →") : __("No one has gone quiet"),
+    actionInk: t.value.stale ? "text-warning" : "text-ink-gray-6",
   },
   {
     key: "hot",
     label: __("Hot leads"),
     value: t.value.hot,
     to: list("hot", false),
+    icon: LucideFlame,
+    iconTone: "hot",
+    action: t.value.hot ? __("Close them →") : __("No hot leads yet"),
+    actionInk: t.value.hot ? "text-hot" : "text-ink-gray-6",
   },
   {
     key: "lost",
     label: __("Lost this period"),
     value: t.value.lost,
     to: list("lost"),
+    icon: LucideTrendingDown,
+    action: t.value.lost ? __("See why →") : __("Nothing lost, nice"),
+    actionInk: t.value.lost ? "text-ink-gray-7" : "text-ink-gray-6",
   },
 ]);
+
+// the period's steps as the progress card draws them: each bar is the share of the step before
+const PROGRESS_NOTES = [
+  () => __("Came in this period"),
+  (n: number) => __("{0}% of new leads", String(n)),
+  (n: number) => __("{0}% of contacted", String(n)),
+  (n: number) => __("{0}% of meetings", String(n)),
+  (n: number) => __("{0}% of proposals", String(n)),
+];
+const progress = computed(() =>
+  periodCells.value.map((cell, index, cells) => {
+    const rate =
+      index === 0
+        ? cell.value
+          ? 100
+          : 0
+        : share(cell.value, cells[index - 1].value);
+    const note = PROGRESS_NOTES[index]?.(rate) ?? "";
+    return {
+      ...cell,
+      bar: rate,
+      note:
+        cell.key === "won" && t.value.won_value
+          ? `${note} · ${amount(t.value.won_value)}`
+          : note,
+    };
+  })
+);
+
+// the day's new leads by person, for the side column
+const intake = computed(
+  () => overviewPage.data?.intake as LeadIntake | null | undefined
+);
 
 const ownerOptions = computed(() => [
   {
@@ -853,7 +1033,7 @@ const ownerOptions = computed(() => [
   })),
 ]);
 
-const periodText = computed(() => {
+const periodParts = computed(() => {
   const d = data.value!;
   const from = dayjs(d.from_date);
   const to = dayjs(d.to_date);
@@ -870,7 +1050,7 @@ const periodText = computed(() => {
       : d.scope === "team"
       ? __("your team's leads")
       : __("everyone's leads");
-  return __("{0}, {1}. Every number opens its leads.", range, whose);
+  return { range, whose };
 });
 
 // open stages, then won and lost: the pipeline reads left to right
@@ -953,17 +1133,11 @@ function fieldLink(
 
 <style scoped>
 /* one bordered row of cells, hairlines between them (no tiles) */
-.cells {
-  @apply grid gap-px overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-gray-2;
-}
-.cell {
-  @apply flex min-w-0 flex-col bg-surface-base px-4 py-3.5 transition-colors hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-highlight;
-}
 .panel {
   @apply min-w-0 overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base;
 }
 .panel-head {
-  @apply flex flex-wrap items-baseline justify-between gap-2 border-b border-outline-gray-1 px-4 py-3;
+  @apply flex flex-wrap items-baseline justify-between gap-2 border-b border-outline-gray-2 px-4 py-3;
 }
 .row-link {
   @apply transition-colors hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-gray-4;

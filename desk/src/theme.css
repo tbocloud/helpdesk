@@ -1,13 +1,11 @@
 /*
  * TBO Support theme.
  *
- * Re-points frappe-ui's semantic tokens at the TBO palette: cool-tinted
- * neutrals (hue ~265) instead of pure grays, one teal brand accent (the TBO
- * logo's teal) for primary actions and selection, the logo's orange only for
- * the focus ring and the "today" ring, and Geist type. Lightness steps follow
- * frappe-ui's own scale so every existing component keeps its contrast
- * relationships; ink-gray-5 is darkened slightly so secondary text passes
- * WCAG AA (4.5:1) on white.
+ * Re-points frappe-ui's semantic tokens at the "Leads (all) — redesigned"
+ * mockup: slate neutrals, a deep teal accent for primary actions and the
+ * current menu item, white cards on a light gray canvas, the orange focus
+ * ring, and Geist type. ink-gray-5 and -6 share the mockup's secondary text
+ * colour, which passes WCAG AA (4.5:1) on white and on the canvas.
  *
  * Selectors are doubled up so they outrank frappe-ui's :root / [data-theme]
  * variables regardless of stylesheet order.
@@ -19,32 +17,58 @@
   --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
   /*
-   * brand: the logo teal, the same hex values as the TBO mobile app.
+   * The "Leads (all) — redesigned" mockup's palette (2026-11-14, the owner's
+   * choice over the earlier logo teal): a deep teal accent on slate neutrals.
    * Contrast table in docs/ui-guidelines.md §8.
    */
-  --brand: #3a748d;
-  --brand-hover: #2a5766;
-  --brand-soft: #e6f0f4;
-  --brand-ink: #2c5f75;
+  --brand: #17657f;
+  --brand-hover: #125469;
+  --brand-soft: #e6f2f5;
+  --brand-soft-border: #cfe5eb;
+  --brand-ink: #17657f;
+  --brand-ink-hover: #0e4a5e;
   --on-brand: #ffffff;
   /*
-   * highlight: the logo orange, only as a ring or marker (the keyboard focus
-   * ring and the calendars' "today" ring). Never a fill, a button or text, so
-   * it never reads as warning (brown text on cream).
+   * highlight: an orange ring or marker only (the keyboard focus ring and the
+   * calendars' "today" ring). Never a fill, a button or text.
    */
   --highlight: #c8641a;
   --note: oklch(0.985 0.03 95);
   --note-border: oklch(0.89 0.08 95);
   /* status: meaning only, always paired with an icon or label */
-  --success: #1c7547;
-  --success-soft: #e6f4ec;
-  --warning: #955700;
-  --warning-soft: #fdf2de;
-  --danger: #bf3328;
-  --danger-soft: #fdebe9;
-  /* info sits at hue ~225, clear of the teal brand (~198) */
-  --info: #2f56c6;
-  --info-soft: #e8edfb;
+  --success: #136b4a;
+  --success-soft: #e3f5ee;
+  --warning: #8a5300;
+  --warning-soft: #fff4e0;
+  /* the "Needs your attention" card */
+  --warning-panel: #fff7e8;
+  --warning-border: #f6e2b8;
+  --danger: #b42318;
+  --danger-soft: #feeceb;
+  --info: #1e4fb8;
+  --info-soft: #e8f0fe;
+  /* the mockup's other accents: proposals, and a hot lead score */
+  --violet: #5b32b4;
+  --violet-soft: #f1eafe;
+  --hot: #b4410a;
+  --hot-fill: #e8590c;
+  --warm-fill: #d69e2e;
+  /*
+   * person colours: each person gets one, from a hash of their name, on their
+   * initials (PersonAvatar). Always with the name or initials beside it.
+   */
+  --person-1: #0e4a5e;
+  --person-1-soft: #ddeff4;
+  --person-2: #4c2a9e;
+  --person-2-soft: #ede7fb;
+  --person-3: #8f3b0b;
+  --person-3-soft: #fdebdd;
+  --person-4: #136b4a;
+  --person-4-soft: #e3f5ee;
+  --person-5: #1e4fb8;
+  --person-5-soft: #e8f0fe;
+  --person-6: #3b4453;
+  --person-6-soft: #e9edf1;
   /*
    * champion: the Scoreboard's champion card only. A warm gold says "award"
    * without reusing warning (a problem) or note (internal notes).
@@ -62,46 +86,50 @@
   --channel-email: #136b62;
   --channel-whatsapp: #1c7a43;
 
-  --surface-sidebar: oklch(0.976 0.003 265);
+  /* the page canvas sits behind white cards; the menu panel is white */
+  --surface-canvas: #f4f6f8;
+  --surface-sidebar: #ffffff;
 
   /* the navigation rail stays dark in both themes; icons are neutral on it */
-  --surface-rail: oklch(0.22 0.012 265);
-  --ink-rail: oklch(0.8 0.01 265);
-  --ink-rail-hover: oklch(0.985 0.003 265);
-  --rail-hover: oklch(1 0 0 / 0.14);
+  --surface-rail: #0f172a;
+  --ink-rail: #94a3b8;
+  --ink-rail-hover: #ffffff;
+  --rail-hover: #1e293b;
+  /* the unread marker on the rail's bell */
+  --rail-dot: #38bdf8;
 
-  --surface-gray-1: oklch(0.976 0.003 265);
-  --surface-gray-2: oklch(0.961 0.004 268);
-  --surface-gray-3: oklch(0.949 0.006 265);
-  --surface-gray-4: oklch(0.913 0.008 265);
-  --surface-gray-5: oklch(0.83 0.012 265);
-  --surface-gray-6: oklch(0.683 0.016 265);
-  --surface-gray-7: oklch(0.586 0.018 265);
-  --surface-gray-8: oklch(0.439 0.018 265);
-  --surface-gray-9: oklch(0.341 0.016 266);
-  --surface-gray-10: oklch(0.205 0.01 268);
+  --surface-gray-1: #f8fafb;
+  --surface-gray-2: #f1f4f7;
+  --surface-gray-3: #eef2f5;
+  --surface-gray-4: #e6eaee;
+  --surface-gray-5: #d5dbe2;
+  --surface-gray-6: #94a3b8;
+  --surface-gray-7: #5b6474;
+  --surface-gray-8: #3b4453;
+  --surface-gray-9: #1f2937;
+  --surface-gray-10: #0f172a;
 
-  --ink-gray-1: oklch(0.946 0.005 265);
-  --ink-gray-2: oklch(0.913 0.008 265);
-  --ink-gray-3: oklch(0.83 0.012 265);
-  --ink-gray-4: oklch(0.66 0.016 265);
-  --ink-gray-5: oklch(0.523 0.019 263);
-  --ink-gray-6: oklch(0.47 0.019 263);
-  --ink-gray-7: oklch(0.36 0.016 265);
-  --ink-gray-8: oklch(0.25 0.012 266);
-  --ink-gray-9: oklch(0.205 0.01 268);
+  --ink-gray-1: #eef1f4;
+  --ink-gray-2: #e3e7ec;
+  --ink-gray-3: #cbd5e1;
+  --ink-gray-4: #94a3b8;
+  --ink-gray-5: #5b6474;
+  --ink-gray-6: #5b6474;
+  --ink-gray-7: #3b4453;
+  --ink-gray-8: #1f2937;
+  --ink-gray-9: #0f172a;
 
-  --outline-gray-1: oklch(0.946 0.005 265);
-  --outline-gray-2: oklch(0.928 0.006 265);
-  --outline-gray-3: oklch(0.866 0.011 262);
-  --outline-gray-4: oklch(0.72 0.014 265);
-  --outline-gray-5: oklch(0.586 0.018 265);
-  --outline-gray-6: oklch(0.439 0.018 265);
-  --outline-gray-7: oklch(0.341 0.016 266);
-  --outline-gray-8: oklch(0.205 0.01 268);
-  --outline-gray-9: oklch(0.168 0.008 268);
-  --outline-elevation-1: oklch(0.928 0.006 265);
-  --outline-elevation-2: oklch(0.928 0.006 265);
+  --outline-gray-1: #eef1f4;
+  --outline-gray-2: #e3e7ec;
+  --outline-gray-3: #d5dbe2;
+  --outline-gray-4: #94a3b8;
+  --outline-gray-5: #5b6474;
+  --outline-gray-6: #3b4453;
+  --outline-gray-7: #1f2937;
+  --outline-gray-8: #0f172a;
+  --outline-gray-9: #020617;
+  --outline-elevation-1: #e3e7ec;
+  --outline-elevation-2: #e3e7ec;
 }
 
 :root[data-theme="dark"] {
@@ -110,6 +138,31 @@
   --brand-soft: #15303b;
   --brand-ink: #a6d5e6;
   --on-brand: #0b2129;
+  --brand-soft-border: #1f4654;
+  --brand-ink-hover: #c4e4ef;
+  --warning-panel: #2a2112;
+  --warning-border: #4a3a1a;
+  --violet: #c4b0ff;
+  --violet-soft: #251d3d;
+  --hot: #ffad7a;
+  --hot-fill: #f07a35;
+  --warm-fill: #e0b04f;
+  --person-1: #a6d5e6;
+  --person-1-soft: #15303b;
+  --person-2: #c4b0ff;
+  --person-2-soft: #251d3d;
+  --person-3: #ffb98a;
+  --person-3-soft: #352014;
+  --person-4: #6fd39a;
+  --person-4-soft: #14281e;
+  --person-5: #8da6ff;
+  --person-5-soft: #16233f;
+  --person-6: #c9d0da;
+  --person-6-soft: #2a2e36;
+  --surface-canvas: oklch(0.169 0.006 271);
+  --surface-sidebar: oklch(0.205 0.008 275);
+  --rail-hover: oklch(1 0 0 / 0.14);
+  --ink-rail: oklch(0.8 0.01 265);
   --highlight: #f59a4a;
   --note: oklch(0.25 0.03 95);
   --note-border: oklch(0.36 0.05 95);
@@ -134,7 +187,6 @@
   --channel-whatsapp: #6fd39a;
 
   --surface-base: oklch(0.205 0.008 275);
-  --surface-sidebar: oklch(0.169 0.006 271);
 
   --surface-rail: oklch(0.12 0.006 271);
 
@@ -320,13 +372,74 @@ kbd {
 }
 
 /*
- * Segmented controls (frappe-ui TabButtons, the one segmented control): the
- * checked option is filled in brand. Underline and browser-tab pills draw
- * their indicator with ::after and keep their own look.
+ * Segmented controls (frappe-ui TabButtons, for small in-card toggles such as
+ * Today / Yesterday): the mockup's .seg — a light track, the checked option a
+ * white pill with a hairline shadow. Page-level views use ViewTabs instead.
+ * Underline and browser-tab pills draw their indicator with ::after and keep
+ * their own look.
  */
 [data-slot="tab-button"][data-state="checked"]
   > [data-state="active"]:not([class*="after:"]) {
-  background-color: var(--brand);
-  color: var(--on-brand);
+  background-color: var(--surface-base);
+  color: var(--ink-gray-9);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.08);
+}
+
+/*
+ * Fields (frappe-ui's subtle inputs, textareas and selects): the mockup's
+ * .field — white, a slate border, 10px corners; focus is the brand border with
+ * a soft brand ring. The class pair only appears on those controls.
+ */
+.border-\[--surface-gray-2\].bg-surface-gray-2 {
+  border-color: var(--outline-gray-3);
+  background-color: var(--surface-base);
+  border-radius: 10px;
+}
+.border-\[--surface-gray-2\].bg-surface-gray-2:hover {
+  border-color: var(--outline-gray-4);
+  background-color: var(--surface-base);
+}
+.border-\[--surface-gray-2\].bg-surface-gray-2:focus,
+.border-\[--surface-gray-2\].bg-surface-gray-2:focus-within,
+.border-\[--surface-gray-2\].bg-surface-gray-2[data-state="open"] {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 15%, transparent);
+}
+
+/*
+ * Secondary buttons (frappe-ui's subtle gray): the mockup's .btn — white with a
+ * slate border, semibold. Ghost and solid buttons keep their own look.
+ */
+button.text-ink-gray-8.bg-surface-gray-2,
+a.text-ink-gray-8.bg-surface-gray-2 {
+  background-color: var(--surface-base);
+  box-shadow: inset 0 0 0 1px var(--outline-gray-3);
+}
+button.text-ink-gray-8.bg-surface-gray-2:hover,
+a.text-ink-gray-8.bg-surface-gray-2:hover {
+  background-color: var(--surface-gray-1);
+}
+button.text-ink-gray-8.bg-surface-gray-2:active,
+a.text-ink-gray-8.bg-surface-gray-2:active {
+  background-color: var(--surface-gray-3);
+}
+
+/*
+ * Cards (the redesign's white rounded-xl panels): a soft two-layer shadow
+ * lifts them off the canvas, and a card that is a link or button rises a
+ * little on hover. Matches the exact class trio every card uses.
+ */
+.rounded-xl.border-outline-gray-2.bg-surface-base {
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04), 0 1px 3px rgb(15 23 42 / 0.03);
+  transition: box-shadow 150ms ease, border-color 150ms ease,
+    transform 150ms ease;
+}
+:is(a, button).rounded-xl.border-outline-gray-2.bg-surface-base:hover {
+  border-color: var(--outline-gray-3);
+  box-shadow: 0 4px 12px -2px rgb(15 23 42 / 0.08),
+    0 2px 4px -2px rgb(15 23 42 / 0.04);
+  transform: translateY(-1px);
+}
+:root[data-theme="dark"] .rounded-xl.border-outline-gray-2.bg-surface-base {
   box-shadow: none;
 }

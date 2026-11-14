@@ -7,20 +7,23 @@
     >
       <template #actions>
         <Button
-          variant="ghost"
+          size="md"
           :label="__('Refresh')"
           :loading="tasks.loading && !!tasks.data"
           @click="tasks.reload()"
         >
-          <template #icon><LucideRefreshCw class="size-4" /></template>
+          <template #icon
+            ><LucideRefreshCw class="size-[18px]" aria-hidden="true"
+          /></template>
         </Button>
       </template>
     </ProjectNav>
 
     <div class="relative flex-1 overflow-auto">
-      <div class="mx-auto w-full max-w-5xl px-4 py-5 md:px-6">
+      <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
         <TaskyState
           v-if="tasks.error && !tasks.data"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
           error
           :icon="LucideCircleAlert"
           :title="__('Couldn\'t load overdue tasks')"
@@ -31,54 +34,52 @@
 
         <template v-else>
           <!-- Summary -->
-          <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div
+          <div
+            class="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4"
+          >
+            <!-- a tone only once there is something to flag, as before -->
+            <StatTile
               v-for="stat in stats"
               :key="stat.key"
-              class="flex flex-col gap-3 rounded-lg border border-outline-gray-2 bg-surface-base p-4"
-            >
-              <div class="flex items-center justify-between">
-                <span class="text-sm text-ink-gray-6">{{ stat.label }}</span>
-                <component
-                  :is="stat.icon"
-                  class="size-4"
-                  :class="stat.iconClass"
-                  aria-hidden="true"
-                />
-              </div>
-              <span
-                class="text-2xl-semibold tabular-nums"
-                :class="stat.valueClass"
-              >
-                <span
-                  v-if="!tasks.data"
-                  class="inline-block h-7 w-8 animate-pulse rounded bg-surface-gray-2"
-                />
-                <template v-else>{{ stat.value }}</template>
-              </span>
-            </div>
+              :label="stat.label"
+              :value="stat.value"
+              :icon="stat.icon"
+              :loading="!tasks.data"
+              :icon-tone="
+                stat.key === 'ontrack'
+                  ? 'success'
+                  : stat.value
+                  ? stat.key === 'overdue'
+                    ? 'danger'
+                    : 'warning'
+                  : 'neutral'
+              "
+              :value-tone="
+                stat.key === 'overdue' && stat.value ? 'danger' : 'neutral'
+              "
+            />
           </div>
 
           <!-- Loading -->
           <div
             v-if="!tasks.data"
-            class="mt-6 overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
+            class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
             aria-busy="true"
           >
             <div
               v-for="i in 4"
               :key="i"
-              class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-3.5 last:border-b-0"
+              class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-3 last:border-b-0"
             >
               <div
-                class="size-4 animate-pulse rounded-full bg-surface-gray-2"
+                class="size-4 animate-pulse rounded-full bg-surface-gray-3"
               />
               <div class="flex flex-1 flex-col gap-2">
                 <div
-                  class="h-3.5 w-2/5 animate-pulse rounded bg-surface-gray-2"
+                  class="h-3.5 w-2/5 animate-pulse rounded bg-surface-gray-3"
                 />
                 <div
-                  class="h-3 w-1/4 animate-pulse rounded bg-surface-gray-2"
+                  class="h-3 w-1/4 animate-pulse rounded bg-surface-gray-3"
                 />
               </div>
             </div>
@@ -87,9 +88,10 @@
           <!-- All clear -->
           <div
             v-else-if="!overdue.length && !dueThisWeek.length"
-            class="mt-6 rounded-xl border border-outline-gray-2 bg-surface-base"
+            class="rounded-xl border border-outline-gray-2 bg-surface-base"
           >
             <TaskyState
+              class="py-10"
               :icon="LucideCircleCheck"
               :title="__('All tasks are on track')"
               :message="__('Nothing is overdue or due in the next 7 days.')"
@@ -107,26 +109,24 @@
             <section
               v-for="section in sections"
               :key="section.key"
-              class="mt-6"
+              class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
               :aria-labelledby="`ov-${section.key}`"
             >
               <h2
                 :id="`ov-${section.key}`"
-                class="mb-2 flex items-center gap-2 text-sm font-medium text-ink-gray-7"
+                class="flex items-center gap-2 border-b border-outline-gray-2 px-4 py-3 text-base font-semibold text-ink-gray-9"
               >
                 {{ section.label }}
-                <span class="font-mono text-xs tabular-nums text-ink-gray-5">{{
-                  section.tasks.length
-                }}</span>
+                <span
+                  class="min-w-[22px] rounded-full bg-surface-gray-3 px-[7px] py-px text-center text-xs font-semibold tabular-nums text-ink-gray-7"
+                  >{{ section.tasks.length }}</span
+                >
               </h2>
-              <ul
-                role="list"
-                class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base shadow-sm"
-              >
+              <ul role="list" class="divide-y divide-outline-gray-1">
                 <li
                   v-for="task in section.tasks"
                   :key="task.name"
-                  class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-3 last:border-b-0"
+                  class="flex items-center gap-3 px-4 py-3"
                 >
                   <component
                     :is="section.icon"
@@ -135,7 +135,9 @@
                     aria-hidden="true"
                   />
                   <div class="min-w-0 flex-1">
-                    <div class="truncate text-sm text-ink-gray-9">
+                    <div
+                      class="truncate text-[13px] font-medium text-ink-gray-9"
+                    >
                       {{ task.subject }}
                     </div>
                     <div
@@ -159,9 +161,10 @@
                   </div>
                   <span
                     v-if="task.assigned_to"
-                    class="hidden max-w-[12rem] truncate text-xs text-ink-gray-6 md:block"
+                    class="hidden max-w-[14rem] items-center gap-2 text-[12px] text-ink-gray-7 md:flex"
                   >
-                    {{ task.assigned_to }}
+                    <PersonAvatar :name="task.assigned_to" size="md" />
+                    <span class="truncate">{{ task.assigned_to }}</span>
                   </span>
                   <TaskStatusBadge :status="task.status" />
                 </li>
@@ -184,6 +187,8 @@ import LucideCalendarClock from "~icons/lucide/calendar-clock";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
+import PersonAvatar from "@/components/PersonAvatar.vue";
+import StatTile from "@/components/StatTile.vue";
 import ProjectNav from "./components/ProjectNav.vue";
 import TaskStatusBadge from "./components/TaskStatusBadge.vue";
 import TaskyState from "@/components/TaskyState.vue";
@@ -261,24 +266,18 @@ const stats = computed(() => [
     label: __("Overdue"),
     value: overdue.value.length,
     icon: LucideAlarmClock,
-    iconClass: overdue.value.length ? "text-danger" : "text-ink-gray-5",
-    valueClass: overdue.value.length ? "text-danger" : "text-ink-gray-9",
   },
   {
     key: "week",
     label: __("Due in 7 days"),
     value: dueThisWeek.value.length,
     icon: LucideCalendarClock,
-    iconClass: dueThisWeek.value.length ? "text-warning" : "text-ink-gray-5",
-    valueClass: "text-ink-gray-9",
   },
   {
     key: "ontrack",
     label: __("On track"),
     value: onTrack.value.length,
     icon: LucideCircleCheck,
-    iconClass: "text-success",
-    valueClass: "text-ink-gray-9",
   },
 ]);
 

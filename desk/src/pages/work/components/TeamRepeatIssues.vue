@@ -7,18 +7,19 @@
   >
     <div
       v-if="!data && !issues.error"
-      class="flex flex-col gap-2 p-4"
+      class="flex flex-col gap-2 p-5"
       aria-busy="true"
     >
       <div
         v-for="i in 3"
         :key="i"
-        class="h-12 animate-pulse rounded-md bg-surface-gray-2"
+        class="h-12 animate-pulse rounded-md bg-surface-gray-3"
       />
     </div>
 
     <TaskyState
       v-else-if="issues.error"
+      class="py-10"
       :icon="LucideCircleAlert"
       :title="__('Couldn\'t load the repeat issues')"
       :message="
@@ -37,7 +38,7 @@
       :inert="issues.loading"
     >
       <p
-        class="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-outline-gray-1 px-4 py-2.5 text-p-sm tabular-nums text-ink-gray-7"
+        class="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-outline-gray-1 px-5 py-3 text-p-sm tabular-nums text-ink-gray-7"
       >
         <span>{{ summaryText }}</span>
         <span
@@ -51,6 +52,7 @@
 
       <TaskyState
         v-if="!data.customers.length"
+        class="py-10"
         :icon="LucideRepeat"
         :title="__('No repeat issues')"
         :message="emptyText"

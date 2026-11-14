@@ -1,102 +1,97 @@
 <template>
   <div class="flex h-full flex-col">
-    <LayoutHeader>
-      <template #left-header>
-        <h1 class="text-lg-medium text-ink-gray-9">{{ __("Adoption") }}</h1>
-      </template>
+    <LayoutHeader
+      :title="__('Adoption')"
+      :subtitle="__('Who is using the system, and what is stuck.')"
+    >
       <template #right-header>
         <Button
-          variant="ghost"
+          size="md"
           :loading="adoption.loading && !!adoption.data"
           :aria-label="__('Refresh')"
           @click="refresh"
         >
           <template #icon>
-            <LucideRefreshCw class="size-4" aria-hidden="true" />
+            <LucideRefreshCw class="size-[18px]" aria-hidden="true" />
           </template>
         </Button>
       </template>
     </LayoutHeader>
 
     <div class="relative flex-1 overflow-auto">
-      <div class="mx-auto w-full max-w-4xl px-4 py-5 md:px-6">
-        <p class="max-w-2xl text-p-sm text-ink-gray-6">
-          {{
-            __(
-              "Who is using the system, and what is stuck. Tap a line to see who it is about and what to do."
-            )
-          }}
-        </p>
-
-        <TabButtons
+      <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
+        <ViewTabs
           v-model="period"
-          class="mt-4 hidden self-start sm:block"
-          size="md"
+          class="hidden self-start sm:inline-flex"
           :aria-label="__('Period')"
           :options="PERIODS.map((p) => ({ label: p.label, value: p.key }))"
         />
         <FormControl
           v-model="period"
-          class="mt-4 sm:hidden"
+          class="sm:hidden"
           type="select"
           :label="__('Period')"
           :options="PERIODS.map((p) => ({ label: p.label, value: p.key }))"
         />
 
-        <TaskyState
-          v-if="adoption.error && !adoption.data"
-          class="mt-6"
-          :icon="LucideCircleAlert"
-          :title="__('Couldn\'t load Adoption')"
-          :message="
-            errorText(
-              adoption.error,
-              __('Check your connection and try again.')
-            )
-          "
-          error
-        >
-          <Button :label="__('Retry')" @click="adoption.reload()" />
-        </TaskyState>
-
         <div
-          v-else-if="!data"
-          class="mt-6 flex flex-col gap-3"
-          aria-busy="true"
+          v-if="adoption.error && !adoption.data"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base"
         >
+          <TaskyState
+            class="py-10"
+            :icon="LucideCircleAlert"
+            :title="__('Couldn\'t load Adoption')"
+            :message="
+              errorText(
+                adoption.error,
+                __('Check your connection and try again.')
+              )
+            "
+            error
+          >
+            <Button :label="__('Retry')" @click="adoption.reload()" />
+          </TaskyState>
+        </div>
+
+        <div v-else-if="!data" class="flex flex-col gap-3" aria-busy="true">
           <span class="sr-only">{{ __("Loading") }}</span>
           <span
             v-for="i in 4"
             :key="i"
-            class="h-14 animate-pulse rounded-xl bg-surface-gray-2"
+            class="h-14 animate-pulse rounded-xl bg-surface-gray-3"
           />
         </div>
 
         <template v-else>
           <p
-            class="mt-5 text-base-medium text-ink-gray-9"
+            class="text-[14px] font-medium text-ink-gray-9"
             :aria-busy="adoption.loading"
             aria-live="polite"
           >
             {{ summary }}
           </p>
 
-          <TaskyState
+          <div
             v-if="!(data.counts.attention || data.counts.watch)"
-            :icon="LucideCircleCheck"
-            :title="EVERYONE_USING[data.period]"
-            :message="__('Nothing needs a manager\'s attention right now.')"
-          />
+            class="rounded-xl border border-outline-gray-2 bg-surface-base"
+          >
+            <TaskyState
+              class="py-10"
+              :icon="LucideCircleCheck"
+              :title="EVERYONE_USING[data.period]"
+              :message="__('Nothing needs a manager\'s attention right now.')"
+            />
+          </div>
 
           <section
             v-for="group in groups"
             :key="group.key"
-            class="mt-5"
             :aria-labelledby="`${uid}-${group.key}`"
           >
             <h2
               :id="`${uid}-${group.key}`"
-              class="flex items-center gap-2 text-sm font-medium"
+              class="flex items-center gap-2 text-base font-semibold"
               :class="INK[group.tone]"
             >
               <component :is="group.icon" class="size-4" aria-hidden="true" />
@@ -107,7 +102,7 @@
             </h2>
             <ul
               role="list"
-              class="mt-2 divide-y divide-outline-gray-1 overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
+              class="mt-3 divide-y divide-outline-gray-1 overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
             >
               <li v-for="f in group.items" :key="f.id">
                 <button
@@ -124,7 +119,7 @@
                     aria-hidden="true"
                   />
                   <span class="min-w-0 flex-1">
-                    <span class="block text-sm text-ink-gray-9">
+                    <span class="block text-[13px] font-medium text-ink-gray-9">
                       {{ f.title }}
                     </span>
                     <span class="mt-0.5 block text-p-sm text-ink-gray-6">
@@ -144,7 +139,7 @@
                 <div
                   v-if="open.has(f.id)"
                   :id="`${uid}-${f.id}`"
-                  class="flex flex-col gap-3 border-t border-outline-gray-1 bg-surface-gray-1 px-4 py-3 pl-11"
+                  class="flex flex-col gap-3 border-t border-outline-gray-1 bg-surface-gray-1 px-4 py-3 pl-12"
                 >
                   <p class="text-p-sm text-ink-gray-7">{{ f.detail }}</p>
                   <div v-if="f.who.length">
@@ -170,10 +165,7 @@
             </ul>
           </section>
 
-          <p
-            v-if="!data.sales_available"
-            class="mt-4 text-p-sm text-ink-gray-5"
-          >
+          <p v-if="!data.sales_available" class="text-p-sm text-ink-gray-6">
             {{
               __(
                 "Sales results are not shown: the sales system isn't connected right now."
@@ -182,7 +174,7 @@
           </p>
 
           <SectionCard
-            class="mt-8 overflow-hidden"
+            class="overflow-hidden"
             :title="__('People')"
             :description="
               __(
@@ -199,13 +191,13 @@
               </caption>
               <thead>
                 <tr
-                  class="border-b border-outline-gray-2 bg-surface-gray-1 text-left text-xs text-ink-gray-5"
+                  class="h-11 border-b border-outline-gray-2 bg-surface-gray-1 text-left text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6"
                 >
                   <th
                     v-for="col in COLUMNS"
                     :key="col.key"
                     scope="col"
-                    class="px-3 py-2 font-normal first:pl-4 last:pr-4"
+                    class="px-3 first:pl-4 last:pr-4 md:first:pl-4 md:last:pr-5"
                     :class="col.key === 'name' ? '' : 'text-right'"
                     :aria-sort="ariaSort(col.key)"
                   >
@@ -228,11 +220,17 @@
                 <tr
                   v-for="p in rows"
                   :key="p.user"
-                  class="border-b border-outline-gray-1 last:border-b-0"
+                  class="border-b border-outline-gray-1 last:border-b-0 hover:bg-surface-gray-1"
                 >
-                  <th scope="row" class="px-4 py-2.5 text-left font-normal">
+                  <th
+                    scope="row"
+                    class="px-3 py-3 pl-4 text-left font-normal md:pl-4"
+                  >
                     <span class="flex flex-wrap items-center gap-2">
-                      <span class="text-ink-gray-9">{{ p.name }}</span>
+                      <PersonAvatar :name="p.name" size="md" />
+                      <span class="font-medium text-ink-gray-9">{{
+                        p.name
+                      }}</span>
                       <TaskyBadge
                         v-if="p.quiet"
                         tone="warning"
@@ -246,23 +244,23 @@
                       />
                     </span>
                   </th>
-                  <td class="px-3 py-2.5 text-right font-mono tabular-nums">
+                  <td class="px-3 py-3 text-right font-mono tabular-nums">
                     {{ p.tasks_done }}
                   </td>
-                  <td class="px-3 py-2.5 text-right font-mono tabular-nums">
+                  <td class="px-3 py-3 text-right font-mono tabular-nums">
                     {{ p.hours }}
                   </td>
-                  <td class="px-3 py-2.5 text-right font-mono tabular-nums">
+                  <td class="px-3 py-3 text-right font-mono tabular-nums">
                     {{ p.standups_written }}
                   </td>
-                  <td class="px-3 py-2.5 text-right font-mono tabular-nums">
+                  <td class="px-3 py-3 text-right font-mono tabular-nums">
                     {{ p.calls ?? "–" }}
                   </td>
-                  <td class="px-3 py-2.5 text-right font-mono tabular-nums">
+                  <td class="px-3 py-3 text-right font-mono tabular-nums">
                     {{ p.outcomes ?? "–" }}
                   </td>
                   <td
-                    class="px-4 py-2.5 text-right tabular-nums text-ink-gray-7"
+                    class="px-3 py-3 pr-4 text-right tabular-nums text-ink-gray-7 md:pr-4"
                   >
                     {{ lastSeen(p) }}
                   </td>
@@ -277,7 +275,10 @@
                 class="flex flex-col gap-1 border-b border-outline-gray-1 px-4 py-3 last:border-b-0"
               >
                 <span class="flex flex-wrap items-center gap-2">
-                  <span class="text-sm text-ink-gray-9">{{ p.name }}</span>
+                  <PersonAvatar :name="p.name" size="md" />
+                  <span class="text-sm font-medium text-ink-gray-9">{{
+                    p.name
+                  }}</span>
                   <TaskyBadge
                     v-if="p.quiet"
                     tone="warning"
@@ -304,19 +305,15 @@
 
 <script setup lang="ts">
 import LayoutHeader from "@/components/LayoutHeader.vue";
+import PersonAvatar from "@/components/PersonAvatar.vue";
 import SectionCard from "@/components/SectionCard.vue";
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import TaskyState from "@/components/TaskyState.vue";
+import ViewTabs from "@/components/ViewTabs.vue";
 import { INK } from "@/components/tone";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
-import {
-  Button,
-  createResource,
-  dayjs,
-  FormControl,
-  TabButtons,
-} from "frappe-ui";
+import { Button, createResource, dayjs, FormControl } from "frappe-ui";
 import { computed, reactive, ref, useId, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LucideArrowDown from "~icons/lucide/arrow-down";

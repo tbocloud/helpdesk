@@ -21,11 +21,13 @@
     </LayoutHeader>
 
     <div class="relative flex-1 overflow-y-auto overflow-x-hidden">
-      <div class="mx-auto flex w-full max-w-xl flex-col gap-5 px-4 py-5">
+      <div
+        class="mx-auto flex w-full max-w-xl flex-col gap-4 px-4 pb-8 pt-4 md:px-8"
+      >
         <!-- done: what happened, then the next lead -->
         <section
           v-if="result"
-          class="flex flex-col items-center gap-4 rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-8 text-center"
+          class="flex flex-col items-center gap-4 rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-10 text-center"
           role="status"
         >
           <LucideCircleCheck
@@ -41,7 +43,7 @@
           <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
             <Button
               variant="solid"
-              size="lg"
+              size="md"
               :label="__('Add another lead')"
               @click="reset"
             >
@@ -50,7 +52,7 @@
               </template>
             </Button>
             <Button
-              size="lg"
+              size="md"
               :label="__('See my leads')"
               @click="router.push({ name: 'LeadBank' })"
             />
@@ -59,7 +61,9 @@
 
         <template v-else>
           <header class="flex flex-col gap-1">
-            <h1 class="text-xl-semibold text-ink-gray-9">
+            <h1
+              class="text-[24px] font-bold leading-tight tracking-[-0.01em] text-ink-gray-9"
+            >
               {{ __("Add a lead") }}
             </h1>
             <p class="text-p-sm text-ink-gray-6">
@@ -72,7 +76,10 @@
           </header>
 
           <!-- the photos: one big button, the gallery second -->
-          <section class="flex flex-col gap-3" :aria-label="__('Photos')">
+          <section
+            class="flex flex-col gap-3 rounded-xl border border-outline-gray-2 bg-surface-base p-4"
+            :aria-label="__('Photos')"
+          >
             <Button
               variant="solid"
               size="xl"
@@ -90,6 +97,7 @@
             </Button>
             <Button
               class="w-full"
+              size="md"
               :label="__('Choose from gallery')"
               :disabled="full || preparing"
               @click="gallery?.click()"
@@ -127,7 +135,7 @@
               <li
                 v-for="(photo, index) in photos"
                 :key="photo.id"
-                class="relative aspect-square overflow-hidden rounded-lg border border-outline-gray-2 bg-surface-gray-2"
+                class="relative aspect-square overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-gray-2"
               >
                 <img
                   :src="photo.preview"
@@ -180,7 +188,7 @@
           <p
             v-if="duplicate"
             role="alert"
-            class="flex items-start gap-2 rounded-lg bg-info-soft px-3 py-2 text-p-sm text-info"
+            class="flex items-start gap-2 rounded-xl bg-info-soft px-4 py-3 text-p-sm text-info"
           >
             <LucideInfo class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
             <span>
@@ -197,7 +205,7 @@
           <form
             v-if="photos.length"
             :id="formId"
-            class="flex flex-col gap-4"
+            class="flex flex-col gap-4 rounded-xl border border-outline-gray-2 bg-surface-base p-4"
             novalidate
             @submit.prevent="submit"
           >
@@ -310,7 +318,7 @@
             <p
               v-if="errorMessage"
               role="alert"
-              class="flex items-start gap-2 rounded-md bg-danger-soft px-3 py-2 text-p-sm text-danger"
+              class="flex items-start gap-2 rounded-xl bg-danger-soft px-3.5 py-2.5 text-p-sm text-danger"
             >
               <LucideCircleAlert
                 class="mt-0.5 size-4 shrink-0"
@@ -326,12 +334,12 @@
     <!-- the one primary action, always in reach on a phone -->
     <div
       v-if="photos.length && !result"
-      class="border-t border-outline-gray-2 bg-surface-base px-4 py-3"
+      class="border-t border-outline-gray-2 bg-surface-base px-4 py-3 md:px-8"
     >
       <div class="mx-auto max-w-xl">
         <Button
           variant="solid"
-          size="lg"
+          size="md"
           class="w-full"
           type="submit"
           :form="formId"

@@ -1,26 +1,29 @@
 <template>
   <div class="flex h-full flex-col">
-    <LayoutHeader>
-      <template #left-header>
-        <h1 class="truncate text-lg-medium text-ink-gray-9">
-          {{ __("Lead Bank") }}
-        </h1>
-      </template>
+    <LayoutHeader
+      :title="__('Lead Bank')"
+      :subtitle="
+        __('Snap a business you spot, and earn when it becomes a client.')
+      "
+    >
       <template #right-header>
         <Button
           v-if="options.data?.is_manager"
+          size="md"
           :label="__('Team')"
           @click="router.push({ name: 'LeadBankTeam' })"
         >
           <template #prefix>
-            <LucideUsers class="size-4" aria-hidden="true" />
+            <LucideUsers class="size-[18px]" aria-hidden="true" />
           </template>
         </Button>
       </template>
     </LayoutHeader>
 
     <div class="relative flex-1 overflow-y-auto overflow-x-hidden">
-      <div class="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 py-5">
+      <div
+        class="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 pb-8 pt-4 md:px-8"
+      >
         <!-- the one primary action -->
         <section class="flex flex-col gap-2">
           <Button
@@ -41,6 +44,7 @@
 
         <TaskyState
           v-if="mine.error && !data"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
           error
           :icon="LucideCircleAlert"
           :title="__('Couldn\'t load your leads')"
@@ -53,34 +57,41 @@
 
         <div
           v-else-if="!data"
-          class="flex flex-col gap-3"
+          class="flex flex-col gap-5"
           aria-busy="true"
           :aria-label="__('Loading')"
         >
-          <div class="grid grid-cols-3 gap-3">
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div
               v-for="i in 3"
               :key="i"
-              class="h-[72px] animate-pulse rounded-xl bg-surface-gray-2"
+              class="h-[130px] animate-pulse rounded-xl bg-surface-gray-3"
             />
           </div>
-          <div class="h-48 animate-pulse rounded-xl bg-surface-gray-2" />
+          <div class="h-48 animate-pulse rounded-xl bg-surface-gray-3" />
         </div>
 
         <template v-else>
           <section
-            class="grid grid-cols-3 gap-3"
+            class="grid grid-cols-1 gap-4 sm:grid-cols-3"
             :aria-label="__('Your totals')"
           >
             <StatTile
-              compact
               :label="__('Leads added')"
               :value="data.summary.leads"
+              :icon="LucideCamera"
+              icon-tone="brand"
             />
-            <StatTile compact :label="__('Won')" :value="data.summary.won" />
             <StatTile
-              compact
+              :label="__('Won')"
+              :value="data.summary.won"
+              :icon="LucideTrophy"
+              icon-tone="success"
+            />
+            <StatTile
               :label="__('You earned')"
+              :icon="LucideWallet"
+              icon-tone="brand"
               :value="fullAmount(data.summary.earned, data.currency)"
               :sub="
                 data.summary.pending > 0
@@ -95,6 +106,7 @@
 
           <TaskyState
             v-if="!data.rows.length"
+            class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
             :icon="LucideCamera"
             :title="__('You haven\'t added a lead yet')"
             :message="
@@ -107,7 +119,7 @@
           <ul
             v-else
             role="list"
-            class="divide-y divide-outline-gray-1 rounded-xl border border-outline-gray-2 bg-surface-base"
+            class="divide-y divide-outline-gray-1 overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
           >
             <li
               v-for="lead in data.rows"
@@ -115,10 +127,11 @@
               class="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3"
             >
               <div class="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span class="truncate text-base-medium text-ink-gray-9">{{
-                  lead.title
-                }}</span>
-                <span class="text-p-xs text-ink-gray-6">
+                <span
+                  class="truncate text-[13px] font-semibold text-ink-gray-9"
+                  >{{ lead.title }}</span
+                >
+                <span class="text-[12px] text-ink-gray-6">
                   {{ day(lead.collected_on) }}
                   <template v-if="lead.region">
                     · {{ REGION_LABEL[lead.region] }}</template
@@ -181,7 +194,9 @@ import { computed } from "vue";
 import { useRouter } from "vue-router";
 import LucideCamera from "~icons/lucide/camera";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
+import LucideTrophy from "~icons/lucide/trophy";
 import LucideUsers from "~icons/lucide/users";
+import LucideWallet from "~icons/lucide/wallet";
 import {
   earnText,
   REGION_LABEL,

@@ -9,18 +9,18 @@
       aria-hidden="true"
     />
     <span class="flex min-w-0 flex-1 flex-col gap-1">
-      <span class="text-base font-medium text-ink-gray-9">
+      <span class="text-[14px] font-semibold text-ink-gray-9">
         {{ article.title }}
       </span>
       <span
         v-if="article.content"
-        class="line-clamp-2 text-p-sm text-ink-gray-6"
+        class="line-clamp-2 text-[13px] leading-relaxed text-ink-gray-6"
       >
         {{ article.content }}
       </span>
       <span
         v-if="meta.length"
-        class="flex flex-wrap items-center gap-x-1.5 text-sm text-ink-gray-5"
+        class="flex flex-wrap items-center gap-x-1.5 text-[12px] text-ink-gray-6"
       >
         <template v-for="(part, i) in meta" :key="part">
           <span v-if="i" aria-hidden="true">·</span>

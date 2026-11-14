@@ -9,9 +9,11 @@
         ? { type: 'button', 'aria-pressed': pressed }
         : {}
     "
-    class="flex min-w-0 items-start rounded-xl border text-left"
+    class="flex min-w-0 border text-left"
     :class="[
-      compact ? 'px-3 py-2.5' : 'flex-col gap-2 p-4 sm:flex-row sm:gap-3',
+      compact
+        ? 'items-start rounded-xl px-3 py-2.5'
+        : 'flex-col gap-1.5 rounded-xl p-3.5',
       hero ? 'sm:col-span-2' : '',
       pressed
         ? 'border-brand bg-brand-soft'
@@ -19,32 +21,48 @@
         ? TINTS[tint].tile
         : 'border-outline-gray-2 bg-surface-base',
       interactive
-        ? 'transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4'
+        ? 'transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight'
         : '',
-      interactive && !pressed ? 'hover:border-outline-gray-4' : '',
+      interactive && !pressed
+        ? 'hover:-translate-y-px hover:border-outline-gray-3 hover:shadow-[0_4px_12px_-2px_rgb(15_23_42/0.08)] motion-reduce:hover:translate-y-0'
+        : '',
     ]"
   >
-    <!-- the icon sits in a circle; soft colour only when iconTone carries meaning -->
+    <!-- the mockup's stat card: the label, and the icon on a soft square at the right -->
     <span
-      v-if="icon && !compact"
-      class="grid size-9 shrink-0 place-items-center rounded-full"
-      :class="tint ? TINTS[tint].circle : circleClass"
+      v-if="!compact"
+      class="flex w-full items-center justify-between gap-2"
     >
-      <component :is="icon" class="size-[18px]" aria-hidden="true" />
+      <span class="min-w-0 text-[12px] font-medium text-ink-gray-6">{{
+        label
+      }}</span>
+      <LucideChevronRight
+        v-if="to && !icon"
+        class="size-4 shrink-0 text-ink-gray-4"
+        aria-hidden="true"
+      />
+      <span
+        v-if="icon"
+        class="grid size-7 shrink-0 place-items-center rounded-lg ring-1 ring-inset ring-black/[0.04]"
+        :class="tint ? TINTS[tint].circle : circleClass"
+      >
+        <component :is="icon" class="size-3.5" aria-hidden="true" />
+      </span>
     </span>
 
     <span class="flex min-w-0 flex-1 flex-col gap-1">
-      <span class="flex items-center gap-1.5 text-sm text-ink-gray-7">
+      <span
+        v-if="compact"
+        class="flex items-center gap-1.5 text-sm text-ink-gray-7"
+      >
         <component
           :is="icon"
-          v-if="icon && compact"
+          v-if="icon"
           class="size-4 shrink-0"
           :class="iconInk"
           aria-hidden="true"
         />
-        <span class="min-w-0 flex-1" :class="compact ? 'truncate' : ''">{{
-          label
-        }}</span>
+        <span class="min-w-0 flex-1 truncate">{{ label }}</span>
         <LucideChevronRight
           v-if="to"
           class="size-4 shrink-0 text-ink-gray-4"
@@ -54,7 +72,11 @@
       <span
         class="font-semibold tabular-nums"
         :class="[
-          hero ? 'text-5xl leading-tight' : compact ? 'text-xl' : 'text-3xl',
+          hero
+            ? 'text-5xl font-bold leading-tight tracking-[-0.02em]'
+            : compact
+            ? 'text-xl'
+            : 'text-[22px] font-bold leading-none tracking-[-0.02em]',
           valueTone === 'neutral' ? 'text-ink-gray-9' : INK[valueTone],
         ]"
       >
@@ -102,10 +124,7 @@
         </span>
         <span class="min-w-0">{{ deltaText }}</span>
       </span>
-      <span
-        v-if="sub && !loading"
-        class="text-p-sm tabular-nums text-ink-gray-6"
-      >
+      <span v-if="sub && !loading" class="text-xs tabular-nums text-ink-gray-6">
         {{ sub }}
       </span>
       <!-- extra content under the figures, e.g. a mini trend -->
@@ -134,7 +153,7 @@ const props = withDefaults(
      * Colours the icon's circle, only when that carries meaning: success for
      * done, danger for overdue or risk, info for time and hours.
      */
-    iconTone?: Tone | "brand";
+    iconTone?: Tone | "brand" | "hot";
     /**
      * Fills the tile with its tone's soft colour and sets the icon on the solid tone,
      * for headline figures on a screen that is colourful by exception (ui-guidelines §8).
@@ -175,10 +194,15 @@ const props = withDefaults(
 
 const interactive = computed(() => !!props.to || props.pressed !== undefined);
 
-// brand is not a status tone, so it is handled here, as TaskyBadge does
+// brand is not a status tone, so it is handled here, as TaskyBadge does; a
+// neutral tile is the canvas gray
 const circleClass = computed(() =>
   props.iconTone === "brand"
     ? "bg-brand-soft text-brand-ink"
+    : props.iconTone === "hot"
+    ? "bg-warning-soft text-hot"
+    : props.iconTone === "neutral"
+    ? "bg-surface-gray-2 text-ink-gray-7"
     : TONE_CLASSES[props.iconTone]
 );
 const iconInk = computed(() =>
@@ -186,6 +210,8 @@ const iconInk = computed(() =>
     ? "text-ink-gray-5"
     : props.iconTone === "brand"
     ? "text-brand-ink"
+    : props.iconTone === "hot"
+    ? "text-hot"
     : INK[props.iconTone]
 );
 

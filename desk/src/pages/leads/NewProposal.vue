@@ -21,6 +21,7 @@
       <template #right-header>
         <Button
           v-if="!chatOpen && options?.enabled"
+          size="md"
           :label="__('Back to the assistant')"
           @click="chatOpen = true"
         />
@@ -38,6 +39,7 @@
         </button>
         <Button
           variant="solid"
+          size="md"
           :label="__('Generate proposal')"
           :loading="create.loading"
           :disabled="!options?.enabled"
@@ -52,16 +54,17 @@
     </LayoutHeader>
 
     <div class="relative flex-1 overflow-auto">
-      <div class="mx-auto w-full max-w-7xl px-4 py-5 md:px-6">
+      <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
         <TaskyState
           v-if="options && !options.enabled"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
           :icon="LucideCircleAlert"
           :title="__('Proposals are off on the ERP site')"
           :message="__('Switch on Proposals in TBO Smart Settings there.')"
         />
         <div
           v-else-if="options"
-          class="grid grid-cols-1 gap-4"
+          class="grid grid-cols-1 gap-5"
           :class="chatOpen ? 'lg:grid-cols-2' : ''"
         >
           <div
@@ -83,7 +86,7 @@
           </div>
 
           <!-- the live summary: the scoping form, filled as the chat goes; edit anything -->
-          <div class="flex min-w-0 flex-col gap-4" :aria-label="__('Summary')">
+          <div class="flex min-w-0 flex-col gap-5" :aria-label="__('Summary')">
             <p v-if="error" role="alert" class="text-p-sm text-danger">
               {{ error }}
             </p>
@@ -91,7 +94,10 @@
               class="flex flex-col gap-3 rounded-xl border border-outline-gray-2 bg-surface-base p-4"
               :aria-labelledby="profileId"
             >
-              <h2 :id="profileId" class="text-base-medium text-ink-gray-9">
+              <h2
+                :id="profileId"
+                class="text-base font-semibold text-ink-gray-9"
+              >
                 {{ __("Client profile") }}
                 <span
                   v-if="!profileFilled"
@@ -110,7 +116,7 @@
               class="flex flex-col gap-3 rounded-xl border border-outline-gray-2 bg-surface-base p-4"
               :aria-labelledby="reqId"
             >
-              <h2 :id="reqId" class="text-base-medium text-ink-gray-9">
+              <h2 :id="reqId" class="text-base font-semibold text-ink-gray-9">
                 {{ __("Customer requirements") }}
               </h2>
               <FormControl
@@ -126,7 +132,7 @@
               class="flex flex-col gap-4 rounded-xl border border-outline-gray-2 bg-surface-base p-4"
               :aria-labelledby="formId"
             >
-              <h2 :id="formId" class="text-base-medium text-ink-gray-9">
+              <h2 :id="formId" class="text-base font-semibold text-ink-gray-9">
                 {{ __("What the proposal covers") }}
               </h2>
               <FormControl
@@ -206,7 +212,7 @@
         </div>
         <div
           v-else
-          class="h-64 animate-pulse rounded-xl border border-outline-gray-2 bg-surface-gray-1"
+          class="h-64 animate-pulse rounded-xl bg-surface-gray-3"
           aria-busy="true"
           :aria-label="__('Loading')"
         />

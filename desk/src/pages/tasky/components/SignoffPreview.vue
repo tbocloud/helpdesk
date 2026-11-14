@@ -3,7 +3,7 @@
     class="flex min-h-0 flex-col overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
     :aria-label="__('Preview')"
   >
-    <div class="border-b border-outline-gray-1 px-3 py-2">
+    <div class="border-b border-outline-gray-2 px-5 py-3">
       <TabButtons
         v-model="tab"
         :aria-label="__('What to preview')"
@@ -16,7 +16,7 @@
 
     <template v-if="tab === 'mail'">
       <dl
-        class="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-3 gap-y-1 border-b border-outline-gray-1 px-4 py-3 text-sm"
+        class="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-3 gap-y-1 border-b border-outline-gray-1 px-5 py-3 text-sm"
       >
         <dt class="text-ink-gray-5">{{ __("Subject") }}</dt>
         <dd class="text-base-medium text-ink-gray-9">

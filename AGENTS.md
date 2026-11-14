@@ -69,8 +69,9 @@ Frappe Helpdesk is an open-source ticket management tool built on the [Frappe Fr
   - `ink-*` tokens are text-only: `bg-ink-*`, `border-ink-*`, `ring-ink-*` do not exist
   - Font sizes: `text-2xs`, `text-xs`, `text-sm`, `text-base`, `text-lg`, `text-xl`, `text-2xl`, `text-3xl`; weighted variants such as `text-base-medium`
   - Multiline text: `text-p-xs`, `text-p-sm`, `text-p-base`, `text-p-lg`, `text-p-xl`, `text-p-2xl`
-- **TBO theme** (`desk/src/theme.css`, reference mockup: TBO ticket view). It re-points frappe-ui's gray tokens at cool-tinted neutrals and adds:
-  - `brand` (`bg-brand`, `text-brand-on`, `bg-brand-soft`, `text-brand-ink`, `hover:bg-brand-hover`) — the TBO logo teal (`#3A748D` light, `#6FB4CF` dark; same hex as the mobile app), the **one accent**, only for the primary action and the current selection. frappe-ui `variant="solid"` buttons render in brand automatically.
+- **TBO theme** (`desk/src/theme.css`, reference mockup: "Leads (all) — redesigned"; page recipe in `docs/ui-guidelines.md` §8). It re-points frappe-ui's gray tokens at the mockup's slate neutrals, puts pages on a light gray `bg-canvas` with white `rounded-xl` cards, and adds:
+  - `brand` (`bg-brand`, `text-brand-on`, `bg-brand-soft`, `border-brand-soft-border`, `text-brand-ink`, `hover:bg-brand-hover`) — the mockup's deep teal (`#17657F` light, `#6FB4CF` dark), the **one accent**, for the primary action, links and the current menu item. frappe-ui `variant="solid"` buttons render in brand automatically.
+  - Shared redesign pieces: `LayoutHeader` `title`/`subtitle` props, `ViewTabs` (page-level view pills with counts), `PersonAvatar` (initials on a per-person colour), `StatTile` (the mockup stat card).
   - `highlight` (`ring-highlight`, `border-highlight`) — the logo orange (`#C8641A` light, `#F59A4A` dark), only as a ring or marker: the keyboard focus ring and the calendars' "today" ring. Never a fill, a button or text, and not a status. Full palette and contrast table: `docs/ui-guidelines.md` §8.
   - Status colors `success`, `warning`, `danger`, `info` (each with `-soft` background) — only to convey meaning, and always paired with an icon or text label.
   - `note` / `note-border` for internal notes.

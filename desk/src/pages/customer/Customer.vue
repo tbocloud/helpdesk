@@ -1,7 +1,5 @@
 <template>
-  <div
-    class="mx-auto flex h-full w-full max-w-screen-xl flex-col overflow-y-hidden"
-  >
+  <div class="flex h-full w-full flex-col overflow-y-hidden">
     <LayoutHeader>
       <template #left-header>
         <Breadcrumbs :items="breadcrumbs" class="-ml-[2px]" />
@@ -29,68 +27,79 @@
 
     <div
       v-else-if="!customer.doc?.name"
-      class="flex items-center gap-3 px-5 pt-5"
+      class="px-4 pb-10 pt-5 md:px-8"
       :aria-label="__('Loading')"
     >
-      <span class="size-[52px] animate-pulse rounded-lg bg-surface-gray-2" />
-      <div class="flex flex-col gap-2">
-        <span class="h-5 w-48 animate-pulse rounded bg-surface-gray-2" />
-        <span class="h-3.5 w-64 animate-pulse rounded bg-surface-gray-2" />
+      <div
+        class="flex items-center gap-3 rounded-xl border border-outline-gray-2 bg-surface-base p-4"
+      >
+        <span class="size-[52px] animate-pulse rounded-lg bg-surface-gray-3" />
+        <div class="flex flex-col gap-2">
+          <span class="h-5 w-48 animate-pulse rounded bg-surface-gray-3" />
+          <span class="h-3.5 w-64 animate-pulse rounded bg-surface-gray-3" />
+        </div>
       </div>
     </div>
 
-    <div v-else class="flex min-h-0 flex-1 flex-col gap-4">
-      <PageInfo
-        :avatar="{
-          label: customer.doc.customer_name ?? '',
-          image: customer.doc.image,
-          shape: 'square',
-        }"
-        :doc-info="customerInfo"
-      >
-        <template #actions>
-          <template v-if="hasPermission()">
-            <Button variant="subtle" @click="customerDialog = true">
-              <template #prefix>
-                <LucideSquarePen class="size-4" aria-hidden="true" />
+    <div
+      v-else
+      class="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-contain"
+    >
+      <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
+        <div
+          class="rounded-xl border border-outline-gray-2 bg-surface-base pb-5"
+        >
+          <PageInfo
+            :avatar="{
+              label: customer.doc.customer_name ?? '',
+              image: customer.doc.image,
+              shape: 'square',
+            }"
+            :doc-info="customerInfo"
+          >
+            <template #actions>
+              <template v-if="hasPermission()">
+                <Button variant="subtle" @click="customerDialog = true">
+                  <template #prefix>
+                    <LucideSquarePen class="size-4" aria-hidden="true" />
+                  </template>
+                  {{ __("Edit") }}
+                </Button>
+                <Dropdown :options="dropdownActions" placement="right">
+                  <Button variant="subtle" :aria-label="__('More actions')">
+                    <template #icon>
+                      <LucideEllipsis class="size-4" aria-hidden="true" />
+                    </template>
+                  </Button>
+                </Dropdown>
               </template>
-              {{ __("Edit") }}
-            </Button>
-            <Dropdown :options="dropdownActions" placement="right">
-              <Button variant="subtle" :aria-label="__('More actions')">
-                <template #icon>
-                  <LucideEllipsis class="size-4" aria-hidden="true" />
-                </template>
-              </Button>
-            </Dropdown>
-          </template>
-        </template>
-      </PageInfo>
+            </template>
+          </PageInfo>
+        </div>
 
-      <p
-        v-if="connectionError"
-        class="mx-5 flex items-start gap-2 rounded-lg border border-outline-gray-2 px-3 py-2 text-p-sm text-ink-gray-7"
-        role="status"
-      >
-        <LucideCircleX
-          class="mt-0.5 size-4 shrink-0 text-danger"
-          aria-hidden="true"
-        />
-        <span class="min-w-0 break-words">
-          {{
-            connection?.connection_status === "Unreachable"
-              ? __("ERP unreachable: {0}", connectionError)
-              : __("ERP connection error: {0}", connectionError)
-          }}
-        </span>
-      </p>
+        <p
+          v-if="connectionError"
+          class="flex items-start gap-2 rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-3 text-p-sm text-ink-gray-7"
+          role="status"
+        >
+          <LucideCircleX
+            class="mt-0.5 size-4 shrink-0 text-danger"
+            aria-hidden="true"
+          />
+          <span class="min-w-0 break-words">
+            {{
+              connection?.connection_status === "Unreachable"
+                ? __("ERP unreachable: {0}", connectionError)
+                : __("ERP connection error: {0}", connectionError)
+            }}
+          </span>
+        </p>
 
-      <div class="flex flex-1 flex-col overflow-y-auto overscroll-y-contain">
         <TicketStats dt="HD Customer" :dn="customer.doc.name" />
         <Tabs
           v-model="activeTab"
           :tabs="tabs"
-          class="tabs-sticky-header [&_[role='tablist']]:!bg-surface-base"
+          class="tabs-sticky-header rounded-xl border border-outline-gray-2 bg-surface-base [&_[role='tablist']]:rounded-t-2xl [&_[role='tablist']]:!bg-surface-base"
         >
           <template #tab-item="{ tab, selected }">
             <button

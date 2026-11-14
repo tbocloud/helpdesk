@@ -21,11 +21,10 @@
     </LayoutHeader>
 
     <div class="relative flex-1 overflow-y-auto overflow-x-hidden">
-      <div
-        class="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-5 md:px-6"
-      >
+      <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
         <TaskyState
           v-if="plans.error && !plans.data"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
           :error="!isRefusal"
           :icon="isRefusal ? LucideLock : LucideCircleAlert"
           :title="
@@ -51,16 +50,17 @@
 
         <div
           v-else-if="!plans.data"
-          class="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_22rem]"
+          class="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_22rem]"
           aria-busy="true"
           :aria-label="__('Loading')"
         >
-          <div class="h-96 animate-pulse rounded-xl bg-surface-gray-2" />
-          <div class="h-80 animate-pulse rounded-xl bg-surface-gray-2" />
+          <div class="h-96 animate-pulse rounded-xl bg-surface-gray-3" />
+          <div class="h-80 animate-pulse rounded-xl bg-surface-gray-3" />
         </div>
 
         <TaskyState
           v-else-if="!plans.data.available"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
           :icon="LucideCloudOff"
           :title="__('The ERP site can\'t assign leads yet')"
           :message="
@@ -70,6 +70,7 @@
 
         <TaskyState
           v-else-if="!plans.data.departments.length"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
           :icon="LucidePhoneOff"
           :title="__('No department hands out daily calls')"
           :message="
@@ -104,7 +105,7 @@
 
           <div
             v-if="stuck"
-            class="flex flex-wrap items-center gap-3 rounded-lg border border-outline-gray-2 bg-warning-soft px-4 py-3"
+            class="flex flex-wrap items-center gap-3 rounded-xl border border-outline-gray-2 bg-warning-soft px-4 py-3"
             role="alert"
           >
             <LucideTriangleAlert
@@ -134,15 +135,15 @@
           </div>
 
           <div
-            class="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start"
+            class="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start"
           >
             <!-- the people and what each is handed now -->
             <section
-              class="min-w-0 rounded-xl border border-outline-gray-2 bg-surface-base"
+              class="min-w-0 overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
               :aria-labelledby="peopleHeading"
             >
               <div
-                class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-3"
+                class="flex items-center gap-3 border-b border-outline-gray-2 px-4 py-4 md:px-4"
               >
                 <Checkbox
                   v-if="current.members.length && canEdit"
@@ -152,7 +153,7 @@
                 />
                 <h2
                   :id="peopleHeading"
-                  class="flex-1 text-base-medium text-ink-gray-9"
+                  class="flex-1 text-base font-semibold text-ink-gray-9"
                 >
                   {{ __("People") }}
                 </h2>
@@ -171,6 +172,7 @@
 
               <TaskyState
                 v-if="!current.members.length"
+                class="py-10"
                 :icon="LucideUsers"
                 :title="__('{0} has no members', current.department)"
                 :message="
@@ -182,7 +184,7 @@
 
               <template v-else>
                 <div
-                  class="hidden items-center gap-2 px-4 py-2 text-xs text-ink-gray-6 md:grid"
+                  class="hidden h-11 items-center gap-2 border-b border-outline-gray-2 bg-surface-gray-1 px-5 text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6 md:grid"
                   :class="rowColumns"
                   :style="gridStyle"
                   aria-hidden="true"
@@ -199,14 +201,12 @@
                   <span class="text-right">{{ __("Today") }}</span>
                   <span class="text-right">{{ __("Leads") }}</span>
                 </div>
-                <ul
-                  class="divide-y divide-outline-gray-1 border-t border-outline-gray-1 md:border-t-0"
-                >
+                <ul class="divide-y divide-outline-gray-1">
                   <li v-for="member in current.members" :key="member.user">
                     <!-- a viewer can't pick anyone: a plain row, not a label -->
                     <component
                       :is="canEdit ? 'label' : 'div'"
-                      class="grid items-center gap-x-2 gap-y-1 px-4 py-3"
+                      class="grid items-center gap-x-2 gap-y-1 px-4 py-3 md:px-4"
                       :class="[
                         rowColumns,
                         canEdit
@@ -222,15 +222,20 @@
                         :aria-label="member.full_name"
                         @update:model-value="toggle(member.user, !!$event)"
                       />
-                      <span class="min-w-0">
-                        <span class="block truncate text-base text-ink-gray-9">
-                          {{ member.full_name }}
-                        </span>
-                        <!-- on a phone the plan is one line under the name -->
-                        <span
-                          class="block truncate text-sm text-ink-gray-6 md:hidden"
-                        >
-                          {{ planLine(member) }}
+                      <span class="flex min-w-0 items-center gap-2.5">
+                        <PersonAvatar :name="member.full_name" size="md" />
+                        <span class="min-w-0">
+                          <span
+                            class="block truncate text-[13px] font-semibold text-ink-gray-9"
+                          >
+                            {{ member.full_name }}
+                          </span>
+                          <!-- on a phone the plan is one line under the name -->
+                          <span
+                            class="block truncate text-[12px] text-ink-gray-6 md:hidden"
+                          >
+                            {{ planLine(member) }}
+                          </span>
                         </span>
                       </span>
                       <span
@@ -301,7 +306,7 @@
                   </li>
                 </ul>
                 <p
-                  class="border-t border-outline-gray-1 px-4 py-2 text-xs text-ink-gray-5"
+                  class="border-t border-outline-gray-2 px-4 py-3.5 text-xs text-ink-gray-6 md:px-4"
                 >
                   {{
                     __(
@@ -320,7 +325,7 @@
             >
               <h2
                 :id="planHeading"
-                class="flex items-center gap-2 text-base-medium text-ink-gray-9"
+                class="flex items-center gap-2 text-base font-semibold text-ink-gray-9"
               >
                 <LucideEye class="size-4 text-ink-gray-6" aria-hidden="true" />
                 {{ __("View only") }}
@@ -347,7 +352,10 @@
               @submit.prevent="assign"
             >
               <div>
-                <h2 :id="planHeading" class="text-base-medium text-ink-gray-9">
+                <h2
+                  :id="planHeading"
+                  class="text-base font-semibold text-ink-gray-9"
+                >
                   {{
                     picked.length
                       ? __("Assign to {0}", pickedLabel)
@@ -409,7 +417,7 @@
                   >
                 </legend>
                 <div
-                  class="flex max-h-64 flex-col overflow-y-auto rounded-lg border border-outline-gray-2"
+                  class="flex max-h-64 flex-col overflow-y-auto rounded-xl border border-outline-gray-2"
                 >
                   <label
                     v-for="row in districtRows"
@@ -465,7 +473,7 @@
               <!-- the product's unassigned leads: see them, or hand some out now -->
               <div
                 v-if="picked.length"
-                class="flex flex-col gap-2 rounded-lg border border-outline-gray-2 p-3"
+                class="flex flex-col gap-2 rounded-xl border border-outline-gray-2 p-3.5"
               >
                 <div class="flex items-center justify-between gap-2">
                   <p class="text-p-sm text-ink-gray-8">
@@ -544,7 +552,7 @@
 
               <div
                 v-if="picked.length"
-                class="flex flex-col gap-1.5 rounded-lg bg-surface-gray-1 px-3 py-2.5 text-sm"
+                class="flex flex-col gap-1.5 rounded-xl bg-surface-gray-1 px-3.5 py-3 text-sm"
                 aria-live="polite"
               >
                 <p class="text-ink-gray-8">
@@ -598,7 +606,7 @@
 
               <!-- pinned to the panel's bottom on a wide screen, so Assign is always in view -->
               <div
-                class="flex flex-col gap-2 border-outline-gray-2 bg-surface-base lg:sticky lg:-bottom-4 lg:-mx-4 lg:-mb-4 lg:border-t lg:px-4 lg:pb-4 lg:pt-3"
+                class="flex flex-col gap-2 border-outline-gray-2 bg-surface-base lg:sticky lg:-bottom-5 lg:-mx-5 lg:-mb-5 lg:border-t lg:px-5 lg:pb-5 lg:pt-3"
               >
                 <ErrorMessage
                   v-if="formError"
@@ -726,6 +734,7 @@
 
 <script setup lang="ts">
 import LayoutHeader from "@/components/LayoutHeader.vue";
+import PersonAvatar from "@/components/PersonAvatar.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";

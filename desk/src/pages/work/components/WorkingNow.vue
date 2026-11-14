@@ -3,7 +3,9 @@
     class="rounded-xl border border-outline-gray-2 bg-surface-base p-4"
     :aria-label="__('Working on now')"
   >
-    <h2 class="text-sm-semibold text-ink-gray-9">{{ __("Working on now") }}</h2>
+    <h2 class="text-base font-semibold text-ink-gray-9">
+      {{ __("Working on now") }}
+    </h2>
 
     <p v-if="!task" class="mt-3 text-p-sm text-ink-gray-6">
       {{
@@ -25,7 +27,7 @@
 
       <div
         v-if="timer.loading && !timer.data"
-        class="mt-3 h-8 w-32 animate-pulse rounded bg-surface-gray-2"
+        class="mt-3 h-8 w-32 animate-pulse rounded bg-surface-gray-3"
         role="status"
         :aria-label="__('Loading')"
       />

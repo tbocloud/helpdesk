@@ -8,30 +8,31 @@
       >
         <template #actions>
           <Button
-            variant="ghost"
+            size="md"
             :label="__('Refresh')"
             :loading="
               (dashboard.loading || projectDetail.loading) && !!dashboard.data
             "
             @click="reload"
           >
-            <template #icon><LucideRefreshCw class="size-4" /></template>
+            <template #icon>
+              <LucideRefreshCw class="size-[18px]" aria-hidden="true" />
+            </template>
           </Button>
         </template>
       </ProjectNav>
     </template>
-    <LayoutHeader v-else>
-      <template #left-header>
-        <div class="text-lg-medium text-ink-gray-9">
-          {{ __("Project dashboard") }}
-        </div>
-      </template>
-    </LayoutHeader>
+    <LayoutHeader
+      v-else
+      :title="__('Project dashboard')"
+      :subtitle="__('A project\'s progress, milestones, phases and team.')"
+    />
 
     <div class="relative flex-1 overflow-auto">
-      <div class="mx-auto w-full max-w-6xl px-4 py-5 md:px-6">
+      <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
         <TaskyState
           v-if="!projectId"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
           :icon="LucideGanttChartSquare"
           :title="__('No project selected')"
           :message="__('Pick a project to see its progress, phases and team.')"
@@ -46,6 +47,7 @@
           v-else-if="
             (dashboard.error || projectDetail.error) && !dashboard.data
           "
+          class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
           error
           :icon="LucideCircleAlert"
           :title="__('Couldn\'t load the dashboard')"
@@ -58,14 +60,13 @@
           <!-- the client documents it came from (read only here; acted on from the lead) -->
           <LeadDocuments
             v-if="projectDetail.data?.crm_lead && documentChain.data"
-            class="mb-4"
             :lead-id="projectDetail.data.crm_lead"
             :chain="documentChain.data"
             :can-write="false"
           />
           <!-- Overview -->
           <div
-            class="rounded-xl border border-outline-gray-2 bg-surface-base p-4 shadow-sm md:p-5"
+            class="rounded-xl border border-outline-gray-2 bg-surface-base p-4"
           >
             <div class="flex flex-wrap items-start justify-between gap-3">
               <div class="min-w-0">
@@ -75,7 +76,7 @@
                     kind="project"
                     :status="projectDetail.data.status"
                   />
-                  <span class="truncate font-mono text-xs text-ink-gray-5">{{
+                  <span class="truncate font-mono text-xs text-ink-gray-6">{{
                     projectId
                   }}</span>
                 </div>
@@ -100,20 +101,22 @@
                 </div>
               </div>
               <div class="text-right">
-                <div class="text-xs text-ink-gray-5">
+                <div class="text-[12px] text-ink-gray-6">
                   {{ progressLabel }}
                 </div>
-                <div class="text-2xl-semibold tabular-nums text-ink-gray-9">
+                <div
+                  class="text-[34px] font-bold leading-none tracking-[-0.02em] tabular-nums text-ink-gray-9"
+                >
                   <span
                     v-if="!dashboard.data"
-                    class="inline-block h-7 w-14 animate-pulse rounded bg-surface-gray-2"
+                    class="inline-block h-8 w-16 animate-pulse rounded bg-surface-gray-3"
                   />
                   <template v-else>{{ progressPercent }}%</template>
                 </div>
               </div>
             </div>
             <div
-              class="mt-4 h-2 w-full overflow-hidden rounded-full bg-surface-gray-2"
+              class="mt-4 h-2 w-full overflow-hidden rounded-full bg-surface-gray-3"
               role="progressbar"
               :aria-valuenow="progressPercent"
               aria-valuemin="0"
@@ -121,7 +124,7 @@
               :aria-label="progressLabel"
             >
               <div
-                class="h-full rounded-full bg-surface-gray-7 transition-[width] duration-500"
+                class="h-full rounded-full bg-brand transition-[width] duration-500"
                 :style="{ width: progressPercent + '%' }"
               />
             </div>
@@ -129,7 +132,7 @@
 
           <div
             v-if="projectDetail.data?.can_coordinate && undatedCount"
-            class="-mb-1 mt-3 flex justify-end"
+            class="-my-2 flex justify-end"
           >
             <Button
               variant="ghost"
@@ -151,7 +154,9 @@
           </div>
 
           <!-- Stats -->
-          <div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div
+            class="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4"
+          >
             <StatTile
               v-for="card in statCards"
               :key="card.key"
@@ -170,29 +175,27 @@
           <section
             v-if="milestones.length || projectDetail.data?.can_coordinate"
             aria-labelledby="pm-milestones"
-            class="mt-6"
+            class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
           >
             <h2
               id="pm-milestones"
-              class="mb-2 flex items-center gap-2 text-sm font-medium text-ink-gray-7"
+              class="flex items-center gap-2 border-b border-outline-gray-2 px-4 py-3 text-base font-semibold text-ink-gray-9"
             >
               {{ __("Milestones") }}
               <span
                 v-if="milestones.length"
-                class="font-mono text-xs tabular-nums text-ink-gray-5"
+                class="min-w-[22px] rounded-full bg-surface-gray-4 px-[7px] py-px text-center text-xs font-semibold tabular-nums text-ink-gray-7"
               >
                 {{ milestonesDone }}/{{ milestones.length }}
               </span>
             </h2>
-            <div
-              class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base shadow-sm"
-            >
+            <div>
               <p
                 v-if="!milestones.length"
-                class="flex items-center gap-2 px-4 py-4 text-p-sm text-ink-gray-6"
+                class="flex items-center gap-2 px-4 py-3 text-p-sm text-ink-gray-6"
               >
                 <LucideFlag
-                  class="size-4 shrink-0 text-ink-gray-5"
+                  class="size-4 shrink-0 text-ink-gray-6"
                   aria-hidden="true"
                 />
                 {{
@@ -201,11 +204,11 @@
                   )
                 }}
               </p>
-              <ol v-else role="list">
+              <ol v-else role="list" class="divide-y divide-outline-gray-1">
                 <li
                   v-for="m in milestones"
                   :key="m.name"
-                  class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-2.5 last:border-b-0"
+                  class="flex items-center gap-3 px-4 py-3"
                 >
                   <component
                     :is="milestoneIcon(m)"
@@ -216,7 +219,7 @@
                   <div class="min-w-0 flex-1">
                     <div class="flex min-w-0 items-center gap-2">
                       <span
-                        class="truncate text-sm"
+                        class="truncate text-[13px] font-medium"
                         :class="
                           isClosed(m)
                             ? 'text-ink-gray-5 line-through'
@@ -270,30 +273,31 @@
             </div>
           </section>
 
-          <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_20rem]">
+          <div class="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_22rem]">
             <!-- Phases -->
-            <section aria-labelledby="pm-phases">
+            <section
+              aria-labelledby="pm-phases"
+              class="self-start overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
+            >
               <h2
                 id="pm-phases"
-                class="mb-2 text-sm font-medium text-ink-gray-7"
+                class="border-b border-outline-gray-2 px-4 py-3 text-base font-semibold text-ink-gray-9"
               >
                 {{ __("Phases") }}
               </h2>
-              <div
-                class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base shadow-sm"
-              >
+              <div>
                 <template v-if="!dashboard.data">
                   <div
                     v-for="i in 3"
                     :key="i"
-                    class="flex flex-col gap-2 border-b border-outline-gray-1 p-4 last:border-b-0"
+                    class="flex flex-col gap-2 border-b border-outline-gray-1 px-4 py-3 last:border-b-0"
                     aria-hidden="true"
                   >
                     <div
-                      class="h-3.5 w-1/3 animate-pulse rounded bg-surface-gray-2"
+                      class="h-3.5 w-1/3 animate-pulse rounded bg-surface-gray-3"
                     />
                     <div
-                      class="h-1.5 w-full animate-pulse rounded-full bg-surface-gray-2"
+                      class="h-1.5 w-full animate-pulse rounded-full bg-surface-gray-3"
                     />
                   </div>
                 </template>
@@ -316,16 +320,16 @@
                     "
                   />
                 </div>
-                <ul v-else role="list">
+                <ul v-else role="list" class="divide-y divide-outline-gray-1">
                   <li
                     v-for="phase in phases"
                     :key="phase.name"
-                    class="flex items-center gap-4 border-b border-outline-gray-1 px-4 py-3 last:border-b-0"
+                    class="flex items-center gap-4 px-4 py-3"
                   >
                     <div class="min-w-0 flex-1">
                       <div class="flex items-center justify-between gap-2">
                         <span
-                          class="flex min-w-0 items-center gap-1.5 text-sm text-ink-gray-8"
+                          class="flex min-w-0 items-center gap-1.5 text-[13px] font-medium text-ink-gray-9"
                         >
                           <LucideCircleCheck
                             v-if="
@@ -345,10 +349,10 @@
                         </span>
                       </div>
                       <div
-                        class="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-surface-gray-2"
+                        class="mt-2 h-2 w-full overflow-hidden rounded-full bg-surface-gray-3"
                       >
                         <div
-                          class="h-full rounded-full bg-surface-gray-7 transition-[width] duration-500"
+                          class="h-full rounded-full bg-brand transition-[width] duration-500"
                           :style="{ width: phase.progress_pct + '%' }"
                         />
                       </div>
@@ -364,22 +368,23 @@
             </section>
 
             <!-- Team -->
-            <section aria-labelledby="pm-team">
+            <section
+              aria-labelledby="pm-team"
+              class="self-start overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
+            >
               <h2
                 id="pm-team"
-                class="mb-2 flex items-center gap-2 text-sm font-medium text-ink-gray-7"
+                class="flex items-center gap-2 border-b border-outline-gray-2 px-4 py-3 text-base font-semibold text-ink-gray-9"
               >
                 {{ __("Team") }}
                 <span
                   v-if="teamWorkload.length"
-                  class="font-mono text-xs tabular-nums text-ink-gray-5"
+                  class="min-w-[22px] rounded-full bg-surface-gray-4 px-[7px] py-px text-center text-xs font-semibold tabular-nums text-ink-gray-7"
                 >
                   {{ teamWorkload.length }}
                 </span>
               </h2>
-              <div
-                class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base shadow-sm"
-              >
+              <div>
                 <template v-if="!projectDetail.data">
                   <div
                     v-for="i in 3"
@@ -388,38 +393,38 @@
                     aria-hidden="true"
                   >
                     <div
-                      class="size-6 animate-pulse rounded-full bg-surface-gray-2"
+                      class="size-7 animate-pulse rounded-full bg-surface-gray-3"
                     />
                     <div
-                      class="h-3.5 w-1/2 animate-pulse rounded bg-surface-gray-2"
+                      class="h-3.5 w-1/2 animate-pulse rounded bg-surface-gray-3"
                     />
                   </div>
                 </template>
                 <p
                   v-else-if="teamWorkload.length === 0"
-                  class="px-4 py-10 text-center text-p-sm text-ink-gray-6"
+                  class="px-5 py-14 text-center text-p-sm text-ink-gray-6"
                 >
                   {{ __("No team members yet") }}
                 </p>
-                <ul v-else role="list">
+                <ul v-else role="list" class="divide-y divide-outline-gray-1">
                   <li
                     v-for="member in teamWorkload"
                     :key="member.user"
-                    class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-2.5 last:border-b-0"
+                    class="flex items-center gap-3 px-5 py-3.5"
                   >
-                    <span
-                      class="flex size-7 shrink-0 items-center justify-center rounded-full bg-surface-gray-3 text-xs font-medium text-ink-gray-7"
-                      aria-hidden="true"
-                    >
-                      {{ initials(member.full_name || member.user) }}
-                    </span>
+                    <PersonAvatar
+                      :name="member.full_name || member.user"
+                      size="md"
+                    />
                     <div class="min-w-0 flex-1">
-                      <div class="truncate text-sm text-ink-gray-8">
+                      <div
+                        class="truncate text-[13px] font-medium text-ink-gray-9"
+                      >
                         {{ member.full_name || member.user }}
                       </div>
                       <div
                         v-if="member.full_name"
-                        class="truncate font-mono text-xs text-ink-gray-5"
+                        class="truncate font-mono text-xs text-ink-gray-6"
                       >
                         {{ member.user }}
                       </div>
@@ -427,7 +432,7 @@
                     <!-- with only your own tasks loaded, the count would be partial -->
                     <span
                       v-if="seesAllTasks"
-                      class="shrink-0 font-mono text-xs tabular-nums text-ink-gray-6"
+                      class="min-w-[22px] shrink-0 rounded-full bg-surface-gray-4 px-[7px] py-px text-center text-xs font-semibold tabular-nums text-ink-gray-7"
                       :title="__('Open tasks assigned')"
                     >
                       {{ openCountFor(member.user) }}
@@ -470,15 +475,11 @@ import LeadDocuments from "@/pages/leads/LeadDocuments.vue";
 import ProjectNav from "./components/ProjectNav.vue";
 import SlipBadge from "./components/SlipBadge.vue";
 import TaskStatusBadge from "./components/TaskStatusBadge.vue";
+import PersonAvatar from "@/components/PersonAvatar.vue";
 import StatTile from "@/components/StatTile.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import type { Tone } from "@/components/tone";
-import {
-  CHECKLIST_FILTERS,
-  initials,
-  isClosed,
-  loadErrorMessage,
-} from "./taskMeta";
+import { CHECKLIST_FILTERS, isClosed, loadErrorMessage } from "./taskMeta";
 
 const props = defineProps<{
   projectId?: string;
