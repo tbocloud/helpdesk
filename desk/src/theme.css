@@ -46,6 +46,22 @@
   --info: #2f56c6;
   --info-soft: #e8edfb;
   /*
+   * person colours: each person gets one, from a hash of their name, on their
+   * initials (PersonAvatar). Always with the name or initials beside it.
+   */
+  --person-1: #0e4a5e;
+  --person-1-soft: #ddeff4;
+  --person-2: #4c2a9e;
+  --person-2-soft: #ede7fb;
+  --person-3: #8f3b0b;
+  --person-3-soft: #fdebdd;
+  --person-4: #136b4a;
+  --person-4-soft: #e3f5ee;
+  --person-5: #1e4fb8;
+  --person-5-soft: #e8f0fe;
+  --person-6: #3b4453;
+  --person-6-soft: #e9edf1;
+  /*
    * champion: the Scoreboard's champion card only. A warm gold says "award"
    * without reusing warning (a problem) or note (internal notes).
    */
@@ -121,6 +137,18 @@
   --danger-soft: #34191a;
   --info: #8da6ff;
   --info-soft: #16233f;
+  --person-1: #a6d5e6;
+  --person-1-soft: #15303b;
+  --person-2: #c4b0ff;
+  --person-2-soft: #251d3d;
+  --person-3: #ffb98a;
+  --person-3-soft: #352014;
+  --person-4: #6fd39a;
+  --person-4-soft: #14281e;
+  --person-5: #8da6ff;
+  --person-5-soft: #16233f;
+  --person-6: #c9d0da;
+  --person-6-soft: #2a2e36;
   --champion: #f0bf5e;
   --champion-soft: #2a2213;
   --champion-border: #4f3f1c;

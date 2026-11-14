@@ -418,22 +418,43 @@ Code: `helpdesk/api/call_batches.py` (proxies; `report_lines` for the 6 pm text)
 
 The department's slots hand every member the same number (by default Morning 40, Afternoon 30, Evening 30). On
 **Assign leads** (Sales, Team; `/leads/assign`, `AssignLeads.vue`) a manager or department head
-plans each person instead: the **product** they are handed and the **calls per slot**. The ERP
-site keeps the plan on the member's row and the call batches follow it from the next slot
-(TBO Smart's `call-batches.md` §11). Nothing is stored here.
+plans each person instead: the **product** they are handed, the **calls per slot** and, per
+slot, **which districts** they come from. The ERP site keeps the plan on the member's row and the
+call batches follow it from the next slot (TBO Smart's `call-batches.md` §11). Nothing is stored
+here.
 
-**What the page shows.** A **Department** field first (the departments with call batches on;
-`?department=` in the URL). The **People** list and the **Product** choices are that
-department's own. The **People** list has each member's product ("Any product" without one), their calls per
-slot (gray: the department's size, no plan of their own) and today's *called / handed*. On a phone
-each row is the name with "PhoebiX · 50 + 50" under it. The **Assign** panel (beside the list on a
-wide screen, under it on a phone) has the product, one number per slot, the day's total ("100
-calls a day each, 300 together"), how many unassigned leads of that product are ready (with a
-warning icon and words when it is fewer than the plan; each batch starts with the person's own
-leads anyway), one primary **Assign leads** button and, for people who have a plan, **Back to
-department sizes**. On a wide screen the panel scrolls in itself and its buttons stay pinned to
-its bottom, so Assign leads is always in view. A department's campaign product is the only product (the picker is locked
-and says why).
+**What the page shows.** The header: *Leads › Assign leads*, the title and *Pick people on the
+left, then choose what to do on the right.* Then the **Department** picker on the left, labelled
+and always shown, so it is the first thing to choose (`?department=` in the URL). Then one strip
+of four numbers, as the owner's mockup draws it (figure over label, no icons): **Leads waiting in
+the pool** (in warning ink with *Less than a day of planned calls* when the pool is smaller than
+the day's plans and the department pulls from it), **Calls planned per day**, **Called today**
+(*99 of 170*) and **People on a daily plan** (*3 of 4*). Under them, the **People** list beside one action panel
+(sticky on a wide screen, under the list on a phone).
+
+**The people list.** A card headed *People · 1 selected* with a search box; the pick-everyone
+box sits in the table's header row (half-ticked when some are picked). Each row: a tick box, the person
+(`PersonAvatar` and name), **Daily plan**, **Called today** and **Leads they own**. The plan is a
+pill in words and colour (`callPlans.planKind`): **Default · 100 a day** (gray, the department's
+slot sizes), **Custom · 70 a day** (brand, a plan of their own) or **No plan** (warning, a plan of
+0 calls: they get only the leads given by hand), with the plan spelled out under it: the product
+or industry (*For PhoebiX*), then one line per slot (*Morning: Ernakulam 40*, *Afternoon: Idukki
+20, Mixed 10*; `memberShares`, `sharesText`). Called today is a bar and *38 of 70 called*, or
+*Nothing handed out yet*; it opens the person's Today's calls. Leads they own opens their leads.
+A click on a row picks only that person; the tick box adds or drops one, for several at once. A
+legend under the list explains the three pills. On a phone each row stacks: the name, the plan,
+then today's calls and the leads on one line.
+
+**The action panel.** With nobody picked it says *Pick someone to start*. Otherwise its header
+names who (*Fidha V P*, with *Owns 452 leads · 100 calls a day*; or *3 people* and their names),
+then three tabs of equal width (`?tab=give|plan|back` in the URL) with a one-line hint and
+one main button each, pinned to the panel's bottom on a wide screen:
+- **Give now** (`AssignGiveNow.vue`): waiting leads now, without changing the daily plan.
+- **Daily plan** (`AssignDailyPlan.vue`): the calls of each slot, from which districts.
+- **Take back** (`AssignTakeBack.vue`): their leads back to the pool.
+
+A department's campaign product is the only product (the picker is locked and says why), and its
+campaign district the only district.
 
 **A department without products gives leads by industry.** When a department has no products
 (TBO) and the ERP site sends its industries, Assign leads uses **Industry** where it would use
@@ -445,37 +466,35 @@ TBO Smart keeps it as the member's `call_industry`, and the batches and the 11:0
 follow it). The leads window filters and gives by industry too and hides Set product. An older
 TBO Smart sends no industries, so the page stays as it was.
 
-**A district narrows it all.** When the ERP site sends a department's districts (those its open
-leads are in; `callPlans.hasDistricts`), the Assign panel has a **District** list under Product
-(or Industry) that shows each district's balance: *Any district* with the total, then every
-district with its unassigned leads of the product (or industry) chosen, the fullest first
-(*Malappuram 40*). When the people picked own open leads, a second column (*With Fidha V P*, or
-*With them* for several) shows how many of their leads are in each district, so a department
-whose pool is empty doesn't read as a list of zeros. It counts all their open leads (the ERP's
-district counts ignore the product), comes from one `get_department_leads` call per owner, and
-is fetched again only when that person's lead total changes, not on the 15-second reload.
-Picking a row chooses that district, and the product's counts follow it. The box says
-*40 unassigned PhoebiX leads in Malappuram*; **See leads** opens the Unassigned window on that
-product and district, **Give now** gives the next leads of both, and **Assign leads** saves the
-district with the plan, so the batches, *Calling for* and the 11:00 auto-assign take only that
-district's new leads (TBO Smart keeps it as the member's `call_district`; `save_call_plan`,
-`assign_leads`, `get_department_leads` send `district` only when one is chosen). The people
-table's plan column reads *PhoebiX · Malappuram* (*Product · District*). A department's campaign
-district is the only one: the field is locked and says why. The leads window gets a **District**
-filter with counts (*All districts*, each district, *No district*), each lead shows its district
-next to the stage, and *Give the next* takes an **In district** too. An older TBO Smart sends no
-districts, so the field stays out instead of filtering nothing.
+**Districts.** When the ERP site sends a department's districts (those its open leads are in;
+`callPlans.hasDistricts`) with what waits in each (`unassigned_districts`), Give now lists them to
+take from, Daily plan offers them per slot, and Take back lists the people's own. District names
+are shown as the leads carry them (spellings that differ only in case or spacing are one). The
+leads window gets a **District** filter with counts (*All districts*, each district, *No
+district*), each lead shows its district next to the stage, and *Give the next* takes an **In
+district** too. `save_call_plan`, `assign_leads` and `get_department_leads` send `district` only
+when one is chosen. An older TBO Smart sends no districts, so the district parts stay out instead
+of filtering nothing.
 
-**The product's unassigned leads, there and then.** Each product in the picker says how many
-unassigned leads with a phone it has (*PhoebiX · 120 unassigned*; *Any product* the total). With
-people picked, a box under it says *120 unassigned PhoebiX leads* with **See leads** (the
-Unassigned window, already on that product; with one person picked it opens on their pool, ready
-to give picked leads to them) and **Give now** (*Give each now* for several people): that many of
-the next unassigned leads of the product go to each person at once (`assign_leads` with `count`
-and `product`, one call per person, as *Give the next 25* in the window). Give now is always
-there; with nothing to give it is disabled and says to pick a district with a balance or another
-product. Given leads are theirs
-straight away and their next batch can call them; the plan below still sets the calls a day.
+**Give now.** A **Product** (or **Industry**) picker with how many wait (*StayveX · 291
+waiting*). With districts: **1. Where should leads come from?**, a list of tick boxes (frappe-ui
+`Checkbox`): *Any district* with the total (so leads without a district can be given too), then
+each district with its waiting leads, the fullest first; a district with none says *none* and
+can't be ticked; *Any district* and named districts don't mix (the last kind ticked wins); **Pick
+all with leads** ticks every district that has some; with one person picked a **They own** column
+shows their open leads there (one `get_department_leads` call, asked again only when their lead
+total changes). **2. How many?** (*How many each?* for several): a number and quick chips 10, 25,
+50, 100 and *All N* (what the ticked districts hold, per person). A preview says *Fidha V P gets 25
+leads now*, how many from each district, and *They own them at once. Their next batch can call
+them, at the latest the Afternoon slot at 14:00* (`nextSlotText`). Instead of a silently disabled
+button it says what is in the way: nothing waiting for the product, no district ticked, no number,
+more than 500, or *Only 60 leads are waiting in the districts you picked, and you need 75. Pick
+more districts or lower the amount.* The button says it all (*Give 25 leads to Fidha V P*, *Give
+25 leads each to 3 people*). Each person in turn takes from the fullest district left, so two
+people may get theirs from different districts; one `assign_leads` call per person and district.
+The toast says how many went (*Gave 50 leads to 2 people*, or *… The rest were taken meanwhile*),
+and the page reads its numbers again. **Pick leads one by one** opens the Unassigned window on that
+product (and the one district ticked).
 
 **Auto-assign when nobody did.** Under the panel, a clock line says when the department hands
 out leads on its own: *At 11:00, anyone with a plan who wasn't given leads here today is topped up
@@ -499,43 +518,74 @@ phone):
   department);
 - under Unassigned, tick leads and **Assign to** the person, or **Give the next 25 of PhoebiX**
   without picking (the ERP site takes the next unassigned leads with a phone, hot then newest);
-- the header's **Unassigned leads** button opens the pool on its own.
+- Give now's **Pick leads one by one** opens the pool on the product and district chosen.
 
-**No daily calls: assign by hand.** With people ticked, the panel's footer has a quiet **No daily
-calls · assign by hand**. It asks first ("From the next slot they get no automatic calls (the
-department's 50 + 50 stops for them)…") and saves their plan as 0 in every slot (`save_call_plan`
-with zeros, the product and district as picked), so the batches and the 11:00 top-up hand them
-nothing; they get only the leads given here: **Give now** (a number of the product and district
-picked) or **See leads** (pick them one by one). The people table's plan reads *By hand: no daily
-calls*. To go back to batches, set calls per slot and press Assign leads, or **Remove plan** for
-the department's default. Today's calls lists only leads still at New Lead, and no newer
-duplicate (TBO Smart's `call-batches.md`, "Only new leads are listed").
+**Daily plan.** A box with the current plan (*Current plan (the department's): Morning: Mixed 50 /
+Afternoon: Mixed 50*; *No daily plan. Fidha V P gets leads only when you use Give now.*; for
+several people, how many have a plan of their own), the **Calls for product** (or industry), then
+two choices:
+- **Use the department plan**: the department's slot sizes from any district (each slot reads
+  *50 mixed, from any district*). Saving sends `clear`.
+- **Choose districts for each slot**: a box per department slot (*Morning 10:00–13:00 · 50
+  calls*; as many slots as the department has), each a list of rows: a district picker (*Mixed ·
+  any district · 291 waiting*, then every district with what waits there; a district or Mixed
+  already in the slot is greyed out), the calls and a remove button. **+ Add district** adds a
+  row. Under a row whose district has fewer waiting leads than it asks of everyone picked: *Only 40
+  waiting in Idukki. The rest comes from their own leads there.* Saving sends `slot_districts`
+  (`{"Morning": [{"district": "Ernakulam", "calls": 50}], "Afternoon": [{"district": "Idukki",
+  "calls": 20}, {"district": "", "calls": 10}]}`; a blank district is Mixed). The ERP site checks
+  it again (each district once a slot, 0 to 500 calls a slot, the campaign district).
 
-**All of someone's leads back to the pool at once.** With people ticked who own open leads, the
-panel's footer has a quiet **Send their 555 leads back to the pool** (the count is theirs
-together). It opens a window (`SendBackLeadsDialog.vue`) that asks which: a **Product** (or
-**Industry**) and a **District**, each listing only what those people have, with counts (*All
-products (555)*, *StayveX (555)*, *No product (12)*). It counts the leads that match, says what
-happens ("555 leads go back to StayVeX's unassigned pool. Fidha will no longer see them or their
-notes, and their calls not made yet leave Fidha's list."), and *Keep them* is the primary button;
-**Send 555 back to the pool** is the red one. Only open leads go: won and lost ones stay theirs.
-It works through them 100 at a time (`get_department_leads` for the person and the choice, then
-`unassign_leads` on those names, round after round), showing *Sending back: 200 of 555 done*, and
-can't be closed while it runs. Each round reads what the person still owns, so a lead moved to
-someone else meanwhile is never taken from them, and it never sends back more than it counted, so
-leads handed to the person meanwhile don't keep it going. If a call fails it stops, says how many went
-back, and counts again, so the button then sends the rest. No new endpoint: the ERP site's
-`unassign_leads` takes at most 500 named leads, and the hub lists 100 at a time.
+Then the day's total (*100 calls a day*, *100 calls a day each · 300 together*), whether the pool
+carries it (a bar and *291 leads waiting: enough for about 2 days*, or a warning that only part can
+come from the pool; when the department doesn't pull waiting leads it says each person calls their
+own), and a folded **How daily calls are handed out** (each slot's batch takes their own new leads
+first, then waiting ones; district rows first, Mixed after them; the department's auto-assign line
+with its real time and days; calls already handed out stay). The main button is **Save plan for
+X**, **Start plan for X** for people with no plan, **Use the department plan for X**, or disabled as
+*Add calls to save a plan* / *Already on the department plan*. A plan is not saved with 0 calls a
+day: that is Remove plan. A number outside 0–500, or a slot over 500, says which slot to fix and
+sends nothing. The form is filled from the first person picked and filled again only when other
+people are picked or their plan changes, not on the 15-second reload.
 
-**Made hard to get wrong.** *Send N back to the pool* is a quiet secondary button and asks first
-("Send 71 leads back to the pool? Shahana V K will no longer see them or their notes. They go to
-the next person's call batch."); *Keep them with X* is the primary button of that question. Under
-Unassigned, *Give N to X* is the solid button. Every action leaves a plain result line in the
-window ("71 leads given to Fidha V P", "71 leads are now in the pool") and the list says who owns
-what it shows ("owned by X" / "no owner yet"). When leads wait in a department's pool and nobody
-will be handed them, the page shows a warning above the people: every member's plan is 0 (with a
-*Set the plan* button that picks everyone) or the department doesn't pull unassigned leads
-(`poolStuck` in `callPlans.ts`).
+**Remove plan.** For people picked who have a plan (default or their own), a red outlined
+**Remove plan** under the main button. It asks in place (no browser dialog): *Remove the daily plan
+for Fidha V P? Automatic calls stop from the next slot, and the 11:00 top-up skips them. Leads they
+already own stay with them.* with **Keep plan** and **Remove plan**. It saves 0 calls in every slot
+(`save_call_plan` with zeros), so the batches and the top-up hand them nothing; the pill becomes
+**No plan** and the main button **Start plan**. It works for several people at once. Today's calls
+lists only leads still at New Lead, and no newer duplicate (TBO Smart's `call-batches.md`, "Only
+new leads are listed").
+
+**An older TBO Smart** sends no `slot_districts` (`callPlans.splitsSlots`): the second choice is
+**Set calls for each slot**, one number per slot and one **District** for the whole plan, saved as
+`sizes` and `district` as before, with *A different district for each slot needs the latest TBO
+Smart on the ERP site.* The hub sends `slot_districts` only when it is given.
+
+**Take back.** For the people picked who own open leads: a **Product** (or **Industry**) picker
+listing only what they have, with counts (*All products (555)*, *StayveX (555)*, *No product
+(12)*), then **All districts** (*555 leads*) or **Only some districts** (their districts as tick
+boxes with counts, *No district* too). It counts the leads that match, per person and district
+(`get_department_leads`), and says what happens (*555 leads go back to StayVeX's unassigned pool.
+Fidha will no longer see them or their notes, and their calls not made yet leave Fidha's list.*).
+**Send 555 leads back to the pool** (red outline) asks in place (*Send 555 leads from Fidha V P back
+to the pool?*) with **Keep them** as the solid button and **Yes, send back**. Only open leads go:
+won and lost ones stay theirs. It works through them 100 at a time (`get_department_leads` for the
+person, the choice and each district, then `unassign_leads` on those names, round after round),
+showing *Sending back: 200 of 555 done*. Each round reads what the person still owns, so a lead
+moved to someone else meanwhile is never taken from them, and it never sends back more than it
+counted. If a call fails it stops, says how many went back, and counts again, so sending again
+takes the rest. (The mockup's note that today's calls stay on their list is not what happens:
+`unassign_leads` takes the calls not made yet off the person's list, so the page says that.)
+
+**Made hard to get wrong.** Every action says what it will do, with names and numbers, and the
+two that take something away (Remove plan, Take back) ask in place first, with keeping things as
+the safe choice. Every action ends in a toast (*Gave 25 leads to Fidha V P*, *Saved the daily plan
+for Fidha V P*, *Removed the daily plan for Fidha V P*, *Sent 44 leads back to the pool*) and the
+numbers update without reloading the page. When leads wait in a department's pool and nobody will
+be handed them, the page shows a warning above the people: every member's plan is 0 (with a *Set a
+daily plan* button that picks everyone and opens Daily plan) or the department doesn't pull waiting
+leads (`poolStuck` in `callPlans.ts`).
 
 The owner, the ToDo assignment and a waiting call in the previous owner's running batch move with
 the lead (TBO Smart's `call-batches.md` §12). At most 500 leads at a time; 50 a page with **Show
@@ -549,40 +599,40 @@ can be planned; the page says to add people in Settings, CRM, Lead departments.
 
 **States.** Loading skeleton; an error with Try again; an older ERP site (*The ERP site can't
 assign leads yet*); no department with batches (turn them on in Settings); a department with no
-members; the save's own error under the button.
+members; a search with no match (*Clear search*); nobody picked; each tab's own error under its
+fields, after which its button works again.
 
 **What a plan does on the ERP site.** The slot's batch holds the person's number (0: none in
-that slot), the day's cap is at least the plan's total, new leads are only the plan's product, the
-person's *Calling for* offers only that product in the department, and their batches there open
-even when they focus on another department. Calls already handed out stay.
+that slot), split by the slot's district rows (named districts first, then Mixed; each takes their
+own leads of that district first, then waiting ones), the day's cap is at least the plan's total,
+new leads are only the plan's product, the person's *Calling for* offers only that product in the
+department, and their batches there open even when they focus on another department. The 11:00
+top-up fills each district's shortfall, then Mixed. Calls already handed out stay.
 
-Code: `helpdesk/api/call_batches.py` (`get_call_plans`, `save_call_plan`; a 403 becomes
-`LeadsForbiddenError` with the ERP site's reason), `desk/src/pages/leads/callPlans.ts` (types,
-`leadsReady`), `AssignLeads.vue`; the nav item `assign-leads` (`callPlannerOnly` in
-`useNavigation.ts`).
+Code: `helpdesk/api/call_batches.py` (`get_call_plans`, `save_call_plan` with `slot_districts`;
+a 403 becomes `LeadsForbiddenError` with the ERP site's reason), `desk/src/pages/leads/callPlans.ts`
+(types, `leadsReady`, `planKind`, `memberShares`, `nextSlotText`), `AssignLeads.vue` with
+`AssignGiveNow.vue`, `AssignDailyPlan.vue` and `AssignTakeBack.vue`; the nav item `assign-leads`
+(`callPlannerOnly` in `useNavigation.ts`).
 
 ### How to use (managers and heads)
 
-1. Open **Sales → Assign leads** and pick the **Department**. The list shows its people.
-2. Tick the people (or the box at the top for everyone).
-3. Choose the **Product** and, to call one place only, the **District**. Type the calls for each
-   slot, for example Morning 40, Afternoon 30, Evening 30.
-4. Check the line under it: if fewer unassigned leads are ready than you plan, the batches give
-   what there is.
-5. Press **Assign leads**. It counts from the next slot.
-6. To see or move someone's leads, press **N leads** on their row. Tick leads to **Move to**
-   someone else, **Unassign** or **Set product**. Under **Unassigned**, tick leads and assign them,
-   or type how many to give (and of which product and district) and press **Give to**.
-7. For someone who should get no automatic calls, tick them and press **No daily calls · assign
-   by hand**, then give them leads with **Give now** or **See leads**.
-8. To take back the leads someone already has (they leave, or change department), tick them and
-   press **Send their N leads back to the pool**. Leave *All products* and *All districts* for
-   every open lead, or choose one product or district, then press **Send N back to the pool**.
-   Keep the page open until it says they are in the pool.
-9. To remove someone's plan, tick them and press **Remove plan · use (department) default
-   (50 + 50)**; the button shows the department's slot sizes. It asks first ("Remove Fidha V P's
-   plan? From the next slot they get GrowthX's default: Morning 50 + Afternoon 50, any
-   product."), naming the campaign product instead of "any product" when the department has one.
+1. Open **Sales → Assign leads** and pick the **Department**. The list shows its people and
+   their plans.
+2. Click a person (or tick several, or the box at the top for everyone).
+3. **Give now**: choose the product, tick the districts, say how many, check the preview and press
+   **Give 25 leads to …**.
+4. **Daily plan**: choose **Use the department plan**, or **Choose districts for each slot** and
+   add rows, for example Morning: Ernakulam 50; Afternoon: Idukki 20 and Mixed 10. Check the warning
+   lines and whether the pool is enough, then press **Save plan for …**. It counts from the next
+   slot.
+5. For someone who should get no automatic calls, press **Remove plan** on Daily plan, then
+   **Remove plan** again to confirm. Give them leads with **Give now**.
+6. **Take back**: choose all their districts or some, press **Send N leads back to the pool** and
+   confirm. Keep the page open until it says they are in the pool.
+7. To see or move single leads, press the number under **Leads they own**: tick leads to **Move
+   to** someone else, **Unassign** or **Set product**; under **Unassigned**, assign them or give the
+   next N.
 
 **Viewers (read-only).** A department's **Viewers** (Settings → CRM → Lead departments, next to
 Heads; shown once the ERP site's TBO Smart has them) open Assign leads for it but change nothing:

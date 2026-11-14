@@ -176,16 +176,20 @@ def save_call_plan(
     clear: int | str | bool = 0,
     industry: str | None = None,
     district: str | None = None,
+    slot_districts: dict | str | None = None,
 ) -> dict:
     """Hand `users` (members of `department`) the `product` (or, in a department without
     products, the `industry`), the `district` and `sizes` ({slot: calls}) from their next slot,
-    or (`clear`) the department's sizes again. The ERP site checks who may and
+    or `slot_districts` ({slot: [{district, calls}]}, a blank district is Mixed) to split each
+    slot by district, or (`clear`) the department's sizes again. The ERP site checks who may and
     what is valid; it answers with the department as `get_call_plans` lists it."""
     require_leads()
     users = frappe.parse_json(users) if isinstance(users, str) else users
     if not users:
         frappe.throw(_("Pick the people to assign leads to."))
     sizes = frappe.parse_json(sizes) if isinstance(sizes, str) else sizes
+    if isinstance(slot_districts, str):
+        slot_districts = frappe.parse_json(slot_districts)
     result = call_if_deployed(
         "save_call_plan",
         post=True,
@@ -195,6 +199,8 @@ def save_call_plan(
         sizes=sizes or None,
         clear=cint(clear),
         **only_given(industry=industry, district=district),
+        # sent only when given: an older ERP site does not know it
+        **({"slot_districts": slot_districts} if slot_districts else {}),
         permission_message=_(PLANNERS_ONLY),
     )
     if result is None:

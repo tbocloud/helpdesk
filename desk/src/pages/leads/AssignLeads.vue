@@ -2,30 +2,42 @@
   <div class="flex h-full flex-col">
     <LayoutHeader>
       <template #left-header>
-        <nav
-          class="flex min-w-0 items-center gap-1.5 text-lg-medium"
-          :aria-label="__('Breadcrumb')"
-        >
-          <router-link
-            :to="{ name: 'Leads' }"
-            class="shrink-0 rounded text-ink-gray-6 hover:text-ink-gray-8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
-            >{{ __("Leads") }}</router-link
+        <div class="flex min-w-0 flex-col gap-1">
+          <nav
+            class="flex items-center gap-1 text-sm text-ink-gray-6"
+            :aria-label="__('Breadcrumb')"
           >
-          <LucideChevronRight
-            class="size-4 shrink-0 text-ink-gray-4"
-            aria-hidden="true"
-          />
-          <h1 class="truncate text-ink-gray-9">{{ __("Assign leads") }}</h1>
-        </nav>
+            <router-link
+              :to="{ name: 'Leads' }"
+              class="rounded hover:text-ink-gray-8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+              >{{ __("Leads") }}</router-link
+            >
+            <LucideChevronRight class="size-3.5 shrink-0" aria-hidden="true" />
+            <span aria-current="page">{{ __("Assign leads") }}</span>
+          </nav>
+          <h1
+            class="truncate text-lg font-bold text-ink-gray-9 md:text-[22px] md:leading-[1.25] md:tracking-[-0.01em]"
+          >
+            {{ __("Assign leads") }}
+          </h1>
+          <p class="text-sm text-ink-gray-6">
+            {{
+              canEdit
+                ? __(
+                    "Pick people on the left, then choose what to do on the right."
+                  )
+                : __("You can watch the plans, today's calls and leads.")
+            }}
+          </p>
+        </div>
       </template>
     </LayoutHeader>
 
     <div class="relative flex-1 overflow-y-auto overflow-x-hidden">
-      <div
-        class="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-5 md:px-6"
-      >
+      <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
         <TaskyState
           v-if="plans.error && !plans.data"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
           :error="!isRefusal"
           :icon="isRefusal ? LucideLock : LucideCircleAlert"
           :title="
@@ -51,16 +63,20 @@
 
         <div
           v-else-if="!plans.data"
-          class="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_22rem]"
+          class="flex flex-col gap-4"
           aria-busy="true"
           :aria-label="__('Loading')"
         >
-          <div class="h-96 animate-pulse rounded-xl bg-surface-gray-2" />
-          <div class="h-80 animate-pulse rounded-xl bg-surface-gray-2" />
+          <div class="h-24 animate-pulse rounded-xl bg-surface-gray-3" />
+          <div class="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_26rem]">
+            <div class="h-96 animate-pulse rounded-xl bg-surface-gray-3" />
+            <div class="h-80 animate-pulse rounded-xl bg-surface-gray-3" />
+          </div>
         </div>
 
         <TaskyState
           v-else-if="!plans.data.available"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
           :icon="LucideCloudOff"
           :title="__('The ERP site can\'t assign leads yet')"
           :message="
@@ -70,6 +86,7 @@
 
         <TaskyState
           v-else-if="!plans.data.departments.length"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
           :icon="LucidePhoneOff"
           :title="__('No department hands out daily calls')"
           :message="
@@ -80,31 +97,20 @@
         />
 
         <template v-else-if="current">
-          <!-- the department first: the people and products below are its own -->
+          <!-- the department first, on the left: everything below is its own -->
           <FormControl
             :model-value="current.department"
             type="select"
+            size="md"
             class="w-full sm:w-72"
             :label="__('Department')"
             :options="departmentOptions"
-            :description="
-              industryMode
-                ? __(
-                    '{0} people, no products: leads are given by industry',
-                    String(current.members.length)
-                  )
-                : __(
-                    '{0} people, {1} products',
-                    String(current.members.length),
-                    String(current.products.length)
-                  )
-            "
             @update:model-value="pickDepartment(String($event))"
           />
 
           <div
             v-if="stuck"
-            class="flex flex-wrap items-center gap-3 rounded-lg border border-outline-gray-2 bg-warning-soft px-4 py-3"
+            class="flex flex-wrap items-center gap-3 rounded-xl border border-outline-gray-2 bg-warning-soft px-4 py-3"
             role="alert"
           >
             <LucideTriangleAlert
@@ -117,60 +123,91 @@
                   ? __(
                       "No one in {0} gets calls from the pool: everyone's plan is 0. {1} leads are waiting.",
                       current.department,
-                      String(leadsReady(current, null))
+                      String(waiting)
                     )
                   : __(
-                      "{0} doesn't hand out pool leads, so the {1} unassigned leads wait. Turn it on in Settings, CRM, Lead departments.",
+                      "{0} doesn't hand out pool leads, so the {1} waiting leads stay there. Turn it on in Settings, CRM, Lead departments.",
                       current.department,
-                      String(leadsReady(current, null))
+                      String(waiting)
                     )
               }}
             </p>
             <Button
               v-if="stuck === 'zero' && canEdit"
-              :label="__('Set the plan')"
-              @click="pickAll(true)"
+              :label="__('Set a daily plan')"
+              @click="planEveryone"
             />
           </div>
 
-          <div
-            class="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start"
+          <!-- today at a glance: one strip of four numbers -->
+          <section
+            class="grid grid-cols-2 rounded-xl border border-outline-gray-2 bg-surface-base lg:grid-cols-4"
+            :aria-label="__('Today at a glance')"
           >
-            <!-- the people and what each is handed now -->
+            <div
+              v-for="(stat, i) in stats"
+              :key="stat.label"
+              class="flex min-w-0 flex-col gap-1 border-outline-gray-2 px-5 py-4"
+              :class="STAT_BORDERS[i]"
+            >
+              <span
+                class="text-[22px] font-bold leading-none tracking-[-0.02em] tabular-nums"
+                :class="stat.warn ? 'text-warning' : 'text-ink-gray-9'"
+                >{{ stat.value }}
+                <span
+                  v-if="stat.of"
+                  class="ml-1 text-sm font-medium tracking-normal text-ink-gray-6"
+                  >{{ stat.of }}</span
+                ></span
+              >
+              <span class="text-sm text-ink-gray-6">{{ stat.label }}</span>
+              <span v-if="stat.warn" class="text-xs text-warning">{{
+                stat.warn
+              }}</span>
+            </div>
+          </section>
+
+          <div
+            class="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_26rem] lg:items-start"
+          >
+            <!-- the people, and what each is handed -->
             <section
-              class="min-w-0 rounded-xl border border-outline-gray-2 bg-surface-base"
+              class="min-w-0 overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
               :aria-labelledby="peopleHeading"
             >
               <div
-                class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-3"
+                class="flex flex-wrap items-center gap-3 border-b border-outline-gray-2 px-4 py-4"
               >
-                <Checkbox
-                  v-if="current.members.length && canEdit"
-                  :model-value="allPicked"
-                  :aria-label="__('Pick everyone')"
-                  @update:model-value="pickAll(!!$event)"
-                />
                 <h2
                   :id="peopleHeading"
-                  class="flex-1 text-base-medium text-ink-gray-9"
+                  class="text-base font-semibold text-ink-gray-9 tabular-nums"
                 >
-                  {{ __("People") }}
-                </h2>
-                <span class="text-sm text-ink-gray-6 tabular-nums">
                   {{
                     picked.length
-                      ? __("{0} picked", String(picked.length))
-                      : __("{0} people", String(current.members.length))
+                      ? __("People · {0} selected", String(picked.length))
+                      : __("People")
                   }}
-                </span>
-                <Button
-                  :label="__('Unassigned leads')"
-                  @click="openLeads(null)"
-                />
+                </h2>
+                <FormControl
+                  v-model="search"
+                  type="search"
+                  size="md"
+                  class="ml-auto w-full sm:w-64"
+                  :placeholder="__('Search people')"
+                  :aria-label="__('Search people')"
+                >
+                  <template #prefix>
+                    <LucideSearch
+                      class="size-4 text-ink-gray-5"
+                      aria-hidden="true"
+                    />
+                  </template>
+                </FormControl>
               </div>
 
               <TaskyState
                 v-if="!current.members.length"
+                class="py-10"
                 :icon="LucideUsers"
                 :title="__('{0} has no members', current.department)"
                 :message="
@@ -179,89 +216,97 @@
                   )
                 "
               />
+              <TaskyState
+                v-else-if="!shown.length"
+                class="py-10"
+                :icon="LucideSearch"
+                :title="__('No one matches “{0}”', search)"
+                :message="__('Check the spelling, or clear the search.')"
+              >
+                <Button :label="__('Clear search')" @click="search = ''" />
+              </TaskyState>
 
               <template v-else>
                 <div
-                  class="hidden items-center gap-2 px-4 py-2 text-xs text-ink-gray-6 md:grid"
+                  class="hidden h-11 items-center gap-3 border-b border-outline-gray-2 bg-surface-gray-1 px-4 text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6 md:grid"
                   :class="rowColumns"
-                  :style="gridStyle"
-                  aria-hidden="true"
                 >
-                  <span v-if="canEdit" />
-                  <span>{{ __("Name") }}</span>
-                  <span>{{ planHeader }}</span>
-                  <span
-                    v-for="slot in current.slots"
-                    :key="slot.label"
-                    class="text-right"
-                    >{{ slot.label }}</span
-                  >
-                  <span class="text-right">{{ __("Today") }}</span>
-                  <span class="text-right">{{ __("Leads") }}</span>
+                  <span v-if="canEdit" class="flex">
+                    <Checkbox
+                      :model-value="allPicked"
+                      :indeterminate="!!picked.length && !allPicked"
+                      :aria-label="__('Pick everyone')"
+                      @update:model-value="pickAll(!!$event)"
+                    />
+                  </span>
+                  <span aria-hidden="true">{{ __("Person") }}</span>
+                  <span aria-hidden="true">{{ __("Daily plan") }}</span>
+                  <span aria-hidden="true">{{ __("Called today") }}</span>
+                  <span aria-hidden="true" class="text-right">{{
+                    __("Leads they own")
+                  }}</span>
                 </div>
-                <ul
-                  class="divide-y divide-outline-gray-1 border-t border-outline-gray-1 md:border-t-0"
-                >
-                  <li v-for="member in current.members" :key="member.user">
-                    <!-- a viewer can't pick anyone: a plain row, not a label -->
-                    <component
-                      :is="canEdit ? 'label' : 'div'"
-                      class="grid items-center gap-x-2 gap-y-1 px-4 py-3"
-                      :class="[
-                        rowColumns,
-                        canEdit
-                          ? 'cursor-pointer grid-cols-[2rem_minmax(0,1fr)] hover:bg-surface-gray-1'
-                          : 'grid-cols-[minmax(0,1fr)]',
-                        isPicked(member.user) && 'bg-surface-gray-1',
-                      ]"
-                      :style="gridStyle"
-                    >
+                <ul class="divide-y divide-outline-gray-1">
+                  <li
+                    v-for="member in shown"
+                    :key="member.user"
+                    class="grid items-start gap-x-3 gap-y-2 px-4 py-3"
+                    :class="[
+                      rowColumns,
+                      canEdit
+                        ? 'cursor-pointer grid-cols-[2rem_minmax(0,1fr)] hover:bg-surface-gray-1'
+                        : 'grid-cols-[minmax(0,1fr)]',
+                      isPicked(member.user) &&
+                        'bg-brand-soft hover:bg-brand-soft',
+                    ]"
+                    @click="canEdit && pickOnly(member.user)"
+                  >
+                    <!-- the box adds or drops one person; a click on the row picks only them -->
+                    <span v-if="canEdit" class="pt-1.5" @click.stop>
                       <Checkbox
-                        v-if="canEdit"
                         :model-value="isPicked(member.user)"
-                        :aria-label="member.full_name"
+                        :aria-label="__('Pick {0}', member.full_name)"
                         @update:model-value="toggle(member.user, !!$event)"
                       />
-                      <span class="min-w-0">
-                        <span class="block truncate text-base text-ink-gray-9">
-                          {{ member.full_name }}
-                        </span>
-                        <!-- on a phone the plan is one line under the name -->
+                    </span>
+                    <span class="flex min-w-0 items-center gap-2.5 md:pt-0.5">
+                      <PersonAvatar :name="member.full_name" size="md" />
+                      <span
+                        class="truncate text-[13px] font-semibold text-ink-gray-9"
+                      >
+                        {{ member.full_name }}
+                      </span>
+                    </span>
+                    <span
+                      class="flex min-w-0 flex-col items-start gap-1"
+                      :class="canEdit && 'col-start-2 md:col-start-auto'"
+                    >
+                      <span
+                        class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium"
+                        :class="PILL[planKind(current, member)]"
+                      >
                         <span
-                          class="block truncate text-sm text-ink-gray-6 md:hidden"
-                        >
-                          {{ planLine(member) }}
-                        </span>
+                          class="size-1.5 rounded-full bg-current"
+                          aria-hidden="true"
+                        />
+                        {{ pillText(member) }}
                       </span>
                       <span
-                        class="hidden min-w-0 truncate text-sm md:block"
-                        :class="
-                          planChoice(member) || member.district
-                            ? 'text-ink-gray-8'
-                            : 'text-ink-gray-5'
-                        "
-                        :title="planText(member)"
+                        v-for="line in planLines(member)"
+                        :key="line"
+                        class="text-xs text-ink-gray-6 tabular-nums"
+                        >{{ line }}</span
                       >
-                        {{ planText(member) }}
-                      </span>
-                      <span
-                        v-for="slot in current.slots"
-                        :key="slot.label"
-                        class="hidden text-right font-mono text-sm tabular-nums md:block"
-                        :class="
-                          member.has_plan
-                            ? 'text-ink-gray-9'
-                            : 'text-ink-gray-5'
-                        "
-                      >
-                        {{ member.sizes[slot.label] ?? slot.size }}
-                      </span>
-                      <!-- their Today's calls, read-only; inside the row's label: it must not tick them -->
+                    </span>
+                    <!-- on a phone, today's calls and their leads share one line -->
+                    <span
+                      class="flex items-start justify-between gap-3 md:contents"
+                      :class="canEdit && 'col-start-2'"
+                    >
+                      <!-- their Today's calls, read-only -->
                       <button
                         type="button"
-                        class="justify-self-start rounded px-1 text-sm text-ink-gray-7 tabular-nums underline decoration-outline-gray-3 underline-offset-2 hover:text-ink-gray-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight md:col-start-auto md:justify-self-end md:text-right"
-                        :class="canEdit && 'col-start-2'"
-                        :title="__('Called / handed today')"
+                        class="flex flex-col items-start gap-1 justify-self-start rounded px-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
                         :aria-label="
                           __(
                             'See today\'s calls of {0}: {1} of {2} called',
@@ -270,18 +315,44 @@
                             String(member.today.size)
                           )
                         "
-                        @click.prevent.stop="openCalls(member)"
+                        @click.stop="openCalls(member)"
                       >
-                        <span class="font-mono">{{
-                          `${member.today.called}/${member.today.size}`
-                        }}</span>
-                        <span class="md:hidden"> {{ __("called today") }}</span>
+                        <template v-if="member.today.size">
+                          <span
+                            class="block h-1.5 w-28 overflow-hidden rounded-full bg-surface-gray-3"
+                            aria-hidden="true"
+                          >
+                            <span
+                              class="block h-full rounded-full bg-success"
+                              :style="{
+                                width: `${Math.min(
+                                  (member.today.called / member.today.size) *
+                                    100,
+                                  100
+                                )}%`,
+                              }"
+                            />
+                          </span>
+                          <span
+                            class="text-xs text-ink-gray-7 tabular-nums underline-offset-2 hover:text-ink-gray-9 hover:underline"
+                            >{{
+                              __(
+                                "{0} of {1} called",
+                                String(member.today.called),
+                                String(member.today.size)
+                              )
+                            }}</span
+                          >
+                        </template>
+                        <span
+                          v-else
+                          class="text-xs text-ink-gray-6 underline-offset-2 hover:text-ink-gray-8 hover:underline"
+                          >{{ __("Nothing handed out yet") }}</span
+                        >
                       </button>
-                      <!-- a button inside the row's label: it must not tick the person -->
                       <button
                         type="button"
-                        class="justify-self-start rounded px-1 text-sm text-ink-gray-8 underline decoration-outline-gray-3 underline-offset-2 hover:text-ink-gray-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight md:col-start-auto md:justify-self-end"
-                        :class="canEdit && 'col-start-2'"
+                        class="shrink-0 rounded px-1 text-sm text-ink-gray-9 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight md:justify-self-end"
                         :aria-label="
                           canEdit
                             ? __(
@@ -290,37 +361,49 @@
                               )
                             : __('See the leads of {0}', member.full_name)
                         "
-                        @click.prevent.stop="openLeads(member)"
+                        @click.stop="openLeads(member)"
                       >
-                        <span class="font-mono tabular-nums">{{
-                          member.leads
+                        <span class="font-mono font-semibold tabular-nums">{{
+                          member.leads.toLocaleString()
                         }}</span>
-                        {{ __("leads") }}
+                        <span class="ml-1 md:hidden">{{ __("leads") }}</span>
                       </button>
-                    </component>
+                    </span>
                   </li>
                 </ul>
-                <p
-                  class="border-t border-outline-gray-1 px-4 py-2 text-xs text-ink-gray-5"
-                >
-                  {{
-                    __(
-                      "Gray numbers are the department's slot sizes: that person has no plan of their own."
-                    )
-                  }}
-                </p>
               </template>
+              <p
+                class="flex flex-wrap gap-x-5 gap-y-2 border-t border-outline-gray-2 px-4 py-3.5 text-xs text-ink-gray-6"
+              >
+                <span
+                  v-for="kind in LEGEND"
+                  :key="kind.kind"
+                  class="flex items-center gap-1.5"
+                >
+                  <span
+                    class="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 font-medium"
+                    :class="PILL[kind.kind]"
+                  >
+                    <span
+                      class="size-1.5 rounded-full bg-current"
+                      aria-hidden="true"
+                    />
+                    {{ kind.label }}
+                  </span>
+                  {{ kind.help }}
+                </span>
+              </p>
             </section>
 
-            <!-- a viewer watches: no plan to set -->
+            <!-- a viewer watches: nothing to act on -->
             <section
               v-if="!canEdit"
               class="flex flex-col gap-2 rounded-xl border border-outline-gray-2 bg-surface-base p-4 lg:sticky lg:top-0"
-              :aria-labelledby="planHeading"
+              :aria-labelledby="panelHeading"
             >
               <h2
-                :id="planHeading"
-                class="flex items-center gap-2 text-base-medium text-ink-gray-9"
+                :id="panelHeading"
+                class="flex items-center gap-2 text-base font-semibold text-ink-gray-9"
               >
                 <LucideEye class="size-4 text-ink-gray-6" aria-hidden="true" />
                 {{ __("View only") }}
@@ -338,324 +421,102 @@
               </p>
             </section>
 
-            <!-- the plan for the people picked -->
-            <form
+            <!-- what to do for the people picked -->
+            <section
               v-else
-              class="flex flex-col gap-4 rounded-xl border border-outline-gray-2 bg-surface-base p-4 lg:sticky lg:top-0 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto"
-              novalidate
-              :aria-labelledby="planHeading"
-              @submit.prevent="assign"
+              class="flex min-w-0 flex-col rounded-xl border border-outline-gray-2 bg-surface-base lg:sticky lg:top-0 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto"
+              :aria-labelledby="panelHeading"
             >
-              <div>
-                <h2 :id="planHeading" class="text-base-medium text-ink-gray-9">
-                  {{
-                    picked.length
-                      ? __("Assign to {0}", pickedLabel)
-                      : __("Assign leads")
-                  }}
-                </h2>
-                <p v-if="!picked.length" class="mt-1 text-p-sm text-ink-gray-6">
-                  {{
-                    __("Pick people on the list, then choose what they call.")
-                  }}
-                </p>
-              </div>
-
-              <FormControl
-                v-if="industryMode"
-                v-model="form.industry"
-                type="select"
-                :label="__('Industry')"
-                :disabled="!picked.length"
-                :options="industryOptions"
-              />
-              <FormControl
-                v-else
-                v-model="form.product"
-                type="select"
-                :label="__('Product')"
-                :disabled="!picked.length || !!current.campaign_product"
-                :options="productOptions"
-                :description="
-                  current.campaign_product
-                    ? __(
-                        '{0} calls only for {1}, set in the department.',
-                        current.department,
-                        current.campaign_product
-                      )
-                    : undefined
+              <TaskyState
+                v-if="!pickedMembers.length"
+                class="px-4 py-12"
+                :icon="LucideMousePointerClick"
+                :title="__('Pick someone to start')"
+                :message="
+                  __(
+                    'Pick one or more people on the list. Then give them leads now, set their daily plan, or take leads back.'
+                  )
                 "
-              />
-              <!-- each district with its balance (the unassigned leads of the choice above) and the
-                   leads the people picked already own there -->
-              <fieldset
-                v-if="withDistricts"
-                class="flex flex-col gap-1.5"
-                :disabled="!picked.length || !!current.campaign_district"
               >
-                <!-- padded like the rows, so each heading sits over its column -->
-                <legend
-                  class="mb-1.5 flex w-full items-baseline gap-2.5 px-3 text-sm text-ink-gray-7"
-                >
-                  <span class="flex-1">{{ __("District") }}</span>
-                  <span class="text-xs text-ink-gray-5">{{
-                    __("Unassigned")
-                  }}</span>
-                  <span
-                    v-if="pickedOwned"
-                    class="w-24 truncate text-right text-xs text-ink-gray-5"
-                    :title="ownedHeader"
-                    >{{ ownedHeader }}</span
-                  >
-                </legend>
-                <div
-                  class="flex max-h-64 flex-col overflow-y-auto rounded-lg border border-outline-gray-2"
-                >
-                  <label
-                    v-for="row in districtRows"
-                    :key="row.value"
-                    class="flex min-h-[40px] cursor-pointer items-center gap-2.5 border-b border-outline-gray-1 px-3 text-sm last:border-0 focus-within:ring-2 focus-within:ring-inset focus-within:ring-highlight"
-                    :class="
-                      form.district === row.value
-                        ? 'bg-brand-soft text-brand-ink'
-                        : 'text-ink-gray-8 hover:bg-surface-gray-1'
-                    "
-                  >
-                    <input
-                      v-model="form.district"
-                      type="radio"
-                      name="assign-district"
-                      :value="row.value"
-                      class="size-4 shrink-0 focus:outline-none"
+                <h2 :id="panelHeading" class="sr-only">
+                  {{ __("Assign leads") }}
+                </h2>
+              </TaskyState>
+              <template v-else>
+                <div class="flex flex-col gap-3 px-4 pt-4">
+                  <div class="flex min-w-0 items-center gap-3">
+                    <PersonAvatar
+                      v-if="pickedMembers.length === 1"
+                      :name="pickedMembers[0].full_name"
+                      size="lg"
                     />
-                    <span class="min-w-0 flex-1 truncate">{{ row.label }}</span>
                     <span
-                      class="font-mono tabular-nums"
+                      v-else
+                      class="grid size-9 shrink-0 place-items-center rounded-full bg-surface-gray-3 text-sm font-semibold text-ink-gray-8 tabular-nums"
+                      aria-hidden="true"
+                      >{{ pickedMembers.length }}</span
+                    >
+                    <div class="min-w-0">
+                      <h2
+                        :id="panelHeading"
+                        class="truncate text-base font-semibold text-ink-gray-9"
+                      >
+                        {{ pickedLabel }}
+                      </h2>
+                      <p class="truncate text-sm text-ink-gray-6 tabular-nums">
+                        {{ pickedLine }}
+                      </p>
+                    </div>
+                  </div>
+                  <div
+                    class="grid grid-cols-3 gap-1 rounded-lg bg-surface-gray-2 p-1"
+                    role="group"
+                    :aria-label="__('What to do')"
+                  >
+                    <button
+                      v-for="option in TABS"
+                      :key="option.value"
+                      type="button"
+                      class="h-9 rounded-md text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
                       :class="
-                        form.district === row.value
-                          ? ''
-                          : row.count
-                          ? 'text-ink-gray-9'
-                          : 'text-ink-gray-5'
+                        tab === option.value
+                          ? 'bg-surface-base text-ink-gray-9 shadow-sm'
+                          : 'text-ink-gray-6 hover:text-ink-gray-9'
                       "
-                      >{{ row.count }}</span
+                      :aria-pressed="tab === option.value"
+                      @click="tab = option.value"
                     >
-                    <!-- their own leads: context, not something to give, so it stays gray -->
-                    <span
-                      v-if="pickedOwned"
-                      class="w-24 text-right font-mono tabular-nums text-ink-gray-6"
-                      >{{ row.owned }}</span
-                    >
-                  </label>
-                </div>
-                <p
-                  v-if="current.campaign_district"
-                  class="text-p-xs text-ink-gray-6"
-                >
-                  {{
-                    __(
-                      "{0} calls only in {1}, set in the department.",
-                      current.department,
-                      current.campaign_district
-                    )
-                  }}
-                </p>
-              </fieldset>
-
-              <!-- the product's unassigned leads: see them, or hand some out now -->
-              <div
-                v-if="picked.length"
-                class="flex flex-col gap-2 rounded-lg border border-outline-gray-2 p-3"
-              >
-                <div class="flex items-center justify-between gap-2">
-                  <p class="text-p-sm text-ink-gray-8">
-                    <span class="font-mono tabular-nums">{{ ready }}</span>
-                    {{ readyText }}
+                      {{ option.label }}
+                    </button>
+                  </div>
+                  <p class="text-p-sm text-ink-gray-6">
+                    {{ TAB_HINTS[tab] }}
                   </p>
-                  <Button
-                    :label="__('See leads')"
-                    :disabled="!ready"
-                    @click="openPool"
-                  />
                 </div>
-                <!-- always here, so the way to hand out leads is never hidden -->
-                <div class="flex items-end gap-2">
-                  <FormControl
-                    v-model="giveCount"
-                    type="number"
-                    min="1"
-                    :max="MAX_GIVE"
-                    inputmode="numeric"
-                    class="w-28"
-                    :disabled="!ready"
-                    :label="
-                      picked.length === 1 ? __('Give now') : __('Give each now')
-                    "
-                  />
-                  <Button
-                    :label="__('Give to {0}', pickedLabel)"
-                    :loading="giving"
-                    :disabled="giving || !ready"
-                    @click="giveNow"
-                  />
-                </div>
-                <p v-if="!ready" class="text-p-xs text-ink-gray-7">
-                  {{
-                    withDistricts
-                      ? __(
-                          "No {0} to give now. Pick a district with a balance above, or another {1}.",
-                          readyText,
-                          industryMode ? __("industry") : __("product")
-                        )
-                      : __(
-                          "No {0} to give now. Pick another {1}, or wait for new leads.",
-                          readyText,
-                          industryMode ? __("industry") : __("product")
-                        )
-                  }}
-                </p>
-                <p class="text-xs text-ink-gray-5">
-                  {{
-                    __(
-                      "Given now: they own the leads at once, and their next batch can call them. The plan below sets how many calls a day."
-                    )
-                  }}
-                </p>
-              </div>
-
-              <fieldset class="flex flex-col gap-2" :disabled="!picked.length">
-                <legend class="mb-1.5 text-xs text-ink-gray-5">
-                  {{ __("Calls per person") }}
-                </legend>
-                <div class="grid grid-cols-2 gap-3">
-                  <FormControl
-                    v-for="slot in current.slots"
-                    :key="slot.label"
-                    v-model="form.sizes[slot.label]"
-                    type="number"
-                    min="0"
-                    :max="MAX_CALLS"
-                    inputmode="numeric"
-                    :label="slot.label"
-                    :description="`${slot.start_time}–${slot.end_time}`"
-                  />
-                </div>
-              </fieldset>
-
-              <div
-                v-if="picked.length"
-                class="flex flex-col gap-1.5 rounded-lg bg-surface-gray-1 px-3 py-2.5 text-sm"
-                aria-live="polite"
-              >
-                <p class="text-ink-gray-8">
-                  {{
-                    __(
-                      "{0} calls a day each, {1} together.",
-                      String(perPerson),
-                      String(perPerson * picked.length)
-                    )
-                  }}
-                </p>
-                <p
-                  v-if="current.pull_unassigned"
-                  class="flex items-start gap-1.5"
-                  :class="short ? 'text-ink-gray-8' : 'text-ink-gray-6'"
-                >
-                  <LucideTriangleAlert
-                    v-if="short"
-                    class="mt-0.5 size-4 shrink-0 text-warning"
-                    aria-hidden="true"
-                  />
-                  <span>
-                    {{ __("{0} {1} are ready.", String(ready), readyText) }}
-                    <template v-if="short">
-                      {{
-                        __(
-                          "Not enough for a full day: each batch starts with the person's own leads, then takes what is left."
-                        )
-                      }}
-                    </template>
-                  </span>
-                </p>
-                <p v-else class="text-ink-gray-6">
-                  {{
-                    __(
-                      "This department doesn't hand out unassigned leads, so each person calls their own."
-                    )
-                  }}
-                </p>
-                <p
-                  v-if="autoAssignText(current)"
-                  class="flex items-start gap-1.5 text-ink-gray-6"
-                >
-                  <LucideClock
-                    class="mt-0.5 size-4 shrink-0 text-ink-gray-5"
-                    aria-hidden="true"
-                  />
-                  <span>{{ autoAssignText(current) }}</span>
-                </p>
-              </div>
-
-              <!-- pinned to the panel's bottom on a wide screen, so Assign is always in view -->
-              <div
-                class="flex flex-col gap-2 border-outline-gray-2 bg-surface-base lg:sticky lg:-bottom-4 lg:-mx-4 lg:-mb-4 lg:border-t lg:px-4 lg:pb-4 lg:pt-3"
-              >
-                <ErrorMessage
-                  v-if="formError"
-                  :message="formError"
-                  role="alert"
+                <AssignGiveNow
+                  v-if="tab === 'give'"
+                  :key="`give|${current.department}`"
+                  :department="current"
+                  :people="pickedMembers"
+                  @changed="plans.reload()"
+                  @pick-leads="openPool"
                 />
-                <Button
-                  type="submit"
-                  variant="solid"
-                  size="md"
-                  :label="__('Assign leads')"
-                  :loading="save.loading && !clearing"
-                  :disabled="!picked.length || save.loading"
+                <AssignDailyPlan
+                  v-else-if="tab === 'plan'"
+                  :key="`plan|${current.department}`"
+                  :department="current"
+                  :people="pickedMembers"
+                  @saved="replaceDepartment"
                 />
-                <Button
-                  v-if="pickedWithPlan.length"
-                  variant="ghost"
-                  :label="
-                    __(
-                      'Remove plan · use {0} default ({1})',
-                      current.department,
-                      defaultSizes
-                    )
-                  "
-                  :loading="save.loading && clearing"
-                  :disabled="save.loading"
-                  @click="confirmClear = true"
+                <AssignTakeBack
+                  v-else
+                  :key="`back|${current.department}`"
+                  :department="current"
+                  :people="pickedMembers"
+                  @changed="plans.reload()"
                 />
-                <!-- no batches at all: they get only the leads handed to them here -->
-                <Button
-                  v-if="!pickedByHand"
-                  variant="ghost"
-                  :label="__('No daily calls · assign by hand')"
-                  :disabled="save.loading"
-                  @click="confirmByHand = true"
-                />
-                <!-- the leads they already own, all at once (it asks which, and confirms) -->
-                <Button
-                  v-if="pickedOwners.length"
-                  variant="ghost"
-                  :label="
-                    __(
-                      'Send their {0} leads back to the pool',
-                      String(pickedOwned)
-                    )
-                  "
-                  @click="sendingBack = true"
-                />
-                <p class="text-xs text-ink-gray-5">
-                  {{
-                    __(
-                      "Counts from the next slot. Calls already handed out stay on their list."
-                    )
-                  }}
-                </p>
-              </div>
-            </form>
+              </template>
+            </section>
           </div>
         </template>
       </div>
@@ -672,106 +533,79 @@
     :start-district="leadsDistrict"
     @changed="plans.reload()"
   />
-  <SendBackLeadsDialog
-    v-if="current"
-    v-model:open="sendingBack"
-    :department="current"
-    :people="pickedOwners"
-    @changed="plans.reload()"
-  />
-  <Dialog
-    v-if="current"
-    v-model:open="confirmByHand"
-    :title="__('No daily calls for {0}?', pickedLabel)"
-    size="sm"
-  >
-    <p class="text-p-base text-ink-gray-7">
-      {{
-        __(
-          "From the next slot they get no automatic calls (the department's {0} stops for them). Give them leads by hand: Give now, or See leads to pick them. Their own leads stay theirs.",
-          defaultSizes
-        )
-      }}
-    </p>
-    <div class="mt-6 flex justify-end gap-2">
-      <Button :label="__('Cancel')" @click="confirmByHand = false" />
-      <Button
-        variant="solid"
-        :label="__('Assign by hand')"
-        :loading="save.loading && byHand"
-        @click="planByHand"
-      />
-    </div>
-  </Dialog>
-  <Dialog
-    v-if="current"
-    v-model:open="confirmClear"
-    :title="clearTitle"
-    size="sm"
-  >
-    <p class="text-p-base text-ink-gray-7">
-      {{ defaultText }}
-    </p>
-    <div class="mt-6 flex justify-end gap-2">
-      <Button :label="__('Cancel')" @click="confirmClear = false" />
-      <Button
-        variant="solid"
-        :label="__('Remove plan')"
-        :loading="save.loading && clearing"
-        @click="clearPlans"
-      />
-    </div>
-  </Dialog>
 </template>
 
 <script setup lang="ts">
 import LayoutHeader from "@/components/LayoutHeader.vue";
+import PersonAvatar from "@/components/PersonAvatar.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
 import { useDocumentVisibility, useIntervalFn } from "@vueuse/core";
-import {
-  Button,
-  call,
-  Checkbox,
-  createResource,
-  Dialog,
-  ErrorMessage,
-  FormControl,
-  toast,
-} from "frappe-ui";
-import { computed, reactive, ref, useId, watch } from "vue";
+import { Button, Checkbox, createResource, FormControl } from "frappe-ui";
+import { computed, ref, useId, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
-import LucideClock from "~icons/lucide/clock";
-import LucideEye from "~icons/lucide/eye";
 import LucideCloudOff from "~icons/lucide/cloud-off";
+import LucideEye from "~icons/lucide/eye";
 import LucideLock from "~icons/lucide/lock";
+import LucideMousePointerClick from "~icons/lucide/mouse-pointer-click";
 import LucidePhoneOff from "~icons/lucide/phone-off";
+import LucideSearch from "~icons/lucide/search";
 import LucideTriangleAlert from "~icons/lucide/triangle-alert";
 import LucideUsers from "~icons/lucide/users";
+import AssignDailyPlan from "./AssignDailyPlan.vue";
+import AssignGiveNow from "./AssignGiveNow.vue";
+import AssignTakeBack from "./AssignTakeBack.vue";
 import MemberLeadsDialog from "./MemberLeadsDialog.vue";
-import SendBackLeadsDialog from "./SendBackLeadsDialog.vue";
 import {
-  autoAssignText,
   byIndustry,
-  hasDistricts,
-  industryReady,
   leadsReady,
+  memberShares,
+  planKind,
   poolStuck,
+  sharesText,
   type CallPlans,
   type PlanDepartment,
+  type PlanKind,
   type PlanMember,
 } from "./callPlans";
 
-// the ERP site refuses more
-const MAX_CALLS = 500;
+type Tab = "give" | "plan" | "back";
+
+const TABS: { label: string; value: Tab }[] = [
+  { label: __("Give now"), value: "give" },
+  { label: __("Daily plan"), value: "plan" },
+  { label: __("Take back"), value: "back" },
+];
+const TAB_HINTS: Record<Tab, string> = {
+  give: __("Hand over waiting leads right now. They own them at once."),
+  plan: __(
+    "Set how many calls they get in each slot, and from which districts."
+  ),
+  back: __("Return leads they own to the pool, for others to get."),
+};
+// a status says what it is in words too: the pill's text, not only its colour
+const PILL: Record<PlanKind, string> = {
+  default: "bg-surface-gray-2 text-ink-gray-7",
+  custom: "bg-brand-soft text-brand-ink",
+  hand: "bg-warning-soft text-warning",
+};
+const LEGEND: { kind: PlanKind; label: string; help: string }[] = [
+  {
+    kind: "default",
+    label: __("Default"),
+    help: __("uses the department plan"),
+  },
+  { kind: "custom", label: __("Custom"), help: __("has their own plan") },
+  { kind: "hand", label: __("No plan"), help: __("gets leads only by hand") },
+];
 
 const route = useRoute();
 const router = useRouter();
 const peopleHeading = useId();
-const planHeading = useId();
+const panelHeading = useId();
 
 const plans = createResource<CallPlans>({
   url: "helpdesk.api.call_batches.get_call_plans",
@@ -798,14 +632,9 @@ const stuck = computed(() => (current.value ? poolStuck(current.value) : null));
 const canEdit = computed(() => current.value?.can_edit !== false);
 const rowColumns = computed(() =>
   canEdit.value
-    ? "md:grid-cols-[2rem_minmax(0,1fr)_var(--plan)_repeat(var(--slots),4.5rem)_6rem_6rem]"
-    : "md:grid-cols-[minmax(0,1fr)_var(--plan)_repeat(var(--slots),4.5rem)_6rem_6rem]"
+    ? "md:grid-cols-[2rem_minmax(0,1fr)_minmax(0,16rem)_9rem_6rem]"
+    : "md:grid-cols-[minmax(0,1fr)_minmax(0,16rem)_9rem_6rem]"
 );
-// the plan column holds "PhoebiX · Malappuram" once plans can call for a district
-const gridStyle = computed(() => ({
-  "--slots": current.value?.slots.length ?? 0,
-  "--plan": withDistricts.value ? "12rem" : "9rem",
-}));
 
 // live: today's calls and the leads move all day, so the page reads again every 15 seconds
 // while it is in view, and at once when it comes back into view
@@ -842,12 +671,123 @@ function pickDepartment(name: string) {
   router.replace({ query: { ...route.query, department: name } });
 }
 
+/** The panel's tab, in the URL so a reload keeps it. */
+const tab = computed<Tab>({
+  get: () =>
+    (["give", "plan", "back"] as Tab[]).includes(route.query.tab as Tab)
+      ? (route.query.tab as Tab)
+      : "give",
+  set: (value) => router.replace({ query: { ...route.query, tab: value } }),
+});
+
 function openCalls(member: PlanMember) {
   router.push({
     name: "MemberCalls",
     params: { user: member.user },
     query: { name: member.full_name, department: current.value?.department },
   });
+}
+
+/** A department's saved plans, as the ERP site answered the save. */
+function replaceDepartment(department: PlanDepartment) {
+  if (!plans.data) return;
+  plans.data.departments = plans.data.departments.map((d) =>
+    d.department === department.department ? { ...d, ...department } : d
+  );
+}
+
+// ---------- today at a glance ----------
+
+const waiting = computed(() =>
+  current.value ? leadsReady(current.value, null) : 0
+);
+const plannedPerDay = computed(() =>
+  (current.value?.members ?? []).reduce((sum, m) => sum + m.total, 0)
+);
+const poolShort = computed(
+  () =>
+    !!current.value?.pull_unassigned &&
+    plannedPerDay.value > 0 &&
+    waiting.value < plannedPerDay.value
+);
+const calledToday = computed(() =>
+  (current.value?.members ?? []).reduce((sum, m) => sum + m.today.called, 0)
+);
+const handedToday = computed(() =>
+  (current.value?.members ?? []).reduce((sum, m) => sum + m.today.size, 0)
+);
+// a 2 × 2 grid on a phone, one row of four on a wide screen
+const STAT_BORDERS = [
+  "border-b border-r lg:border-b-0",
+  "border-b lg:border-b-0 lg:border-r",
+  "border-r",
+  "",
+];
+const stats = computed(() => [
+  {
+    label: __("Leads waiting in the pool"),
+    value: waiting.value.toLocaleString(),
+    warn: poolShort.value ? __("Less than a day of planned calls") : "",
+  },
+  {
+    label: __("Calls planned per day"),
+    value: plannedPerDay.value.toLocaleString(),
+  },
+  {
+    label: __("Called today"),
+    value: calledToday.value.toLocaleString(),
+    of: __("of {0}", handedToday.value.toLocaleString()),
+  },
+  {
+    label: __("People on a daily plan"),
+    value: __(
+      "{0} of {1}",
+      String(onPlan.value),
+      String(current.value?.members.length ?? 0)
+    ),
+  },
+]);
+const onPlan = computed(
+  () =>
+    (current.value?.members ?? []).filter(
+      (m) => planKind(current.value!, m) !== "hand"
+    ).length
+);
+
+// ---------- the people ----------
+
+const search = ref("");
+const shown = computed(() => {
+  const text = search.value.trim().toLowerCase();
+  const members = current.value?.members ?? [];
+  return text
+    ? members.filter((m) => m.full_name.toLowerCase().includes(text))
+    : members;
+});
+
+/** "Default · 100 a day", "Custom · 70 a day", "No plan". */
+function pillText(member: PlanMember) {
+  const kind = planKind(current.value!, member);
+  if (kind === "hand") return __("No plan");
+  const day = __("{0} a day", String(member.total));
+  return kind === "default"
+    ? __("Default · {0}", day)
+    : __("Custom · {0}", day);
+}
+
+/** The plan spelled out: the product (or industry), then each slot's districts. */
+function planLines(member: PlanMember) {
+  const department = current.value!;
+  if (planKind(department, member) === "hand")
+    return [__("Gets leads only when given")];
+  const what = byIndustry(department) ? member.industry : member.product;
+  const shares = memberShares(department, member);
+  return [
+    ...(what ? [__("For {0}", what)] : []),
+    ...department.slots.map(
+      (slot) => `${slot.label}: ${sharesText(shares[slot.label] ?? [])}`
+    ),
+  ];
 }
 
 // ---------- who is picked ----------
@@ -857,7 +797,7 @@ watch(
   () => current.value?.department,
   () => {
     picked.value = [];
-    fillForm();
+    search.value = "";
   }
 );
 
@@ -874,383 +814,40 @@ function toggle(user: string, on: boolean) {
     : picked.value.filter((u) => u !== user);
 }
 
+function pickOnly(user: string) {
+  picked.value = [user];
+}
+
 function pickAll(on: boolean) {
   picked.value = on ? current.value?.members.map((m) => m.user) ?? [] : [];
 }
 
+/** Everyone picked, on the Daily plan tab: the banner's way out of "everyone's plan is 0". */
+function planEveryone() {
+  pickAll(true);
+  tab.value = "plan";
+}
+
 const pickedMembers = computed(() =>
   (current.value?.members ?? []).filter((m) => isPicked(m.user))
-);
-const pickedWithPlan = computed(() =>
-  pickedMembers.value.filter((m) => m.has_plan)
 );
 const pickedLabel = computed(() =>
   pickedMembers.value.length === 1
     ? pickedMembers.value[0].full_name
     : __("{0} people", String(pickedMembers.value.length))
 );
-// the people picked who own open leads, and how many: they can be sent back to the pool
-const pickedOwners = computed(() =>
-  pickedMembers.value.filter((m) => m.leads > 0)
-);
-const pickedOwned = computed(() =>
-  pickedOwners.value.reduce((sum, m) => sum + m.leads, 0)
-);
-const sendingBack = ref(false);
-// every one picked is already on "by hand"
-const pickedByHand = computed(
-  () => !!pickedMembers.value.length && pickedMembers.value.every(isByHand)
-);
-
-// ---------- removing a plan: back to the department's slot sizes ----------
-
-const confirmClear = ref(false);
-const defaultSizes = computed(() =>
-  (current.value?.slots ?? []).map((s) => String(s.size)).join(" + ")
-);
-const clearLabel = computed(() =>
-  pickedWithPlan.value.length === 1
-    ? pickedWithPlan.value[0].full_name
-    : __("{0} people", String(pickedWithPlan.value.length))
-);
-const clearTitle = computed(() => __("Remove {0}'s plan?", clearLabel.value));
-const defaultText = computed(() => {
-  const department = current.value;
-  if (!department) return "";
-  const sizes = department.slots.map((s) => `${s.label} ${s.size}`).join(" + ");
-  const product = department.campaign_product
-    ? department.campaign_product
-    : department.products.length
-    ? __("any product")
-    : "";
-  return product
-    ? __(
-        "From the next slot they get {0}'s default: {1}, {2}.",
-        department.department,
-        sizes,
-        product
-      )
-    : __(
-        "From the next slot they get {0}'s default: {1}.",
-        department.department,
-        sizes
-      );
+/** "Owns 554 leads · 100 calls a day", or the names of the people picked. */
+const pickedLine = computed(() => {
+  const members = pickedMembers.value;
+  if (members.length !== 1) return members.map((m) => m.full_name).join(", ");
+  const member = members[0];
+  const owns = __("Owns {0} leads", member.leads.toLocaleString());
+  return planKind(current.value!, member) === "hand"
+    ? `${owns} · ${__("no daily plan")}`
+    : `${owns} · ${__("{0} calls a day", String(member.total))}`;
 });
 
-// ---------- the plan ----------
-
-const form = reactive<{
-  product: string;
-  industry: string;
-  district: string;
-  sizes: Record<string, number>;
-}>({
-  product: "",
-  industry: "",
-  district: "",
-  sizes: {},
-});
-// a department without products plans and gives leads by industry (callPlans.byIndustry)
-const industryMode = computed(() => byIndustry(current.value));
-// any plan may also call for one district, once the ERP site sends them (callPlans.hasDistricts)
-const withDistricts = computed(() => hasDistricts(current.value));
-/** The product, or in industry mode the industry, the plan calls for ("" for any). */
-const chosen = computed(() =>
-  industryMode.value ? form.industry : form.product
-);
-const anyLabel = computed(() =>
-  industryMode.value ? __("Any industry") : __("Any product")
-);
-function planChoice(member: PlanMember) {
-  return (industryMode.value ? member.industry : member.product) || "";
-}
-/** A plan of 0 calls in every slot: no batches, leads are handed to them by hand. */
-function isByHand(member: PlanMember) {
-  return (
-    member.has_plan &&
-    !!current.value?.slots.length &&
-    current.value.slots.every((slot) => !member.sizes[slot.label])
-  );
-}
-
-/** "PhoebiX · Malappuram": what the person's plan calls for. */
-function planText(member: PlanMember) {
-  if (isByHand(member)) return __("By hand: no daily calls");
-  const what = planChoice(member) || anyLabel.value;
-  return member.district ? `${what} · ${member.district}` : what;
-}
-const planHeader = computed(() => {
-  const what = industryMode.value ? __("Industry") : __("Product");
-  return withDistricts.value ? __("{0} · District", what) : what;
-});
-const formError = ref("");
-
-/** One person picked: their plan to edit. Otherwise the department's slot sizes, or what
- * the first picked person has, so a team is planned in one go. */
-function fillForm(from?: PlanMember) {
-  const department = current.value;
-  if (!department) return;
-  form.product = department.campaign_product || from?.product || "";
-  form.industry = from?.industry || "";
-  form.district = department.campaign_district || from?.district || "";
-  form.sizes = Object.fromEntries(
-    department.slots.map((slot) => [
-      slot.label,
-      from?.sizes[slot.label] ?? slot.size,
-    ])
-  );
-  formError.value = "";
-}
-
-watch(
-  () => pickedMembers.value[0]?.user,
-  () => {
-    if (pickedMembers.value.length === 1) fillForm(pickedMembers.value[0]);
-    else if (!pickedMembers.value.length) fillForm();
-  }
-);
-watch(
-  current,
-  (department) => department && !Object.keys(form.sizes).length && fillForm(),
-  {
-    immediate: true,
-  }
-);
-
-/** "PhoebiX · 120 unassigned": how many leads of each product (in the district chosen) wait
- * to be handed out. */
-const productOptions = computed(() => {
-  const department = current.value;
-  const label = (name: string, product: string | null) =>
-    department
-      ? __(
-          "{0} · {1} unassigned",
-          name,
-          String(leadsReady(department, product, form.district || null))
-        )
-      : name;
-  return [
-    { label: label(__("Any product"), null), value: "" },
-    ...(department?.products ?? []).map((p) => ({
-      label: label(p.product_name, p.product_name),
-      value: p.product_name,
-    })),
-  ];
-});
-
-const perPerson = computed(() =>
-  Object.values(form.sizes).reduce(
-    (sum, calls) => sum + (Number(calls) || 0),
-    0
-  )
-);
-/** The unassigned leads of the product (or industry) chosen, in `district` (null: any). */
-function readyIn(district: string | null) {
-  const department = current.value;
-  if (!department) return 0;
-  return industryMode.value
-    ? industryReady(department, form.industry || null, district)
-    : leadsReady(department, form.product || null, district);
-}
-const ready = computed(() => readyIn(form.district || null));
-/** "unassigned PhoebiX leads in Malappuram", said after the count. */
-const readyText = computed(() => {
-  const what = chosen.value
-    ? __("unassigned {0} leads", chosen.value)
-    : __("unassigned leads");
-  return form.district ? __("{0} in {1}", what, form.district) : what;
-});
-/** "Hospitality · 120 unassigned", for a department planned by industry. */
-const industryOptions = computed(() => {
-  const department = current.value;
-  if (!department) return [];
-  const label = (name: string, industry: string | null) =>
-    __(
-      "{0} · {1} unassigned",
-      name,
-      String(industryReady(department, industry, form.district || null))
-    );
-  return [
-    { label: label(__("Any industry"), null), value: "" },
-    ...(department.industries ?? []).map((name) => ({
-      label: label(name, name),
-      value: name,
-    })),
-  ];
-});
-// how many open leads the people picked own in each district, next to the pool's balance: a
-// district at 0 unassigned can still hold all their leads. Kept per person under their lead
-// total, so the 15-second reload asks the ERP site again only once their leads moved.
-const ownedDistricts = reactive(new Map<string, Record<string, number>>());
-const ownedKey = (member: PlanMember) =>
-  `${current.value?.department}|${member.user}|${member.leads}`;
-watch(
-  () => (withDistricts.value ? pickedOwners.value.map((m) => ownedKey(m)) : []),
-  (keys) =>
-    keys.forEach(async (key) => {
-      if (ownedDistricts.has(key)) return;
-      ownedDistricts.set(key, {});
-      const [department, owner] = key.split("|");
-      try {
-        const page = await call(
-          "helpdesk.api.call_batches.get_department_leads",
-          { department, owner, page_length: 1 }
-        );
-        ownedDistricts.set(key, page.districts ?? {});
-      } catch {
-        // the column only adds context; the plan works without it
-        ownedDistricts.delete(key);
-      }
-    }),
-  { immediate: true }
-);
-/** The open leads the people picked own in `district` (null: every district). */
-function ownedIn(district: string | null) {
-  if (district === null) return pickedOwned.value;
-  return pickedOwners.value.reduce(
-    (sum, m) => sum + (ownedDistricts.get(ownedKey(m))?.[district] ?? 0),
-    0
-  );
-}
-const ownedHeader = computed(() =>
-  pickedMembers.value.length === 1
-    ? __("With {0}", pickedMembers.value[0].full_name)
-    : __("With them")
-);
-
-/** Each district's balance of the product (or industry) chosen, the fullest first, after
- * "Any district" with the total. A plan's district whose open leads are all gone stays listed,
- * so the choice never disappears. */
-const districtRows = computed(() => {
-  const names = current.value?.districts ?? [];
-  const rows = (
-    form.district && !names.includes(form.district)
-      ? [form.district, ...names]
-      : names
-  ).map((name) => ({
-    label: name,
-    value: name,
-    count: readyIn(name),
-    owned: ownedIn(name),
-  }));
-  rows.sort(
-    (a, b) =>
-      b.count - a.count || b.owned - a.owned || a.label.localeCompare(b.label)
-  );
-  return [
-    {
-      label: __("Any district"),
-      value: "",
-      count: readyIn(null),
-      owned: ownedIn(null),
-    },
-    ...rows,
-  ];
-});
-const short = computed(
-  () => perPerson.value * picked.value.length > ready.value
-);
-
-function cleanSizes(): Record<string, number> | null {
-  const sizes: Record<string, number> = {};
-  for (const [label, value] of Object.entries(form.sizes)) {
-    const calls = Number(value);
-    if (!Number.isInteger(calls) || calls < 0 || calls > MAX_CALLS) {
-      formError.value = __(
-        "{0}: give a whole number from 0 to {1}.",
-        label,
-        String(MAX_CALLS)
-      );
-      return null;
-    }
-    sizes[label] = calls;
-  }
-  return sizes;
-}
-
-// ---------- saving ----------
-
-const clearing = ref(false);
-const save = createResource({
-  url: "helpdesk.api.call_batches.save_call_plan",
-  onSuccess(department: PlanDepartment) {
-    if (plans.data) {
-      plans.data.departments = plans.data.departments.map((d) =>
-        d.department === department.department ? department : d
-      );
-    }
-    toast.success(
-      clearing.value
-        ? __(
-            "Plan removed for {0}: they get the department's default",
-            clearLabel.value
-          )
-        : byHand.value
-        ? __("{0}: no daily calls. Give them leads by hand.", pickedLabel.value)
-        : __("Leads assigned to {0}", pickedLabel.value)
-    );
-    byHand.value = false;
-    picked.value = [];
-    confirmClear.value = false;
-    confirmByHand.value = false;
-  },
-  onError(error: unknown) {
-    confirmClear.value = false;
-    confirmByHand.value = false;
-    byHand.value = false;
-    formError.value = errorText(error, __("Couldn't save. Try again."));
-  },
-});
-
-function assign() {
-  formError.value = "";
-  if (!current.value || !picked.value.length) return;
-  const sizes = cleanSizes();
-  if (!sizes) return;
-  clearing.value = false;
-  save.submit({
-    department: current.value.department,
-    users: picked.value,
-    product: industryMode.value ? null : form.product || null,
-    ...(industryMode.value ? { industry: form.industry || null } : {}),
-    district: form.district || null,
-    sizes,
-  });
-}
-
-// ---------- by hand: no daily calls ----------
-
-const confirmByHand = ref(false);
-const byHand = ref(false);
-
-/** A plan of 0 in every slot for the people picked: no batches, no 11:00 top-up. */
-function planByHand() {
-  formError.value = "";
-  if (!current.value) return;
-  clearing.value = false;
-  byHand.value = true;
-  save.submit({
-    department: current.value.department,
-    users: picked.value,
-    product: industryMode.value ? null : form.product || null,
-    ...(industryMode.value ? { industry: form.industry || null } : {}),
-    district: form.district || null,
-    sizes: Object.fromEntries(current.value.slots.map((s) => [s.label, 0])),
-  });
-}
-
-function clearPlans() {
-  formError.value = "";
-  if (!current.value) return;
-  clearing.value = true;
-  save.submit({
-    department: current.value.department,
-    users: pickedWithPlan.value.map((m) => m.user),
-    clear: 1,
-  });
-}
-
-// ---------- a person's leads, or the unassigned ones ----------
+// ---------- a person's leads, or the waiting ones ----------
 
 const showLeads = ref(false);
 const leadsOf = ref<PlanMember | null>(null);
@@ -1265,71 +862,14 @@ function openLeads(member: PlanMember | null) {
   showLeads.value = true;
 }
 
-/** The chosen product's (and district's) unassigned leads, ready to give to the one person
+/** The waiting leads of a product (or industry) and district, ready to give to the one person
  * picked. */
-function openPool() {
+function openPool(choice: string, district: string) {
   leadsOf.value =
     pickedMembers.value.length === 1 ? pickedMembers.value[0] : null;
   leadsOnPool.value = true;
-  leadsProduct.value = chosen.value;
-  leadsDistrict.value = form.district;
+  leadsProduct.value = choice;
+  leadsDistrict.value = district;
   showLeads.value = true;
-}
-
-// ---------- give unassigned leads now ----------
-
-// the ERP site refuses more in one call
-const MAX_GIVE = 500;
-const giveCount = ref<number | string>(25);
-const giving = ref(false);
-
-/** The next N unassigned leads of the chosen product to each person picked, one call each. */
-async function giveNow() {
-  const count = Number(giveCount.value);
-  if (!Number.isInteger(count) || count < 1 || count > MAX_GIVE) {
-    formError.value = __(
-      "Give a whole number from 1 to {0}.",
-      String(MAX_GIVE)
-    );
-    return;
-  }
-  formError.value = "";
-  giving.value = true;
-  let given = 0;
-  try {
-    for (const member of pickedMembers.value) {
-      const result = await call("helpdesk.api.call_batches.assign_leads", {
-        department: current.value?.department,
-        user: member.user,
-        count,
-        ...(industryMode.value
-          ? { industry: form.industry || null }
-          : { product: form.product || null }),
-        district: form.district || null,
-      });
-      given += Number(result?.assigned) || 0;
-    }
-    toast.success(
-      given
-        ? __("{0} leads given to {1}.", String(given), pickedLabel.value)
-        : __("No unassigned leads were left to give.")
-    );
-  } catch (error) {
-    formError.value = errorText(
-      error,
-      __("Couldn't give the leads. Try again.")
-    );
-  } finally {
-    giving.value = false;
-    plans.reload();
-  }
-}
-
-/** "PhoebiX · Malappuram · 50 + 50", the plan on one line for a phone. */
-function planLine(member: PlanMember) {
-  const sizes = (current.value?.slots ?? [])
-    .map((slot) => member.sizes[slot.label] ?? slot.size)
-    .join(" + ");
-  return `${planText(member)} · ${sizes}`;
 }
 </script>
