@@ -67,9 +67,7 @@ class TestLeadCalls(FrappeTestCase):
     def test_the_incoming_call_is_asked_as_the_signed_in_person(self):
         self.crm.lead_answers["get_incoming_call"] = {"enabled": True, "call": None}
         frappe.set_user(BDE)
-        self.assertEqual(
-            leads_api.get_incoming_call(), {"enabled": True, "call": None}
-        )
+        self.assertEqual(leads_api.get_incoming_call(), {"enabled": True, "call": None})
         ((method, post, params),) = self.crm.lead_calls
         self.assertEqual(
             (method, post, params["acting_user"]), ("get_incoming_call", False, BDE)
