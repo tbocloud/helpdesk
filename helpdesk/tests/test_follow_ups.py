@@ -571,6 +571,31 @@ class TestDigest(FollowUpCase):
         self.assertIn("/helpdesk/my-work)", text)
 
 
+class TestAttentionList(FollowUpCase):
+    def test_the_list_is_what_the_banner_counts_most_pressing_first(self):
+        friday = self.task("Import item master", FRIDAY)
+        monday = self.task("Opening balances", LAST_MONDAY)
+        found = follow_ups.evaluate(follow_up_context())
+
+        mine = follow_ups.attention_for(DEV[0], follow_ups=found)
+        self.assertEqual(
+            mine["total"], follow_ups.summary_for(DEV[0], found)["total"]
+        )
+        self.assertEqual(
+            [row["name"] for row in mine["rows"]], [str(monday), str(friday)]
+        )
+        self.assertTrue(all(row["yours"] for row in mine["rows"]))
+        self.assertEqual(mine["rows"][0]["rule_label"], "Overdue")
+
+        # the lead did not get the work: it waits on them
+        waiting = follow_ups.attention_for(LEAD[0], limit=1, follow_ups=found)
+        self.assertEqual((waiting["total"], len(waiting["rows"])), (2, 1))
+        self.assertEqual(
+            (waiting["rows"][0]["name"], waiting["rows"][0]["yours"]),
+            (str(monday), False),
+        )
+
+
 class TestSwitchedOff(FollowUpCase):
     def test_turning_follow_ups_off_clears_the_badges(self):
         task = self.task("Bank feeds", WEDNESDAY)

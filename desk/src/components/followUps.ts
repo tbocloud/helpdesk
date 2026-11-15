@@ -24,11 +24,21 @@ export interface SummaryPart {
 }
 
 /** "3 overdue · 1 escalated to your head · 2 waiting on you", only the non-zero parts. */
-export function summaryParts(s: FollowUpSummary | null | undefined): SummaryPart[] {
+export function summaryParts(
+  s: FollowUpSummary | null | undefined
+): SummaryPart[] {
   if (!s) return [];
   const parts: SummaryPart[] = [
-    { key: "breached", label: __("{0} SLA breached", String(s.breached)), danger: true },
-    { key: "overdue", label: __("{0} overdue", String(s.overdue)), danger: true },
+    {
+      key: "breached",
+      label: __("{0} SLA breached", String(s.breached)),
+      danger: true,
+    },
+    {
+      key: "overdue",
+      label: __("{0} overdue", String(s.overdue)),
+      danger: true,
+    },
     {
       key: "escalated",
       label: __("{0} escalated to your head", String(s.escalated)),
@@ -53,4 +63,9 @@ export interface FollowUpRow {
   /** a path inside /helpdesk */
   link: string;
   owners: { user: string; full_name: string }[];
+  /** helpdesk.follow_ups.attention_for only: why it is on the person's list */
+  rule?: string;
+  rule_label?: string;
+  /** false: someone else's work that waits on this person */
+  yours?: boolean;
 }

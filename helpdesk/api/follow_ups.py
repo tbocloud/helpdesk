@@ -6,6 +6,7 @@ The engine is helpdesk.follow_ups; docs/follow-ups.md describes both.
 import frappe
 from frappe import _
 from frappe.model import no_value_fields
+from frappe.utils import cint
 
 from helpdesk import follow_ups
 from helpdesk.recurrence import time_label
@@ -118,6 +119,14 @@ def get_preview() -> list[dict]:
     """What each person would get in their digest now."""
     check_admin()
     return follow_ups.preview()
+
+
+@frappe.whitelist()
+@agent_only
+def get_my_follow_ups(limit: int | None = None) -> dict:
+    """What "Needs your attention" counts for the person asking, the most pressing first:
+    {total, rows}. `limit` rows at most (all of them without it)."""
+    return follow_ups.attention_for(frappe.session.user, cint(limit) or None)
 
 
 @frappe.whitelist()
