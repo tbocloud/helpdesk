@@ -268,6 +268,7 @@
             due-or-estimate
           />
         </div>
+        <DueDateNote :date="dueDate" />
         <p
           v-if="!hasDueOrEstimate(dueDate, estimate)"
           class="text-p-xs text-ink-gray-6"
@@ -323,6 +324,7 @@ import {
   toast,
 } from "frappe-ui";
 import { computed, ref, useId } from "vue";
+import DueDateNote from "@/components/DueDateNote.vue";
 import RequiredMark from "@/components/RequiredMark.vue";
 import EstimateInput from "@/pages/tasky/components/EstimateInput.vue";
 import { dueOrEstimateHint, hasDueOrEstimate } from "@/pages/tasky/taskMeta";

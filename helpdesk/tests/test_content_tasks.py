@@ -21,6 +21,7 @@ from helpdesk.test_utils import (
     make_project,
     make_tasky_user,
     make_ticket,
+    saved_due,
     set_content_settings,
 )
 
@@ -103,9 +104,14 @@ class TestTasksFromPosts(ContentTaskCase):
         tasks = self.tasks(post)
         self.assertEqual(set(tasks), {"Writer", "Designer", "Marketer"})
         day = getdate(self.publish)
-        self.assertEqual(getdate(tasks["Writer"].exp_end_date), add_days(day, -3))
-        self.assertEqual(getdate(tasks["Designer"].exp_end_date), add_days(day, -1))
-        self.assertEqual(getdate(tasks["Marketer"].exp_end_date), day)
+        # a date on a day off moves to the working day before (saved_due)
+        self.assertEqual(
+            getdate(tasks["Writer"].exp_end_date), saved_due(add_days(day, -3), True)
+        )
+        self.assertEqual(
+            getdate(tasks["Designer"].exp_end_date), saved_due(add_days(day, -1), True)
+        )
+        self.assertEqual(getdate(tasks["Marketer"].exp_end_date), saved_due(day, True))
         self.assertEqual(tasks["Writer"].project, self.project)
         self.assertEqual(self.assignees(tasks["Designer"]), [DESIGNER[0]])
         # each person hears about their task
@@ -331,7 +337,7 @@ class TestTasksFromPosts(ContentTaskCase):
         self.assertEqual(self.assignees(tasks["Writer"]), [OTHER[0]])
         self.assertEqual(
             getdate(tasks["Writer"].exp_end_date),
-            add_days(getdate(self.publish), -3),
+            saved_due(add_days(getdate(self.publish), -3), True),
         )
         # the same task opened again, not a second one for the part
         self.assertEqual(
@@ -469,23 +475,23 @@ class TestEstimatedHours(ContentTaskCase):
         day = getdate(self.publish)
         # the dialog starts at the date the task already has
         self.assertEqual(
-            content_board.get_role_due(post.name, "writer"), str(add_days(day, -3))
+            content_board.get_role_due(post.name, "writer"),
+            str(saved_due(add_days(day, -3), True)),
         )
 
         content_board.assign(
             post.name, "writer", [WRITER[0]], due=str(add_days(day, -5))
         )
         task = self.tasks(post)["Writer"]
-        self.assertEqual(getdate(task.exp_end_date), add_days(day, -5))
-        self.assertEqual(
-            content_board.get_role_due(post.name, "writer"), str(add_days(day, -5))
-        )
+        due = saved_due(add_days(day, -5), True)
+        self.assertEqual(getdate(task.exp_end_date), due)
+        self.assertEqual(content_board.get_role_due(post.name, "writer"), str(due))
 
         # any date can be picked, even after the post goes live or in the past
         for other in (add_days(day, 2), add_days(getdate(), -1)):
             content_board.assign(post.name, "writer", [WRITER[0]], due=str(other))
             task = self.tasks(post)["Writer"]
-            self.assertEqual(getdate(task.exp_end_date), other)
+            self.assertEqual(getdate(task.exp_end_date), saved_due(other, True))
 
     def test_a_finished_task_keeps_its_due_date(self):
         from helpdesk.api import content_board
@@ -504,7 +510,7 @@ class TestEstimatedHours(ContentTaskCase):
         )
         self.assertEqual(
             getdate(frappe.db.get_value("Task", task, "exp_end_date")),
-            add_days(day, -3),
+            saved_due(add_days(day, -3), True),
         )
 
     def test_a_role_without_a_task_offers_its_usual_due_date(self):

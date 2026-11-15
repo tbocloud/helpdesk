@@ -18,6 +18,7 @@
           type="date"
           :label="__('Due date')"
         />
+        <DueDateNote :date="form.due_date" />
         <p class="text-p-sm text-ink-gray-5">
           <template v-if="task?.due_date">
             {{ __("Currently due") }}
@@ -106,6 +107,7 @@
 </template>
 
 <script setup lang="ts">
+import DueDateNote from "@/components/DueDateNote.vue";
 import { errorText } from "@/utils";
 import { __ } from "@/translation";
 import {

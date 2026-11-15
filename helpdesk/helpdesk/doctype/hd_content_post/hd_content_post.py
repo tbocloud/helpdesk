@@ -31,6 +31,7 @@ from helpdesk.content_team import (
 )
 from helpdesk.tasky.new_assignments import told_by_caller
 from helpdesk.utils import add_assignment, join_malayalam_signs, remove_assignment
+from helpdesk.work_calendar import overdue_cutoff
 from helpdesk.work_reminders import notify_users
 
 # Posts in these statuses are ready to go; anything else close to its date needs attention
@@ -475,7 +476,7 @@ class HDContentPost(Document):
         old_day, new_day = getdate(before.publish_on), getdate(self.publish_on)
         if old_day == new_day:
             return False
-        late = getdate(task.exp_end_date) < getdate()
+        late = getdate(task.exp_end_date) < overdue_cutoff()
         return not late or new_day > old_day
 
     def reassign_task(self, task, users: list):

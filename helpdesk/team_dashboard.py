@@ -26,6 +26,7 @@ from helpdesk import sales_scoreboard as sales
 from helpdesk.ai_engine import call_haiku, fact_numbers, invents_numbers
 from helpdesk.api.content_performance import members, scored_posts
 from helpdesk.api.ticket_ai import truncate
+from helpdesk.work_calendar import overdue_cutoff
 from helpdesk.work_hours import max_hours
 from helpdesk.work_reminders import SKIP, notify_users
 
@@ -332,7 +333,11 @@ def overdue_tasks(today) -> list[dict]:
             task["_assign"],
             project.custom_department.as_("department"),
         )
-        .where(task.status.isin(OPEN_STATUSES) & (task.exp_end_date < today))
+        .where(
+            task.status.isin(OPEN_STATUSES)
+            # a due date on a day off is due the next working day
+            & (task.exp_end_date < overdue_cutoff(today))
+        )
         .run(as_dict=True)
     )
     return [

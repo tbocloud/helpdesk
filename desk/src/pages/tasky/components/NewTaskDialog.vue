@@ -123,6 +123,7 @@
             />
           </template>
         </TextInput>
+        <DueDateNote :date="form.due_date" class="sm:col-span-2" />
         <p
           v-if="!hasDueOrEstimate(form.due_date, form.estimated_hours)"
           class="text-p-xs text-ink-gray-6 sm:col-span-2"
@@ -215,6 +216,7 @@ import {
   isAiDrafted,
   priorityOptions,
 } from "../taskMeta";
+import DueDateNote from "@/components/DueDateNote.vue";
 import RequiredMark from "@/components/RequiredMark.vue";
 import EstimateInput from "./EstimateInput.vue";
 import TaskDescriptionField, {
