@@ -465,16 +465,18 @@
                     <tr
                       v-for="row in data.rows"
                       :key="row.name"
-                      class="border-b border-outline-gray-1 text-ink-gray-8 last:border-b-0"
+                      class="cursor-pointer border-b border-outline-gray-1 text-ink-gray-8 last:border-b-0"
                       :class="
                         selected.has(row.name)
                           ? 'bg-brand-soft/60'
                           : 'hover:bg-surface-gray-1'
                       "
+                      @click="onRowClick($event, row)"
                     >
                       <td
                         v-if="canCategorise"
                         class="w-11 py-3 pl-4 align-middle md:pl-4"
+                        @click.stop
                       >
                         <Checkbox
                           :model-value="selected.has(row.name)"
@@ -742,7 +744,7 @@
                           >{{ dayjs(row.modified).fromNow() }}</time
                         >
                       </td>
-                      <td class="py-3 pr-4 align-middle md:pr-4">
+                      <td class="py-3 pr-4 align-middle md:pr-4" @click.stop>
                         <span class="flex items-center justify-end gap-1">
                           <Tooltip
                             v-if="options?.can_call && row.mobile_no"
@@ -1849,6 +1851,17 @@ function rowActions(row: LeadRow) {
       onClick: () => window.open(to.href, "_blank", "noopener"),
     },
   ];
+}
+
+// The name link stays the keyboard and new-tab path; this lets a click anywhere
+// else on the row open the lead, without hijacking the row's own controls or a
+// text selection.
+function onRowClick(event: MouseEvent, row: LeadRow) {
+  const target = event.target as HTMLElement;
+  if (target.closest("a, button, input, label, [role='button'], [role='menu']"))
+    return;
+  if (window.getSelection()?.toString()) return;
+  router.push({ name: "Lead", params: { leadId: row.name } });
 }
 
 function openLead(name: string) {
