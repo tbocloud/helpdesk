@@ -101,6 +101,8 @@
           </Button>
         </div>
 
+        <NeedsAttention v-if="!viewUser" ref="attention" />
+
         <div
           v-if="work.error && !work.data"
           class="rounded-xl border border-outline-gray-2 bg-surface-base"
@@ -543,6 +545,7 @@ import LucideX from "~icons/lucide/x";
 import WorkItemActions, {
   type WorkStep,
 } from "./components/WorkItemActions.vue";
+import NeedsAttention from "./components/NeedsAttention.vue";
 import WorkingNow from "./components/WorkingNow.vue";
 import WorkItemRow from "./components/WorkItemRow.vue";
 import {
@@ -607,9 +610,12 @@ const given = createResource({
 
 const givenLoading = computed(() => given.loading && !given.data);
 
+const attention = ref<InstanceType<typeof NeedsAttention> | null>(null);
+
 function reload() {
   work.reload();
   given.reload();
+  attention.value?.reload();
 }
 
 const people = createResource({
