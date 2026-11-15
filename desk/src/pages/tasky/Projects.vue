@@ -1,6 +1,9 @@
 <template>
   <div class="flex h-full flex-col">
+    <!-- kept alive behind a project (AgentRoot): a deactivated page's teleported header
+         stays in #app-header, so it shows only while this page is on screen -->
     <LayoutHeader
+      v-if="onScreen"
       :title="__('Projects')"
       :subtitle="
         __(
@@ -371,7 +374,15 @@ import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import { watchDebounced } from "@vueuse/core";
 import { Button, TextInput, createResource } from "frappe-ui";
-import { computed, reactive, ref, useId, watch } from "vue";
+import {
+  computed,
+  onActivated,
+  onDeactivated,
+  reactive,
+  ref,
+  useId,
+  watch,
+} from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
 import LucideCalendarClock from "~icons/lucide/calendar-clock";
@@ -395,6 +406,9 @@ import ProjectCard, {
 import ProjectFormDialog from "./components/ProjectFormDialog.vue";
 import { daysUntil } from "./taskMeta";
 
+const onScreen = ref(true);
+onActivated(() => (onScreen.value = true));
+onDeactivated(() => (onScreen.value = false));
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();

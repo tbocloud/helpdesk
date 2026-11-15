@@ -122,18 +122,46 @@ export interface Questionnaire {
   new_answers: number;
 }
 
+/** Skipped: this client doesn't need the step. Not used: the chain started after it. */
+export type StepSkipStatus = "Skipped" | "Not used";
+
+/** What the signed-in person may do with a step (the ERP site decides). */
+export type StepAction = "open" | "create" | "skip" | "bring_back";
+
 /** One step of the lead's chain of documents (after the plan: its project and the UAT). */
 export interface DocumentStep {
   document_type: DocumentTypeName | "Project" | "UAT";
   label: string;
   name: string | null;
   title: string | null;
-  status: ProposalStatus | null;
+  /** the step's status: its document's, or Skipped / Not used */
+  status: ProposalStatus | StepSkipStatus | "Created" | null;
   status_label: string | null;
+  /** the document's own status, whatever the step shows */
+  document_status?: ProposalStatus | null;
   done: boolean;
   view_count: number;
   /** where its ERPNext Quotation is (a priced document's) */
   quotation_status: string | null;
+  /** the project's link (the Project step) */
+  url?: string | null;
+  /** skipped or marked not used: who, when and why */
+  skipped?: null | {
+    status: StepSkipStatus;
+    reason: string;
+    by: string;
+    by_name: string | null;
+    on: string;
+  };
+  /** shown Not used because a later step started; nothing is recorded yet */
+  implicit?: boolean;
+  actions?: StepAction[];
+  /** making it: the accepted document it is made from (null: from the lead) */
+  source?: string | null;
+  /** it is the next step (anything else is out of order) */
+  in_order?: boolean;
+  /** why it can't be made now, in words */
+  create_refused?: string | null;
 }
 
 /** The lead's documents in order and the one next action (get_lead's `documents`). */
@@ -143,14 +171,21 @@ export interface DocumentChain {
     action: "create_proposal" | "create" | "open" | "create_project" | "uat";
     document_type: DocumentStep["document_type"];
     label: string;
-    /** create: the accepted document to make it from */
-    source?: string;
+    /** create: the accepted document to make it from (null: from the lead) */
+    source?: string | null;
     /** create_project: "Proposal" when the project comes from an accepted strategy
-     *  proposal (Content / Digital Marketing leads), else an implementation plan */
-    source_type?: "Proposal" | "Implementation Plan";
+     *  proposal (Content / Digital Marketing leads), "Lead" when the steps before it
+     *  were skipped, else an implementation plan */
+    source_type?: "Proposal" | "Implementation Plan" | "Lead";
     /** open: the document in progress; uat: the project */
     name?: string;
   };
+  /** the lead is lost: nothing moves, and this says why */
+  blocked?: string | null;
+  /** may skip, bring back and work out of order (the lead's owner, a head, a manager) */
+  can_steer?: boolean;
+  /** why nothing is next while a step is still to do */
+  note?: string | null;
 }
 
 /** Every section may carry an image but these two: the price and the signatures. */
@@ -531,6 +566,13 @@ export interface Proposal {
     status: ProposalStatus;
     is_latest: number;
   }[];
+  /** a revision made after the client asked for changes on the version before */
+  changes_asked?: null | {
+    name: string;
+    reason: string | null;
+    by: string | null;
+    on: string | null;
+  };
   tracking: {
     sent_on?: string | null;
     sent_to?: string | null;
