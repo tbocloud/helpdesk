@@ -2,6 +2,7 @@
 // call is dismissed with a reason (helpdesk.api.pending_calls, docs/leads.md).
 import { __ } from "@/translation";
 import { call, createResource } from "frappe-ui";
+import type { CallOutcome } from "./callBatches";
 import { computed, ref } from "vue";
 
 export interface PendingCall {
@@ -39,8 +40,6 @@ export const pendingCalls = computed<PendingCall[]>(
 
 /** The lead whose result sheet should open now (set when the person comes back from a call). */
 export const askFor = ref("");
-/** What the person typed in the call box: the sheet opens with it as the note. */
-export const askNote = ref("");
 /** Bumped when a call of Today's calls is answered from the call result sheet: the queue
  * reads again at once, so the call can't be answered twice from its row. */
 export const queueChanged = ref(0);
@@ -93,6 +92,33 @@ export function dismissCall(lead: string, reason: string) {
   }).then((answer: PendingAnswer) => setPendingCalls(answer));
 }
 
+/** The ERP site records the answer on the call in Today's calls, or logs it on the lead;
+ * either way the call stops waiting. */
+export function answerCall(
+  pending: PendingCall,
+  value: { outcome: CallOutcome; note: string; callback_at: string | null }
+) {
+  const request = pending.item
+    ? call("helpdesk.api.call_batches.record_call_outcome", {
+        batch_item: pending.item,
+        lead: pending.lead,
+        outcome: value.outcome,
+        note: value.note || null,
+        callback_at: value.callback_at,
+        number: pending.number,
+      })
+    : call("helpdesk.api.leads.log_call", {
+        lead: pending.lead,
+        outcome: value.outcome,
+        note: value.note,
+        callback_at: value.callback_at,
+        number: pending.number,
+      });
+  return request.then(() => {
+    if (pending.item) queueChanged.value++;
+  });
+}
+
 /** The call back times the sheet offers, as the ERP site takes them. */
 export function callBackIn(hours: number) {
   return erpTime(new Date(Date.now() + hours * 3_600_000));
@@ -105,7 +131,8 @@ export function callBackTomorrow() {
   return erpTime(day);
 }
 
-function erpTime(date: Date) {
+/** A date as the ERP site takes it: local time, to the minute. */
+export function erpTime(date: Date) {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
     date.getDate()

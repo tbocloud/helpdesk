@@ -36,7 +36,6 @@
     :position="index + 1"
     :total="pendingCalls.length"
     :saving="saving"
-    :start-note="prefill.lead === current?.lead ? prefill.note : ''"
     @answer="answer"
     @dismiss="dismiss"
     @add-number="showAddNumber = true"
@@ -53,7 +52,7 @@
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
 import { useDocumentVisibility, useWindowFocus } from "@vueuse/core";
-import { Button, call as post, toast } from "frappe-ui";
+import { Button, toast } from "frappe-ui";
 import { computed, onMounted, ref, watch } from "vue";
 import LucidePhoneCall from "~icons/lucide/phone-call";
 import type { CallOutcome } from "./callBatches";
@@ -62,12 +61,11 @@ import CallResultSheet from "./CallResultSheet.vue";
 import { box } from "./callBox";
 import {
   askFor,
-  askNote,
+  answerCall,
   cameBack,
   dismissCall,
   loadPendingCalls,
   pendingCalls,
-  queueChanged,
   type PendingCall,
 } from "./pendingCalls";
 
@@ -99,47 +97,23 @@ const focused = useWindowFocus();
 watch(visibility, (state) => state === "visible" && cameBack());
 watch(focused, (state) => state && cameBack());
 
-// what the person typed in the call box goes into the result as its note
-const prefill = ref({ lead: "", note: "" });
-
 watch(askFor, (lead) => {
   if (!lead) return;
   askFor.value = "";
-  prefill.value = { lead, note: askNote.value };
-  askNote.value = "";
   // the list is read again on coming back: wait for it before looking the lead up
   loadPendingCalls().finally(() => {
     if (pendingCalls.value.some((c) => c.lead === lead)) open(lead);
   });
 });
 
-/** The ERP site records it as the person's answer on the call in Today's calls, or logs it on
- * the lead; either way the call stops waiting. */
 function answer(
   pending: PendingCall,
   value: { outcome: CallOutcome; note: string; callback_at: string | null }
 ) {
   saving.value = true;
-  const request = pending.item
-    ? post("helpdesk.api.call_batches.record_call_outcome", {
-        batch_item: pending.item,
-        lead: pending.lead,
-        outcome: value.outcome,
-        note: value.note || null,
-        callback_at: value.callback_at,
-        number: pending.number,
-      })
-    : post("helpdesk.api.leads.log_call", {
-        lead: pending.lead,
-        outcome: value.outcome,
-        note: value.note,
-        callback_at: value.callback_at,
-        number: pending.number,
-      });
-  request
+  answerCall(pending, value)
     .then(() => {
       toast.success(__("Saved"));
-      if (pending.item) queueChanged.value++;
       return next();
     })
     .catch((e: unknown) =>

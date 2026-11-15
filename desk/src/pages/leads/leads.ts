@@ -640,6 +640,43 @@ export function callLength(seconds?: number | null) {
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
 }
 
+/** A call's recording, streamed by the hub from the ERP site (which checks the person may read the lead). */
+export function recordingUrl(call: string) {
+  return `/api/method/helpdesk.api.leads.call_recording?call=${encodeURIComponent(
+    call
+  )}`;
+}
+
+/** What a call on the timeline says in plain words: "Outgoing call · Answered · 0:02". Only an
+ * explicit missed status is a missed call; an unknown one stays neutral. */
+export function callMeta(entry: LeadTimelineEntry) {
+  const incoming = entry.direction === "incoming";
+  const missed = entry.status === "missed";
+  const voicemail = entry.status === "voicemail";
+  const kind = !entry.direction
+    ? __("Call")
+    : incoming
+    ? __("Incoming call")
+    : __("Outgoing call");
+  const status = missed
+    ? incoming
+      ? __("Missed")
+      : __("Not answered")
+    : voicemail
+    ? __("Voicemail")
+    : entry.status === "answered"
+    ? __("Answered")
+    : "";
+  const talk = !missed && !voicemail && entry.duration;
+  return {
+    kind,
+    status,
+    missed,
+    voicemail,
+    duration: talk ? callLength(entry.duration) : "",
+  };
+}
+
 export function stageLabel(options: LeadOptions | undefined, stage?: string) {
   if (!stage) return "";
   return options?.stages.find((s) => s.name === stage)?.label || stage;
