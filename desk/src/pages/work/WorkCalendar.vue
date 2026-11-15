@@ -620,7 +620,7 @@ const agenda = computed(() => {
     }));
 });
 
-function timeLabel(event: (typeof events.value)[number]) {
+function timeLabel(event: typeof events.value[number]) {
   if (event.fromTime) return `${event.fromTime}–${event.toTime}`;
   return (
     {
