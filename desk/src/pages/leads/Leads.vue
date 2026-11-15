@@ -212,6 +212,15 @@
                 :aria-label="__('Last called')"
                 :options="LAST_CALLED"
               />
+              <FormControl
+                v-if="hasFollowUpDate"
+                v-model="filters.follow_up_date"
+                type="date"
+                size="md"
+                class="w-full sm:w-44"
+                :aria-label="__('Follow-up date')"
+                :placeholder="__('Follow-up date')"
+              />
               <LeadCategoryFilters
                 ref="productPanel"
                 v-model="categories"
@@ -237,34 +246,6 @@
                   />
                 </template>
               </Button>
-            </div>
-            <!-- the days a follow-up is due; on Follow-up they take the place of the cards -->
-            <div
-              v-if="hasDueDays"
-              class="flex flex-wrap items-end gap-3 border-b border-outline-gray-2 px-4 py-3 md:px-4"
-              role="group"
-              :aria-label="__('Follow-up due between')"
-            >
-              <FormControl
-                v-model="filters.due_from"
-                type="date"
-                class="w-40"
-                :label="__('Follow-up due from')"
-                :max="filters.due_to || undefined"
-              />
-              <FormControl
-                v-model="filters.due_to"
-                type="date"
-                class="w-40"
-                :label="__('To')"
-                :min="filters.due_from || undefined"
-              />
-              <Button
-                v-if="filters.due_from || filters.due_to"
-                variant="ghost"
-                :label="__('Clear dates')"
-                @click="clearDueDays"
-              />
             </div>
             <div
               v-if="created === 'custom'"
@@ -1113,29 +1094,24 @@ const filters = reactive({
   called: queryValue("called"),
   // the Follow-up card picked: when the follow-ups are due ("" overdue and today)
   due: queryValue("due"),
-  // Follow-up and My leads: the days the earliest open follow-up falls in (YYYY-MM-DD)
-  due_from: queryValue("due_from"),
-  due_to: queryValue("due_to"),
+  // Follow-up and My leads: the day the earliest open follow-up falls on (YYYY-MM-DD)
+  follow_up_date: queryValue("follow_up_date"),
 });
-// the tabs with the follow-up days; the API sends them for these only too
-const hasDueDays = computed(
+// the tabs with the follow-up date; the API sends it for these only too
+const hasFollowUpDate = computed(
   () => view.value === "follow_up" || view.value === "mine"
 );
-function clearDueDays() {
-  filters.due_from = "";
-  filters.due_to = "";
-}
-// a card and the days are two ways to pick the same list: picking one drops the other
+// a card and the date are two ways to pick the same list: picking one drops the other
 watch(
   () => filters.due,
   (due) => {
-    if (due) clearDueDays();
+    if (due) filters.follow_up_date = "";
   }
 );
 watch(
-  () => [filters.due_from, filters.due_to],
-  ([from, to]) => {
-    if (from || to) filters.due = "";
+  () => filters.follow_up_date,
+  (day) => {
+    if (day) filters.due = "";
   }
 );
 const CREATED_BY = [
@@ -1367,7 +1343,7 @@ const hasFilters = computed(
       filters.department ||
       filters.created_by ||
       filters.called ||
-      (hasDueDays.value && (filters.due_from || filters.due_to)) ||
+      (hasFollowUpDate.value && filters.follow_up_date) ||
       hasCategories.value ||
       extra.metric ||
       extraChips.value.length
@@ -1409,8 +1385,7 @@ function clearFilters() {
     created_by: "",
     called: "",
     due: "",
-    due_from: "",
-    due_to: "",
+    follow_up_date: "",
   });
   categories.value = emptyCategories();
   Object.assign(extra, {
@@ -1585,8 +1560,9 @@ const leads = createResource({
         ? 1
         : null,
     due: view.value === "follow_up" ? filters.due || null : null,
-    due_from: hasDueDays.value ? filters.due_from || null : null,
-    due_to: hasDueDays.value ? filters.due_to || null : null,
+    // one day: the API takes a range, from and to that same day
+    due_from: hasFollowUpDate.value ? filters.follow_up_date || null : null,
+    due_to: hasFollowUpDate.value ? filters.follow_up_date || null : null,
     view: isList.value ? view.value : "all",
     start: (page.value - 1) * PAGE_LENGTH,
     page_length: PAGE_LENGTH,
@@ -1704,8 +1680,7 @@ watch(
       created_by: queryValue("created_by"),
       called: queryValue("called"),
       due: queryValue("due"),
-      due_from: queryValue("due_from"),
-      due_to: queryValue("due_to"),
+      follow_up_date: queryValue("follow_up_date"),
       page: queryPage(),
       extra: queryExtra(),
       categories: queryCategories(),
@@ -1722,8 +1697,7 @@ watch(
       filters.created_by === wanted.created_by &&
       filters.called === wanted.called &&
       (wanted.view !== "follow_up" || filters.due === wanted.due) &&
-      filters.due_from === wanted.due_from &&
-      filters.due_to === wanted.due_to &&
+      filters.follow_up_date === wanted.follow_up_date &&
       page.value === wanted.page
     )
       return;
@@ -1738,8 +1712,7 @@ watch(
       created_by: wanted.created_by,
       called: wanted.called,
       due: wanted.due,
-      due_from: wanted.due_from,
-      due_to: wanted.due_to,
+      follow_up_date: wanted.follow_up_date,
     });
     Object.assign(extra, wanted.extra);
     categories.value = wanted.categories;
@@ -1784,8 +1757,9 @@ watch(
         created_by: f.created_by || undefined,
         called: f.called || undefined,
         due: v === "follow_up" ? f.due || undefined : undefined,
-        due_from: hasDueDays.value ? f.due_from || undefined : undefined,
-        due_to: hasDueDays.value ? f.due_to || undefined : undefined,
+        follow_up_date: hasFollowUpDate.value
+          ? f.follow_up_date || undefined
+          : undefined,
         industry: c.industry.length ? c.industry : undefined,
         state: c.state.length ? c.state : undefined,
         district: c.district.length ? c.district : undefined,
