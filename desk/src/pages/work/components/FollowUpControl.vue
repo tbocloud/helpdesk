@@ -1,8 +1,10 @@
 <template>
   <!-- managers: whether the follow-ups are getting work moved (docs/follow-ups.md) -->
-  <section :aria-label="__('Follow-ups')" class="flex flex-col gap-3">
+  <section :aria-label="__('Follow-ups')" class="flex flex-col gap-4">
     <div class="flex items-baseline justify-between gap-3">
-      <h2 class="text-base-semibold text-ink-gray-9">{{ __("Follow-ups") }}</h2>
+      <h2 class="text-base font-semibold text-ink-gray-9">
+        {{ __("Follow-ups") }}
+      </h2>
       <span class="text-p-sm text-ink-gray-5">
         {{
           __(
@@ -12,25 +14,29 @@
       </span>
     </div>
 
-    <TaskyState
+    <div
       v-if="control.error && !data"
-      :icon="LucideCircleAlert"
-      :title="__('Couldn\'t load the follow-ups')"
-      :message="__('Check your connection and try again.')"
-      error
+      class="rounded-xl border border-outline-gray-2 bg-surface-base"
     >
-      <Button :label="__('Retry')" @click="control.reload()" />
-    </TaskyState>
+      <TaskyState
+        class="py-10"
+        :icon="LucideCircleAlert"
+        :title="__('Couldn\'t load the follow-ups')"
+        :message="__('Check your connection and try again.')"
+        error
+      >
+        <Button :label="__('Retry')" @click="control.reload()" />
+      </TaskyState>
+    </div>
 
     <template v-else>
-      <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div class="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4">
         <StatTile
           :label="__('Escalated to head or managers')"
           :value="data?.counts.escalated ?? 0"
           :icon="LucideChevronsUp"
           :icon-tone="data?.counts.escalated ? 'danger' : 'neutral'"
           :loading="!data"
-          compact
         />
         <StatTile
           :label="__('SLA breached')"
@@ -38,7 +44,6 @@
           :icon="LucideTimerOff"
           :icon-tone="data?.counts.breached ? 'danger' : 'neutral'"
           :loading="!data"
-          compact
         />
         <StatTile
           :label="__('Overdue tasks')"
@@ -46,7 +51,6 @@
           :icon="LucideAlarmClock"
           :icon-tone="data?.counts.overdue ? 'danger' : 'neutral'"
           :loading="!data"
-          compact
         />
       </div>
 
@@ -76,9 +80,12 @@
             <li
               v-for="person in data.people"
               :key="person.user"
-              class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-2.5 last:border-b-0"
+              class="flex items-center gap-3 border-b border-outline-gray-1 px-5 py-3 last:border-b-0"
             >
-              <span class="min-w-0 flex-1 truncate text-base text-ink-gray-8">
+              <PersonAvatar :name="person.full_name" size="md" />
+              <span
+                class="min-w-0 flex-1 truncate text-[13px] font-medium text-ink-gray-9"
+              >
                 {{ person.full_name }}
               </span>
               <span class="font-mono text-sm tabular-nums text-ink-gray-7">
@@ -86,7 +93,7 @@
               </span>
             </li>
           </ul>
-          <p v-else class="px-4 py-6 text-p-sm text-ink-gray-6">
+          <p v-else class="px-5 py-6 text-p-sm text-ink-gray-6">
             {{ __("Nobody has escalated work.") }}
           </p>
         </SectionCard>
@@ -97,6 +104,7 @@
 
 <script setup lang="ts">
 import type { FollowUpRow } from "@/components/followUps";
+import PersonAvatar from "@/components/PersonAvatar.vue";
 import SectionCard from "@/components/SectionCard.vue";
 import StatTile from "@/components/StatTile.vue";
 import TaskyState from "@/components/TaskyState.vue";

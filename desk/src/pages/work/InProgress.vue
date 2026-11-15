@@ -1,31 +1,26 @@
 <template>
   <div class="flex h-full flex-col">
-    <LayoutHeader>
-      <template #left-header>
-        <h1 class="text-lg-medium text-ink-gray-9">{{ __("In progress") }}</h1>
-      </template>
+    <LayoutHeader :title="__('In progress')" :subtitle="intro">
       <template #right-header>
         <Button
-          variant="ghost"
+          size="md"
           :loading="resource.loading"
           :aria-label="__('Refresh')"
           @click="resource.reload()"
         >
           <template #icon>
-            <LucideRefreshCw class="size-4" aria-hidden="true" />
+            <LucideRefreshCw class="size-[18px]" aria-hidden="true" />
           </template>
         </Button>
       </template>
     </LayoutHeader>
 
     <div class="relative flex-1 overflow-auto">
-      <div class="mx-auto w-full max-w-7xl px-4 py-5 md:px-6">
-        <p class="text-p-sm text-ink-gray-6">{{ intro }}</p>
-
+      <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
         <!-- one line answers "what's going on"; it counts the whole view, before
              the two switches narrow the lanes -->
         <p
-          class="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-base text-ink-gray-8"
+          class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px] text-ink-gray-8"
           aria-live="polite"
         >
           <template v-if="data">
@@ -48,26 +43,27 @@
           </template>
           <span
             v-else-if="firstLoad"
-            class="h-5 w-80 max-w-full animate-pulse rounded bg-surface-gray-2"
+            class="h-5 w-80 max-w-full animate-pulse rounded bg-surface-gray-3"
           />
         </p>
 
-        <div class="mt-4 flex flex-col gap-3">
-          <div class="overflow-x-auto">
-            <TabButtons
-              :model-value="group"
-              size="md"
-              :aria-label="__('Group the work')"
-              :options="
-                groupOptions.map((o) => ({
-                  label: o.label,
-                  value: o.key,
-                  iconLeft: o.icon,
-                }))
-              "
-              @update:model-value="group = $event as InProgressGroup"
-            />
-          </div>
+        <div class="max-w-full overflow-x-auto">
+          <ViewTabs
+            :model-value="group"
+            :aria-label="__('Group the work')"
+            :options="
+              groupOptions.map((o) => ({
+                label: o.label,
+                value: o.key,
+                icon: o.icon,
+              }))
+            "
+            @update:model-value="group = $event as InProgressGroup"
+          />
+        </div>
+        <div
+          class="flex flex-col gap-3 rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-4 md:px-4"
+        >
           <div
             class="grid grid-cols-1 gap-3 sm:grid-cols-[repeat(auto-fit,minmax(12rem,1fr))]"
             role="group"
@@ -115,57 +111,57 @@
           </div>
         </div>
 
-        <TaskyState
-          v-if="resource.error && !data"
-          class="mt-6"
-          :icon="LucideCircleAlert"
-          :title="__('Couldn\'t load the work in progress')"
-          :message="
-            errorText(
-              resource.error,
-              __('Check your connection and try again.')
-            )
-          "
-          error
-        >
-          <Button :label="__('Retry')" @click="resource.reload()" />
-        </TaskyState>
-
         <div
-          v-else-if="firstLoad"
-          class="mt-5 flex flex-col gap-4"
-          aria-busy="true"
+          v-if="resource.error && !data"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base"
         >
+          <TaskyState
+            class="py-10"
+            :icon="LucideCircleAlert"
+            :title="__('Couldn\'t load the work in progress')"
+            :message="
+              errorText(
+                resource.error,
+                __('Check your connection and try again.')
+              )
+            "
+            error
+          >
+            <Button :label="__('Retry')" @click="resource.reload()" />
+          </TaskyState>
+        </div>
+
+        <div v-else-if="firstLoad" class="flex flex-col gap-4" aria-busy="true">
           <div
             v-for="i in 3"
             :key="i"
-            class="h-40 animate-pulse rounded-xl border border-outline-gray-2 bg-surface-gray-1"
+            class="h-40 animate-pulse rounded-xl bg-surface-gray-3"
           />
         </div>
 
-        <TaskyState
-          v-else-if="!lanes.length"
-          class="mt-6"
-          :icon="LucideCircleCheck"
-          :title="
-            hasFilters
-              ? __('Nothing matches these filters')
-              : __('Nothing in progress')
-          "
-          :message="emptyMessage"
-        >
-          <Button
-            v-if="hasFilters"
-            :label="__('Clear filters')"
-            @click="clear"
-          />
-        </TaskyState>
-
         <div
-          v-else
-          class="mt-5 flex flex-col gap-4"
-          :aria-busy="resource.loading"
+          v-else-if="!lanes.length"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base"
         >
+          <TaskyState
+            class="py-10"
+            :icon="LucideCircleCheck"
+            :title="
+              hasFilters
+                ? __('Nothing matches these filters')
+                : __('Nothing in progress')
+            "
+            :message="emptyMessage"
+          >
+            <Button
+              v-if="hasFilters"
+              :label="__('Clear filters')"
+              @click="clear"
+            />
+          </TaskyState>
+        </div>
+
+        <div v-else class="flex flex-col gap-4" :aria-busy="resource.loading">
           <SectionCard
             v-for="lane in lanes"
             :key="`${lane.kind}:${lane.key}`"
@@ -175,7 +171,7 @@
             :count="lane.tasks.length + lane.posts.length"
           >
             <ul
-              class="flex flex-wrap items-center gap-1.5 border-b border-outline-gray-1 px-4 py-2"
+              class="flex flex-wrap items-center gap-1.5 border-b border-outline-gray-1 px-5 py-3"
               role="list"
               :aria-label="__('In this lane')"
             >
@@ -236,7 +232,7 @@
             </ul>
             <div
               v-if="hiddenCount(lane)"
-              class="border-t border-outline-gray-1 px-4 py-2"
+              class="border-t border-outline-gray-1 px-5 py-2.5"
             >
               <Button
                 variant="ghost"
@@ -284,6 +280,7 @@ import LayoutHeader from "@/components/LayoutHeader.vue";
 import SectionCard from "@/components/SectionCard.vue";
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import TaskyState from "@/components/TaskyState.vue";
+import ViewTabs from "@/components/ViewTabs.vue";
 import type { Tone } from "@/components/tone";
 import PostDialog from "@/pages/content/components/PostDialog.vue";
 import TaskDetailDialog, {
@@ -294,7 +291,7 @@ import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
 import { useEventListener, useIntervalFn } from "@vueuse/core";
-import { Button, createResource, dayjs, Switch, TabButtons } from "frappe-ui";
+import { Button, createResource, dayjs, Switch } from "frappe-ui";
 import { computed, reactive, ref, watch, type Component } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";

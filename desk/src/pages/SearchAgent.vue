@@ -1,207 +1,220 @@
 <template>
   <div>
     <div>
-      <LayoutHeader>
-        <template #left-header>
-          <Breadcrumbs
-            :items="[{ label: __('Search'), route: { name: 'SearchAgent' } }]"
-          />
-        </template>
-      </LayoutHeader>
-      <div class="mx-auto mt-6 max-w-4xl px-4 sm:px-5">
-        <div class="flex items-center space-x-2 px-2.5">
-          <TextInput
-            ref="searchInput"
-            class="flex-1"
-            :placeholder="__('Search tickets, comments, and communications...')"
-            autocomplete="off"
-            :model-value="query"
-            @update:model-value="updateQuery"
-            @keydown="newSearch = true"
-            @keydown.enter="() => submit()"
-          >
-            <template #prefix>
-              <LucideSearch class="w-4 text-ink-gray-5" />
-            </template>
-            <template #suffix>
-              <div class="flex items-center">
-                <button
-                  v-if="query"
-                  @click="clearSearch"
-                  class="p-1 size-6 grid place-content-center focus:outline-none focus:ring focus:ring-outline-gray-3 rounded"
-                >
-                  <LucideX class="w-4 text-ink-gray-7" />
-                </button>
-              </div>
-            </template>
-          </TextInput>
-        </div>
-
-        <!-- Filter Panel -->
-        <div class="mt-2 px-2.5">
-          <div class="flex gap-2 items-center">
-            <!-- Team Filter -->
-            <SearchMultiSelect
-              :options="teamsFilterOptions"
-              :model-value="activeFilters.agent_group || []"
-              @update:model-value="
-                (values) => updateFilter('agent_group', values)
-              "
-              :placeholder="__('Team')"
-              :label="__('Team')"
-            />
-
-            <!-- Status Filter -->
-            <SearchMultiSelect
-              :options="statusFilterOptions"
-              :model-value="activeFilters.status || []"
-              @update:model-value="(values) => updateFilter('status', values)"
-              :placeholder="__('Status')"
-              :label="__('Status')"
-            />
-
-            <!-- Priority Filter -->
-            <SearchMultiSelect
-              :options="priorityFilterOptions"
-              :model-value="activeFilters.priority || []"
-              @update:model-value="(values) => updateFilter('priority', values)"
-              :placeholder="__('Priority')"
-              :label="__('Priority')"
-            />
-
-            <!-- Document Type Filter -->
-            <SearchMultiSelect
-              :options="doctypesFilterOptions"
-              :model-value="activeFilters.doctype || []"
-              @update:model-value="(values) => updateFilter('doctype', values)"
-              :placeholder="__('Type')"
-              :label="__('Type')"
-            />
-            <Button
-              v-if="hasActiveFilters()"
-              size="sm"
-              class="ml-auto text-ink-gray-5"
-              variant="gray-ghost"
-              @click="clearFilters"
-              :label="__('Clear all filters')"
-            />
-          </div>
-        </div>
-
-        <!-- Search Summary -->
-        <div
-          class="mt-2 px-2.5 text-sm flex items-center justify-between min-h-6"
+      <LayoutHeader
+        :title="__('Search')"
+        :subtitle="__('Find any ticket, comment or email by the words in it.')"
+      />
+      <!-- one list to read: a reading width, on the canvas -->
+      <div class="flex w-full max-w-4xl flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
+        <section
+          class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
+          :aria-label="__('Search')"
         >
-          <div>
-            <template v-if="search.error">
-              <ErrorMessage
-                :message="
-                  search.error.type == 'HelpdeskSearchIndexMissingError'
-                    ? __(
-                        'Search index does not exist. Please build the index first.'
-                      )
-                    : search.error
+          <div
+            class="flex flex-col gap-3 border-b border-outline-gray-2 px-4 py-4 md:px-4"
+          >
+            <TextInput
+              ref="searchInput"
+              size="md"
+              class="w-full"
+              :placeholder="
+                __('Search tickets, comments, and communications...')
+              "
+              autocomplete="off"
+              :model-value="query"
+              @update:model-value="updateQuery"
+              @keydown="newSearch = true"
+              @keydown.enter="() => submit()"
+            >
+              <template #prefix>
+                <LucideSearch class="size-[18px] text-ink-gray-6" />
+              </template>
+              <template #suffix>
+                <div class="flex items-center">
+                  <button
+                    v-if="query"
+                    @click="clearSearch"
+                    class="p-1 size-6 grid place-content-center focus:outline-none focus:ring focus:ring-outline-gray-3 rounded"
+                  >
+                    <LucideX class="w-4 text-ink-gray-7" />
+                  </button>
+                </div>
+              </template>
+            </TextInput>
+
+            <!-- Filter Panel -->
+            <div class="flex flex-wrap gap-2 items-center">
+              <!-- Team Filter -->
+              <SearchMultiSelect
+                :options="teamsFilterOptions"
+                :model-value="activeFilters.agent_group || []"
+                @update:model-value="
+                  (values) => updateFilter('agent_group', values)
                 "
+                :placeholder="__('Team')"
+                :label="__('Team')"
               />
-            </template>
-            <template v-else-if="newSearch && query.length > 2">
-              <p class="text-ink-gray-6">{{ __("Press enter to search") }}</p>
-            </template>
-            <template v-else-if="search.loading">
-              <p class="text-ink-gray-6">{{ __("Searching...") }}</p>
-            </template>
-            <template v-else-if="searchResponse?.summary">
-              <div class="space-y-1">
-                <p class="text-ink-gray-6">
-                  {{
-                    __("{0} matches", [searchResponse.summary.filtered_matches])
-                  }}
-                  <span>
-                    {{ __("({0}s)", [searchResponse.summary.duration]) }}
-                  </span>
-                  <span v-if="hasActiveFilters()">
-                    •
+
+              <!-- Status Filter -->
+              <SearchMultiSelect
+                :options="statusFilterOptions"
+                :model-value="activeFilters.status || []"
+                @update:model-value="(values) => updateFilter('status', values)"
+                :placeholder="__('Status')"
+                :label="__('Status')"
+              />
+
+              <!-- Priority Filter -->
+              <SearchMultiSelect
+                :options="priorityFilterOptions"
+                :model-value="activeFilters.priority || []"
+                @update:model-value="
+                  (values) => updateFilter('priority', values)
+                "
+                :placeholder="__('Priority')"
+                :label="__('Priority')"
+              />
+
+              <!-- Document Type Filter -->
+              <SearchMultiSelect
+                :options="doctypesFilterOptions"
+                :model-value="activeFilters.doctype || []"
+                @update:model-value="
+                  (values) => updateFilter('doctype', values)
+                "
+                :placeholder="__('Type')"
+                :label="__('Type')"
+              />
+              <Button
+                v-if="hasActiveFilters()"
+                size="sm"
+                class="ml-auto text-ink-gray-5"
+                variant="gray-ghost"
+                @click="clearFilters"
+                :label="__('Clear all filters')"
+              />
+            </div>
+          </div>
+
+          <!-- Search Summary -->
+          <div
+            class="flex min-h-6 items-center justify-between border-b border-outline-gray-1 px-4 py-3 text-sm md:px-4"
+          >
+            <div>
+              <template v-if="search.error">
+                <ErrorMessage
+                  :message="
+                    search.error.type == 'HelpdeskSearchIndexMissingError'
+                      ? __(
+                          'Search index does not exist. Please build the index first.'
+                        )
+                      : search.error
+                  "
+                />
+              </template>
+              <template v-else-if="newSearch && query.length > 2">
+                <p class="text-ink-gray-6">{{ __("Press enter to search") }}</p>
+              </template>
+              <template v-else-if="search.loading">
+                <p class="text-ink-gray-6">{{ __("Searching...") }}</p>
+              </template>
+              <template v-else-if="searchResponse?.summary">
+                <div class="space-y-1">
+                  <p class="text-ink-gray-6">
                     {{
-                      __("{0} filter(s) applied", [
-                        Object.keys(
-                          searchResponse.summary.applied_filters || {}
-                        ).length,
+                      __("{0} matches", [
+                        searchResponse.summary.filtered_matches,
                       ])
                     }}
-                  </span>
-                </p>
-                <p
-                  v-if="searchResponse.summary.corrected_query"
-                  class="text-ink-gray-6"
-                >
-                  <span class="text-ink-gray-5">{{ __("Searched for:") }}</span>
-                  <span class="ml-1 font-medium text-ink-gray-9">
-                    {{ searchResponse.summary.corrected_query }}
-                  </span>
-                </p>
-              </div>
+                    <span>
+                      {{ __("({0}s)", [searchResponse.summary.duration]) }}
+                    </span>
+                    <span v-if="hasActiveFilters()">
+                      •
+                      {{
+                        __("{0} filter(s) applied", [
+                          Object.keys(
+                            searchResponse.summary.applied_filters || {}
+                          ).length,
+                        ])
+                      }}
+                    </span>
+                  </p>
+                  <p
+                    v-if="searchResponse.summary.corrected_query"
+                    class="text-ink-gray-6"
+                  >
+                    <span class="text-ink-gray-5">{{
+                      __("Searched for:")
+                    }}</span>
+                    <span class="ml-1 font-medium text-ink-gray-9">
+                      {{ searchResponse.summary.corrected_query }}
+                    </span>
+                  </p>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <div class="divide-y divide-outline-gray-1">
+            <template v-for="item in searchResponse?.results" :key="item.id">
+              <router-link
+                :to="getItemRoute(item)"
+                class="flex space-x-2 overflow-hidden px-4 py-3 hover:bg-surface-gray-1 focus-visible:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-gray-4"
+              >
+                <div class="flex items-start space-x-2">
+                  <div class="flex-shrink-0">
+                    <LucideTicket
+                      v-if="item.doctype === 'HD Ticket'"
+                      class="h-4 w-4 text-ink-gray-6"
+                    />
+                    <LucideMessageSquare
+                      v-else-if="item.doctype === 'HD Ticket Comment'"
+                      class="h-4 w-4 text-ink-gray-6"
+                    />
+                    <LucideMail
+                      v-else-if="item.doctype === 'Communication'"
+                      class="h-4 w-4 text-ink-gray-6"
+                    />
+                  </div>
+                  <!-- <UserAvatar :name="item.raised_by || item.author || 'System'" /> -->
+                </div>
+                <div class="w-full">
+                  <div class="flex items-center">
+                    <div
+                      v-if="item.title"
+                      class="text-base-medium truncate max-w-[60%]"
+                      v-html="item.title"
+                    />
+                    <div class="text-base-medium" v-else>
+                      {{ item.name }}
+                    </div>
+                    <span class="px-1 leading-none text-sm text-ink-gray-5">
+                      &middot;
+                      {{
+                        item.doctype == "Communication"
+                          ? __("Email")
+                          : item.doctype.replace("HD ", "")
+                      }}
+                    </span>
+                    <span class="px-1 leading-none text-sm text-ink-gray-5">
+                      &middot; #{{ getTicketNumber(item) }}
+                    </span>
+                    <div class="ml-auto text-sm text-ink-gray-5">
+                      {{ formatDate(item.modified) }}
+                    </div>
+                  </div>
+                  <div
+                    v-if="item.content"
+                    class="mt-1 text-p-base text-ink-gray-6"
+                    v-html="item.content"
+                  ></div>
+                </div>
+              </router-link>
             </template>
           </div>
-        </div>
-
-        <div class="mt-5">
-          <template v-for="item in searchResponse?.results" :key="item.id">
-            <router-link
-              :to="getItemRoute(item)"
-              class="flex space-x-2 overflow-hidden rounded px-2.5 py-3 hover:bg-surface-gray-2"
-            >
-              <div class="flex items-start space-x-2">
-                <div class="flex-shrink-0">
-                  <LucideTicket
-                    v-if="item.doctype === 'HD Ticket'"
-                    class="h-4 w-4 text-ink-gray-6"
-                  />
-                  <LucideMessageSquare
-                    v-else-if="item.doctype === 'HD Ticket Comment'"
-                    class="h-4 w-4 text-ink-gray-6"
-                  />
-                  <LucideMail
-                    v-else-if="item.doctype === 'Communication'"
-                    class="h-4 w-4 text-ink-gray-6"
-                  />
-                </div>
-                <!-- <UserAvatar :name="item.raised_by || item.author || 'System'" /> -->
-              </div>
-              <div class="w-full">
-                <div class="flex items-center">
-                  <div
-                    v-if="item.title"
-                    class="text-base-medium truncate max-w-[60%]"
-                    v-html="item.title"
-                  />
-                  <div class="text-base-medium" v-else>
-                    {{ item.name }}
-                  </div>
-                  <span class="px-1 leading-none text-sm text-ink-gray-5">
-                    &middot;
-                    {{
-                      item.doctype == "Communication"
-                        ? __("Email")
-                        : item.doctype.replace("HD ", "")
-                    }}
-                  </span>
-                  <span class="px-1 leading-none text-sm text-ink-gray-5">
-                    &middot; #{{ getTicketNumber(item) }}
-                  </span>
-                  <div class="ml-auto text-sm text-ink-gray-5">
-                    {{ formatDate(item.modified) }}
-                  </div>
-                </div>
-                <div
-                  v-if="item.content"
-                  class="mt-1 text-p-base text-ink-gray-6"
-                  v-html="item.content"
-                ></div>
-              </div>
-            </router-link>
-            <div class="border-b mx-2"></div>
-          </template>
-        </div>
+        </section>
       </div>
     </div>
   </div>
@@ -213,7 +226,6 @@ import SearchMultiSelect from "@/components/SearchMultiSelect.vue";
 import { useShortcut } from "@/composables/shortcuts";
 import { __ } from "@/translation";
 import {
-  Breadcrumbs,
   createResource,
   dayjs,
   debounce,

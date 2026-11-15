@@ -92,47 +92,95 @@ The happy path alone is not a finished UI.
   and done.
 - **Never colour alone:** always pair colour with an icon, text or shape. Keep contrast
   accessible.
-- **Avoid:** purple-to-blue gradients, gradient text, decorative blobs, **pastel icon tiles**
-  (a soft-coloured square behind every icon), rainbow stat cards and colour used as
-  decoration.
+- **Avoid:** purple-to-blue gradients, gradient text, decorative blobs, rainbow stat cards
+  and colour used as decoration. (Pastel icon tiles on stat cards, per-stage pill colours
+  and person colours are allowed by the Leads redesign exception below.)
 
-### The TBO palette (2026-10-12)
+### The TBO palette (2026-11-14: the Leads redesign)
 
-The owner asked for the logo's colours: its teal is the brand, its orange a small highlight.
-The hex values are the same as the TBO mobile app's. The tokens live in
-`desk/src/theme.css` (mirrored in `helpdesk/templates/portal_base.html`). `info` moved from
-hue ~216 toward indigo (~225) so it stays clearly blue next to the teal (~198).
+The owner asked for the "Leads (all) — redesigned" mockup across the whole app, with the
+mockup's colours winning over the earlier rules. So the brand moved from the logo teal
+(`#3a748d`) to the mockup's deeper teal, the neutrals are the mockup's slate grays, and the
+page sits on a light gray canvas with white cards. The tokens live in `desk/src/theme.css`
+(mirrored in `helpdesk/templates/portal_base.html`).
 
 | Token | Light | Dark |
 | --- | --- | --- |
-| `brand` | `#3a748d` | `#6fb4cf` |
-| `brand-hover` (hover and pressed) | `#2a5766` | `#8dc5da` |
-| `brand-soft` | `#e6f0f4` | `#15303b` |
-| `brand-ink` | `#2c5f75` | `#a6d5e6` |
-| `on-brand` | `#ffffff` | `#0b2129` |
-| `highlight` | `#c8641a` | `#f59a4a` |
-| `info` / `info-soft` | `#2f56c6` / `#e8edfb` | `#8da6ff` / `#16233f` |
+| `brand` | `#17657f` | `#6fb4cf` |
+| `brand-hover` | `#125469` | `#8dc5da` |
+| `brand-soft` / `brand-soft-border` | `#e6f2f5` / `#cfe5eb` | `#15303b` / `#1f4654` |
+| `brand-ink` / `brand-ink-hover` (links, current menu item) | `#17657f` / `#0e4a5e` | `#a6d5e6` / `#c4e4ef` |
+| `canvas` (page background) | `#f4f6f8` | `oklch(0.169 0.006 271)` |
+| `surface-sidebar` (menu panel) | `#ffffff` | `oklch(0.205 0.008 275)` |
+| rail | `#0f172a`, icons `#94a3b8` | unchanged |
+| `ink-gray-9` / `-8` / `-7` / `-6` | `#0f172a` / `#1f2937` / `#3b4453` / `#5b6474` | unchanged |
+| `outline-gray-1` / `-2` / `-3` | `#eef1f4` / `#e3e7ec` / `#d5dbe2` | unchanged |
+| `info` / `success` / `warning` / `danger` | `#1e4fb8` / `#136b4a` / `#8a5300` / `#b42318` | unchanged |
+| `violet` (proposal stage) | `#5b32b4` on `#f1eafe` | `#c4b0ff` on `#251d3d` |
+| `hot` (lead score) | `#b4410a`, bar `#e8590c` | `#ffad7a`, bar `#f07a35` |
+| `person-1` … `person-6` (avatars) | slate-teal, violet, rust, green, blue, slate | lighter tints |
+| `highlight` (focus ring, today ring) | `#c8641a` | `#f59a4a` |
 
-WCAG contrast (`surface-base` is `#ffffff` light, `#16171b` dark; the light sidebar is
-`#f6f7f9`):
+WCAG contrast (light): `brand` on white 6.55, `on-brand` on `brand` 6.55, `brand-ink` on
+`brand-soft` 5.74, `ink-gray-6` on white 5.97 and on the canvas 5.51, `danger` on
+`danger-soft` 5.76, `warning` on `warning-soft` 5.81, `success` on `success-soft` 5.75,
+`info` on `info-soft` 6.39, `violet` on `violet-soft` 7.01, the person colours on their
+soft fills 6.47–8.35, the rail icons 6.96. Every text pair passes 4.5:1; the highlight
+ring passes 3:1 (3.97 on white, 3.66 on the canvas).
 
-| Pair | Light | Dark |
-| --- | --- | --- |
-| `on-brand` on `brand` (buttons, selected chips) | 5.17 | 7.20 |
-| `on-brand` on `brand-hover` | 7.91 | 8.81 |
-| `on-brand` on `brand-ink` (pressed frappe-ui button) | 7.00 | 10.51 |
-| `brand-ink` on `brand-soft` | 6.04 | 8.75 |
-| `brand-ink` on `surface-base` | 7.00 | 11.33 |
-| `brand` on `surface-base` (borders, selection rings) | 5.17 | 7.77 |
-| `brand` on the sidebar background | 4.82 | 8.31 |
-| `highlight` ring on `surface-base` (3:1 needed) | 3.97 | 8.19 |
-| `highlight` ring on `surface-gray-2` | 3.54 | 7.63 |
-| `highlight` ring on `brand-soft` | 3.43 | 6.33 |
-| `info` on `info-soft` | 5.49 | 6.71 |
+### The owner's exception: the Leads redesign everywhere (2026-11-14)
 
-Every text pair passes 4.5:1 and every ring passes 3:1. `highlight` is only ever a ring, so
-it never needs text contrast, and today is always labelled too ("Today", or in the day's
-accessible label).
+The owner asked for the mockup's look on every page and chose the mockup over the colour
+rules above where the two disagreed. What that allows, and nothing beyond it:
+
+- **Stat cards** (`StatTile`): the label top left, the icon on a soft 28 px square at the
+  right (`iconTone` picks the tone, so a stat may carry a pastel tile), a 22 px bold value
+  and a 12 px line under it.
+- **Stage pills** (`stagePillClass` in `pages/leads/leads.ts`): one tone per stage, as the
+  mockup draws them — blue new, amber contacted, green meetings and won, violet proposal,
+  gray lost; a dot or icon and the stage's name always beside the colour.
+- **People** (`PersonAvatar`): initials on one of six person colours, picked by a hash of
+  the name so a person keeps theirs everywhere; leads and companies are neutral gray.
+- **Page views** (`ViewTabs`): pills in one white strip, the current one filled near-black
+  (`surface-gray-10`) with its count. Small in-card toggles stay frappe-ui `TabButtons`,
+  now the mockup's segmented look (the checked option white on a light track).
+- **Bulk selection**: a near-black bar across the table with outlined white buttons.
+
+### Page recipe (every page)
+
+- **Type**: a compact scale (`desk/tailwind.config.js`): every frappe-ui size is about 1 px
+  smaller than stock (`text-base` 13 px, `text-sm` 12.5 px, `text-xs` 11.5 px, `text-lg`
+  15 px) with no added letter-spacing, the weighted variants included. Arbitrary sizes in
+  templates stay at 12–14 px for body text.
+
+- **Header**: `LayoutHeader` with `title` (22 px bold) and a one-sentence `subtitle`; its
+  actions are `size="md"` buttons, refresh as an icon button first, the solid primary last.
+  Pages with breadcrumbs keep the `left-header` slot.
+- **Body**: `flex flex-col gap-4 px-4 pb-8 pt-4 md:px-8` on the canvas, full width. Reading
+  and form pages (an article, a settings form, a single document) keep a max width.
+- **Cards**: `rounded-xl border border-outline-gray-2 bg-surface-base`, `p-4` inside; a
+  card's heading is `text-base font-semibold text-ink-gray-9`. `theme.css` gives every card
+  a soft two-layer shadow (none in dark mode), and a card that is a link or button lifts
+  1 px with a deeper shadow on hover.
+- **Stat rows**: `grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4` of `StatTile`s
+  (13 px label, a 28 px icon square, a 22 px figure).
+- **Tables** sit in a card: filters in a `border-b px-4 py-4` bar (inputs `size="md"`,
+  search first and widest), then the table — headings
+  `h-11 bg-surface-gray-1 text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6`,
+  rows `border-b border-outline-gray-1 hover:bg-surface-gray-1` at 56–64 px, cells `px-3`
+  with `pl-4` at the edges — then a `border-t px-4 py-3.5` footer ("Showing 1–20 of 386"
+  and Previous / Next). The row's main action is a 36 px `brand-soft` icon button; the
+  rest sit in an ellipsis menu.
+- **Lists that aren't tables**: a card with `divide-y divide-outline-gray-1` rows, `px-4
+  py-3`.
+- **Empty, error and loading** states sit inside the card they replace (`TaskyState`
+  with `py-10`; skeletons in `bg-surface-gray-3`).
+- **Fields** are white with a slate border and 10 px corners; focus is the brand border
+  with a soft brand ring (`theme.css` restyles frappe-ui's subtle inputs). Secondary
+  buttons are white and outlined.
+- **Menu**: the dark 64 px rail, then the white panel — the workspace name, search, the
+  groups under 11 px uppercase headings, 36 px rows (the current one `brand-soft`), counts
+  as brand pills, and the "Needs your attention" card at the foot.
 
 ### The owner's exception: soft status circles (2026-10-10)
 
@@ -202,7 +250,7 @@ one place (`METRIC_LOOK` in `desk/src/pages/crm-dashboard/crmDashboard.ts`):
 - The three headline KPI cards are filled with their tone's soft colour (`StatTile`'s `tint`),
   the icon on the solid tone, and a mini trend in the tone's colour; every other KPI card is a
   compact `StatTile` with a 4 px left edge and its icon in the tone. Values stay neutral ink.
-  The page sits on `surface-gray-1` so the cards stand out, the filters are a light bar of
+  The page sits on the gray canvas like every page, the filters are a light bar of
   outlined selects with no box around them, and a chart card is a section as on the Daily
   report: a 4 px left border, a soft heading strip and the heading icon in the tone of the
   chart's metric.

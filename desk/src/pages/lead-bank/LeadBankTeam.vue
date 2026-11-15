@@ -19,22 +19,21 @@
         </nav>
       </template>
       <template #right-header>
-        <Button :label="__('Move credit')" @click="openCredit">
+        <Button size="md" :label="__('Move credit')" @click="openCredit">
           <template #prefix>
-            <LucideArrowRightLeft class="size-4" aria-hidden="true" />
+            <LucideArrowRightLeft class="size-[18px]" aria-hidden="true" />
           </template>
         </Button>
       </template>
     </LayoutHeader>
 
     <div class="relative flex-1 overflow-y-auto overflow-x-hidden">
-      <div
-        class="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 py-5 md:px-6"
-      >
+      <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
         <div class="flex flex-wrap items-end gap-3">
           <FormControl
             v-model="month"
             type="select"
+            size="md"
             class="w-full sm:w-56"
             :label="__('Month')"
             :options="monthOptions"
@@ -43,6 +42,7 @@
 
         <TaskyState
           v-if="page.error && !data"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
           error
           :icon="LucideCircleAlert"
           :title="__('Couldn\'t load the Lead Bank')"
@@ -58,39 +58,44 @@
 
         <div
           v-else-if="!data"
-          class="flex flex-col gap-3"
+          class="flex flex-col gap-5"
           aria-busy="true"
           :aria-label="__('Loading')"
         >
-          <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <div
+            class="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4"
+          >
             <div
               v-for="i in 4"
               :key="i"
-              class="h-[72px] animate-pulse rounded-xl bg-surface-gray-2"
+              class="h-[130px] animate-pulse rounded-xl bg-surface-gray-3"
             />
           </div>
-          <div class="h-56 animate-pulse rounded-xl bg-surface-gray-2" />
+          <div class="h-56 animate-pulse rounded-xl bg-surface-gray-3" />
         </div>
 
         <template v-else>
           <section
-            class="grid grid-cols-2 gap-3 md:grid-cols-4"
+            class="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4"
             :aria-label="__('Totals')"
           >
             <StatTile
-              compact
               :label="__('Leads collected')"
               :value="data.collected"
+              :icon="LucideCamera"
+              icon-tone="brand"
             />
             <StatTile
-              compact
               :label="__('Won')"
               :value="data.won"
+              :icon="LucideTrophy"
+              icon-tone="success"
               :sub="__('{0}% of collected', String(data.conversion))"
             />
             <StatTile
-              compact
               :label="__('Referral due')"
+              :icon="LucideWallet"
+              icon-tone="brand"
               :value="fullAmount(data.referral.due, data.currency)"
               :sub="
                 __(
@@ -101,30 +106,33 @@
               "
             />
             <StatTile
-              compact
               :label="__('Waiting for a department')"
+              :icon="LucideHourglass"
+              :icon-tone="data.pool.count ? 'warning' : 'neutral'"
               :value="data.pool.count"
             />
           </section>
 
           <section
-            class="rounded-xl border border-outline-gray-2 bg-surface-base"
+            class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
             :aria-label="__('By region')"
           >
             <h2
-              class="border-b border-outline-gray-1 px-4 py-3 text-base-medium text-ink-gray-9"
+              class="border-b border-outline-gray-2 px-4 py-3 text-base font-semibold text-ink-gray-9"
             >
               {{ __("By region") }}
             </h2>
-            <table class="w-full text-sm">
-              <thead class="text-left text-xs text-ink-gray-6">
-                <tr>
-                  <th class="px-4 py-2 font-normal">{{ __("Region") }}</th>
-                  <th class="px-2 py-2 font-normal">{{ __("Department") }}</th>
-                  <th class="px-2 py-2 text-right font-normal">
+            <table class="w-full text-[13px]">
+              <thead>
+                <tr
+                  class="h-11 border-b border-outline-gray-2 bg-surface-gray-1 text-left text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6"
+                >
+                  <th class="px-3 pl-4 md:pl-4">{{ __("Region") }}</th>
+                  <th class="px-3">{{ __("Department") }}</th>
+                  <th class="px-3 text-right">
                     {{ __("Collected") }}
                   </th>
-                  <th class="px-4 py-2 text-right font-normal">
+                  <th class="px-3 pr-4 text-right md:pr-4">
                     {{ __("Won") }}
                   </th>
                 </tr>
@@ -133,18 +141,20 @@
                 <tr
                   v-for="row in data.by_region"
                   :key="row.region"
-                  class="border-t border-outline-gray-1"
+                  class="border-b border-outline-gray-1 last:border-b-0 hover:bg-surface-gray-1"
                 >
-                  <td class="px-4 py-2 text-ink-gray-9">
+                  <td class="px-3 py-3 pl-4 text-ink-gray-9 md:pl-4">
                     {{ REGION_LABEL[row.region] }}
                   </td>
-                  <td class="px-2 py-2 text-ink-gray-7">
+                  <td class="px-3 py-3 text-ink-gray-7">
                     {{ row.department || __("None, goes to the waiting list") }}
                   </td>
-                  <td class="px-2 py-2 text-right font-mono tabular-nums">
+                  <td class="px-3 py-3 text-right font-mono tabular-nums">
                     {{ row.collected }}
                   </td>
-                  <td class="px-4 py-2 text-right font-mono tabular-nums">
+                  <td
+                    class="px-3 py-3 pr-4 text-right font-mono tabular-nums md:pr-4"
+                  >
                     {{ row.won }}
                   </td>
                 </tr>
@@ -153,31 +163,33 @@
           </section>
 
           <section
-            class="rounded-xl border border-outline-gray-2 bg-surface-base"
+            class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
             :aria-label="__('Top collectors')"
           >
             <h2
-              class="border-b border-outline-gray-1 px-4 py-3 text-base-medium text-ink-gray-9"
+              class="border-b border-outline-gray-2 px-4 py-3 text-base font-semibold text-ink-gray-9"
             >
               {{ __("Top collectors") }}
             </h2>
             <p
               v-if="!data.collectors.length"
-              class="px-4 py-6 text-center text-p-sm text-ink-gray-6"
+              class="px-5 py-14 text-center text-p-sm text-ink-gray-6"
             >
               {{ __("Nobody has added a lead in {0} yet.", monthTitle(month)) }}
             </p>
-            <table v-else class="w-full text-sm">
-              <thead class="text-left text-xs text-ink-gray-6">
-                <tr>
-                  <th class="px-4 py-2 font-normal">{{ __("Person") }}</th>
-                  <th class="px-2 py-2 text-right font-normal">
+            <table v-else class="w-full text-[13px]">
+              <thead>
+                <tr
+                  class="h-11 border-b border-outline-gray-2 bg-surface-gray-1 text-left text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6"
+                >
+                  <th class="px-3 pl-4 md:pl-4">{{ __("Person") }}</th>
+                  <th class="px-3 text-right">
                     {{ __("Collected") }}
                   </th>
-                  <th class="px-2 py-2 text-right font-normal">
+                  <th class="px-3 text-right">
                     {{ __("Won") }}
                   </th>
-                  <th class="px-4 py-2 text-right font-normal">
+                  <th class="px-3 pr-4 text-right md:pr-4">
                     {{ __("Referral due") }}
                   </th>
                 </tr>
@@ -186,18 +198,25 @@
                 <tr
                   v-for="person in data.collectors"
                   :key="person.user"
-                  class="border-t border-outline-gray-1"
+                  class="border-b border-outline-gray-1 last:border-b-0 hover:bg-surface-gray-1"
                 >
-                  <td class="px-4 py-2 text-ink-gray-9">
-                    {{ person.full_name }}
+                  <td class="px-3 py-3 pl-4 text-ink-gray-9 md:pl-4">
+                    <span class="flex min-w-0 items-center gap-2.5">
+                      <PersonAvatar :name="person.full_name" size="md" />
+                      <span class="truncate font-medium">{{
+                        person.full_name
+                      }}</span>
+                    </span>
                   </td>
-                  <td class="px-2 py-2 text-right font-mono tabular-nums">
+                  <td class="px-3 py-3 text-right font-mono tabular-nums">
                     {{ person.collected }}
                   </td>
-                  <td class="px-2 py-2 text-right font-mono tabular-nums">
+                  <td class="px-3 py-3 text-right font-mono tabular-nums">
                     {{ person.won }}
                   </td>
-                  <td class="px-4 py-2 text-right font-mono tabular-nums">
+                  <td
+                    class="px-3 py-3 pr-4 text-right font-mono tabular-nums md:pr-4"
+                  >
                     {{ fullAmount(dueOf(person.user), data.currency) }}
                   </td>
                 </tr>
@@ -207,11 +226,11 @@
 
           <section
             v-if="data.pool.count"
-            class="rounded-xl border border-outline-gray-2 bg-surface-base"
+            class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
             :aria-label="__('Waiting for a department')"
           >
             <h2
-              class="border-b border-outline-gray-1 px-4 py-3 text-base-medium text-ink-gray-9"
+              class="border-b border-outline-gray-2 px-4 py-3 text-base font-semibold text-ink-gray-9"
             >
               {{ __("Waiting for a department") }}
               <span
@@ -219,7 +238,9 @@
                 >{{ data.pool.count }}</span
               >
             </h2>
-            <p class="px-4 pt-3 text-p-sm text-ink-gray-6">
+            <p
+              class="border-b border-outline-gray-1 px-4 py-3 text-p-sm text-ink-gray-6"
+            >
               {{
                 __(
                   "These regions have no department yet, so nobody owns these leads. Set the department in Settings → CRM → Commission plans → Referral (Lead Bank), then give each lead to someone."
@@ -234,7 +255,7 @@
               >
                 <router-link
                   :to="{ name: 'Lead', params: { leadId: lead.lead } }"
-                  class="min-w-0 flex-1 truncate rounded text-base-medium text-brand-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+                  class="min-w-0 flex-1 truncate rounded text-[13px] font-semibold text-brand-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
                   >{{ lead.title }}</router-link
                 >
                 <span class="text-p-xs text-ink-gray-6">
@@ -325,7 +346,12 @@ import {
 import { computed, onMounted, reactive, ref, useId, watch } from "vue";
 import LucideArrowRightLeft from "~icons/lucide/arrow-right-left";
 import LucideChevronRight from "~icons/lucide/chevron-right";
+import LucideCamera from "~icons/lucide/camera";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
+import LucideHourglass from "~icons/lucide/hourglass";
+import LucideTrophy from "~icons/lucide/trophy";
+import LucideWallet from "~icons/lucide/wallet";
+import PersonAvatar from "@/components/PersonAvatar.vue";
 import { REGION_LABEL, type Dashboard } from "./leadBank";
 
 const { agents } = useAgentStore();

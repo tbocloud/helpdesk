@@ -7,7 +7,7 @@
     @change="(e) => setSort(e)"
   >
     <template #target="{ togglePopover }">
-      <Button :label="'Sort'" @click="togglePopover()">
+      <Button :label="'Sort'" size="md" @click="togglePopover()">
         <template v-if="hideLabel" #icon>
           <SortIcon class="h-4" />
         </template>
@@ -19,7 +19,7 @@
   </Autocomplete>
   <NestedPopover v-else>
     <template #target="{ open }">
-      <Button v-if="sortValues.size > 1" :label="'Sort'">
+      <Button v-if="sortValues.size > 1" :label="'Sort'" size="md">
         <template v-if="hideLabel" #icon>
           <SortIcon class="h-4" />
         </template>
@@ -36,6 +36,7 @@
         <Button
           v-if="sortValues.size"
           class="rounded-r-none border-r"
+          size="md"
           @click.stop="
             () => {
               Array.from(sortValues)[0].direction =
@@ -51,6 +52,7 @@
           <DescendingIcon v-else class="h-4" />
         </Button>
         <Button
+          size="md"
           :label="getSortLabel()"
           :class="sortValues.size ? 'rounded-l-none' : ''"
         >

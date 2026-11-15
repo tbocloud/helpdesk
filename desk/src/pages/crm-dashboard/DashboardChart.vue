@@ -5,23 +5,23 @@
     :aria-labelledby="headingId"
   >
     <!-- the heading takes its metric's tone, beside the icon and the words -->
-    <header class="flex items-center gap-2 px-4 py-2.5" :class="section.head">
+    <header class="flex items-center gap-2 px-5 py-3" :class="section.head">
       <component
         :is="look.icon"
         class="size-4 shrink-0"
         :class="section.ink"
         aria-hidden="true"
       />
-      <h2 :id="headingId" class="text-base-medium text-ink-gray-9">
+      <h2 :id="headingId" class="text-base font-semibold text-ink-gray-9">
         {{ chart.title }}
       </h2>
     </header>
-    <p class="px-4 pt-3 text-p-sm text-ink-gray-6">{{ subtitle }}</p>
+    <p class="px-5 pt-4 text-p-sm text-ink-gray-6">{{ subtitle }}</p>
 
-    <div class="min-w-0 flex-1 p-4">
+    <div class="min-w-0 flex-1 p-5">
       <p
         v-if="chart.missing"
-        class="flex items-start gap-2 rounded-md bg-surface-gray-2 px-3 py-2 text-p-sm text-ink-gray-7"
+        class="flex items-start gap-2 rounded-xl bg-surface-gray-2 px-3 py-2 text-p-sm text-ink-gray-7"
       >
         <LucideInfo class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
         <span>{{ chart.missing }}</span>

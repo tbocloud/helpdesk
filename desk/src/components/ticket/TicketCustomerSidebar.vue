@@ -5,12 +5,12 @@
     :class="
       inline
         ? 'w-full'
-        : 'w-[340px] shrink-0 border-l border-outline-gray-2 bg-surface-base'
+        : 'w-[340px] shrink-0 rounded-xl border border-outline-gray-2 bg-surface-base'
     "
     :aria-label="__('Ticket details')"
   >
-    <section class="flex flex-col gap-3 px-5 py-4">
-      <h2 class="text-base-medium text-ink-gray-9">
+    <section class="flex flex-col gap-3 px-4 py-3">
+      <h2 class="text-base font-semibold text-ink-gray-9">
         {{ __("Ticket details") }}
       </h2>
       <dl
@@ -67,9 +67,9 @@
 
     <section
       v-if="ticket.data.feedback_rating"
-      class="flex flex-col gap-3 border-t border-outline-gray-2 px-5 py-4"
+      class="flex flex-col gap-3 border-t border-outline-gray-1 px-4 py-3"
     >
-      <h2 class="text-base-medium text-ink-gray-9">
+      <h2 class="text-base font-semibold text-ink-gray-9">
         {{ __("Your rating") }}
       </h2>
       <dl

@@ -7,12 +7,12 @@
   >
     <template #default>
       <div
-        class="flex flex-col overflow-hidden sm:flex-row"
+        class="relative flex flex-col overflow-hidden sm:flex-row"
         :style="{ height: 'calc(100vh - 8rem)' }"
       >
         <!-- small screens: one select instead of the sidebar -->
         <div
-          class="shrink-0 border-b border-outline-gray-2 bg-surface-sidebar px-4 py-3 sm:hidden"
+          class="shrink-0 border-b border-outline-gray-2 bg-surface-sidebar py-3 pe-14 ps-4 sm:hidden"
         >
           <label
             for="settings-page-select"
@@ -96,6 +96,16 @@
             class="flex h-full w-full flex-col"
           />
         </div>
+        <!-- always visible: Escape and a click outside are off while a page has unsaved changes -->
+        <button
+          type="button"
+          class="absolute end-3 top-3 z-10 grid size-8 place-items-center rounded-lg text-ink-gray-6 transition-colors hover:bg-surface-gray-3 hover:text-ink-gray-9"
+          :aria-label="__('Close settings')"
+          :title="__('Close')"
+          @click="closeSettings"
+        >
+          <LucideX class="size-[18px]" aria-hidden="true" />
+        </button>
       </div>
     </template>
   </Dialog>
@@ -107,9 +117,11 @@
     "
     :onConfirm="
       () => {
-        if (nextActiveTab !== null) {
+        if (closing) show = false;
+        else if (nextActiveTab !== null) {
           activeTab = nextActiveTab;
         }
+        closing = false;
         nextActiveTab = null;
         showConfirmDialog = false;
         disableSettingModalOutsideClick = false;
@@ -118,6 +130,7 @@
     :onCancel="
       () => {
         nextActiveTab = null;
+        closing = false;
       }
     "
   />
@@ -127,6 +140,7 @@ import ConfirmDialog from "@/components/ConfirmDialog.vue";
 import { __ } from "@/translation";
 import { Dialog } from "frappe-ui";
 import { ModelRef, ref } from "vue";
+import LucideX from "~icons/lucide/x";
 import {
   activeTab,
   disableSettingModalOutsideClick,
@@ -138,6 +152,17 @@ import {
 const show: ModelRef<boolean> = defineModel();
 
 const showConfirmDialog = ref(false);
+// the close button asked to leave; the same "leave without saving?" guards it
+const closing = ref(false);
+
+function closeSettings() {
+  if (!disableSettingModalOutsideClick.value) {
+    show.value = false;
+    return;
+  }
+  closing.value = true;
+  showConfirmDialog.value = true;
+}
 
 function isActive(item: SettingsTab) {
   return activeTab.value?.label === item.label;

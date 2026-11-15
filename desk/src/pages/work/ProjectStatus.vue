@@ -1,126 +1,133 @@
 <template>
   <div class="flex h-full flex-col">
-    <LayoutHeader>
-      <template #left-header>
-        <div class="text-lg-medium text-ink-gray-9">
-          {{ __("Project status") }}
-        </div>
-      </template>
+    <LayoutHeader
+      :title="__('Project status')"
+      :subtitle="
+        __(
+          'Where each open project stands, with the projects that need someone first.'
+        )
+      "
+    >
       <template #right-header>
         <Button
-          variant="ghost"
+          size="md"
           :loading="report.loading && !!report.data"
           :aria-label="__('Refresh')"
           @click="report.reload()"
         >
           <template #icon>
-            <LucideRefreshCw class="size-4" aria-hidden="true" />
+            <LucideRefreshCw class="size-[18px]" aria-hidden="true" />
           </template>
         </Button>
         <Button
+          size="md"
           :label="__('Download PDF')"
           :disabled="!shown.length"
           @click="printReport"
         >
           <template #prefix>
-            <LucideDownload class="size-4" aria-hidden="true" />
+            <LucideDownload class="size-[18px]" aria-hidden="true" />
           </template>
         </Button>
         <Button
           v-if="data?.can_write_any"
           variant="solid"
+          size="md"
           :label="__('Paste today\'s update')"
           @click="splitOpen = true"
         >
           <template #prefix>
-            <LucideMic class="size-4" aria-hidden="true" />
+            <LucideMic class="size-[18px]" aria-hidden="true" />
           </template>
         </Button>
       </template>
     </LayoutHeader>
 
     <div class="relative flex-1 overflow-auto">
-      <div class="mx-auto w-full max-w-7xl px-4 py-5 md:px-6">
-        <p class="text-p-sm text-ink-gray-6">
-          {{
-            __(
-              "Where each open project stands: the written status beside what the tasks say. Projects that need someone come first."
-            )
-          }}
-        </p>
-
+      <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
         <div
-          class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
-          role="group"
-          :aria-label="__('Filter projects')"
-        >
-          <FormControl
-            v-model="filters.department"
-            type="select"
-            :label="__('Department')"
-            :options="options('department')"
-          />
-          <FormControl
-            v-model="filters.lead"
-            type="select"
-            :label="__('Lead')"
-            :options="options('lead')"
-          />
-          <FormControl
-            v-model="filters.stage"
-            type="select"
-            :label="__('Stage')"
-            :options="stageFilter"
-          />
-          <FormControl
-            v-model="filters.waiting"
-            type="select"
-            :label="__('Waiting on')"
-            :options="waitingFilter"
-          />
-        </div>
-        <div class="mt-2 flex items-center justify-between gap-2">
-          <p
-            v-if="data"
-            class="text-sm text-ink-gray-6"
-            role="status"
-            aria-live="polite"
-          >
-            {{ summary }}
-          </p>
-          <Button
-            v-if="hasFilters"
-            class="ml-auto"
-            variant="ghost"
-            :label="__('Clear filters')"
-            @click="clear"
-          >
-            <template #prefix>
-              <LucideX class="size-4" aria-hidden="true" />
-            </template>
-          </Button>
-        </div>
-
-        <TaskyState
           v-if="report.error && !data"
-          class="mt-6"
-          :icon="LucideCircleAlert"
-          :title="__('Couldn\'t load the project status')"
-          :message="__('Check your connection and try again.')"
-          error
+          class="rounded-xl border border-outline-gray-2 bg-surface-base"
         >
-          <Button :label="__('Retry')" @click="report.reload()" />
-        </TaskyState>
+          <TaskyState
+            class="py-10"
+            :icon="LucideCircleAlert"
+            :title="__('Couldn\'t load the project status')"
+            :message="__('Check your connection and try again.')"
+            error
+          >
+            <Button :label="__('Retry')" @click="report.reload()" />
+          </TaskyState>
+        </div>
 
         <SectionCard
           v-else
           :title="__('Projects')"
           :count="data ? shown.length : undefined"
-          class="mt-4 overflow-hidden"
+          class="overflow-hidden"
           :aria-busy="report.loading"
         >
           <div
-            class="hidden gap-3 border-b border-outline-gray-2 bg-surface-gray-1 px-4 py-2 text-xs text-ink-gray-5 xl:grid"
+            class="flex flex-col gap-2 border-b border-outline-gray-2 px-4 py-4 md:px-4"
+          >
+            <div
+              class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
+              role="group"
+              :aria-label="__('Filter projects')"
+            >
+              <FormControl
+                v-model="filters.department"
+                type="select"
+                size="md"
+                :label="__('Department')"
+                :options="options('department')"
+              />
+              <FormControl
+                v-model="filters.lead"
+                type="select"
+                size="md"
+                :label="__('Lead')"
+                :options="options('lead')"
+              />
+              <FormControl
+                v-model="filters.stage"
+                type="select"
+                size="md"
+                :label="__('Stage')"
+                :options="stageFilter"
+              />
+              <FormControl
+                v-model="filters.waiting"
+                type="select"
+                size="md"
+                :label="__('Waiting on')"
+                :options="waitingFilter"
+              />
+            </div>
+            <div class="flex items-center justify-between gap-2">
+              <p
+                v-if="data"
+                class="text-sm text-ink-gray-6"
+                role="status"
+                aria-live="polite"
+              >
+                {{ summary }}
+              </p>
+              <Button
+                v-if="hasFilters"
+                class="ml-auto"
+                variant="ghost"
+                :label="__('Clear filters')"
+                @click="clear"
+              >
+                <template #prefix>
+                  <LucideX class="size-4" aria-hidden="true" />
+                </template>
+              </Button>
+            </div>
+          </div>
+          <div
+            class="hidden h-11 items-center gap-3 border-b border-outline-gray-2 bg-surface-gray-1 px-5 text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6 xl:grid"
             :class="GRID"
             aria-hidden="true"
           >
@@ -136,17 +143,18 @@
             <div
               v-for="i in 5"
               :key="i"
-              class="flex flex-col gap-2 border-b border-outline-gray-1 px-4 py-4 last:border-b-0"
+              class="flex flex-col gap-2 border-b border-outline-gray-1 px-4 py-3 last:border-b-0"
             >
               <div
-                class="h-3.5 w-1/4 animate-pulse rounded bg-surface-gray-2"
+                class="h-3.5 w-1/4 animate-pulse rounded bg-surface-gray-3"
               />
-              <div class="h-3 w-3/5 animate-pulse rounded bg-surface-gray-2" />
+              <div class="h-3 w-3/5 animate-pulse rounded bg-surface-gray-3" />
             </div>
           </div>
 
           <TaskyState
             v-else-if="!data.rows.length"
+            class="py-10"
             :icon="LucideFolderKanban"
             :title="__('No open projects')"
             :message="
@@ -156,6 +164,7 @@
 
           <TaskyState
             v-else-if="!shown.length"
+            class="py-10"
             :icon="LucideFolderKanban"
             :title="__('No project matches')"
             :message="__('Try fewer filters.')"
@@ -167,7 +176,7 @@
             <li
               v-for="(row, index) in shown"
               :key="row.project"
-              class="flex flex-col gap-2 border-b border-outline-gray-1 px-4 py-3.5 last:border-b-0 xl:grid xl:gap-3"
+              class="flex flex-col gap-2 border-b border-outline-gray-1 px-4 py-3 last:border-b-0 xl:grid xl:gap-3"
               :class="GRID"
             >
               <span

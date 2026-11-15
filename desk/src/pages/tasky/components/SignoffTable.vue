@@ -9,7 +9,7 @@
       <li
         v-for="(row, idx) in rows"
         :key="idx"
-        class="flex gap-2 rounded-lg border border-outline-gray-2 bg-surface-base p-2.5"
+        class="flex gap-2 rounded-xl border border-outline-gray-2 bg-surface-base p-3"
       >
         <div
           class="grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-[repeat(var(--cols),minmax(0,1fr))]"

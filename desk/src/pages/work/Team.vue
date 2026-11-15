@@ -1,64 +1,61 @@
 <template>
   <div class="flex h-full flex-col">
-    <LayoutHeader>
-      <template #left-header>
-        <div class="text-lg-medium text-ink-gray-9">{{ __("Team") }}</div>
-      </template>
+    <LayoutHeader
+      :title="__('Team')"
+      :subtitle="
+        __(
+          'Who is working on what across your projects, what\'s due this week, and who has room for more.'
+        )
+      "
+    >
       <template #right-header>
         <Button
-          v-if="authStore.canSeeAdoption"
-          :route="{ name: 'Adoption' }"
-          :label="__('Adoption')"
-        >
-          <template #prefix>
-            <LucideActivity class="size-4" aria-hidden="true" />
-          </template>
-        </Button>
-        <Button
-          :route="{ name: 'ProjectStatus' }"
-          :label="__('Project status')"
-        >
-          <template #prefix>
-            <LucideClipboardList class="size-4" aria-hidden="true" />
-          </template>
-        </Button>
-        <Button
-          variant="ghost"
+          size="md"
           :loading="refreshing"
           :aria-label="__('Refresh')"
           @click="refresh"
         >
           <template #icon>
-            <LucideRefreshCw class="size-4" aria-hidden="true" />
+            <LucideRefreshCw class="size-[18px]" aria-hidden="true" />
+          </template>
+        </Button>
+        <Button
+          v-if="authStore.canSeeAdoption"
+          size="md"
+          :route="{ name: 'Adoption' }"
+          :label="__('Adoption')"
+        >
+          <template #prefix>
+            <LucideActivity class="size-[18px]" aria-hidden="true" />
+          </template>
+        </Button>
+        <Button
+          size="md"
+          :route="{ name: 'ProjectStatus' }"
+          :label="__('Project status')"
+        >
+          <template #prefix>
+            <LucideClipboardList class="size-[18px]" aria-hidden="true" />
           </template>
         </Button>
       </template>
     </LayoutHeader>
 
     <div class="relative flex-1 overflow-auto">
-      <div class="mx-auto w-full max-w-7xl px-4 py-5 md:px-6">
-        <p class="text-p-sm text-ink-gray-6">
-          {{
-            __(
-              "Who is working on what across your projects, what's due this week, and who has room for more."
-            )
-          }}
-        </p>
-
+      <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
         <div
-          class="mt-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between"
+          class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between"
         >
           <!-- View switch -->
           <div class="max-w-full self-start overflow-x-auto lg:self-auto">
-            <TabButtons
+            <ViewTabs
               :model-value="view"
-              size="md"
               :aria-label="__('Show the team')"
               :options="
                 VIEWS.map((o) => ({
                   label: o.label,
                   value: o.key,
-                  iconLeft: o.icon,
+                  icon: o.icon,
                 }))
               "
               @update:model-value="setView($event as View)"
@@ -88,7 +85,7 @@
         </div>
         <div
           v-if="view === 'person' && hasFilters"
-          class="mt-2 flex justify-end"
+          class="-mt-3 flex justify-end"
         >
           <Button variant="ghost" :label="__('Clear filters')" @click="clear">
             <template #prefix>
@@ -97,33 +94,29 @@
           </Button>
         </div>
 
-        <ProjectPortfolio
-          v-if="view === 'project'"
-          ref="portfolioView"
-          class="mt-5"
-        />
+        <ProjectPortfolio v-if="view === 'project'" ref="portfolioView" />
 
-        <CapacityPlanner
-          v-else-if="view === 'capacity'"
-          ref="capacityView"
-          class="mt-5"
-        />
+        <CapacityPlanner v-else-if="view === 'capacity'" ref="capacityView" />
 
-        <TaskyState
+        <div
           v-else-if="workload.error && !workload.data"
-          class="mt-6"
-          :icon="LucideCircleAlert"
-          :title="__('Couldn\'t load the team')"
-          :message="__('Check your connection and try again.')"
-          error
+          class="rounded-xl border border-outline-gray-2 bg-surface-base"
         >
-          <Button :label="__('Retry')" @click="workload.reload()" />
-        </TaskyState>
+          <TaskyState
+            class="py-10"
+            :icon="LucideCircleAlert"
+            :title="__('Couldn\'t load the team')"
+            :message="__('Check your connection and try again.')"
+            error
+          >
+            <Button :label="__('Retry')" @click="workload.reload()" />
+          </TaskyState>
+        </div>
 
         <template v-else>
           <!-- Summary: each tile narrows the people below to those it counts -->
           <div
-            class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6"
+            class="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4"
             role="group"
             :aria-label="__('Show people')"
           >
@@ -148,13 +141,14 @@
             :id="tableId"
             :title="showTile?.key ? showTile.label : __('People')"
             :count="isLoading ? undefined : people.length"
-            class="mt-6 overflow-hidden"
+            class="overflow-hidden"
             :aria-busy="workload.loading"
           >
             <template #actions>
               <FormControl
                 v-model="sort"
                 type="select"
+                size="md"
                 class="w-48"
                 :options="SORTS"
                 :aria-label="__('Sort people')"
@@ -162,7 +156,7 @@
             </template>
 
             <div
-              class="hidden gap-3 border-b border-outline-gray-2 bg-surface-gray-1 px-4 py-2 text-xs text-ink-gray-5 xl:grid"
+              class="hidden h-11 items-center gap-3 border-b border-outline-gray-2 bg-surface-gray-1 px-5 text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6 xl:grid"
               :class="GRID"
               aria-hidden="true"
             >
@@ -180,30 +174,31 @@
               <div
                 v-for="i in 6"
                 :key="i"
-                class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-3.5 last:border-b-0"
+                class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-3 last:border-b-0"
               >
                 <div
-                  class="size-8 shrink-0 animate-pulse rounded-full bg-surface-gray-2"
+                  class="size-8 shrink-0 animate-pulse rounded-full bg-surface-gray-3"
                 />
                 <div class="flex flex-1 flex-col gap-2">
                   <div
-                    class="h-3.5 w-1/4 animate-pulse rounded bg-surface-gray-2"
+                    class="h-3.5 w-1/4 animate-pulse rounded bg-surface-gray-3"
                   />
                   <div
-                    class="h-3 w-2/5 animate-pulse rounded bg-surface-gray-2"
+                    class="h-3 w-2/5 animate-pulse rounded bg-surface-gray-3"
                   />
                 </div>
                 <div
-                  class="hidden h-5 w-24 animate-pulse rounded bg-surface-gray-2 md:block"
+                  class="hidden h-5 w-24 animate-pulse rounded bg-surface-gray-3 md:block"
                 />
                 <div
-                  class="hidden h-3 w-20 animate-pulse rounded bg-surface-gray-2 md:block"
+                  class="hidden h-3 w-20 animate-pulse rounded bg-surface-gray-3 md:block"
                 />
               </div>
             </div>
 
             <TaskyState
               v-else-if="!everyone.length"
+              class="py-10"
               :icon="LucideUsers"
               :title="__('No one on your projects yet')"
               :message="
@@ -223,6 +218,7 @@
 
             <TaskyState
               v-else-if="!people.length"
+              class="py-10"
               :icon="LucideUsers"
               :title="__('No one here right now')"
               :message="showTile?.empty"
@@ -245,9 +241,11 @@
                 >
                   <!-- Person -->
                   <div class="flex min-w-0 items-center gap-3">
-                    <UserAvatar :name="person.user" size="lg" />
+                    <UserAvatar :name="person.user" size="md" />
                     <div class="min-w-0 flex-1">
-                      <div class="truncate text-base text-ink-gray-9">
+                      <div
+                        class="truncate text-[13px] font-semibold text-ink-gray-9"
+                      >
                         {{ person.full_name }}
                       </div>
                       <div class="truncate font-mono text-xs text-ink-gray-5">
@@ -472,17 +470,12 @@ import { Link, UserAvatar } from "@/components";
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import SectionCard from "@/components/SectionCard.vue";
 import StatTile from "@/components/StatTile.vue";
+import ViewTabs from "@/components/ViewTabs.vue";
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
-import {
-  Button,
-  createResource,
-  dayjs,
-  FormControl,
-  TabButtons,
-} from "frappe-ui";
+import { Button, createResource, dayjs, FormControl } from "frappe-ui";
 import { computed, reactive, ref, useId, watch, type Component } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import LucideActivity from "~icons/lucide/activity";

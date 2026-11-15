@@ -4,10 +4,11 @@
 
     <div class="relative flex-1 overflow-auto">
       <div
-        class="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 py-5 md:px-6"
+        class="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 pb-8 pt-4 md:px-8"
       >
         <TaskyState
           v-if="info.error && !loaded"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
           error
           :icon="LucideCircleAlert"
           :title="__('Couldn\'t load the commission')"
@@ -20,6 +21,7 @@
 
         <TaskyState
           v-else-if="info.data && !info.data.available"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
           :icon="LucideCloudOff"
           :title="__('Commission isn\'t available yet')"
           :message="__('The ERP site needs the latest TBO Smart.')"
@@ -27,183 +29,190 @@
 
         <div
           v-else-if="!loaded"
-          class="h-40 animate-pulse rounded-xl bg-surface-gray-1"
+          class="h-40 animate-pulse rounded-xl bg-surface-gray-3"
           aria-busy="true"
           :aria-label="__('Loading')"
         />
 
         <template v-else>
-          <div>
-            <h2 class="text-lg-semibold text-ink-gray-9">
-              {{ __("Commission") }}
-            </h2>
-            <p class="mt-1 max-w-prose text-p-sm text-ink-gray-6">
-              {{
-                __(
-                  "Who earns commission on the money collected on this project, and by which plan. With no earners, the owner of the lead behind each payment earns all of it, by the plan that matches the rules in Settings → CRM."
-                )
-              }}
-            </p>
-          </div>
-
-          <section class="grid grid-cols-2 gap-3" :aria-label="__('So far')">
+          <section
+            class="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4"
+            :aria-label="__('So far')"
+          >
             <StatTile
-              compact
               :label="__('Collected so far')"
               :value="fullAmount(info.data.collected, currency)"
               :sub="__('{0} payments', String(info.data.payments))"
             />
             <StatTile
-              compact
               :label="__('Commission so far')"
               :value="fullAmount(info.data.commission, currency)"
               :sub="__('In statements')"
             />
           </section>
 
-          <form class="flex flex-col gap-4" novalidate @submit.prevent="save">
-            <div class="flex flex-col gap-1.5">
-              <div class="flex items-end gap-2">
-                <FormControl
-                  v-model="key"
-                  class="flex-1"
-                  :label="__('Project name on the invoices')"
-                  autocomplete="off"
-                  :disabled="!!info.data.setup"
-                />
-                <Button
-                  v-if="!info.data.setup"
-                  :label="__('Look up')"
-                  :disabled="!key.trim()"
-                  @click="load"
-                />
-              </div>
-              <p class="text-p-xs text-ink-gray-6">
+          <div
+            class="flex flex-col gap-5 rounded-xl border border-outline-gray-2 bg-surface-base p-4"
+          >
+            <div>
+              <h2 class="text-base font-semibold text-ink-gray-9">
+                {{ __("Commission") }}
+              </h2>
+              <p class="mt-1 max-w-prose text-p-sm text-ink-gray-6">
                 {{
                   __(
-                    "Payments are matched to the project named on their Sales Order or Invoice, else to this project when it is linked on the lead's documents. If the invoices use another name, type it here."
+                    "Who earns commission on the money collected on this project, and by which plan. With no earners, the owner of the lead behind each payment earns all of it, by the plan that matches the rules in Settings → CRM."
                   )
                 }}
               </p>
             </div>
 
-            <fieldset class="flex flex-col gap-2">
-              <legend class="text-sm text-ink-gray-7">
-                {{ __("Who earns") }}
-              </legend>
-              <div
-                v-for="(earner, i) in form.earners"
-                :key="i"
-                role="group"
-                :aria-label="__('Earner {0}', String(i + 1))"
-                class="grid grid-cols-[1fr_6rem_auto] items-end gap-2"
-              >
-                <FormControl
-                  v-model="earner.user"
-                  type="select"
-                  :options="userOptions"
-                  :label="i === 0 ? __('Person') : undefined"
+            <form class="flex flex-col gap-4" novalidate @submit.prevent="save">
+              <div class="flex flex-col gap-1.5">
+                <div class="flex items-end gap-2">
+                  <FormControl
+                    v-model="key"
+                    class="flex-1"
+                    :label="__('Project name on the invoices')"
+                    autocomplete="off"
+                    :disabled="!!info.data.setup"
+                  />
+                  <Button
+                    v-if="!info.data.setup"
+                    :label="__('Look up')"
+                    :disabled="!key.trim()"
+                    @click="load"
+                  />
+                </div>
+                <p class="text-p-xs text-ink-gray-6">
+                  {{
+                    __(
+                      "Payments are matched to the project named on their Sales Order or Invoice, else to this project when it is linked on the lead's documents. If the invoices use another name, type it here."
+                    )
+                  }}
+                </p>
+              </div>
+
+              <fieldset class="flex flex-col gap-2">
+                <legend class="text-sm text-ink-gray-7">
+                  {{ __("Who earns") }}
+                </legend>
+                <div
+                  v-for="(earner, i) in form.earners"
+                  :key="i"
+                  role="group"
                   :aria-label="__('Earner {0}', String(i + 1))"
-                />
+                  class="grid grid-cols-[1fr_6rem_auto] items-end gap-2"
+                >
+                  <FormControl
+                    v-model="earner.user"
+                    type="select"
+                    :options="userOptions"
+                    :label="i === 0 ? __('Person') : undefined"
+                    :aria-label="__('Earner {0}', String(i + 1))"
+                  />
+                  <FormControl
+                    v-model="earner.share_percent"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    :label="i === 0 ? __('Share %') : undefined"
+                    :aria-label="__('Earner {0} share', String(i + 1))"
+                  />
+                  <Button
+                    variant="ghost"
+                    :label="__('Remove earner {0}', String(i + 1))"
+                    @click="form.earners.splice(i, 1)"
+                  >
+                    <template #icon>
+                      <LucideTrash2 class="size-4" aria-hidden="true" />
+                    </template>
+                  </Button>
+                </div>
+                <div class="flex flex-wrap items-center gap-3">
+                  <Button :label="__('Add earner')" @click="addEarner">
+                    <template #prefix>
+                      <LucidePlus class="size-4" aria-hidden="true" />
+                    </template>
+                  </Button>
+                  <span
+                    v-if="form.earners.length"
+                    class="font-mono text-sm tabular-nums"
+                    :class="total === 100 ? 'text-ink-gray-7' : 'text-danger'"
+                    role="status"
+                  >
+                    {{ __("Total {0}%", String(total)) }}
+                  </span>
+                </div>
+              </fieldset>
+
+              <div class="flex flex-col gap-1.5">
                 <FormControl
-                  v-model="earner.share_percent"
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.1"
-                  :label="i === 0 ? __('Share %') : undefined"
-                  :aria-label="__('Earner {0} share', String(i + 1))"
+                  v-model="form.plan"
+                  type="select"
+                  :label="__('Plan')"
+                  :options="planOptions"
+                  :disabled="form.use_override"
                 />
+                <p class="text-p-xs text-ink-gray-6">
+                  {{
+                    form.use_override
+                      ? __("This project uses its own slabs, below.")
+                      : __(
+                          "Match by rules picks the plan whose conditions fit."
+                        )
+                  }}
+                </p>
+              </div>
+
+              <Switch
+                v-model="form.use_override"
+                :label="__('Use this project\'s own slabs instead of a plan')"
+              />
+              <template v-if="form.use_override">
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <FormControl
+                    v-model="form.override_target"
+                    type="number"
+                    min="0"
+                    :label="__('Monthly target')"
+                  />
+                  <FormControl
+                    v-model="form.override_above_target_rate"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    :label="__('Above-target rate (%)')"
+                  />
+                </div>
+                <CommissionSlabs v-model="form.override_slabs" />
+              </template>
+
+              <Switch v-model="form.is_active" :label="__('Active')" />
+
+              <div
+                v-if="problem"
+                role="alert"
+                class="flex items-start gap-2 rounded-[10px] bg-danger-soft px-3 py-2 text-p-sm text-danger"
+              >
+                <LucideCircleAlert
+                  class="mt-0.5 size-4 shrink-0"
+                  aria-hidden="true"
+                />
+                <span>{{ problem }}</span>
+              </div>
+              <div>
                 <Button
-                  variant="ghost"
-                  :label="__('Remove earner {0}', String(i + 1))"
-                  @click="form.earners.splice(i, 1)"
-                >
-                  <template #icon>
-                    <LucideTrash2 class="size-4" aria-hidden="true" />
-                  </template>
-                </Button>
-              </div>
-              <div class="flex flex-wrap items-center gap-3">
-                <Button :label="__('Add earner')" @click="addEarner">
-                  <template #prefix>
-                    <LucidePlus class="size-4" aria-hidden="true" />
-                  </template>
-                </Button>
-                <span
-                  v-if="form.earners.length"
-                  class="font-mono text-sm tabular-nums"
-                  :class="total === 100 ? 'text-ink-gray-7' : 'text-danger'"
-                  role="status"
-                >
-                  {{ __("Total {0}%", String(total)) }}
-                </span>
-              </div>
-            </fieldset>
-
-            <div class="flex flex-col gap-1.5">
-              <FormControl
-                v-model="form.plan"
-                type="select"
-                :label="__('Plan')"
-                :options="planOptions"
-                :disabled="form.use_override"
-              />
-              <p class="text-p-xs text-ink-gray-6">
-                {{
-                  form.use_override
-                    ? __("This project uses its own slabs, below.")
-                    : __("Match by rules picks the plan whose conditions fit.")
-                }}
-              </p>
-            </div>
-
-            <Switch
-              v-model="form.use_override"
-              :label="__('Use this project\'s own slabs instead of a plan')"
-            />
-            <template v-if="form.use_override">
-              <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <FormControl
-                  v-model="form.override_target"
-                  type="number"
-                  min="0"
-                  :label="__('Monthly target')"
-                />
-                <FormControl
-                  v-model="form.override_above_target_rate"
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.1"
-                  :label="__('Above-target rate (%)')"
+                  variant="solid"
+                  type="submit"
+                  :label="__('Save')"
+                  :loading="saving"
                 />
               </div>
-              <CommissionSlabs v-model="form.override_slabs" />
-            </template>
-
-            <Switch v-model="form.is_active" :label="__('Active')" />
-
-            <div
-              v-if="problem"
-              role="alert"
-              class="flex items-start gap-2 rounded-md bg-danger-soft px-3 py-2 text-p-sm text-danger"
-            >
-              <LucideCircleAlert
-                class="mt-0.5 size-4 shrink-0"
-                aria-hidden="true"
-              />
-              <span>{{ problem }}</span>
-            </div>
-            <div>
-              <Button
-                variant="solid"
-                type="submit"
-                :label="__('Save')"
-                :loading="saving"
-              />
-            </div>
-          </form>
+            </form>
+          </div>
         </template>
       </div>
     </div>

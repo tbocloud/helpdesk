@@ -3,20 +3,25 @@
     <ProjectNav :project-id="projectId">
       <template #actions>
         <Button
-          variant="ghost"
+          size="md"
           :label="__('Refresh')"
           :loading="ads.loading && !!ads.data"
           @click="ads.reload()"
         >
-          <template #icon><LucideRefreshCw class="size-4" /></template>
+          <template #icon
+            ><LucideRefreshCw class="size-[18px]" aria-hidden="true"
+          /></template>
         </Button>
       </template>
     </ProjectNav>
 
     <div class="relative flex-1 overflow-auto">
-      <div class="mx-auto w-full max-w-4xl px-4 py-5 md:px-6">
+      <div
+        class="mx-auto flex w-full max-w-4xl flex-col gap-4 px-4 pb-8 pt-4 md:px-8"
+      >
         <TaskyState
           v-if="ads.error && !ads.data"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
           error
           :icon="LucideCircleAlert"
           :title="__('Couldn\'t load the ads')"
@@ -29,22 +34,27 @@
 
         <div
           v-else-if="!data"
-          class="h-40 animate-pulse rounded-xl bg-surface-gray-1"
+          class="h-40 animate-pulse rounded-xl bg-surface-gray-3"
           aria-busy="true"
         />
 
         <template v-else>
-          <h2 class="mb-1 text-lg-semibold text-ink-gray-9">{{ __("Ads") }}</h2>
-          <p class="mb-4 max-w-prose text-p-sm text-ink-gray-6">
-            {{
-              __(
-                "Posts boosted with paid ads. To boost one, open it in the content calendar and press Boost this post."
-              )
-            }}
-          </p>
+          <div>
+            <h2 class="mb-1 text-base font-semibold text-ink-gray-9">
+              {{ __("Ads") }}
+            </h2>
+            <p class="max-w-prose text-p-sm text-ink-gray-6">
+              {{
+                __(
+                  "Posts boosted with paid ads. To boost one, open it in the content calendar and press Boost this post."
+                )
+              }}
+            </p>
+          </div>
 
           <TaskyState
             v-if="data.blocked_reason"
+            class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
             :icon="LucideMegaphone"
             :title="
               data.needs_reconnect
@@ -68,13 +78,13 @@
           <template v-else>
             <section
               v-if="data.spend"
-              class="mb-5 rounded-xl border border-outline-gray-2 bg-surface-base p-4"
+              class="rounded-xl border border-outline-gray-2 bg-surface-base p-4"
               :aria-label="__('This month\'s spend')"
             >
               <div
                 class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1"
               >
-                <h3 class="text-base-medium text-ink-gray-9">
+                <h3 class="text-base font-semibold text-ink-gray-9">
                   {{ __("This month") }}
                 </h3>
                 <p class="text-p-sm tabular-nums text-ink-gray-7">
@@ -123,6 +133,7 @@
 
             <TaskyState
               v-if="!data.boosts.length"
+              class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
               :icon="LucideMegaphone"
               :title="__('No boosts yet')"
               :message="
@@ -136,7 +147,7 @@
               </router-link>
             </TaskyState>
 
-            <ul v-else class="flex flex-col gap-3" role="list">
+            <ul v-else class="flex flex-col gap-4" role="list">
               <li
                 v-for="b in data.boosts"
                 :key="b.name"
@@ -145,7 +156,7 @@
                 <div class="flex flex-wrap items-center gap-2">
                   <ChannelIcon :channel="b.target" class="size-4 shrink-0" />
                   <span
-                    class="min-w-0 flex-1 truncate text-base-medium text-ink-gray-9"
+                    class="min-w-0 flex-1 truncate text-base font-semibold text-ink-gray-9"
                   >
                     {{ b.post_title || b.post }}
                   </span>
@@ -170,7 +181,7 @@
                 </p>
                 <dl class="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-5">
                   <div v-for="stat in stats(b)" :key="stat.label">
-                    <dt class="text-xs text-ink-gray-5">{{ stat.label }}</dt>
+                    <dt class="text-xs text-ink-gray-6">{{ stat.label }}</dt>
                     <dd class="font-mono text-sm tabular-nums text-ink-gray-9">
                       {{ stat.value }}
                     </dd>

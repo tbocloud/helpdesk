@@ -34,7 +34,9 @@
 
       <template v-if="shown?.status === 'ready'">
         <p v-if="!shown.current" class="text-xs text-ink-gray-5">
-          {{ __("From {0}", rangeText(shown.period_start!, shown.period_end!)) }}
+          {{
+            __("From {0}", rangeText(shown.period_start!, shown.period_end!))
+          }}
         </p>
         <p class="text-p-sm text-ink-gray-8">{{ shown.summary }}</p>
         <div v-if="shown.risks?.length">

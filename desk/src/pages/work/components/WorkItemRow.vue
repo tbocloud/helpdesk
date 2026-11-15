@@ -246,7 +246,7 @@
         class="flex items-center justify-end gap-1 whitespace-nowrap text-sm tabular-nums"
         :class="[
           card
-            ? `rounded-full px-2 py-0.5 text-xs font-medium ${
+            ? `h-[26px] gap-1.5 rounded-full px-2.5 text-xs font-semibold ${
                 TONE_CLASSES[
                   deadline.overdue ? 'danger' : dueToday ? 'warning' : 'neutral'
                 ]

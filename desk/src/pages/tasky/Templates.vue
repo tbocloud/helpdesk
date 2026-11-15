@@ -1,15 +1,22 @@
 <template>
   <div class="flex h-full flex-col">
-    <LayoutHeader>
+    <LayoutHeader
+      :title="editing ? undefined : __('Templates')"
+      :subtitle="
+        editing
+          ? undefined
+          : __('Reusable task plans that a project\'s checklist starts from.')
+      "
+    >
       <template #left-header>
         <nav
           v-if="editing"
-          class="flex min-w-0 items-center gap-1.5 text-lg-medium"
+          class="flex min-w-0 items-center gap-1.5 text-lg md:text-[22px] md:leading-[1.2] md:tracking-[-0.01em]"
           :aria-label="__('Breadcrumb')"
         >
           <button
             type="button"
-            class="shrink-0 rounded text-ink-gray-5 transition-colors hover:text-ink-gray-8"
+            class="shrink-0 rounded font-medium text-ink-gray-6 transition-colors hover:text-ink-gray-9"
             @click="cancelEdit"
           >
             {{ __("Templates") }}
@@ -18,44 +25,44 @@
             class="size-4 shrink-0 text-ink-gray-4"
             aria-hidden="true"
           />
-          <span class="truncate text-ink-gray-9" aria-current="page">{{
-            editTitle
-          }}</span>
+          <span
+            class="truncate font-bold text-ink-gray-9"
+            aria-current="page"
+            >{{ editTitle }}</span
+          >
         </nav>
-        <div v-else class="text-lg-medium text-ink-gray-9">
-          {{ __("Templates") }}
-        </div>
       </template>
       <template #right-header>
         <Button
           v-if="!editing"
           variant="solid"
+          size="md"
           :label="__('New template')"
           @click="startNew"
         >
           <template #prefix
-            ><LucidePlus class="size-4" aria-hidden="true"
+            ><LucidePlus class="size-[18px]" aria-hidden="true"
           /></template>
         </Button>
-        <Button v-else variant="ghost" :label="__('Close')" @click="cancelEdit">
+        <Button v-else size="md" :label="__('Close')" @click="cancelEdit">
           <template #prefix
-            ><LucideX class="size-4" aria-hidden="true"
+            ><LucideX class="size-[18px]" aria-hidden="true"
           /></template>
         </Button>
       </template>
     </LayoutHeader>
 
     <div class="relative flex-1 overflow-auto">
-      <div class="mx-auto w-full max-w-5xl px-4 py-5 md:px-6">
+      <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
         <!-- Editor -->
         <form
           v-if="editing"
-          class="flex flex-col gap-5"
+          class="flex w-full max-w-5xl flex-col gap-5"
           novalidate
           @submit.prevent="onSave"
         >
           <section
-            class="rounded-xl border border-outline-gray-2 bg-surface-base p-4 shadow-sm md:p-5"
+            class="rounded-xl border border-outline-gray-2 bg-surface-base p-4"
           >
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <TextInput
@@ -79,22 +86,29 @@
             </div>
           </section>
 
-          <section aria-labelledby="tpl-tasks">
-            <div class="mb-2 flex items-center gap-2">
-              <h2 id="tpl-tasks" class="text-sm font-medium text-ink-gray-7">
+          <section
+            aria-labelledby="tpl-tasks"
+            class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
+          >
+            <div
+              class="flex items-center gap-2 border-b border-outline-gray-2 px-4 py-3"
+            >
+              <h2
+                id="tpl-tasks"
+                class="text-base font-semibold text-ink-gray-9"
+              >
                 {{ __("Tasks") }}
               </h2>
-              <span class="font-mono text-xs tabular-nums text-ink-gray-5">{{
-                form.tasks.length
-              }}</span>
+              <span
+                class="min-w-[22px] rounded-full bg-surface-gray-4 px-[7px] py-px text-center text-xs font-semibold tabular-nums text-ink-gray-7"
+                >{{ form.tasks.length }}</span
+              >
             </div>
 
-            <div
-              class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base shadow-sm"
-            >
+            <div>
               <p
                 v-if="!form.tasks.length"
-                class="border-b border-outline-gray-2 px-4 py-6 text-center text-p-sm text-ink-gray-6"
+                class="border-b border-outline-gray-2 px-5 py-10 text-center text-p-sm text-ink-gray-6"
               >
                 {{
                   __(
@@ -108,10 +122,10 @@
                 :key="phase"
                 class="border-b border-outline-gray-2"
               >
-                <div class="flex items-center gap-1 bg-surface-gray-1 pr-2">
+                <div class="flex items-center gap-1 bg-surface-gray-1 pr-3">
                   <button
                     type="button"
-                    class="flex min-w-0 flex-1 items-center gap-2 px-4 py-2.5 text-left transition-colors hover:bg-surface-gray-2 focus-visible:bg-surface-gray-2 focus-visible:outline-none"
+                    class="flex min-w-0 flex-1 items-center gap-2 px-5 py-3 text-left transition-colors hover:bg-surface-gray-2 focus-visible:bg-surface-gray-2 focus-visible:outline-none"
                     :aria-expanded="expandedPhases.has(phase)"
                     @click="togglePhase(phase)"
                   >
@@ -121,14 +135,16 @@
                           ? LucideChevronDown
                           : LucideChevronRight
                       "
-                      class="size-4 shrink-0 text-ink-gray-5"
+                      class="size-4 shrink-0 text-ink-gray-6"
                       aria-hidden="true"
                     />
-                    <span class="truncate text-sm font-medium text-ink-gray-8">
+                    <span
+                      class="truncate text-[13px] font-semibold text-ink-gray-9"
+                    >
                       {{ phase || __("No phase") }}
                     </span>
                     <span
-                      class="font-mono text-xs tabular-nums text-ink-gray-5"
+                      class="min-w-[22px] rounded-full bg-surface-gray-4 px-[7px] py-px text-center text-xs font-semibold tabular-nums text-ink-gray-7"
                       >{{ group.length }}</span
                     >
                   </button>
@@ -191,7 +207,9 @@
               </div>
 
               <!-- Add task -->
-              <div class="flex flex-col gap-2 p-3 sm:flex-row sm:items-center">
+              <div
+                class="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center"
+              >
                 <TextInput
                   v-model="newTaskName"
                   class="flex-1"
@@ -231,7 +249,7 @@
           <div
             v-if="save.error"
             role="alert"
-            class="flex items-start gap-2 rounded-md bg-danger-soft px-3 py-2 text-p-sm text-danger"
+            class="flex items-start gap-2 rounded-xl bg-danger-soft px-4 py-3 text-p-sm text-danger"
           >
             <LucideCircleAlert
               class="mt-0.5 size-4 shrink-0"
@@ -256,6 +274,7 @@
         <template v-else>
           <TaskyState
             v-if="templates.error && !templates.data"
+            class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
             error
             :icon="LucideCircleAlert"
             :title="__('Couldn\'t load templates')"
@@ -272,11 +291,11 @@
             <div
               v-for="i in 3"
               :key="i"
-              class="flex flex-col gap-3 rounded-xl border border-outline-gray-2 bg-surface-base p-4 shadow-sm"
+              class="flex flex-col gap-3 rounded-xl border border-outline-gray-2 bg-surface-base p-4"
             >
-              <div class="h-4 w-1/2 animate-pulse rounded bg-surface-gray-2" />
-              <div class="h-3 w-4/5 animate-pulse rounded bg-surface-gray-2" />
-              <div class="h-3 w-1/4 animate-pulse rounded bg-surface-gray-2" />
+              <div class="h-4 w-1/2 animate-pulse rounded bg-surface-gray-3" />
+              <div class="h-3 w-4/5 animate-pulse rounded bg-surface-gray-3" />
+              <div class="h-3 w-1/4 animate-pulse rounded bg-surface-gray-3" />
             </div>
           </div>
 
@@ -285,6 +304,7 @@
             class="rounded-xl border border-outline-gray-2 bg-surface-base"
           >
             <TaskyState
+              class="py-10"
               :icon="LucideClipboardList"
               :title="__('No templates yet')"
               :message="
@@ -313,13 +333,13 @@
             <li v-for="t in templates.data" :key="t.name">
               <button
                 type="button"
-                class="group flex h-full w-full flex-col gap-2 rounded-xl border border-outline-gray-2 bg-surface-base p-4 text-left shadow-sm transition-colors hover:border-outline-gray-3 disabled:cursor-wait"
+                class="group flex h-full w-full flex-col gap-2 rounded-xl border border-outline-gray-2 bg-surface-base p-4 text-left transition-colors hover:border-outline-gray-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4 disabled:cursor-wait"
                 :disabled="detail.loading"
                 :aria-label="__('Edit template {0}', t.template_name)"
                 @click="startEdit(t.name)"
               >
                 <div class="flex w-full items-start justify-between gap-2">
-                  <span class="text-base-semibold text-ink-gray-9">{{
+                  <span class="text-base font-semibold text-ink-gray-9">{{
                     t.template_name
                   }}</span>
                   <LoadingIndicator
@@ -337,11 +357,11 @@
                 </p>
                 <div class="mt-auto flex items-center gap-2 pt-1">
                   <span
-                    class="rounded bg-surface-gray-2 px-1.5 py-0.5 text-xs text-ink-gray-7"
+                    class="rounded-full bg-surface-gray-2 px-2 py-0.5 text-xs font-medium text-ink-gray-7"
                   >
                     {{ t.industry || __("General") }}
                   </span>
-                  <span class="truncate font-mono text-xs text-ink-gray-5">{{
+                  <span class="truncate font-mono text-xs text-ink-gray-6">{{
                     t.name
                   }}</span>
                 </div>

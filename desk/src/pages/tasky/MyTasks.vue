@@ -1,25 +1,28 @@
 <template>
   <div class="flex flex-col h-full">
-    <LayoutHeader>
-      <template #left-header>
-        <div class="text-lg-medium text-ink-gray-9">{{ __("My Tasks") }}</div>
-      </template>
+    <LayoutHeader
+      :title="__('My Tasks')"
+      :subtitle="__('Every task assigned to you, across all your projects.')"
+    >
       <template #right-header>
         <Button
-          variant="ghost"
+          size="md"
           :loading="tasks.loading"
           :aria-label="__('Refresh')"
           @click="tasks.reload()"
         >
-          <template #icon><LucideRefreshCw class="size-4" /></template>
+          <template #icon>
+            <LucideRefreshCw class="size-[18px]" aria-hidden="true" />
+          </template>
         </Button>
       </template>
     </LayoutHeader>
 
     <div class="relative flex-1 overflow-auto">
-      <div class="mx-auto w-full max-w-6xl px-4 py-5 md:px-6">
+      <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
         <TaskyState
           v-if="tasks.error && !tasks.data"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
           error
           :icon="LucideCircleAlert"
           :title="__('Couldn\'t load your tasks')"
@@ -30,102 +33,72 @@
 
         <template v-else>
           <!-- Summary -->
-          <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <button
+          <div
+            class="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4"
+          >
+            <StatTile
               v-for="stat in stats"
               :key="stat.key"
-              type="button"
-              class="group flex flex-col gap-3 rounded-lg border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
-              :class="
-                activeFilter === stat.filter
-                  ? 'border-outline-gray-4 bg-surface-gray-1'
-                  : 'border-outline-gray-2 bg-surface-base hover:border-outline-gray-3'
+              :label="stat.label"
+              :value="stat.value"
+              :icon="stat.icon"
+              :icon-tone="
+                stat.key === 'overdue'
+                  ? 'danger'
+                  : stat.key === 'completed'
+                  ? 'success'
+                  : 'brand'
               "
-              :aria-pressed="activeFilter === stat.filter"
+              :sub="stat.hint"
+              :meter="stat.progress"
+              :tone="stat.progress !== undefined ? 'success' : undefined"
+              :loading="tasks.loading && !tasks.data"
+              :pressed="activeFilter === stat.filter"
               @click="setFilter(stat.filter)"
-            >
-              <div class="flex items-center justify-between">
-                <span class="text-sm text-ink-gray-6">{{ stat.label }}</span>
-                <component
-                  :is="stat.icon"
-                  class="size-4 text-ink-gray-5"
-                  aria-hidden="true"
-                />
-              </div>
-              <div class="flex items-end justify-between gap-2">
-                <span class="text-2xl-semibold text-ink-gray-9 tabular-nums">
-                  <span
-                    v-if="tasks.loading && !tasks.data"
-                    class="inline-block h-7 w-8 animate-pulse rounded bg-surface-gray-2"
-                  />
-                  <template v-else>{{ stat.value }}</template>
-                </span>
-                <span v-if="stat.hint" class="text-xs text-ink-gray-5">
-                  {{ stat.hint }}
-                </span>
-              </div>
-              <div
-                v-if="stat.progress !== undefined"
-                class="h-1 w-full overflow-hidden rounded-full bg-surface-gray-2"
-                role="progressbar"
-                :aria-valuenow="stat.progress"
-                aria-valuemin="0"
-                aria-valuemax="100"
-              >
-                <div
-                  class="h-full rounded-full bg-surface-gray-7 transition-[width] duration-500"
-                  :style="{ width: `${stat.progress}%` }"
-                />
-              </div>
-            </button>
+            />
           </div>
 
           <!-- Filters -->
-          <div
-            class="mt-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between"
-          >
-            <div class="-mx-1 min-w-0 overflow-x-auto px-1">
-              <TabButtons
-                :model-value="activeFilter"
-                size="md"
-                :aria-label="__('Filter tasks by status')"
-                :options="
-                  tabs.map((t) => ({ label: __(t.label), value: t.key }))
-                "
-                @update:model-value="setFilter($event)"
-              >
-                <template #suffix="{ button, checked }">
-                  <span
-                    class="font-mono text-xs tabular-nums"
-                    :class="checked ? '' : 'text-ink-gray-5'"
-                  >
-                    {{ countFor(button.modelValue) }}
-                  </span>
-                </template>
-              </TabButtons>
-            </div>
-            <TextInput
-              v-model="search"
-              type="search"
-              class="w-full md:w-64"
-              :placeholder="__('Search tasks or projects')"
-              :aria-label="__('Search tasks')"
-            >
-              <template #prefix>
-                <LucideSearch
-                  class="size-4 text-ink-gray-5"
-                  aria-hidden="true"
-                />
-              </template>
-            </TextInput>
+          <div class="max-w-full overflow-x-auto">
+            <ViewTabs
+              :model-value="activeFilter"
+              :aria-label="__('Filter tasks by status')"
+              :options="
+                tabs.map((t) => ({
+                  label: __(t.label),
+                  value: t.key,
+                  count: countFor(t.key),
+                }))
+              "
+              @update:model-value="setFilter($event)"
+            />
           </div>
 
           <!-- List -->
-          <div
-            class="mt-3 overflow-hidden rounded-lg border border-outline-gray-2 bg-surface-base"
+          <section
+            class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
+            :aria-label="__('Tasks')"
           >
+            <div class="border-b border-outline-gray-2 px-4 py-4 md:px-4">
+              <TextInput
+                v-model="search"
+                type="search"
+                size="md"
+                class="w-full md:max-w-sm"
+                :placeholder="__('Search tasks or projects')"
+                :aria-label="__('Search tasks')"
+              >
+                <template #prefix>
+                  <LucideSearch
+                    class="size-[18px] text-ink-gray-6"
+                    aria-hidden="true"
+                  />
+                </template>
+              </TextInput>
+            </div>
             <div
-              class="hidden grid-cols-[1fr_8rem_7rem_9rem] gap-4 border-b border-outline-gray-2 bg-surface-gray-1 px-4 py-2 text-xs text-ink-gray-5 md:grid"
+              class="hidden h-11 grid-cols-[1fr_8rem_7rem_9rem] items-center gap-4 border-b border-outline-gray-2 bg-surface-gray-1 px-4 text-left text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6 md:grid md:px-4"
+              aria-hidden="true"
             >
               <span>{{ __("Task") }}</span>
               <span>{{ __("Priority") }}</span>
@@ -137,17 +110,17 @@
               <div
                 v-for="i in 5"
                 :key="i"
-                class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-3.5 last:border-b-0"
+                class="flex h-14 items-center gap-3 border-b border-outline-gray-1 px-4 last:border-b-0 md:px-4"
               >
                 <div
-                  class="size-4 animate-pulse rounded-full bg-surface-gray-2"
+                  class="size-4 animate-pulse rounded-full bg-surface-gray-3"
                 />
                 <div class="flex flex-1 flex-col gap-2">
                   <div
-                    class="h-3.5 w-2/5 animate-pulse rounded bg-surface-gray-2"
+                    class="h-3.5 w-2/5 animate-pulse rounded bg-surface-gray-3"
                   />
                   <div
-                    class="h-3 w-1/4 animate-pulse rounded bg-surface-gray-2"
+                    class="h-3 w-1/4 animate-pulse rounded bg-surface-gray-3"
                   />
                 </div>
               </div>
@@ -155,6 +128,7 @@
 
             <TaskyState
               v-else-if="!visibleTasks.length"
+              class="py-10"
               :icon="emptyState.icon"
               :title="emptyState.title"
               :message="emptyState.message"
@@ -179,7 +153,7 @@
               >
                 <button
                   type="button"
-                  class="grid w-full grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1 px-4 py-3 text-left transition-colors hover:bg-surface-gray-1 focus-visible:bg-surface-gray-1 focus-visible:outline-none md:grid-cols-[1fr_8rem_7rem_9rem]"
+                  class="grid min-h-16 w-full grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1 px-4 py-3 text-left transition-colors hover:bg-surface-gray-1 focus-visible:bg-surface-gray-1 focus-visible:outline-none md:grid-cols-[1fr_8rem_7rem_9rem] md:px-4"
                   @click="openTask(task)"
                 >
                   <div class="flex min-w-0 items-start gap-3">
@@ -191,7 +165,7 @@
                     <div class="min-w-0">
                       <div class="flex min-w-0 items-center gap-1.5">
                         <span
-                          class="truncate text-base"
+                          class="truncate text-[13px] font-medium"
                           :class="
                             isClosed(task)
                               ? 'text-ink-gray-5 line-through'
@@ -215,7 +189,7 @@
                         />
                       </div>
                       <div
-                        class="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 text-sm text-ink-gray-5"
+                        class="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 text-[12px] text-ink-gray-6"
                       >
                         <span class="truncate">{{
                           task.project_name || task.project
@@ -303,7 +277,7 @@
                 </button>
               </li>
             </ul>
-          </div>
+          </section>
         </template>
       </div>
     </div>
@@ -314,15 +288,11 @@
 
 <script setup lang="ts">
 import LayoutHeader from "@/components/LayoutHeader.vue";
+import StatTile from "@/components/StatTile.vue";
+import ViewTabs from "@/components/ViewTabs.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";
-import {
-  Button,
-  TabButtons,
-  TextInput,
-  createResource,
-  dayjs,
-} from "frappe-ui";
+import { Button, TextInput, createResource, dayjs } from "frappe-ui";
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";

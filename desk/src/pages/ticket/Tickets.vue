@@ -1,15 +1,13 @@
 <template>
   <div>
-    <LayoutHeader>
-      <template #left-header>
-        <ViewBreadcrumbs
-          :label="__('Tickets')"
-          :route-name="isCustomerPortal ? 'TicketsCustomer' : 'TicketsAgent'"
-          :options="dropdownOptions"
-          :dropdown-actions="(view) => viewActions(view, viewDialogConfig)"
-          :current-view="currentView"
-        />
-      </template>
+    <LayoutHeader
+      :title="__('Tickets')"
+      :subtitle="
+        isCustomerPortal
+          ? __('Your requests to our team and where each one stands.')
+          : __('Every customer request, with its owner, status and SLA.')
+      "
+    >
       <template #right-header>
         <RouterLink
           class="inline-flex"
@@ -18,120 +16,139 @@
           <Button
             class="rtl:flex-row-reverse"
             :label="__('New ticket')"
-            theme="gray"
             variant="solid"
+            size="md"
           >
             <template #prefix>
-              <LucidePlus class="h-4 w-4" />
+              <LucidePlus class="size-[18px]" aria-hidden="true" />
             </template>
           </Button>
         </RouterLink>
       </template>
     </LayoutHeader>
-    <TicketViewTabs v-if="!isCustomerPortal" ref="summaryRef" />
-    <ListViewBuilder
-      ref="listViewRef"
-      :options="options"
-      @row-click="
-        (row) =>
-          $router.push({
-            name: isCustomerPortal ? 'TicketCustomer' : 'TicketAgent',
-            params: { ticketId: row },
-          })
-      "
-    >
-      <template v-if="!isCustomerPortal" #mobile-row="{ row }">
-        <RouterLink
-          :to="{
-            name: 'TicketAgent',
-            params: { ticketId: row.name },
-            query: { view: route.query.view },
-          }"
-          class="flex flex-col gap-1.5 px-4 py-3 hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-gray-4"
+    <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
+      <!-- the quick views as pills, the saved views beside them -->
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div v-if="!isCustomerPortal" class="max-w-full overflow-x-auto">
+          <TicketViewTabs ref="summaryRef" />
+        </div>
+        <ViewBreadcrumbs
+          :label="__('Tickets')"
+          :route-name="isCustomerPortal ? 'TicketsCustomer' : 'TicketsAgent'"
+          :options="dropdownOptions"
+          :dropdown-actions="(view) => viewActions(view, viewDialogConfig)"
+          :current-view="currentView"
+        />
+      </div>
+      <section
+        class="relative min-h-60 overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
+        :aria-label="__('Tickets')"
+      >
+        <ListViewBuilder
+          ref="listViewRef"
+          :options="options"
+          @row-click="
+            (row) =>
+              $router.push({
+                name: isCustomerPortal ? 'TicketCustomer' : 'TicketAgent',
+                params: { ticketId: row },
+              })
+          "
         >
-          <span class="flex items-start justify-between gap-3">
-            <span
-              class="min-w-0 flex-1 truncate text-base text-ink-gray-9"
-              :class="isUnseen(row) ? 'font-semibold' : 'font-medium'"
+          <template v-if="!isCustomerPortal" #mobile-row="{ row }">
+            <RouterLink
+              :to="{
+                name: 'TicketAgent',
+                params: { ticketId: row.name },
+                query: { view: route.query.view },
+              }"
+              class="flex flex-col gap-1.5 px-4 py-3 hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-gray-4"
             >
-              {{ row.subject }}
-            </span>
-            <component
-              :is="slaCell(row, 'resolution', row.resolution_by)"
-              v-if="row.resolution_by"
-            />
-          </span>
-          <span
-            class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-gray-6"
-          >
-            <EscalationBadge
-              v-if="row.custom_escalation_level"
-              :level="row.custom_escalation_level"
-            />
-            <span class="font-mono tabular-nums text-ink-gray-5">
-              #{{ row.name }}
-            </span>
-            <span v-if="row.customer" class="min-w-0 truncate">
-              {{ row.customer }}
-            </span>
-            <span class="flex items-center gap-1.5 text-ink-gray-7">
-              <IndicatorIcon :class="getStatus(row.status)?.parsed_color" />
-              {{ getStatus(row.status)?.label_agent ?? row.status }}
-            </span>
-            <component :is="priorityCell(row.priority)" />
-            <MultipleAvatar
-              v-if="row._assign"
-              :avatars="row._assign"
-              hide-name
-              class="ml-auto"
-            />
-          </span>
-        </RouterLink>
-      </template>
-      <template v-else #mobile-row="{ row }">
-        <RouterLink
-          :to="{ name: 'TicketCustomer', params: { ticketId: row.name } }"
-          class="flex flex-col gap-1.5 px-4 py-3 hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-gray-4"
-        >
-          <span
-            class="min-w-0 truncate text-base text-ink-gray-9"
-            :class="isUnseen(row) ? 'font-semibold' : 'font-medium'"
-          >
-            {{ row.subject }}
-          </span>
-          <span
-            class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-gray-6"
-          >
-            <TaskyBadge v-bind="customerStatus.badge(row.status)" />
-            <span class="font-mono tabular-nums text-ink-gray-5">
-              #{{ row.name }}
-            </span>
-            <span class="ml-auto shrink-0">
-              {{ __("Updated {0}", [timeAgo(row.modified)]) }}
-            </span>
-          </span>
-        </RouterLink>
-      </template>
-      <template v-if="hasActiveFilters" #empty-actions>
-        <Button
-          :label="__('Clear filters')"
-          @click="listViewRef?.clearFilters()"
-        >
-          <template #prefix>
-            <LucideX class="size-4" aria-hidden="true" />
+              <span class="flex items-start justify-between gap-3">
+                <span
+                  class="min-w-0 flex-1 truncate text-base text-ink-gray-9"
+                  :class="isUnseen(row) ? 'font-semibold' : 'font-medium'"
+                >
+                  {{ row.subject }}
+                </span>
+                <component
+                  :is="slaCell(row, 'resolution', row.resolution_by)"
+                  v-if="row.resolution_by"
+                />
+              </span>
+              <span
+                class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-gray-6"
+              >
+                <EscalationBadge
+                  v-if="row.custom_escalation_level"
+                  :level="row.custom_escalation_level"
+                />
+                <span class="font-mono tabular-nums text-ink-gray-5">
+                  #{{ row.name }}
+                </span>
+                <span v-if="row.customer" class="min-w-0 truncate">
+                  {{ row.customer }}
+                </span>
+                <span class="flex items-center gap-1.5 text-ink-gray-7">
+                  <IndicatorIcon :class="getStatus(row.status)?.parsed_color" />
+                  {{ getStatus(row.status)?.label_agent ?? row.status }}
+                </span>
+                <component :is="priorityCell(row.priority)" />
+                <MultipleAvatar
+                  v-if="row._assign"
+                  :avatars="row._assign"
+                  hide-name
+                  class="ml-auto"
+                />
+              </span>
+            </RouterLink>
           </template>
-        </Button>
-      </template>
-      <template v-else-if="isCustomerPortal" #empty-actions>
-        <RouterLink class="inline-flex" :to="{ name: 'TicketNew' }">
-          <Button :label="__('New ticket')" variant="solid">
-            <template #prefix>
-              <LucidePlus class="size-4" aria-hidden="true" />
-            </template>
-          </Button>
-        </RouterLink>
-      </template>
-    </ListViewBuilder>
+          <template v-else #mobile-row="{ row }">
+            <RouterLink
+              :to="{ name: 'TicketCustomer', params: { ticketId: row.name } }"
+              class="flex flex-col gap-1.5 px-4 py-3 hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-gray-4"
+            >
+              <span
+                class="min-w-0 truncate text-base text-ink-gray-9"
+                :class="isUnseen(row) ? 'font-semibold' : 'font-medium'"
+              >
+                {{ row.subject }}
+              </span>
+              <span
+                class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-gray-6"
+              >
+                <TaskyBadge v-bind="customerStatus.badge(row.status)" />
+                <span class="font-mono tabular-nums text-ink-gray-5">
+                  #{{ row.name }}
+                </span>
+                <span class="ml-auto shrink-0">
+                  {{ __("Updated {0}", [timeAgo(row.modified)]) }}
+                </span>
+              </span>
+            </RouterLink>
+          </template>
+          <template v-if="hasActiveFilters" #empty-actions>
+            <Button
+              :label="__('Clear filters')"
+              @click="listViewRef?.clearFilters()"
+            >
+              <template #prefix>
+                <LucideX class="size-4" aria-hidden="true" />
+              </template>
+            </Button>
+          </template>
+          <template v-else-if="isCustomerPortal" #empty-actions>
+            <RouterLink class="inline-flex" :to="{ name: 'TicketNew' }">
+              <Button :label="__('New ticket')" variant="solid">
+                <template #prefix>
+                  <LucidePlus class="size-4" aria-hidden="true" />
+                </template>
+              </Button>
+            </RouterLink>
+          </template>
+        </ListViewBuilder>
+      </section>
+    </div>
     <ExportModal
       v-model="showExportModal"
       :rowCount="$refs.listViewRef?.list?.data?.total_count ?? 0"

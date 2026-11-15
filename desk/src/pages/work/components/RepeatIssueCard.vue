@@ -1,6 +1,6 @@
 <template>
   <article
-    class="flex min-w-0 flex-col gap-2.5 rounded-lg border border-outline-gray-2 bg-surface-base p-3"
+    class="flex min-w-0 flex-col gap-2.5 rounded-xl border border-outline-gray-2 bg-surface-base p-4"
     :aria-labelledby="headingId"
   >
     <header class="flex flex-wrap items-start justify-between gap-2">

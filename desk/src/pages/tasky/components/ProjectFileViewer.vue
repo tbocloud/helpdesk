@@ -46,12 +46,12 @@
         </div>
         <div
           v-else-if="kind === 'markdown'"
-          class="prose prose-sm max-h-[65vh] max-w-none overflow-y-auto rounded-lg border border-outline-gray-2 bg-surface-base px-5 py-4 text-ink-gray-8"
+          class="prose prose-sm max-h-[65vh] max-w-none overflow-y-auto rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-3 text-ink-gray-8"
           v-html="rendered"
         />
         <pre
           v-else
-          class="max-h-[65vh] overflow-auto whitespace-pre-wrap rounded-lg border border-outline-gray-2 bg-surface-gray-1 px-4 py-3 font-mono text-p-sm text-ink-gray-8"
+          class="max-h-[65vh] overflow-auto whitespace-pre-wrap rounded-xl border border-outline-gray-2 bg-surface-gray-1 px-4 py-3 font-mono text-p-sm text-ink-gray-8"
           >{{ text.data?.content }}</pre
         >
       </template>
@@ -60,12 +60,12 @@
         v-else-if="kind === 'pdf'"
         :src="file.file_url"
         :title="file.file_name"
-        class="h-[70vh] w-full rounded-lg border border-outline-gray-2 bg-surface-gray-1"
+        class="h-[70vh] w-full rounded-xl border border-outline-gray-2 bg-surface-gray-1"
       />
 
       <div
         v-else-if="kind === 'image'"
-        class="flex max-h-[70vh] justify-center overflow-auto rounded-lg border border-outline-gray-2 bg-surface-gray-1 p-2"
+        class="flex max-h-[70vh] justify-center overflow-auto rounded-xl border border-outline-gray-2 bg-surface-gray-1 p-2"
       >
         <img
           :src="file.file_url"

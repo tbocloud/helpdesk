@@ -1,8 +1,8 @@
 <template>
   <!-- ticket figures for one customer or contact, over a chosen period -->
-  <section class="px-5 pb-4" :aria-labelledby="headingId">
+  <section class="flex flex-col gap-3" :aria-labelledby="headingId">
     <div class="flex flex-wrap items-center justify-between gap-2">
-      <h2 :id="headingId" class="text-base-medium text-ink-gray-9">
+      <h2 :id="headingId" class="text-base font-semibold text-ink-gray-9">
         {{ __("Support figures") }}
       </h2>
       <FormControl
@@ -16,32 +16,34 @@
 
     <div
       v-if="stats.error && !stats.data"
-      class="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-outline-gray-2 px-4 py-3 text-p-sm text-ink-gray-6"
+      class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-outline-gray-2 bg-surface-base p-4 text-p-sm text-ink-gray-6"
       role="alert"
     >
       {{ errorText(stats.error, __("Couldn't load the ticket figures.")) }}
       <Button size="sm" :label="__('Retry')" @click="stats.reload()" />
     </div>
 
-    <div v-else class="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div
+      v-else
+      class="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4"
+    >
       <StatTile
-        compact
         :label="__('Avg. first response')"
         :value="duration(data?.avg_first_response_time)"
         :sub="change(data?.avg_first_response_time)"
         :icon="LucideReply"
+        icon-tone="info"
         :loading="loading"
       />
       <StatTile
-        compact
         :label="__('Avg. resolution')"
         :value="duration(data?.avg_resolution_time)"
         :sub="change(data?.avg_resolution_time)"
         :icon="LucideCircleCheckBig"
+        icon-tone="info"
         :loading="loading"
       />
       <StatTile
-        compact
         :label="__('SLAs failed')"
         :value="data?.sla_violations.total ?? '–'"
         :sub="change(data?.sla_violations)"
@@ -51,11 +53,11 @@
         :loading="loading"
       />
       <StatTile
-        compact
         :label="__('Rating')"
         :value="rating"
         :sub="ratingSub"
         :icon="LucideStar"
+        icon-tone="brand"
         :loading="loading"
       />
     </div>

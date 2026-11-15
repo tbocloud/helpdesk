@@ -1,252 +1,247 @@
 <template>
   <div class="flex h-full flex-col">
-    <LayoutHeader>
-      <header
-        class="flex w-full items-center justify-between gap-3 px-4 py-2.5 md:px-6 md:py-3"
-      >
-        <h1 class="min-w-0 truncate text-3xl font-semibold text-ink-gray-9">
-          {{ __("Content Calendar") }}
-        </h1>
-        <div class="flex shrink-0 items-center gap-1 sm:gap-2">
-          <button
-            type="button"
-            :class="HEADER_BTN"
-            :title="__('Send portal email')"
-            @click="shareOpen = true"
-          >
-            <span :class="HEADER_TILE" aria-hidden="true">
-              <LucideMail class="size-[15px]" />
-            </span>
-            <span class="sr-only lg:not-sr-only">{{
-              __("Send portal email")
-            }}</span>
-          </button>
-          <router-link
-            v-if="auth.isAdmin || auth.isManager || auth.isProjectManager"
-            :to="{ name: 'ContentPlans' }"
-            :class="HEADER_BTN"
-            :title="__('Monthly plans')"
-          >
-            <span :class="HEADER_TILE" aria-hidden="true">
-              <LucideCalendarSync class="size-[15px]" />
-            </span>
-            <span class="sr-only lg:not-sr-only">{{
-              __("Monthly plans")
-            }}</span>
-          </router-link>
-          <router-link
-            :to="{ name: 'ContentReport' }"
-            :class="HEADER_BTN"
-            :title="__('Delivery report')"
-          >
-            <span :class="HEADER_TILE" aria-hidden="true">
-              <LucideChartColumn class="size-[15px]" />
-            </span>
-            <span class="sr-only lg:not-sr-only">{{
-              __("Delivery report")
-            }}</span>
-          </router-link>
-          <button
-            v-if="auth.canEditContent"
-            type="button"
-            class="inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-brand px-3 text-sm font-semibold text-brand-on shadow-sm transition-colors hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight focus-visible:ring-offset-2 sm:px-4"
-            @click="openAdd()"
-          >
-            <LucidePlus class="size-4" aria-hidden="true" />
-            <span class="sr-only sm:not-sr-only">{{ __("Add entry") }}</span>
-          </button>
-        </div>
-      </header>
+    <LayoutHeader
+      :title="__('Content Calendar')"
+      :subtitle="__('Plan, make and post every client\'s content, day by day.')"
+    >
+      <template #right-header>
+        <Button
+          size="md"
+          :title="__('Send portal email')"
+          @click="shareOpen = true"
+        >
+          <template #prefix>
+            <LucideMail class="size-[18px]" aria-hidden="true" />
+          </template>
+          <span class="sr-only lg:not-sr-only">{{
+            __("Send portal email")
+          }}</span>
+        </Button>
+        <Button
+          v-if="auth.isAdmin || auth.isManager || auth.isProjectManager"
+          size="md"
+          :route="{ name: 'ContentPlans' }"
+          :title="__('Monthly plans')"
+        >
+          <template #prefix>
+            <LucideCalendarSync class="size-[18px]" aria-hidden="true" />
+          </template>
+          <span class="sr-only lg:not-sr-only">{{ __("Monthly plans") }}</span>
+        </Button>
+        <Button
+          size="md"
+          :route="{ name: 'ContentReport' }"
+          :title="__('Delivery report')"
+        >
+          <template #prefix>
+            <LucideChartColumn class="size-[18px]" aria-hidden="true" />
+          </template>
+          <span class="sr-only lg:not-sr-only">{{
+            __("Delivery report")
+          }}</span>
+        </Button>
+        <Button
+          v-if="auth.canEditContent"
+          variant="solid"
+          size="md"
+          @click="openAdd()"
+        >
+          <template #prefix>
+            <LucidePlus class="size-[18px]" aria-hidden="true" />
+          </template>
+          <span class="sr-only sm:not-sr-only">{{ __("Add entry") }}</span>
+        </Button>
+      </template>
     </LayoutHeader>
 
-    <div
-      class="flex flex-wrap items-center gap-2 border-b border-outline-gray-2 px-4 py-2 md:px-6"
-    >
-      <Link
-        v-model="filters.customer"
-        doctype="HD Customer"
-        class="w-full sm:w-auto"
-        :placeholder="__('All customers')"
-      >
-        <template #target="{ togglePopover }">
-          <button
-            type="button"
-            :class="[CONTROL, 'w-full sm:w-auto']"
-            aria-haspopup="listbox"
-            :aria-label="
-              __('Customer: {0}', filters.customer || __('All customers'))
-            "
-            @click="togglePopover()"
-          >
-            <span :class="CONTROL_TILE" aria-hidden="true">
-              <LucideBuilding2 class="size-3.5" />
-            </span>
-            <span
-              class="min-w-0 flex-1 truncate text-left"
-              :class="filters.customer ? 'text-ink-gray-9' : 'text-ink-gray-6'"
-              >{{ filters.customer || __("All customers") }}</span
-            >
-            <LucideChevronDown
-              class="size-3.5 shrink-0 text-ink-gray-5"
-              aria-hidden="true"
-            />
-          </button>
-        </template>
-      </Link>
-      <Select
-        v-model="filters.channel"
-        :class="[CONTROL_SELECT, 'flex-1 sm:flex-none']"
-        :options="[{ label: __('All channels'), value: '' }, ...platforms]"
-        :aria-label="__('Channel')"
-      >
-        <template #trigger="{ displayValue }">
-          <span :class="CONTROL_TILE" aria-hidden="true">
-            <LucideShare2 class="size-3.5" />
-          </span>
-          <span
-            class="min-w-0 flex-1 truncate text-left"
-            :class="filters.channel ? 'text-ink-gray-9' : 'text-ink-gray-6'"
-            >{{ displayValue || __("All channels") }}</span
-          >
-          <LucideChevronDown
-            class="size-3.5 shrink-0 text-ink-gray-5"
-            aria-hidden="true"
-          />
-        </template>
-      </Select>
-      <Select
-        v-model="filters.status"
-        :class="[CONTROL_SELECT, 'flex-1 sm:flex-none']"
-        :options="[{ label: __('All statuses'), value: '' }, ...STATUSES]"
-        :aria-label="__('Status')"
-      >
-        <template #trigger="{ displayValue }">
-          <span :class="CONTROL_TILE" aria-hidden="true">
-            <LucideCircleDot class="size-3.5" />
-          </span>
-          <span
-            class="min-w-0 flex-1 truncate text-left"
-            :class="filters.status ? 'text-ink-gray-9' : 'text-ink-gray-6'"
-            >{{ displayValue || __("All statuses") }}</span
-          >
-          <LucideChevronDown
-            class="size-3.5 shrink-0 text-ink-gray-5"
-            aria-hidden="true"
-          />
-        </template>
-      </Select>
-      <Link
-        v-model="filters.person"
-        doctype="User"
-        class="w-full sm:w-auto"
-        :filters="{ enabled: 1, user_type: 'System User' }"
-        :placeholder="__('Everyone')"
-      >
-        <template #target="{ togglePopover }">
-          <button
-            type="button"
-            :class="[CONTROL, 'w-full sm:w-auto']"
-            aria-haspopup="listbox"
-            :aria-label="__('Person: {0}', personLabel || __('Everyone'))"
-            @click="togglePopover()"
-          >
-            <span :class="CONTROL_TILE" aria-hidden="true">
-              <LucideUsers class="size-3.5" />
-            </span>
-            <span
-              class="min-w-0 flex-1 truncate text-left"
-              :class="filters.person ? 'text-ink-gray-9' : 'text-ink-gray-6'"
-              >{{ personLabel || __("Everyone") }}</span
-            >
-            <LucideChevronDown
-              class="size-3.5 shrink-0 text-ink-gray-5"
-              aria-hidden="true"
-            />
-          </button>
-        </template>
-      </Link>
-      <button
-        v-if="hasFilters"
-        type="button"
-        class="inline-flex h-8 items-center rounded-[10px] px-2.5 text-sm font-medium text-ink-gray-6 hover:bg-surface-gray-2 hover:text-ink-gray-8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3"
-        @click="clearFilters"
-      >
-        {{ __("Clear") }}
-      </button>
-      <div class="hidden flex-1 sm:block" />
+    <div class="px-4 pt-5 md:px-8">
       <div
-        v-if="view === 'calendar'"
-        class="hidden items-center gap-3 text-xs text-ink-gray-6 lg:flex"
-        aria-hidden="true"
+        class="flex flex-wrap items-center gap-2.5 rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-4 md:px-4"
       >
-        <span
-          v-for="s in legend"
-          :key="s.label"
-          class="flex items-center gap-1.5"
+        <Link
+          v-model="filters.customer"
+          doctype="HD Customer"
+          class="w-full sm:w-auto"
+          :placeholder="__('All customers')"
         >
-          <span class="size-2 rounded-sm" :class="s.swatch" />{{ s.label }}
-        </span>
-      </div>
-      <button
-        type="button"
-        class="inline-flex h-8 items-center gap-1.5 rounded-[10px] border pl-1 pr-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3"
-        :class="
-          myPostsOn
-            ? 'border-brand bg-brand-soft text-brand-ink'
-            : 'border-dashed border-outline-gray-3 bg-surface-base text-ink-gray-8 hover:bg-surface-gray-1'
-        "
-        :aria-pressed="myPostsOn"
-        :title="
-          view === 'tasks'
-            ? __('Tasks assigned to me')
-            : __('Posts I am on, in any role')
-        "
-        @click="filters.person = myPostsOn ? '' : auth.userId"
-      >
-        <span
-          class="grid size-[22px] place-items-center rounded-[6px]"
-          :class="
-            myPostsOn ? 'bg-brand text-brand-on' : 'bg-brand-soft text-brand'
-          "
+          <template #target="{ togglePopover }">
+            <button
+              type="button"
+              :class="[CONTROL, 'w-full sm:w-auto']"
+              aria-haspopup="listbox"
+              :aria-label="
+                __('Customer: {0}', filters.customer || __('All customers'))
+              "
+              @click="togglePopover()"
+            >
+              <span :class="CONTROL_TILE" aria-hidden="true">
+                <LucideBuilding2 class="size-3.5" />
+              </span>
+              <span
+                class="min-w-0 flex-1 truncate text-left"
+                :class="
+                  filters.customer ? 'text-ink-gray-9' : 'text-ink-gray-6'
+                "
+                >{{ filters.customer || __("All customers") }}</span
+              >
+              <LucideChevronDown
+                class="size-3.5 shrink-0 text-ink-gray-5"
+                aria-hidden="true"
+              />
+            </button>
+          </template>
+        </Link>
+        <Select
+          v-model="filters.channel"
+          :class="[CONTROL_SELECT, 'flex-1 sm:flex-none']"
+          :options="[{ label: __('All channels'), value: '' }, ...platforms]"
+          :aria-label="__('Channel')"
+        >
+          <template #trigger="{ displayValue }">
+            <span :class="CONTROL_TILE" aria-hidden="true">
+              <LucideShare2 class="size-3.5" />
+            </span>
+            <span
+              class="min-w-0 flex-1 truncate text-left"
+              :class="filters.channel ? 'text-ink-gray-9' : 'text-ink-gray-6'"
+              >{{ displayValue || __("All channels") }}</span
+            >
+            <LucideChevronDown
+              class="size-3.5 shrink-0 text-ink-gray-5"
+              aria-hidden="true"
+            />
+          </template>
+        </Select>
+        <Select
+          v-model="filters.status"
+          :class="[CONTROL_SELECT, 'flex-1 sm:flex-none']"
+          :options="[{ label: __('All statuses'), value: '' }, ...STATUSES]"
+          :aria-label="__('Status')"
+        >
+          <template #trigger="{ displayValue }">
+            <span :class="CONTROL_TILE" aria-hidden="true">
+              <LucideCircleDot class="size-3.5" />
+            </span>
+            <span
+              class="min-w-0 flex-1 truncate text-left"
+              :class="filters.status ? 'text-ink-gray-9' : 'text-ink-gray-6'"
+              >{{ displayValue || __("All statuses") }}</span
+            >
+            <LucideChevronDown
+              class="size-3.5 shrink-0 text-ink-gray-5"
+              aria-hidden="true"
+            />
+          </template>
+        </Select>
+        <Link
+          v-model="filters.person"
+          doctype="User"
+          class="w-full sm:w-auto"
+          :filters="{ enabled: 1, user_type: 'System User' }"
+          :placeholder="__('Everyone')"
+        >
+          <template #target="{ togglePopover }">
+            <button
+              type="button"
+              :class="[CONTROL, 'w-full sm:w-auto']"
+              aria-haspopup="listbox"
+              :aria-label="__('Person: {0}', personLabel || __('Everyone'))"
+              @click="togglePopover()"
+            >
+              <span :class="CONTROL_TILE" aria-hidden="true">
+                <LucideUsers class="size-3.5" />
+              </span>
+              <span
+                class="min-w-0 flex-1 truncate text-left"
+                :class="filters.person ? 'text-ink-gray-9' : 'text-ink-gray-6'"
+                >{{ personLabel || __("Everyone") }}</span
+              >
+              <LucideChevronDown
+                class="size-3.5 shrink-0 text-ink-gray-5"
+                aria-hidden="true"
+              />
+            </button>
+          </template>
+        </Link>
+        <button
+          v-if="hasFilters"
+          type="button"
+          class="inline-flex h-10 items-center rounded-[10px] px-3 text-[13px] font-medium text-ink-gray-6 hover:bg-surface-gray-2 hover:text-ink-gray-8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3"
+          @click="clearFilters"
+        >
+          {{ __("Clear") }}
+        </button>
+        <div class="hidden flex-1 sm:block" />
+        <div
+          v-if="view === 'calendar'"
+          class="hidden items-center gap-3 text-xs text-ink-gray-6 lg:flex"
           aria-hidden="true"
         >
-          <LucideUser class="size-3.5" />
-        </span>
-        {{ view === "tasks" ? __("My tasks") : __("My posts") }}
-      </button>
+          <span
+            v-for="s in legend"
+            :key="s.label"
+            class="flex items-center gap-1.5"
+          >
+            <span class="size-2 rounded-sm" :class="s.swatch" />{{ s.label }}
+          </span>
+        </div>
+        <button
+          type="button"
+          class="inline-flex h-10 items-center gap-2 rounded-[10px] border pl-2 pr-3 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3"
+          :class="
+            myPostsOn
+              ? 'border-brand bg-brand-soft text-brand-ink'
+              : 'border-dashed border-outline-gray-3 bg-surface-base text-ink-gray-8 hover:bg-surface-gray-1'
+          "
+          :aria-pressed="myPostsOn"
+          :title="
+            view === 'tasks'
+              ? __('Tasks assigned to me')
+              : __('Posts I am on, in any role')
+          "
+          @click="filters.person = myPostsOn ? '' : auth.userId"
+        >
+          <span
+            class="grid size-[22px] place-items-center rounded-[6px]"
+            :class="
+              myPostsOn ? 'bg-brand text-brand-on' : 'bg-brand-soft text-brand'
+            "
+            aria-hidden="true"
+          >
+            <LucideUser class="size-3.5" />
+          </span>
+          {{ view === "tasks" ? __("My tasks") : __("My posts") }}
+        </button>
+      </div>
     </div>
 
     <div class="flex min-h-0 flex-1">
       <div
-        class="relative flex min-w-0 flex-1 flex-col gap-3 px-4 pb-4 pt-3 md:px-6"
+        class="relative flex min-w-0 flex-1 flex-col gap-4 px-4 pb-10 pt-5 md:px-8"
       >
-        <div class="flex flex-wrap items-center gap-2">
-          <div
-            class="inline-flex h-8 items-center rounded-[10px] bg-surface-gray-2 p-0.5"
-            role="group"
-            :aria-label="__('View')"
-          >
-            <button
-              v-for="v in VIEWS"
-              :key="v.key"
-              type="button"
-              :aria-pressed="view === v.key"
-              :class="[SEGMENT, view === v.key ? SEGMENT_ON : SEGMENT_OFF]"
-              @click="view = v.key"
-            >
-              <component :is="v.icon" class="size-4" aria-hidden="true" />
-              <span class="sr-only sm:not-sr-only">{{ v.label }}</span>
-            </button>
+        <div class="flex flex-wrap items-center gap-2.5">
+          <div class="max-w-full overflow-x-auto">
+            <ViewTabs
+              v-model="view"
+              :options="
+                VIEWS.map((v) => ({
+                  value: v.key,
+                  label: v.label,
+                  icon: v.icon,
+                }))
+              "
+              :aria-label="__('View')"
+            />
           </div>
           <template v-if="view !== 'calendar'">
             <div class="flex items-center gap-2">
               <button
                 type="button"
-                class="inline-flex h-8 items-center rounded-[10px] px-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight focus-visible:ring-offset-1"
+                class="inline-flex h-10 items-center rounded-[10px] border px-3.5 text-[13px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight focus-visible:ring-offset-1"
                 :class="
                   showingToday
-                    ? 'bg-brand text-brand-on shadow-sm hover:bg-brand-hover'
-                    : 'bg-surface-gray-2 text-ink-gray-8 hover:bg-surface-gray-3'
+                    ? 'border-brand bg-brand text-brand-on shadow-sm hover:bg-brand-hover'
+                    : 'border-outline-gray-3 bg-surface-base text-ink-gray-8 hover:bg-surface-gray-1'
                 "
                 :aria-pressed="showingToday"
                 :title="__('Go to today (T)')"
@@ -255,7 +250,7 @@
                 {{ __("Today") }}
               </button>
               <div
-                class="inline-flex h-8 items-center divide-x divide-outline-gray-2 overflow-hidden rounded-[10px] border border-outline-gray-2 bg-surface-base"
+                class="inline-flex h-10 items-center divide-x divide-outline-gray-3 overflow-hidden rounded-[10px] border border-outline-gray-3 bg-surface-base"
               >
                 <button
                   type="button"
@@ -280,7 +275,7 @@
               <span class="relative inline-flex">
                 <button
                   type="button"
-                  class="inline-flex h-8 items-center gap-1 rounded-[10px] px-2 text-lg font-semibold text-ink-gray-9 hover:bg-surface-gray-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3"
+                  class="inline-flex h-10 items-center gap-1 rounded-[10px] px-2 text-lg font-semibold text-ink-gray-9 hover:bg-surface-gray-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3"
                   :title="__('Pick a date')"
                   :aria-label="__('Pick a date, showing {0}', periodLabel)"
                   @click="openDatePicker"
@@ -303,7 +298,7 @@
             </div>
             <div class="flex-1" />
             <div
-              class="inline-flex h-8 items-center rounded-[10px] bg-surface-gray-2 p-0.5"
+              class="inline-flex h-10 items-center rounded-[10px] bg-surface-gray-2 p-1"
               role="group"
               :aria-label="__('Period')"
             >
@@ -340,7 +335,7 @@
             v-for="o in occasionsInRange"
             :key="`${o.date}-${o.occasion}`"
             type="button"
-            class="inline-flex h-8 items-center gap-2 rounded-full border border-outline-gray-2 bg-surface-base pl-1 pr-3 text-sm text-ink-gray-8 hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3 disabled:cursor-default disabled:hover:bg-surface-base"
+            class="inline-flex h-9 items-center gap-2 rounded-full border border-outline-gray-2 bg-surface-base pl-1.5 pr-3 text-[13px] text-ink-gray-8 hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3 disabled:cursor-default disabled:hover:bg-surface-base"
             :title="o.idea || ''"
             :aria-label="
               __(
@@ -433,17 +428,17 @@
         <!-- posts saved before a date was required have no slot, so list them here -->
         <div
           v-if="undated.data?.length"
-          class="flex flex-col gap-2 rounded-xl border border-outline-gray-2 bg-surface-gray-1 px-3 py-1.5"
+          class="flex flex-col gap-3 rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-3"
           role="status"
         >
           <div class="flex flex-wrap items-center gap-3">
             <span
-              class="grid size-6 shrink-0 place-items-center rounded-[6px] border border-outline-gray-2 bg-surface-base text-ink-gray-6"
+              class="grid size-9 shrink-0 place-items-center rounded-[10px] bg-surface-gray-2 text-ink-gray-6"
               aria-hidden="true"
             >
-              <LucideCalendarX class="size-3.5" />
+              <LucideCalendarX class="size-[18px]" />
             </span>
-            <p class="min-w-0 flex-1 text-sm text-ink-gray-8">
+            <p class="min-w-0 flex-1 text-[13px] text-ink-gray-8">
               {{ undatedText[0]
               }}<strong class="font-semibold text-ink-gray-9">{{
                 undatedCount
@@ -452,7 +447,7 @@
             </p>
             <button
               type="button"
-              class="inline-flex h-7 items-center rounded-[8px] border border-outline-gray-2 bg-surface-base px-2.5 text-sm font-medium text-ink-gray-8 hover:bg-surface-gray-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3"
+              class="inline-flex h-9 items-center rounded-[10px] border border-outline-gray-3 bg-surface-base px-3 text-sm font-medium text-ink-gray-8 hover:bg-surface-gray-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3"
               :aria-expanded="showUndated"
               @click="showUndated = !showUndated"
             >
@@ -469,19 +464,19 @@
             <li v-for="p in undated.data" :key="p.name">
               <button
                 type="button"
-                class="rounded-lg border border-outline-gray-2 bg-surface-base px-2.5 py-1 text-left text-sm text-ink-gray-8 hover:bg-surface-gray-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3"
+                class="rounded-[10px] border border-outline-gray-2 bg-surface-base px-2.5 py-1.5 text-left text-sm text-ink-gray-8 hover:bg-surface-gray-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3"
                 :title="__('Open it and set a posting date')"
                 @click="openPost(p.name)"
               >
                 {{ copyOf(p) }}
-                <span class="text-xs text-ink-gray-5">· {{ p.customer }}</span>
+                <span class="text-xs text-ink-gray-6">· {{ p.customer }}</span>
               </button>
             </li>
           </ul>
         </div>
         <div
           v-if="(view === 'calendar' ? posts : monthPosts).error"
-          class="absolute inset-x-4 top-4 z-10 flex items-center justify-between gap-3 rounded-xl bg-danger-soft px-4 py-2.5 text-base text-danger md:inset-x-8"
+          class="absolute inset-x-4 top-5 z-10 flex items-center justify-between gap-3 rounded-xl bg-danger-soft px-4 py-2.5 text-base text-danger md:inset-x-8"
           role="alert"
         >
           {{ __("Couldn't load posts.") }}
@@ -532,15 +527,21 @@
             @open="openPost"
           />
         </div>
-        <Calendar
+        <div
           v-else
-          :events="events"
-          :config="calendarConfig"
-          :on-click="({ calendarEvent }) => openPost(String(calendarEvent.id))"
-          :on-cell-click="onCellClick"
-          @update="onReschedule"
-          @range-change="onRangeChange"
-        />
+          class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base p-4 md:p-5"
+        >
+          <Calendar
+            :events="events"
+            :config="calendarConfig"
+            :on-click="
+              ({ calendarEvent }) => openPost(String(calendarEvent.id))
+            "
+            :on-cell-click="onCellClick"
+            @update="onReschedule"
+            @range-change="onRangeChange"
+          />
+        </div>
       </div>
     </div>
 
@@ -570,6 +571,7 @@
 <script setup lang="ts">
 import { Link } from "@/components";
 import LayoutHeader from "@/components/LayoutHeader.vue";
+import ViewTabs from "@/components/ViewTabs.vue";
 import { __ } from "@/translation";
 import {
   Button,
@@ -640,24 +642,21 @@ const calendarConfig = computed(() => ({
 }));
 
 // shared looks for the header, filter bar and toolbar controls
-const HEADER_BTN =
-  "inline-flex h-8 items-center gap-1.5 rounded-[10px] px-1 text-sm font-medium text-ink-gray-8 transition-colors hover:bg-surface-gray-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3 lg:pr-3";
-const HEADER_TILE =
-  "grid size-6 place-items-center rounded-[7px] bg-surface-gray-2 text-ink-gray-7";
 const CONTROL =
-  "inline-flex h-8 min-w-[130px] items-center gap-1.5 rounded-[10px] border border-outline-gray-2 bg-surface-base pl-1 pr-2 text-sm transition-colors hover:border-outline-gray-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3";
+  "inline-flex h-10 min-w-[150px] items-center gap-2 rounded-[10px] border border-outline-gray-3 bg-surface-base pl-2 pr-2.5 text-[13px] transition-colors hover:border-outline-gray-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3";
 // the Select trigger brings its own size and padding, so these win over it
 const CONTROL_SELECT =
-  "!h-8 !min-h-8 min-w-[130px] !gap-1.5 !rounded-[10px] !border-outline-gray-2 !bg-surface-base !pl-1 !pr-2 !text-sm hover:!border-outline-gray-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3";
+  "!h-10 !min-h-10 min-w-[150px] !gap-2 !rounded-[10px] !border-outline-gray-3 !bg-surface-base !pl-2 !pr-2.5 !text-[13px] hover:!border-outline-gray-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3";
 const CONTROL_TILE =
-  "grid size-5 shrink-0 place-items-center rounded-[5px] border border-outline-gray-2 text-ink-gray-6";
+  "grid size-6 shrink-0 place-items-center rounded-[6px] bg-surface-gray-2 text-ink-gray-6";
 const SEGMENT =
-  "inline-flex h-7 items-center gap-1.5 rounded-[8px] px-2.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3";
-// the same brand fill as frappe-ui's TabButtons (theme.css)
-const SEGMENT_ON = "bg-brand font-semibold text-brand-on";
+  "inline-flex h-8 items-center gap-1.5 rounded-[8px] px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3";
+// the same white pill on a light track as frappe-ui's TabButtons (theme.css)
+const SEGMENT_ON =
+  "bg-surface-base font-semibold text-ink-gray-9 shadow-[0_1px_2px_rgb(15_23_42/0.08)]";
 const SEGMENT_OFF = "font-medium text-ink-gray-6 hover:text-ink-gray-8";
 const STEP_BTN =
-  "grid h-full w-8 place-items-center text-ink-gray-7 hover:bg-surface-gray-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-gray-3";
+  "grid h-full w-10 place-items-center text-ink-gray-7 hover:bg-surface-gray-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-gray-3";
 
 const legend = [
   { label: __("Planning"), swatch: "bg-info" },

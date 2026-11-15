@@ -4,7 +4,7 @@
     :aria-labelledby="titleId"
   >
     <div class="flex flex-wrap items-center justify-between gap-2">
-      <h2 :id="titleId" class="text-base-medium text-ink-gray-9">
+      <h2 :id="titleId" class="text-base font-semibold text-ink-gray-9">
         {{ __("WhatsApp") }}
       </h2>
       <a

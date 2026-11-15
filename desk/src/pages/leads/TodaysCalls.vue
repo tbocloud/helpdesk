@@ -1,7 +1,8 @@
 <template>
-  <div class="flex flex-col gap-4">
+  <div class="flex flex-col gap-5">
     <TaskyState
       v-if="myCalls.error && !shown"
+      class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
       error
       :icon="LucideCircleAlert"
       :title="__('Couldn\'t load today\'s calls')"
@@ -14,17 +15,18 @@
 
     <div
       v-else-if="!shown"
-      class="flex flex-col gap-3"
+      class="flex flex-col gap-5"
       aria-busy="true"
       :aria-label="__('Loading')"
     >
-      <div class="h-24 animate-pulse rounded-xl bg-surface-gray-2" />
-      <div class="h-40 animate-pulse rounded-xl bg-surface-gray-2" />
-      <div class="h-40 animate-pulse rounded-xl bg-surface-gray-2" />
+      <div class="h-28 animate-pulse rounded-xl bg-surface-gray-3" />
+      <div class="h-40 animate-pulse rounded-xl bg-surface-gray-3" />
+      <div class="h-40 animate-pulse rounded-xl bg-surface-gray-3" />
     </div>
 
     <TaskyState
       v-else-if="!shown.available"
+      class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
       :icon="LucideCloudOff"
       :title="__('Today\'s calls aren\'t available yet')"
       :message="__('The ERP site needs the latest TBO Smart.')"
@@ -32,6 +34,7 @@
 
     <TaskyState
       v-else-if="!shown.enabled"
+      class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
       :icon="LucidePhoneOff"
       :title="
         readOnly
@@ -97,7 +100,10 @@
           <div class="min-w-0 flex-1">
             <template v-if="shown.batch">
               <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <h3 :id="ids.batch" class="text-base-medium text-ink-gray-9">
+                <h3
+                  :id="ids.batch"
+                  class="text-base font-semibold text-ink-gray-9"
+                >
                   {{ shown.batch.slot }}
                 </h3>
                 <span
@@ -178,7 +184,10 @@
               </p>
             </template>
             <template v-else>
-              <h3 :id="ids.batch" class="text-base-medium text-ink-gray-9">
+              <h3
+                :id="ids.batch"
+                class="text-base font-semibold text-ink-gray-9"
+              >
                 {{ __("No batch right now") }}
               </h3>
               <p class="mt-1 text-p-sm text-ink-gray-7">
@@ -217,6 +226,7 @@
           >
             <Button
               class="w-full sm:w-auto"
+              size="md"
               :variant="shown.next_batch?.allowed ? 'solid' : 'subtle'"
               :label="__('Get next batch')"
               :disabled="!shown.next_batch?.allowed || nextBatch.loading"
@@ -252,7 +262,7 @@
       >
         <h3
           :id="ids.pending"
-          class="flex items-baseline justify-between border-b border-outline-gray-1 px-4 py-3 text-base-medium text-ink-gray-9"
+          class="flex items-baseline justify-between border-b border-outline-gray-2 px-4 py-3 text-base font-semibold text-ink-gray-9"
         >
           {{ __("To call") }}
           <span class="font-mono text-sm tabular-nums text-ink-gray-6">{{
@@ -267,19 +277,21 @@
           >
             <router-link
               :to="leadRoute(item)"
-              class="flex min-h-14 items-center gap-3 px-4 py-3 transition-colors hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-highlight"
+              class="flex min-h-[64px] items-center gap-3 px-4 py-3 transition-colors md:px-4 hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-highlight"
             >
               <span
                 class="w-6 shrink-0 font-mono text-sm tabular-nums text-ink-gray-6"
                 >{{ i + 1 }}</span
               >
-              <span class="flex min-w-0 flex-1 flex-col">
-                <span class="truncate text-base-medium text-ink-gray-9">{{
-                  queueName(item)
-                }}</span>
+              <PersonAvatar :name="queueName(item)" size="md" neutral />
+              <span class="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span
+                  class="truncate text-[13px] font-semibold text-ink-gray-9"
+                  >{{ queueName(item) }}</span
+                >
                 <span
                   v-if="queuePlace(item)"
-                  class="truncate text-sm text-ink-gray-6"
+                  class="truncate text-[12px] text-ink-gray-6"
                   >{{ queuePlace(item) }}</span
                 >
               </span>
@@ -308,7 +320,7 @@
         </ol>
         <div
           v-else
-          class="flex flex-col items-center gap-1 px-4 py-12 text-center"
+          class="flex flex-col items-center gap-1 px-5 py-14 text-center"
         >
           <LucideCheckCheck class="size-6 text-success" aria-hidden="true" />
           <p class="text-base-medium text-ink-gray-9">
@@ -332,7 +344,7 @@
         </div>
         <p
           v-if="shown.scheduled.length"
-          class="flex items-center gap-1.5 border-t border-outline-gray-1 px-4 py-3 text-p-sm text-ink-gray-7"
+          class="flex items-center gap-1.5 border-t border-outline-gray-2 px-5 py-3.5 text-p-sm text-ink-gray-7"
         >
           <LucideCalendarClock class="size-4 shrink-0" aria-hidden="true" />
           <span class="tabular-nums">
@@ -347,7 +359,7 @@
         </p>
         <p
           v-if="shown.overdue.length"
-          class="border-t border-outline-gray-1 px-4 py-3 text-p-sm text-ink-gray-7"
+          class="border-t border-outline-gray-2 px-5 py-3.5 text-p-sm text-ink-gray-7"
         >
           {{
             readOnly
@@ -366,11 +378,11 @@
     <section
       v-if="readOnly && shown?.enabled"
       :aria-labelledby="ids.called"
-      class="flex flex-col gap-2"
+      class="flex flex-col gap-3"
     >
       <h2
         :id="ids.called"
-        class="flex items-center gap-2 text-base-medium text-ink-gray-9"
+        class="flex items-center gap-2 text-base font-semibold text-ink-gray-9"
       >
         <LucidePhoneOutgoing
           class="size-4 text-ink-gray-6"
@@ -383,14 +395,14 @@
       </h2>
       <p
         v-if="!shown.called?.length"
-        class="rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-6 text-center text-p-sm text-ink-gray-6"
+        class="rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-14 text-center text-p-sm text-ink-gray-6"
       >
         {{ __("No calls made yet today.") }}
       </p>
       <ul
         v-else
         role="list"
-        class="divide-y divide-outline-gray-1 rounded-xl border border-outline-gray-2 bg-surface-base"
+        class="divide-y divide-outline-gray-1 overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
         :aria-label="__('Called today')"
       >
         <li
@@ -399,7 +411,9 @@
           class="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3"
         >
           <span class="min-w-0 flex-1">
-            <span class="block truncate text-base text-ink-gray-9">
+            <span
+              class="block truncate text-[13px] font-semibold text-ink-gray-9"
+            >
               {{ item.summary.lead_name || item.summary.name || item.lead }}
             </span>
             <span class="block truncate text-p-sm text-ink-gray-6">
@@ -432,6 +446,7 @@
 </template>
 
 <script setup lang="ts">
+import PersonAvatar from "@/components/PersonAvatar.vue";
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import { FILL, TRACK } from "@/components/tone";

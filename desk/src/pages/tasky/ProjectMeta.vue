@@ -3,20 +3,25 @@
     <ProjectNav :project-id="projectId">
       <template #actions>
         <Button
-          variant="ghost"
+          size="md"
           :label="__('Refresh')"
           :loading="connection.loading && !!connection.data"
           @click="connection.reload()"
         >
-          <template #icon><LucideRefreshCw class="size-4" /></template>
+          <template #icon
+            ><LucideRefreshCw class="size-[18px]" aria-hidden="true"
+          /></template>
         </Button>
       </template>
     </ProjectNav>
 
     <div class="relative flex-1 overflow-auto">
-      <div class="mx-auto w-full max-w-3xl px-4 py-5 md:px-6">
+      <div
+        class="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 pb-8 pt-4 md:px-8"
+      >
         <TaskyState
           v-if="connection.error && !connection.data"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
           error
           :icon="LucideCircleAlert"
           :title="__('Couldn\'t load the Meta connection')"
@@ -32,26 +37,28 @@
 
         <div
           v-else-if="!data"
-          class="h-40 animate-pulse rounded-xl bg-surface-gray-1"
+          class="h-40 animate-pulse rounded-xl bg-surface-gray-3"
           aria-busy="true"
         />
 
         <template v-else>
-          <h2 class="mb-1 text-lg-semibold text-ink-gray-9">
-            {{ __("Facebook and Instagram") }}
-          </h2>
-          <p class="mb-4 max-w-prose text-p-sm text-ink-gray-6">
-            {{
-              __(
-                "Connect the client's Facebook Page (and the Instagram account linked to it) to publish their approved posts straight from the content calendar. You must be an admin of the Page."
-              )
-            }}
-          </p>
+          <div>
+            <h2 class="mb-1 text-base font-semibold text-ink-gray-9">
+              {{ __("Facebook and Instagram") }}
+            </h2>
+            <p class="max-w-prose text-p-sm text-ink-gray-6">
+              {{
+                __(
+                  "Connect the client's Facebook Page (and the Instagram account linked to it) to publish their approved posts straight from the content calendar. You must be an admin of the Page."
+                )
+              }}
+            </p>
+          </div>
 
           <p
             v-if="flashError"
             role="alert"
-            class="mb-4 flex items-start gap-2 rounded-lg bg-danger-soft px-3 py-2 text-p-sm text-danger"
+            class="flex items-start gap-2 rounded-[10px] bg-danger-soft px-3 py-2 text-p-sm text-danger"
           >
             <LucideCircleAlert
               class="mt-0.5 size-4 shrink-0"
@@ -62,6 +69,7 @@
 
           <TaskyState
             v-if="!data.enabled"
+            class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
             :icon="LucidePlugZap"
             :title="__('Meta isn\'t set up yet')"
             :message="
@@ -98,12 +106,12 @@
             v-else-if="conn.status === 'Pending'"
             class="flex flex-col gap-3 rounded-xl border border-outline-gray-2 bg-surface-base p-4"
           >
-            <h3 class="text-base-medium text-ink-gray-9">
+            <h3 class="text-base font-semibold text-ink-gray-9">
               {{ __("Pick the Page to publish to") }}
             </h3>
             <div
               v-if="pages.loading"
-              class="h-16 animate-pulse rounded-lg bg-surface-gray-1"
+              class="h-16 animate-pulse rounded-[10px] bg-surface-gray-3"
               aria-busy="true"
             />
             <p
@@ -133,7 +141,7 @@
               <label
                 v-for="page in pages.data"
                 :key="page.id"
-                class="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border border-outline-gray-2 px-3 py-2 has-[:checked]:border-brand has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-highlight"
+                class="flex min-h-11 cursor-pointer items-center gap-3 rounded-[10px] border border-outline-gray-3 px-3 py-2 has-[:checked]:border-brand has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-highlight"
               >
                 <input
                   v-model="chosen"
@@ -189,7 +197,9 @@
                     : __('Needs attention')
                 "
               />
-              <span class="min-w-0 truncate text-base-medium text-ink-gray-9">
+              <span
+                class="min-w-0 truncate text-base font-semibold text-ink-gray-9"
+              >
                 {{ conn.facebook_page_name }}
               </span>
             </div>
