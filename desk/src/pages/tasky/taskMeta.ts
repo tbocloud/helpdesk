@@ -1,6 +1,7 @@
 import type { Tone } from "@/components/tone";
 import { __ } from "@/translation";
 import { dayjs, dayjsLocal } from "frappe-ui";
+import { overdueCutoff } from "@/composables/workDays";
 import type { Component } from "vue";
 import LucideCircle from "~icons/lucide/circle";
 import LucideCircleCheck from "~icons/lucide/circle-check";
@@ -186,7 +187,8 @@ export function holdByLabel(task: {
 
 // Due dates are date-only, so a task is overdue from the day after it's due, or as soon
 // as it has been worked longer than its estimate, whatever its due date and with none
-// (server: is_task_overdue).
+// (server: is_task_overdue). A due date on a day off counts as due the next working day
+// (overdueCutoff).
 // A task on hold is never overdue: its due date moves out when it resumes.
 export function isOverdue(
   task: {
@@ -199,7 +201,8 @@ export function isOverdue(
   now = dayjs()
 ) {
   if (isClosed(task) || isOnHold(task)) return false;
-  if (task.due_date && dayjs(task.due_date).isBefore(now, "day")) return true;
+  if (task.due_date && dayjs(task.due_date).isBefore(overdueCutoff(now), "day"))
+    return true;
   return isOverEstimate(task, now);
 }
 

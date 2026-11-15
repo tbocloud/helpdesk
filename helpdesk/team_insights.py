@@ -23,6 +23,7 @@ from helpdesk.ai_engine import call_haiku
 from helpdesk.api.work import SLA_RISK_HOURS, _assignees, can_see_overview, sla_due_soon
 from helpdesk.home_plan import clean_steps
 from helpdesk.tasky.permissions import departments_headed, is_tasky_admin
+from helpdesk.work_calendar import overdue_cutoff
 
 TREND_PERIODS = 8
 RISK_LIMIT = 5
@@ -282,7 +283,8 @@ def overdue_on(days: list, keep) -> dict:
     )
 
     def late_on(row, day) -> bool:
-        if getdate(row.exp_end_date) >= day:
+        # a due date on a day off is due the next working day
+        if getdate(row.exp_end_date) >= overdue_cutoff(day):
             return False
         if row.status != "Completed":
             return True
@@ -350,7 +352,7 @@ def slipped_milestones(scope, today) -> dict[str, int]:
         .where(
             (task.is_milestone == 1)
             & task.status.notin(CLOSED_TASK_STATUSES)
-            & ((task.slip_count > 0) | (task.exp_end_date < getdate(today)))
+            & ((task.slip_count > 0) | (task.exp_end_date < overdue_cutoff(today)))
         )
         .groupby(task.project)
     )

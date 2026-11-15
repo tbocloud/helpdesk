@@ -4272,6 +4272,38 @@ def add_company_holiday(holiday_date, description: str = "Company holiday (test)
     doc.save(ignore_permissions=True)
 
 
+def saved_due(day, content: bool = False):
+    """The due date a task saved with `day` gets: a day off moves to the next working day,
+    or for a content task to the working day before (work_calendar.due_on_working_day).
+    Tests whose dates count from today use it, so they pass on any day of the week."""
+    from helpdesk.work_calendar import due_on_working_day
+
+    moved = due_on_working_day(day, content=content)
+    return moved["due"] if moved else getdate(day)
+
+
+def get_day_off_activity(task: str) -> list[str]:
+    """The lines a task's activity got when its due date moved off a day off, oldest first."""
+    return frappe.get_all(
+        "Comment",
+        filters={
+            "reference_doctype": "Task",
+            "reference_name": task,
+            "comment_type": "Info",
+            "content": ("like", "Due date moved off%"),
+        },
+        order_by="creation asc",
+        pluck="content",
+    )
+
+
+def forget_request_cache():
+    """Clears what was read once for the request (frappe.local.request_cache), so the work
+    calendar's holidays and overdue cutoff are read again after a test changes them."""
+    if hasattr(frappe.local, "request_cache"):
+        frappe.local.request_cache.clear()
+
+
 def get_recurring_tasks_created(recurring_task: str) -> list[dict]:
     """The Tasks a recurring task created, oldest occurrence first."""
     return frappe.get_all(

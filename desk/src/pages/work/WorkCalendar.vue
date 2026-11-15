@@ -332,6 +332,7 @@ import { errorText } from "@/utils";
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import ViewTabs from "@/components/ViewTabs.vue";
 import { useScreenSize } from "@/composables/screen";
+import { overdueCutoff } from "@/composables/workDays";
 import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";
 import {
@@ -640,7 +641,6 @@ const emptyText = computed(() =>
 // --- events ---
 
 const events = computed(() => {
-  const today = dayjs().format("YYYY-MM-DD");
   const meetings = (data.value?.meetings ?? []).map((m) => {
     const start = dayjs(m.starts_on);
     const end = dayjs(m.ends_on);
@@ -660,7 +660,8 @@ const events = computed(() => {
   });
   const tasks = (data.value?.tasks ?? []).map((t) => {
     const type: Kind =
-      t.exp_end_date < today
+      // a due date on a day off is due the next working day
+      t.exp_end_date < overdueCutoff().format("YYYY-MM-DD")
         ? "overdue"
         : t.is_key || t.is_milestone
         ? "key"

@@ -58,6 +58,7 @@
             due-or-estimate
           />
         </div>
+        <DueDateNote :date="dueDate" />
         <p class="text-p-sm text-ink-gray-5">{{ dueHint }}</p>
       </div>
 
@@ -123,6 +124,7 @@ import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideInfo from "~icons/lucide/info";
 import LucideUserPlus from "~icons/lucide/user-plus";
 import { hasDueOrEstimate } from "../taskMeta";
+import DueDateNote from "@/components/DueDateNote.vue";
 import RequiredMark from "@/components/RequiredMark.vue";
 import EstimateInput from "./EstimateInput.vue";
 import TeammatePicker from "./TeammatePicker.vue";

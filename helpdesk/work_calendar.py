@@ -11,7 +11,9 @@ readers below are what the calendar, Home, capacity and the follow-ups use.
 """
 
 import frappe
+from frappe import _
 from frappe.utils import add_days, cint, getdate, nowdate
+from frappe.utils.caching import request_cache
 
 SATURDAY = 5
 RULES = {
@@ -122,6 +124,107 @@ def next_holiday(today=None) -> dict | None:
     today = getdate(today or nowdate())
     found = holidays_between(today, add_days(today, DAYS_AHEAD), weekly_off=False)
     return found[0] if found else None
+
+
+# --- days off and task due dates ---
+#
+# A task is never due on a day off and never goes overdue over one: a due date on a holiday,
+# a weekly off or a Saturday off moves to the next working day when it is saved (Task
+# validate), and overdue_cutoff forgives the days off since, so a task due on a day off
+# saved before (or a holiday added later) isn't overdue either (docs/workspace-pages.md,
+# "When a task is overdue").
+
+# a search over days off gives up after this many days (a list that marks every day off)
+MAX_DAYS_OFF = 60
+
+
+@request_cache
+def holidays_of_year(year: int) -> dict:
+    """{date: description} on the hub's holiday list in `year`, read once a request."""
+    return {
+        row["date"]: row["description"]
+        for row in holidays_between(f"{year}-01-01", f"{year}-12-31")
+    }
+
+
+@request_cache
+def _saturday_rule() -> set[int]:
+    return saturday_rule()
+
+
+def day_off_reason(day) -> str:
+    """Why `day` isn't worked, in words ("Onam", "a weekly off", "a Saturday off"); "" on a
+    working day. The holiday list, the weekly off and the Saturdays off of HD Work Settings."""
+    from helpdesk.task_estimates import weekly_off_days
+
+    day = getdate(day)
+    holidays = holidays_of_year(day.year)
+    if day in holidays:
+        name = holidays[day]
+        # the list's weekly-off and Saturday-off rows are named after the day itself
+        if name and MARK not in name and name.lower() != day.strftime("%A").lower():
+            return name
+    if day.weekday() in weekly_off_days():
+        return _("a weekly off")
+    if is_saturday_off(day, _saturday_rule()):
+        return _("a Saturday off")
+    return _("a holiday") if day in holidays else ""
+
+
+def next_working_day(day):
+    """`day` when it is worked, else the first working day after it."""
+    day = start = getdate(day)
+    for _i in range(MAX_DAYS_OFF):
+        if not day_off_reason(day):
+            return day
+        day = add_days(day, 1)
+    return start
+
+
+def previous_working_day(day):
+    """`day` when it is worked, else the last working day before it."""
+    day = start = getdate(day)
+    for _i in range(MAX_DAYS_OFF):
+        if not day_off_reason(day):
+            return day
+        day = add_days(day, -1)
+    return start
+
+
+@request_cache
+def overdue_cutoff(today=None):
+    """A task due before this date is overdue: today, or the first of the days off right
+    before it. On a Monday after a Sunday off it is the Sunday, so a task due that Sunday
+    counts as due Monday and isn't overdue yet. A plain date, so queries can use it."""
+    cutoff = getdate(today or nowdate())
+    for _i in range(MAX_DAYS_OFF):
+        before = add_days(cutoff, -1)
+        if not day_off_reason(before):
+            break
+        cutoff = before
+    return cutoff
+
+
+def due_on_working_day(due, content: bool = False) -> dict | None:
+    """Where a due date on a day off goes: {"due": the new date, "reason": why the day is off,
+    "was": the date picked}; None when it is a working day. A content task is due before its
+    post goes live, so it moves back to the working day before, unless that has passed
+    already (then it keeps its date; overdue_cutoff still forgives the day off)."""
+    if not due:
+        return None
+    due = getdate(due)
+    reason = day_off_reason(due)
+    if not reason:
+        return None
+    if content:
+        moved = previous_working_day(due)
+        if moved < getdate(nowdate()) or moved == due:
+            return None
+    else:
+        moved = next_working_day(due)
+        if moved == due:
+            return None
+    return {"due": moved, "reason": reason, "was": due}
 
 
 # --- leave (HD Leave, synced from the CRM site) ---

@@ -19,6 +19,7 @@ from frappe.utils import add_days, flt, formatdate, getdate
 from helpdesk import team_dashboard as td
 from helpdesk.recurrence import working_day_checker
 from helpdesk.utils import assigned_names_query
+from helpdesk.work_calendar import overdue_cutoff
 from helpdesk.work_reminders import notify_users
 
 BADGE = "HD Badge Award"
@@ -473,7 +474,8 @@ def task_gain(stats: dict, task: dict, period: str, today, user: str) -> dict | 
             "self_made": (task.get("assigned_by") or {}).get("user") == user,
         }
     )["weight"]
-    on_time = bool(due and due >= getdate(today))
+    # a due date on a day off is due the next working day
+    on_time = bool(due and getdate(due) >= overdue_cutoff(today))
     overdue = bool(due and not on_time and task["status"] in td.OPEN_STATUSES)
     after = dict(stats)
     after["tasks"] += 1

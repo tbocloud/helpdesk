@@ -131,6 +131,7 @@
           :label="__('Estimate')"
           due-or-estimate
         />
+        <DueDateNote :date="form.due_date" class="sm:col-span-2" />
         <p
           v-if="!hasDueOrEstimate(form.due_date, form.estimated_hours)"
           class="text-p-xs text-ink-gray-6 sm:col-span-2"
@@ -184,6 +185,7 @@
 
 <script setup lang="ts">
 import { errorText } from "@/utils";
+import DueDateNote from "@/components/DueDateNote.vue";
 import RequiredMark from "@/components/RequiredMark.vue";
 import EstimateInput from "@/pages/tasky/components/EstimateInput.vue";
 import TaskStatusBadge from "@/pages/tasky/components/TaskStatusBadge.vue";

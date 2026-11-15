@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
-from frappe.utils import add_days, add_to_date, now_datetime, nowdate
+from frappe.utils import add_days, add_to_date, getdate, now_datetime, nowdate
 
 from helpdesk.api.home import (
     _attention_groups,
@@ -105,7 +105,8 @@ class TestHome(FrappeTestCase):
             self.assertIn(key, systems)
 
     def test_your_day_has_only_my_own_work(self):
-        due_today = make_task(self.project, "Post the launch reel", nowdate()).name
+        due = make_task(self.project, "Post the launch reel", nowdate())
+        due_today = due.name
         make_assignment("Task", due_today, LEAD[0])
         later = make_task(self.project, "Plan next quarter", add_days(nowdate(), 30))
         make_assignment("Task", later.name, DEV[0])
@@ -124,7 +125,11 @@ class TestHome(FrappeTestCase):
         self.assertIn(mine, replies)
         self.assertNotIn(theirs, replies)
         lead_day = self.as_user(LEAD)["day"]
-        self.assertIn(due_today, [i["name"] for i in lead_day["close_first"]["items"]])
+        # on a day off nothing is due today: it's due the next working day, coming up
+        bucket = (
+            "close_first" if getdate(due.exp_end_date) == getdate() else "coming_up"
+        )
+        self.assertIn(due_today, [i["name"] for i in lead_day[bucket]["items"]])
 
     def test_approvals_wait_for_the_project_lead_only(self):
         frappe.db.set_value("Task", self.overdue, "status", "Pending Review")

@@ -94,6 +94,7 @@
             :description="dueNote"
             required
           />
+          <DueDateNote v-if="teamLoaded && people.length" :date="due" content />
           <p class="text-p-sm text-ink-gray-5">
             {{
               __(
@@ -132,6 +133,7 @@
 </template>
 
 <script setup lang="ts">
+import DueDateNote from "@/components/DueDateNote.vue";
 import { __ } from "@/translation";
 import {
   Button,
