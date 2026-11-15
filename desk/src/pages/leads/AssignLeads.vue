@@ -68,7 +68,9 @@
           :aria-label="__('Loading')"
         >
           <div class="h-24 animate-pulse rounded-xl bg-surface-gray-3" />
-          <div class="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_26rem]">
+          <div
+            class="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_24rem] 2xl:grid-cols-[1fr_26rem]"
+          >
             <div class="h-96 animate-pulse rounded-xl bg-surface-gray-3" />
             <div class="h-80 animate-pulse rounded-xl bg-surface-gray-3" />
           </div>
@@ -168,16 +170,25 @@
           </section>
 
           <div
-            class="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_26rem] lg:items-start"
+            class="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start 2xl:grid-cols-[minmax(0,1fr)_26rem]"
           >
             <!-- the people, and what each is handed -->
             <section
+              ref="peopleCard"
               class="min-w-0 overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
               :aria-labelledby="peopleHeading"
             >
               <div
                 class="flex flex-wrap items-center gap-3 border-b border-outline-gray-2 px-4 py-4"
               >
+                <!-- stacked, the list has no header row: pick-everyone sits here -->
+                <Checkbox
+                  v-if="!wide && canEdit && current.members.length"
+                  :model-value="allPicked"
+                  :indeterminate="!!picked.length && !allPicked"
+                  :aria-label="__('Pick everyone')"
+                  @update:model-value="pickAll(!!$event)"
+                />
                 <h2
                   :id="peopleHeading"
                   class="text-base font-semibold text-ink-gray-9 tabular-nums"
@@ -228,7 +239,8 @@
 
               <template v-else>
                 <div
-                  class="hidden h-11 items-center gap-3 border-b border-outline-gray-2 bg-surface-gray-1 px-4 text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6 md:grid"
+                  v-if="wide"
+                  class="grid h-11 items-center gap-3 border-b border-outline-gray-2 bg-surface-gray-1 px-4 text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6"
                   :class="rowColumns"
                 >
                   <span v-if="canEdit" class="flex">
@@ -253,9 +265,7 @@
                     class="grid items-start gap-x-3 gap-y-2 px-4 py-3"
                     :class="[
                       rowColumns,
-                      canEdit
-                        ? 'cursor-pointer grid-cols-[2rem_minmax(0,1fr)] hover:bg-surface-gray-1'
-                        : 'grid-cols-[minmax(0,1fr)]',
+                      canEdit && 'cursor-pointer hover:bg-surface-gray-1',
                       isPicked(member.user) &&
                         'bg-brand-soft hover:bg-brand-soft',
                     ]"
@@ -269,7 +279,10 @@
                         @update:model-value="toggle(member.user, !!$event)"
                       />
                     </span>
-                    <span class="flex min-w-0 items-center gap-2.5 md:pt-0.5">
+                    <span
+                      class="flex min-w-0 items-center gap-2.5"
+                      :class="wide && 'pt-0.5'"
+                    >
                       <PersonAvatar :name="member.full_name" size="md" />
                       <span
                         class="truncate text-[13px] font-semibold text-ink-gray-9"
@@ -279,7 +292,7 @@
                     </span>
                     <span
                       class="flex min-w-0 flex-col items-start gap-1"
-                      :class="canEdit && 'col-start-2 md:col-start-auto'"
+                      :class="canEdit && !wide && 'col-start-2'"
                     >
                       <span
                         class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium"
@@ -300,13 +313,19 @@
                     </span>
                     <!-- on a phone, today's calls and their leads share one line -->
                     <span
-                      class="flex items-start justify-between gap-3 md:contents"
-                      :class="canEdit && 'col-start-2'"
+                      :class="
+                        wide
+                          ? 'contents'
+                          : [
+                              'flex items-start justify-between gap-3',
+                              canEdit && 'col-start-2',
+                            ]
+                      "
                     >
                       <!-- their Today's calls, read-only -->
                       <button
                         type="button"
-                        class="flex flex-col items-start gap-1 justify-self-start rounded px-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+                        class="flex flex-col items-start gap-1 justify-self-start rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
                         :aria-label="
                           __(
                             'See today\'s calls of {0}: {1} of {2} called',
@@ -352,7 +371,8 @@
                       </button>
                       <button
                         type="button"
-                        class="shrink-0 rounded px-1 text-sm text-ink-gray-9 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight md:justify-self-end"
+                        class="shrink-0 rounded text-sm text-ink-gray-9 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+                        :class="wide && 'justify-self-end'"
                         :aria-label="
                           canEdit
                             ? __(
@@ -366,7 +386,7 @@
                         <span class="font-mono font-semibold tabular-nums">{{
                           member.leads.toLocaleString()
                         }}</span>
-                        <span class="ml-1 md:hidden">{{ __("leads") }}</span>
+                        <span v-if="!wide" class="ml-1">{{ __("leads") }}</span>
                       </button>
                     </span>
                   </li>
@@ -541,7 +561,11 @@ import PersonAvatar from "@/components/PersonAvatar.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
-import { useDocumentVisibility, useIntervalFn } from "@vueuse/core";
+import {
+  useDocumentVisibility,
+  useElementSize,
+  useIntervalFn,
+} from "@vueuse/core";
 import { Button, Checkbox, createResource, FormControl } from "frappe-ui";
 import { computed, ref, useId, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -630,10 +654,21 @@ const stuck = computed(() => (current.value ? poolStuck(current.value) : null));
 
 // a department's viewer sees the page but changes nothing; an older ERP site sends no can_edit
 const canEdit = computed(() => current.value?.can_edit !== false);
+// the list is a table only when its card has room for the columns (their minimums, the gaps and
+// the row padding add up to 648px): the card's width, not the
+// screen's, decides, so an open sidebar or the panel beside it never squeezes the columns
+const WIDE_LIST = 650;
+const peopleCard = ref<HTMLElement | null>(null);
+const { width: peopleWidth } = useElementSize(peopleCard);
+const wide = computed(() => peopleWidth.value >= WIDE_LIST);
 const rowColumns = computed(() =>
   canEdit.value
-    ? "md:grid-cols-[2rem_minmax(0,1fr)_minmax(0,16rem)_9rem_6rem]"
-    : "md:grid-cols-[minmax(0,1fr)_minmax(0,16rem)_9rem_6rem]"
+    ? wide.value
+      ? "grid-cols-[1.5rem_minmax(8.5rem,1fr)_minmax(0,12.5rem)_8rem_5rem]"
+      : "grid-cols-[1.5rem_minmax(0,1fr)]"
+    : wide.value
+    ? "grid-cols-[minmax(8.5rem,1fr)_minmax(0,12.5rem)_8rem_5rem]"
+    : "grid-cols-[minmax(0,1fr)]"
 );
 
 // live: today's calls and the leads move all day, so the page reads again every 15 seconds

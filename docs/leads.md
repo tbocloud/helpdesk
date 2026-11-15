@@ -442,8 +442,10 @@ or industry (*For PhoebiX*), then one line per slot (*Morning: Ernakulam 40*, *A
 20, Mixed 10*; `memberShares`, `sharesText`). Called today is a bar and *38 of 70 called*, or
 *Nothing handed out yet*; it opens the person's Today's calls. Leads they own opens their leads.
 A click on a row picks only that person; the tick box adds or drops one, for several at once. A
-legend under the list explains the three pills. On a phone each row stacks: the name, the plan,
-then today's calls and the leads on one line.
+legend under the list explains the three pills. The list is a table only while its card is at
+least 650 px wide (compact columns; the action panel is 24rem, 26rem on very wide screens) (measured with `useElementSize`, not the screen width, so an open sidebar or the
+panel beside it never squeezes the columns into each other); narrower, each row stacks: the name,
+the plan, then today's calls and the leads on one line, with pick-everyone in the card's header.
 
 **The action panel.** With nobody picked it says *Pick someone to start*. Otherwise its header
 names who (*Fidha V P*, with *Owns 452 leads · 100 calls a day*; or *3 people* and their names),
