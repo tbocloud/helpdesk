@@ -4,30 +4,31 @@
     :id="entry.call ? `call-${entry.call}` : undefined"
     class="flex min-w-0 scroll-mt-24 flex-col gap-2"
   >
-    <p class="flex flex-wrap items-center gap-x-2 gap-y-1">
+    <p
+      class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm text-ink-gray-6"
+    >
       <span class="sr-only">{{ __("Call") }}: </span>
       <span
         class="text-base-medium"
-        :class="missed ? 'text-danger' : 'text-ink-gray-9'"
-        >{{ title }}</span
+        :class="meta.missed ? 'text-danger' : 'text-ink-gray-9'"
+        >{{ meta.kind }}</span
       >
-      <span
-        v-if="!missed && entry.duration"
-        class="font-mono text-sm tabular-nums text-ink-gray-6"
-        :title="__('Talk time')"
-      >
-        <span class="sr-only">{{ __("Talk time") }}: </span
-        >{{ callLength(entry.duration) }}
-      </span>
+      <template v-if="meta.status">
+        <span aria-hidden="true">·</span>
+        <span :class="meta.missed ? 'text-danger' : ''">{{ meta.status }}</span>
+      </template>
+      <template v-if="meta.duration">
+        <span aria-hidden="true">·</span>
+        <span class="font-mono tabular-nums" :title="__('Talk time')">
+          <span class="sr-only">{{ __("Talk time") }}: </span
+          >{{ meta.duration }}
+        </span>
+      </template>
     </p>
 
-    <audio
+    <CallRecording
       v-if="entry.recording"
-      class="h-9 w-full max-w-md"
-      controls
-      preload="none"
-      :src="recordingUrl"
-      :aria-label="__('Recording of this call')"
+      :src="recordingUrl(entry.recording)"
     />
 
     <!-- an answered call: say where its recording is -->
@@ -116,7 +117,8 @@ import { computed } from "vue";
 import LucideAudioLines from "~icons/lucide/audio-lines";
 import LucideBot from "~icons/lucide/bot";
 import LucideChevronRight from "~icons/lucide/chevron-right";
-import { callLength, type LeadTimelineEntry } from "./leads";
+import CallRecording from "./CallRecording.vue";
+import { callMeta, recordingUrl, type LeadTimelineEntry } from "./leads";
 
 const props = defineProps<{ entry: LeadTimelineEntry }>();
 
@@ -127,30 +129,13 @@ const INTENT_LABELS: Record<string, string> = {
   None: __("None yet"),
 };
 
-// only an explicit missed status is a missed call; an unknown one stays neutral
-const missed = computed(() => props.entry.status === "missed");
-
-const title = computed(() => {
-  const incoming = props.entry.direction === "incoming";
-  if (props.entry.status === "voicemail") return __("Voicemail");
-  if (missed.value) return incoming ? __("Missed call") : __("Unanswered call");
-  if (!props.entry.direction) return __("Call");
-  return incoming ? __("Incoming call") : __("Outgoing call");
-});
+const meta = computed(() => callMeta(props.entry));
 
 // only an answered call has a recording to wait for or to miss; an older TBO Smart says nothing
 const recordingNote = computed(() => {
-  if (missed.value || props.entry.status === "voicemail") return "";
+  if (meta.value.missed || meta.value.voicemail) return "";
   if (props.entry.recording_state === "pending")
     return __("Recording is being saved…");
   return props.entry.recording_state === "none" ? __("Not recorded") : "";
 });
-
-// the hub streams it from the ERP site, which checks the person may read the lead
-const recordingUrl = computed(
-  () =>
-    `/api/method/helpdesk.api.leads.call_recording?call=${encodeURIComponent(
-      props.entry.recording || ""
-    )}`
-);
 </script>

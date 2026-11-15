@@ -624,7 +624,7 @@ import {
   type LeadStage,
   type LeadTimelineEntry,
 } from "./leads";
-import { placeCall, placing } from "./callBox";
+import { box, leadTouched, placeCall, placing } from "./callBox";
 import { queueChanged, startCall } from "./pendingCalls";
 
 const { goBack, fallbackHref } = useGoBack({ name: "Leads" });
@@ -675,6 +675,10 @@ const batchItem = computed(() =>
 );
 watch(queueChanged, () => {
   if (batchItem.value) router.replace({ query: {} });
+});
+// the call box learned something about this lead (a call over, a number added, a result)
+watch(leadTouched, () => {
+  if (box.call?.lead === props.leadId) detail.reload();
 });
 
 /** After a merge the lead that was kept is the one to see (the merged one is gone). */

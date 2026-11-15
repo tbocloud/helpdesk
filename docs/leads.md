@@ -298,15 +298,44 @@ on the person's phone**; the box only shows where the call is and holds the note
 browser audio or softphone: CallerDesk's WebRTC needs per-agent credentials and a VPN we don't
 have.
 
+**Layout (modelled on a dialler card, and on Frappe CRM's call popup).** From the top: the
+**header** (status in plain words, the timer, mute-ring while it connects, **Minimise**, **Close**
+once allowed), the **contact block** (initial, lead name, company, the lead's stage, **Calling
+for: <product>** with the intro line when there is one, the number being called with its label and
+person), the **hang-up line**, the **result** (or a note while the call is on), the **Numbers**
+list, **This lead's recent calls** and **Open the lead**. On a computer the box can be dragged by
+its header and stays where it was put on that device (`call-box-position`); on a phone it is a
+sheet at the bottom. **Esc** minimises. The minimised pill shows the lead, the status and the
+timer.
+
 What it says, in order: *Calling your phone…* → *Pick up your phone* → *Ringing <lead>* →
-*On call 0:32* (a timer) → *Call ended · 2m 10s* or *Not answered*; a refusal shows CallerDesk's
-reason with **Try again**. It shows the lead's name, company, the number dialled, **Calling for:
-<product>** with the intro line when there is one, **Open the lead**, and a **Note for this
-call**. The note is not saved on its own: it opens as the note of the result sheet. **Minimise**
-turns the box into a small pill with the timer. It can be closed only once the call has a result;
-the sheet (`CallResultSheet`, the existing "How did the call go?") opens by itself when the call
-ends, and **Record the result** opens it again. Without the sheet's result the *You have N calls
-without a result* banner still catches the call.
+*On call* (the timer runs in the header) → *Call ended · 2m 10s* or *Not answered*; a refusal
+shows CallerDesk's reason with **Try again**. In every state up to *On call* a visible line says
+**To end the call, hang up on your phone.**
+
+**The result is recorded in the box.** When the call ends (or **Stop waiting**, or **Record the
+result** after 45 seconds without live updates) the box shows the six answers (*Contacted*, *Not
+Responding*, *Busy*, *Follow-up Required*, *Not Interested*, *Wrong Number*) and the note typed
+during the call. *Follow-up Required* asks when (1 hour, 2 hours, tomorrow 10:00, or **Or pick a day
+and time**), *Not Interested* asks why, and *Not a real call?* (*I didn't call*, *Tapped by
+mistake*) takes the call off the list. The same six answers (`CallOutcomeChoices.vue`) and the same
+saving (`answerCall`, `record_call_outcome` or `log_call`) are used by the separate **How did the
+call go?** sheet (`CallResultSheet`), which remains for calls dialled from the phone's own dialler
+and for the *You have N calls without a result* banner. The stage follows the answer, as before (the flow never asked for a stage). The box can be closed once the result is in.
+
+**After the result.** *Saved: <answer>* with **Next call: <lead>** when the call came from Today's
+calls (the box reads the queue again and opens the next lead's page, ready to call; it says so when
+none is left) and **Close**.
+
+**Numbers.** The box reads the lead when it opens (`get_lead`) and always lists its usable numbers
+(Active or Not reachable) with label and person, the one being called marked, and **Add number**
+(the existing dialog; also for a lead with one number). One tap on **Call** calls that number. While
+a call is still on the box first says *This call is still on. Hang up on your phone first.* and asks
+to confirm; it never ends a call itself. An answered call must have its result before another
+number is called. When the call didn't connect the list says *Not reached? Try another number.*
+
+**This lead's recent calls** (collapsed): the last three calls from the lead's timeline with status,
+talk time, when, and **Play recording** (the file loads only when tapped).
 
 **Live status.** The ERP site keeps the call's live state on its TBO Call (from CallerDesk's
 **Live Call** events and the final Call Report: TBO Smart's `telephony-callerdesk.md` §3.1). The
@@ -318,32 +347,25 @@ call ending) then *Call ended*; after 45 seconds it already offers **Record the 
 after 3 minutes without any sign of the call it stops asking and says *Can't see this call any
 more*. MyOperator calls only ever go from *Calling your phone…* to *Call ended*.
 
-**Ending a call, and another number.** CallerDesk's documented API has **no hang-up call** (its
-Postman collection, read 2026-11-14, only reports a `hangup_cause`), so the box does not fake an
-*End call* button. While the call is on (*Calling your phone…* to *On call*) it says **Hang up on
-your phone to end the call**. **Stop waiting** (shown from *Calling your phone…* on, not while the
-call is being placed) is for a phone that never rang or a call dialled by mistake: it stops the
-ring sound and the asking, says *Stopped waiting* and opens the result sheet at once, whose
-*Not a real call?* choices (*I didn't call*, *Tapped by mistake*) take the call off the list. A
-hang-up API is a question for CallerDesk (tbo_smart `telephony-callerdesk.md` §1.3).
-When the call didn't connect (*Not answered* or busy, *Can't see this call any more*, *Stopped
-waiting*, or CallerDesk refused it) and the lead has other usable numbers (Active or Not
-reachable; Wrong number and Old are left out; the dialled one too), the box shows **Try another
-number**: one button each with the number, its label and the person. Tapping one places the call
-at once to that number (the lead page passes the lead's numbers; every other Call makes the box read
-them from the lead when it needs them), and the result names the number dialled. On the lead page,
-**Call** dials the main number at once; with two or more usable numbers an arrow beside it opens a
-menu of them (`Lead.vue`).
+**Ending a call.** CallerDesk's documented API has **no hang-up call** (its Postman collection,
+read 2026-11-14, only reports a `hangup_cause`), so the box does not fake an *End call*, *Mute* or
+*Hold* button (Frappe CRM's Exotel popup, a provider that also rings the agent's phone first, has
+none either). **Stop waiting** (from *Calling your phone…* on, not while the call is being placed)
+is for a phone that never rang or a call dialled by mistake: it stops the ring sound and the asking
+and asks for the result. A hang-up API is a question for CallerDesk (tbo_smart
+`telephony-callerdesk.md` §1.3). **Browser phone (later):** if CallerDesk gives SIP/WSS
+credentials, a mode with **End call**, **Mute** and **Keypad** goes into the box's controls row (the
+row that holds *Try again*, *Stop waiting* and *Record the result* today); nothing for it ships now.
 
 **Recordings.** The ended box, once the report is in and the call was answered, says **Recording
 is being saved…** and then **Recording saved.** with **Listen on the lead**, which opens the lead
 scrolled to that call (`#call-<name>`). It asks again every 4 seconds, up to 8 times, until the
 ERP site says the recording is saved (`get_call_status` brings `recording_state`). On the lead's
-Activity every call shows its status, talk time and an audio player; an answered call whose
+Activity every call reads like *Outgoing call · Answered · 0:02* with an audio player; an answered call whose
 recording is still being downloaded says *Recording is being saved…* (up to an hour after the
 call), one without a recording says *Not recorded* (`recording_state` of the timeline entry:
 saved, pending or none; an older TBO Smart sends none and nothing extra shows). Managers listen on
-the lead; there is no hub list of TBO calls with recordings (`call-logs` is Helpdesk's own
+the lead; a recording that can't be played (a file error or zero length) says *Recording not available* instead of a dead player; there is no hub list of TBO calls with recordings (`call-logs` is Helpdesk's own
 telephony log, not these calls). If the box loses the call, it asks the ERP site once to look the
 call up at CallerDesk (`helpdesk.api.leads.refresh_call`, TBO Smart's `refresh_call`); a call
 found ends the wait with its result, and TBO Smart also reconciles every 10 minutes

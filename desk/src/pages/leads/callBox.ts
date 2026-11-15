@@ -4,10 +4,24 @@
 import { prepareRing, startRing, stopRing } from "@/composables/ringTone";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
-import { call } from "frappe-ui";
-import { computed, reactive, watch } from "vue";
-import { isUsable, type LeadNumber } from "./leads";
-import { askFor, askNote, pendingCalls, startCall } from "./pendingCalls";
+import { call, toast } from "frappe-ui";
+import { router } from "@/router";
+import { computed, reactive, ref, watch } from "vue";
+import type { CallOutcome, MyCalls, QueueCall } from "./callBatches";
+import {
+  isUsable,
+  type LeadDetail,
+  type LeadNumber,
+  type LeadTimelineEntry,
+} from "./leads";
+import {
+  answerCall,
+  dismissCall,
+  loadPendingCalls,
+  pendingCalls,
+  startCall,
+  type PendingCall,
+} from "./pendingCalls";
 
 /** The lead and number a Call action passes, and what the box says about the lead. */
 export interface BoxCall {
@@ -22,8 +36,16 @@ export interface BoxCall {
   item?: string | null;
   product?: string | null;
   intro?: string | null;
-  /** the lead's numbers, when the caller has them (else the box asks when they are needed) */
+  /** the lead's numbers, when the caller has them (the box reads them from the lead anyway) */
   numbers?: LeadNumber[];
+}
+
+/** The next lead of Today's calls, offered once a result is recorded. */
+export interface NextCall {
+  lead: string;
+  item: string;
+  name: string;
+  place: string;
 }
 
 export type CallPhase =
@@ -59,6 +81,7 @@ export const RECORD_AFTER_MS = 45_000;
 /** after the report, the recording takes a moment: ask again this often, this many times */
 const RECORDING_POLL_MS = 4000;
 const RECORDING_POLLS = 8;
+const RECENT_CALLS = 3;
 
 export const box = reactive({
   open: false,
@@ -77,7 +100,22 @@ export const box = reactive({
   callName: "",
   recording: "" as "" | "saved" | "pending" | "none",
   numbers: undefined as LeadNumber[] | undefined,
+  /** read from the lead: its stage and its last calls */
+  stage: "",
+  recent: [] as LeadTimelineEntry[],
+  /** what the person did about the finished call: a result, or took it off the list */
+  recorded: "" as "" | "result" | "dismissed",
+  outcome: "" as CallOutcome | "",
+  /** the person asked for the result before the call was seen to end */
+  resultAsked: false,
+  saving: false,
+  /** the next call of Today's calls: undefined while asking, null when there is none */
+  next: undefined as NextCall | null | undefined,
 });
+
+/** Bumped when the box learns something the lead page may not know (a call over, a number
+ * added, a result), so an open lead page reads the lead again. */
+export const leadTouched = ref(0);
 
 let timer: ReturnType<typeof setTimeout> | undefined;
 let failures = 0;
@@ -98,30 +136,49 @@ export const resultPending = computed(
   () => !!box.call && pendingCalls.value.some((c) => c.lead === box.call?.lead)
 );
 
-/** A call in progress can't be closed, only minimised; once it is over, only after the result. */
+/** A call in progress can't be closed, only minimised; once it is over, only after the result
+ * (or after the call was taken off the list). */
 export const canClose = computed(
   () =>
     !box.call ||
     box.phase === "refused" ||
+    !!box.recorded ||
     (isOver(box.phase) && !resultPending.value)
 );
 
-/** The lead's other usable numbers, for "Try another number" (the dialled one left out). */
-export const otherNumbers = computed(() => {
-  const dialled = digits(box.number);
-  return (box.numbers ?? []).filter(
-    (n) => isUsable(n) && !!dialled && digits(n.number) !== dialled
-  );
-});
+/** The lead's usable numbers (Active or Not reachable; Wrong number and Old are left out). */
+export const usableNumbers = computed(() =>
+  (box.numbers ?? []).filter(isUsable)
+);
 
-/** Where "Try another number" is offered: the call didn't connect. */
-export const canTryAnother = computed(
+/** The number being called, among the lead's (how a number typed with +91 meets the one dialled). */
+export function isDialled(n: LeadNumber) {
+  const dialled = digits(box.number);
+  return !!dialled && digits(n.number) === dialled;
+}
+
+/** The call didn't connect: the box suggests another number. */
+export const notConnected = computed(
   () =>
-    otherNumbers.value.length > 0 &&
-    (box.phase === "refused" ||
-      box.phase === "timeout" ||
-      box.phase === "stopped" ||
-      (box.phase === "ended" && box.answered === false))
+    box.phase === "refused" ||
+    box.phase === "timeout" ||
+    box.phase === "stopped" ||
+    (box.phase === "ended" && box.answered === false)
+);
+
+/** The result is asked for here, inside the box. */
+export const awaitingResult = computed(
+  () =>
+    (isOver(box.phase) || box.resultAsked) &&
+    !box.recorded &&
+    resultPending.value
+);
+
+/** A call that was answered can't be replaced by another before its result is recorded. */
+export const canDialAnother = computed(
+  () =>
+    box.phase !== "placing" &&
+    !(box.phase === "ended" && box.answered && awaitingResult.value)
 );
 
 /** The last 10 digits: how a number typed with +91 or a 0 meets the one the ERP site dialled. */
@@ -156,7 +213,15 @@ export function placeCall(next: BoxCall, another = false) {
     callName: "",
     recording: "",
     numbers: next.numbers,
+    stage: "",
+    recent: [],
+    recorded: "",
+    outcome: "",
+    resultAsked: false,
+    saving: false,
+    next: undefined,
   });
+  loadLead();
   call("helpdesk.api.leads.click_to_call", {
     name: next.lead,
     number: next.number,
@@ -245,7 +310,11 @@ function apply(status: CallStatus) {
     box.recording = status.recording_state || "";
     const first = box.phase !== "ended";
     box.phase = "ended";
-    if (first) recordResult();
+    if (first) {
+      // the result is asked for in the box: bring it back if it was tucked away
+      box.minimised = false;
+      loadLead(true);
+    }
     if (box.answered && box.recording === "pending") watchRecording(session, 0);
     return;
   }
@@ -268,6 +337,7 @@ function watchRecording(mine: number, tries: number) {
       );
       if (mine !== session) return;
       box.recording = status.recording_state || "";
+      if (box.recording === "saved") loadLead(true);
       if (box.recording !== "pending") return;
     } catch {
       // a later try, or the lead's own timeline, shows it
@@ -282,33 +352,130 @@ function rank(phase: string) {
   );
 }
 
-/** Opens the "How did it go?" sheet, with what was typed during the call already in it. */
-export function recordResult() {
-  if (!box.call) return;
-  askNote.value = box.note;
-  askFor.value = box.call.lead;
+/** "Record the result": the call is over but the box didn't see it end. It keeps asking. */
+export function askResult() {
+  box.resultAsked = true;
 }
 
 /** "Stop waiting": the person never picked up their phone, or dialled by mistake. The box
- * stops asking and ringing, and the result sheet opens (it can also say "Tapped by mistake"). */
+ * stops asking and ringing and asks for the result (it can also say "Tapped by mistake"). */
 export function stopWaiting() {
   if (!isWaiting(box.phase)) return;
   session++;
   clearTimeout(timer);
   box.phase = "stopped";
-  recordResult();
 }
 
-/** The lead's numbers, read when "Try another number" needs them and the caller had none. */
-async function loadNumbers() {
+/** The lead's numbers, stage and last calls, read when the box opens and again when they may
+ * have changed. The box works without them. */
+export async function loadLead(touch = false) {
   const lead = box.call?.lead;
-  if (!lead || box.numbers) return;
+  if (!lead) return;
   try {
-    const detail = await call("helpdesk.api.leads.get_lead", { name: lead });
-    if (box.call?.lead === lead) box.numbers = detail?.lead?.numbers ?? [];
+    const detail: LeadDetail = await call("helpdesk.api.leads.get_lead", {
+      name: lead,
+    });
+    if (box.call?.lead !== lead) return;
+    box.numbers = detail?.lead?.numbers ?? box.numbers ?? [];
+    box.stage = (detail?.lead?.tbo_stage as string) || "";
+    box.recent = (detail?.timeline ?? [])
+      .filter((e) => e.kind === "call")
+      .sort((a, b) => (b.at || "").localeCompare(a.at || ""))
+      .slice(0, RECENT_CALLS);
+    box.call.company ||= detail?.lead?.company_name;
+    box.call.product ||= detail?.lead?.product;
+    if (touch) leadTouched.value++;
   } catch {
-    box.numbers = [];
+    box.numbers ??= [];
   }
+}
+
+/** The result, recorded from the box: the ERP site takes it as the person's answer. */
+export async function saveResult(value: {
+  outcome: CallOutcome;
+  note: string;
+  callback_at: string | null;
+}) {
+  const pending = pendingFor();
+  if (!pending || box.saving) return;
+  box.saving = true;
+  try {
+    await answerCall(pending, value);
+    toast.success(__("Saved"));
+    box.outcome = value.outcome;
+    finished("result");
+  } catch (e) {
+    toast.error(errorText(e, __("Couldn't save the result. Try again.")));
+  } finally {
+    box.saving = false;
+  }
+}
+
+/** "Not a real call": it leaves the list without a result. */
+export async function dismissResult(reason: string) {
+  const lead = box.call?.lead;
+  if (!lead || box.saving) return;
+  box.saving = true;
+  try {
+    await dismissCall(lead, reason);
+    finished("dismissed");
+  } catch (e) {
+    toast.error(errorText(e, __("Couldn't remove it. Try again.")));
+  } finally {
+    box.saving = false;
+  }
+}
+
+/** The call waiting for its result: the one the server remembers for this lead. */
+function pendingFor(): PendingCall | null {
+  const lead = box.call?.lead;
+  return pendingCalls.value.find((c) => c.lead === lead) ?? null;
+}
+
+function finished(how: "result" | "dismissed") {
+  box.recorded = how;
+  loadPendingCalls();
+  loadLead(true);
+  if (box.call?.item && how === "result") loadNext();
+  else box.next = null;
+}
+
+/** The next lead of Today's calls, once this one has its result. */
+async function loadNext() {
+  const lead = box.call?.lead;
+  box.next = undefined;
+  try {
+    const mine: MyCalls = await call("helpdesk.api.call_batches.get_my_calls");
+    if (box.call?.lead !== lead) return;
+    const found: QueueCall | undefined = [
+      ...(mine?.pending ?? []),
+      ...(mine?.overdue ?? []),
+    ].find((c) => c.lead !== lead);
+    box.next = found
+      ? {
+          lead: found.lead,
+          item: found.item,
+          name: found.summary.lead_name || found.summary.name || found.lead,
+          place: [found.summary.company_name, found.summary.district]
+            .filter(Boolean)
+            .join(" · "),
+        }
+      : null;
+  } catch {
+    box.next = null;
+  }
+}
+
+/** "Next call": the next lead's page, ready to call. */
+export function goToNext() {
+  const next = box.next;
+  if (!next || !canClose.value) return;
+  closeBox();
+  router.push({
+    name: "Lead",
+    params: { leadId: next.lead },
+    query: { item: next.item },
+  });
 }
 
 export function minimise(value = true) {
@@ -322,20 +489,6 @@ export function closeBox() {
   box.open = false;
   box.call = null;
 }
-
-// the numbers are read only when a call didn't connect
-watch(
-  () => [box.phase, box.answered] as const,
-  ([phase, answered]) => {
-    if (
-      phase === "refused" ||
-      phase === "timeout" ||
-      phase === "stopped" ||
-      (phase === "ended" && answered === false)
-    )
-      loadNumbers();
-  }
-);
 
 // the ring goes on while the phones ring, and stops the moment the call is picked, over or refused
 watch(
