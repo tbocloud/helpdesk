@@ -497,6 +497,9 @@ export interface LeadDetail {
   documents?: DocumentChain | null;
   /** stage names, or stages, this lead may move to */
   allowed_stages: (string | LeadStage)[];
+  /** the ERP site is away: the hub's saved copy, read only, as of `copied_at` */
+  from_copy?: boolean;
+  copied_at?: string;
 }
 
 /** Fetched once per session and shared by the list, the dialog and the lead. */

@@ -17,6 +17,12 @@
 
     <div class="relative flex-1 overflow-auto">
       <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
+        <LeadCopyNotice
+          v-if="data?.from_copy"
+          :copied-at="data.copied_at"
+          :loading="detail.loading"
+          @retry="detail.reload()"
+        />
         <!-- who this is, what to do about it, and where it stands -->
         <header
           v-if="lead"
@@ -59,7 +65,7 @@
               </Button>
               <!-- for a call made outside MyOperator; only once the ERP site can log it -->
               <Button
-                v-if="options?.can_log_call"
+                v-if="options?.can_log_call && !data?.from_copy"
                 size="md"
                 :label="__('Log call')"
                 @click="showLogCall = true"
@@ -68,7 +74,12 @@
                   <LucidePhoneForwarded class="size-4" aria-hidden="true" />
                 </template>
               </Button>
-              <Button size="md" :label="__('Edit')" @click="showEdit = true">
+              <Button
+                v-if="!data?.from_copy"
+                size="md"
+                :label="__('Edit')"
+                @click="showEdit = true"
+              >
                 <template #prefix>
                   <LucidePencil class="size-4" aria-hidden="true" />
                 </template>
@@ -593,6 +604,7 @@ import LucidePencil from "~icons/lucide/pencil";
 import LeadAISuggests from "./LeadAISuggests.vue";
 import LeadNumbers from "./LeadNumbers.vue";
 import LeadCallEntry from "./LeadCallEntry.vue";
+import LeadCopyNotice from "./LeadCopyNotice.vue";
 import LucideScrollText from "~icons/lucide/scroll-text";
 import LeadFormDialog from "./LeadFormDialog.vue";
 import LeadPhotos from "./LeadPhotos.vue";
