@@ -8,7 +8,7 @@
     <li
       v-for="i in 6"
       :key="i"
-      class="h-[62px] animate-pulse rounded-lg bg-surface-gray-2"
+      class="h-[78px] animate-pulse rounded-xl bg-surface-gray-3"
     />
   </ul>
   <TaskyState

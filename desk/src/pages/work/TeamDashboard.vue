@@ -1,29 +1,29 @@
 <template>
   <div class="flex h-full flex-col">
-    <LayoutHeader>
-      <template #left-header>
-        <div class="text-lg-medium text-ink-gray-9">{{ __("Scoreboard") }}</div>
-      </template>
+    <LayoutHeader
+      :title="__('Scoreboard')"
+      :subtitle="__('Who finished what, on time, and who is champion.')"
+    >
       <template #right-header>
         <Button
-          variant="ghost"
+          size="md"
           :loading="dashboard.loading"
           :aria-label="__('Refresh')"
           @click="dashboard.reload()"
         >
           <template #icon>
-            <LucideRefreshCw class="size-4" aria-hidden="true" />
+            <LucideRefreshCw class="size-[18px]" aria-hidden="true" />
           </template>
         </Button>
       </template>
     </LayoutHeader>
 
     <div class="relative flex-1 overflow-auto">
-      <div class="mx-auto w-full max-w-7xl px-4 py-5 md:px-6">
-        <p class="text-p-sm text-ink-gray-6">
+      <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
+        <p class="-mb-2 text-p-sm text-ink-gray-6">
           {{
             __(
-              "Who finished what, on time, and who is champion. Each task counts by its weight and how well it was done, by its due date; hours count only a little."
+              "Each task counts by its weight and how well it was done, by its due date; hours count only a little."
             )
           }}
           <button
@@ -43,12 +43,11 @@
 
         <!-- period and department: everything below follows them -->
         <div
-          class="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between"
+          class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between"
         >
-          <TabButtons
+          <ViewTabs
             v-model="period"
-            class="hidden self-start sm:block"
-            size="md"
+            class="hidden self-start sm:inline-flex"
             :aria-label="__('Period')"
             :options="PERIODS.map((p) => ({ label: p.label, value: p.key }))"
           />
@@ -64,6 +63,7 @@
             v-model="department"
             class="md:w-56"
             type="select"
+            size="md"
             :aria-label="__('Department')"
             :options="departmentOptions"
           />
@@ -71,7 +71,7 @@
         <!-- which period: step back and forth, or pick a month; every month starts fresh on the 1st -->
         <div
           v-if="data"
-          class="mt-3 flex flex-wrap items-center gap-x-2 gap-y-2"
+          class="-mt-2 flex flex-wrap items-center gap-x-2 gap-y-2"
           role="group"
           :aria-label="__('Choose the period')"
         >
@@ -119,7 +119,7 @@
             :options="monthOptions(data.period.earliest, today)"
           />
         </div>
-        <p v-if="data" class="mt-2 text-p-sm tabular-nums text-ink-gray-5">
+        <p v-if="data" class="-mt-4 text-p-sm tabular-nums text-ink-gray-6">
           {{ rangeText(data.period.start, data.period.end) }} ·
           {{
             __(
@@ -130,27 +130,31 @@
           }}
         </p>
 
-        <TaskyState
+        <div
           v-if="dashboard.error && !data"
-          class="mt-6"
-          :icon="LucideCircleAlert"
-          :title="__('Couldn\'t load the scoreboard')"
-          :message="
-            errorText(
-              dashboard.error,
-              __('Check your connection and try again.')
-            )
-          "
-          error
+          class="rounded-xl border border-outline-gray-2 bg-surface-base"
         >
-          <Button :label="__('Retry')" @click="dashboard.reload()" />
-          <Button
-            v-if="department"
-            variant="ghost"
-            :label="__('Show the whole team')"
-            @click="department = ''"
-          />
-        </TaskyState>
+          <TaskyState
+            class="py-10"
+            :icon="LucideCircleAlert"
+            :title="__('Couldn\'t load the scoreboard')"
+            :message="
+              errorText(
+                dashboard.error,
+                __('Check your connection and try again.')
+              )
+            "
+            error
+          >
+            <Button :label="__('Retry')" @click="dashboard.reload()" />
+            <Button
+              v-if="department"
+              variant="ghost"
+              :label="__('Show the whole team')"
+              @click="department = ''"
+            />
+          </TaskyState>
+        </div>
 
         <div
           v-else
@@ -160,9 +164,9 @@
         >
           <!-- champion and the headline numbers -->
           <div
-            class="mt-5 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]"
+            class="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]"
           >
-            <div class="flex min-w-0 flex-col gap-3">
+            <div class="flex min-w-0 flex-col gap-4">
               <ChampionCard
                 :title="championTitle"
                 :period="periodName"
@@ -210,8 +214,7 @@
               </NativeButton>
             </div>
             <div
-              class="grid grid-cols-2 gap-3"
-              :class="showPosts ? 'xl:grid-cols-3' : ''"
+              class="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4"
             >
               <StatTile
                 :label="__('Tasks finished')"
@@ -261,16 +264,13 @@
           </div>
 
           <div
-            class="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]"
+            class="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]"
           >
             <!-- the list: departments, people or projects -->
             <div class="flex min-w-0 flex-col gap-4">
-              <div
-                class="-mx-1 max-w-full self-start overflow-x-auto px-1 pb-1"
-              >
-                <TabButtons
+              <div class="max-w-full self-start overflow-x-auto">
+                <ViewTabs
                   v-model="view"
-                  size="md"
                   :aria-label="__('Show')"
                   :options="
                     VIEWS.map((v) => ({ label: v.label, value: v.key }))
@@ -285,7 +285,7 @@
               />
               <div
                 v-if="!data"
-                class="h-64 animate-pulse rounded-lg bg-surface-gray-2"
+                class="h-64 animate-pulse rounded-xl bg-surface-gray-3"
               />
               <TeamDepartmentList
                 v-else-if="view === 'departments'"
@@ -326,7 +326,7 @@
                 :can-refresh="data.access.can_refresh"
               />
               <SectionCard v-if="data?.trend" :title="__('Tasks finished')">
-                <div class="px-3 py-3">
+                <div class="p-4">
                   <TeamTrendChart :trend="data.trend" />
                 </div>
               </SectionCard>
@@ -349,7 +349,7 @@
                   <li
                     v-for="row in data.history"
                     :key="`${row.period_type}-${row.start}`"
-                    class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-2.5 last:border-b-0"
+                    class="flex items-center gap-3 border-b border-outline-gray-1 px-5 py-3 last:border-b-0"
                   >
                     <Avatar
                       :label="row.name"
@@ -385,18 +385,12 @@
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import SectionCard from "@/components/SectionCard.vue";
 import StatTile from "@/components/StatTile.vue";
+import ViewTabs from "@/components/ViewTabs.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import { onTimeTone, pctText } from "@/pages/performance/performanceMeta";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
-import {
-  Avatar,
-  Button,
-  createResource,
-  dayjs,
-  FormControl,
-  TabButtons,
-} from "frappe-ui";
+import { Avatar, Button, createResource, dayjs, FormControl } from "frappe-ui";
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";

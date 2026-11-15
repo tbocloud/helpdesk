@@ -3,21 +3,24 @@
     <ProjectNav :project-id="projectId">
       <template #actions>
         <Button
-          variant="ghost"
+          size="md"
           :label="__('Refresh')"
           :loading="credentials.loading && !!credentials.data"
           @click="credentials.reload()"
         >
-          <template #icon><LucideRefreshCw class="size-4" /></template>
+          <template #icon
+            ><LucideRefreshCw class="size-[18px]" aria-hidden="true"
+          /></template>
         </Button>
       </template>
     </ProjectNav>
 
     <div class="relative flex-1 overflow-auto">
-      <div class="mx-auto w-full max-w-5xl px-4 py-5 md:px-6">
+      <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
         <p class="sr-only" aria-live="polite">{{ announcement }}</p>
         <TaskyState
           v-if="credentials.error && !credentials.data"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
           error
           :icon="LucideCircleAlert"
           :title="__('Couldn\'t load the credentials')"
@@ -31,17 +34,17 @@
           <Button :label="__('Retry')" @click="credentials.reload()" />
         </TaskyState>
 
-        <div v-else-if="!data" class="flex flex-col gap-3" aria-busy="true">
+        <div v-else-if="!data" class="flex flex-col gap-4" aria-busy="true">
           <div
             v-for="i in 2"
             :key="i"
-            class="h-28 animate-pulse rounded-xl bg-surface-gray-1"
+            class="h-28 animate-pulse rounded-xl bg-surface-gray-3"
           />
         </div>
 
         <template v-else>
-          <div class="mb-4 flex flex-wrap items-center gap-2">
-            <h2 class="text-lg-semibold text-ink-gray-9">
+          <div class="flex flex-wrap items-center gap-2">
+            <h2 class="text-base font-semibold text-ink-gray-9">
               {{ __("Client credentials") }}
             </h2>
             <TaskyBadge
@@ -52,6 +55,7 @@
             <div v-if="!closed" class="ml-auto flex flex-wrap gap-2">
               <Button
                 v-if="received.length"
+                size="md"
                 theme="red"
                 :label="__('Hand back & close')"
                 @click="showHandBack = true"
@@ -62,18 +66,19 @@
               </Button>
               <Button
                 variant="solid"
+                size="md"
                 :label="__('Add credentials')"
                 @click="openForm(null)"
               >
                 <template #prefix>
-                  <LucidePlus class="size-4" aria-hidden="true" />
+                  <LucidePlus class="size-[18px]" aria-hidden="true" />
                 </template>
               </Button>
             </div>
           </div>
 
           <p
-            class="mb-4 flex items-start gap-2 text-p-sm text-ink-gray-6"
+            class="-mt-2 flex items-start gap-2 text-p-sm text-ink-gray-6"
             role="note"
           >
             <LucideShieldCheck
@@ -89,6 +94,7 @@
 
           <TaskyState
             v-if="!data.handovers.length"
+            class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
             :icon="LucideKeyRound"
             :title="__('No credentials yet')"
             :message="
@@ -112,13 +118,13 @@
               class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
             >
               <div
-                class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-outline-gray-1 px-4 py-3"
+                class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-outline-gray-2 px-4 py-3"
               >
                 <TaskyBadge
                   :label="__(h.direction)"
                   :icon="h.direction === RETURNED ? LucideUndo2 : LucideInbox"
                 />
-                <span class="text-sm text-ink-gray-7">
+                <span class="text-[13px] text-ink-gray-7">
                   <template v-if="h.direction === RETURNED">
                     {{
                       __(
@@ -155,7 +161,7 @@
               </div>
               <p
                 v-if="h.close_reason"
-                class="border-b border-outline-gray-1 px-4 py-2 text-p-sm text-ink-gray-7"
+                class="border-b border-outline-gray-1 px-5 py-3 text-p-sm text-ink-gray-7"
               >
                 {{ __("Closed because: {0}", h.close_reason) }}
               </p>
@@ -166,7 +172,7 @@
                   class="flex flex-col gap-2 border-b border-outline-gray-1 px-4 py-3 last:border-b-0 md:flex-row md:items-center md:gap-4"
                 >
                   <div class="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span class="text-base-medium text-ink-gray-9">{{
+                    <span class="text-[13px] font-semibold text-ink-gray-9">{{
                       item.platform
                     }}</span>
                     <a
@@ -234,7 +240,7 @@
               </ul>
               <p
                 v-if="h.remarks"
-                class="border-t border-outline-gray-1 px-4 py-2 text-p-sm text-ink-gray-7"
+                class="border-t border-outline-gray-1 px-5 py-3 text-p-sm text-ink-gray-7"
               >
                 {{ h.remarks }}
               </p>

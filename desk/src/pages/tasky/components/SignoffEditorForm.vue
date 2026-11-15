@@ -18,8 +18,8 @@
       aria-busy="true"
       :aria-label="__('Loading')"
     >
-      <div class="h-96 animate-pulse rounded-xl bg-surface-gray-1" />
-      <div class="h-96 animate-pulse rounded-xl bg-surface-gray-1" />
+      <div class="h-96 animate-pulse rounded-xl bg-surface-gray-3" />
+      <div class="h-96 animate-pulse rounded-xl bg-surface-gray-3" />
     </div>
 
     <div
@@ -42,7 +42,9 @@
       novalidate
       @submit.prevent="askToSend"
     >
-      <div class="flex min-w-0 flex-col gap-6">
+      <div
+        class="flex min-w-0 flex-col gap-6 rounded-xl border border-outline-gray-2 bg-surface-base p-4"
+      >
         <SignoffFields :f="f" tall />
         <SignoffDetails :f="f" />
 
@@ -50,7 +52,10 @@
           class="flex flex-col gap-2"
           :aria-labelledby="`${id}-questions`"
         >
-          <h3 :id="`${id}-questions`" class="text-base-medium text-ink-gray-9">
+          <h3
+            :id="`${id}-questions`"
+            class="text-base font-semibold text-ink-gray-9"
+          >
             {{ f.isUat ? __("Tests") : __("Questions") }}
           </h3>
           <p v-if="f.fromPlan && !f.editing" class="text-p-sm text-ink-gray-6">

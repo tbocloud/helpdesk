@@ -45,6 +45,7 @@
       <div class="ml-auto flex flex-wrap gap-2">
         <Button
           variant="outline"
+          size="md"
           :label="__('Download data (CSV)')"
           :disabled="!data"
           @click="data && downloadCsv(data)"
@@ -55,6 +56,7 @@
         </Button>
         <Button
           variant="solid"
+          size="md"
           :label="__('Download as slides (PDF)')"
           :disabled="!data"
           @click="printSlides"
@@ -68,6 +70,7 @@
 
     <TaskyState
       v-if="period === 'custom' && !customReady"
+      class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
       :icon="LucideCalendarRange"
       :title="__('Pick both dates')"
       :message="__('Choose a from and a to date to see that period.')"
@@ -75,6 +78,7 @@
 
     <TaskyState
       v-else-if="page.error && !data"
+      class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
       error
       :icon="LucideCircleAlert"
       :title="__('Couldn\'t load the Business overview')"
@@ -87,6 +91,7 @@
 
     <TaskyState
       v-else-if="page.data && !page.data.available"
+      class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
       :icon="LucideCircleAlert"
       :title="__('The ERP site can\'t show this yet')"
       :message="
@@ -103,16 +108,16 @@
       aria-busy="true"
       :aria-label="__('Loading')"
     >
-      <div class="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
+      <div class="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-4">
         <div
           v-for="i in 7"
           :key="i"
-          class="h-[88px] animate-pulse rounded-xl bg-surface-gray-2"
+          class="h-[130px] animate-pulse rounded-xl bg-surface-gray-3"
         />
       </div>
       <div class="grid gap-5 lg:grid-cols-2">
-        <div class="h-72 animate-pulse rounded-xl bg-surface-gray-2" />
-        <div class="h-72 animate-pulse rounded-xl bg-surface-gray-2" />
+        <div class="h-72 animate-pulse rounded-xl bg-surface-gray-3" />
+        <div class="h-72 animate-pulse rounded-xl bg-surface-gray-3" />
       </div>
     </div>
 
@@ -145,13 +150,12 @@
       </p>
 
       <section
-        class="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7"
+        class="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-4"
         :aria-label="__('Headline numbers')"
       >
         <StatTile
           v-for="kpi in kpis"
           :key="kpi.key"
-          compact
           :label="kpi.label"
           :value="kpi.value"
           :sub="kpi.sub"
@@ -162,14 +166,17 @@
       <div class="grid gap-5 lg:grid-cols-2">
         <section class="panel" :aria-labelledby="ids.revenue">
           <header class="panel-head">
-            <h2 :id="ids.revenue" class="text-base-medium text-ink-gray-9">
+            <h2
+              :id="ids.revenue"
+              class="text-base font-semibold text-ink-gray-9"
+            >
               {{ __("Revenue by month") }}
             </h2>
             <span class="text-xs text-ink-gray-6">{{
               __("Invoiced and collected, {0}", rangeText(data))
             }}</span>
           </header>
-          <div class="p-4">
+          <div class="p-5">
             <BusinessBars
               :labels="revenue.labels"
               :series="revenue.series"
@@ -181,44 +188,53 @@
 
         <section class="panel" :aria-labelledby="ids.funnel">
           <header class="panel-head">
-            <h2 :id="ids.funnel" class="text-base-medium text-ink-gray-9">
+            <h2
+              :id="ids.funnel"
+              class="text-base font-semibold text-ink-gray-9"
+            >
               {{ __("Funnel") }}
             </h2>
             <span class="text-xs text-ink-gray-6">{{
               __("Of {0} new leads in the period", String(data.new_leads))
             }}</span>
           </header>
-          <p v-if="!data.new_leads" class="px-4 py-4 text-p-sm text-ink-gray-6">
+          <p v-if="!data.new_leads" class="px-4 py-3 text-p-sm text-ink-gray-6">
             {{ __("No new leads in this period.") }}
           </p>
-          <div v-else class="p-4">
+          <div v-else class="p-5">
             <BusinessRows :rows="funnel" :max="data.new_leads" />
           </div>
         </section>
 
         <section class="panel" :aria-labelledby="ids.stages">
           <header class="panel-head">
-            <h2 :id="ids.stages" class="text-base-medium text-ink-gray-9">
+            <h2
+              :id="ids.stages"
+              class="text-base font-semibold text-ink-gray-9"
+            >
               {{ __("Pipeline by stage") }}
             </h2>
             <span class="text-xs text-ink-gray-6">{{
               __("Open clients now, with quoted value")
             }}</span>
           </header>
-          <p v-if="!stages.length" class="px-4 py-4 text-p-sm text-ink-gray-6">
+          <p v-if="!stages.length" class="px-4 py-3 text-p-sm text-ink-gray-6">
             {{ __("No open clients.") }}
           </p>
-          <div v-else class="p-4"><BusinessRows :rows="stages" /></div>
+          <div v-else class="p-5"><BusinessRows :rows="stages" /></div>
         </section>
 
         <section class="panel" :aria-labelledby="ids.proposals">
           <header class="panel-head">
-            <h2 :id="ids.proposals" class="text-base-medium text-ink-gray-9">
+            <h2
+              :id="ids.proposals"
+              class="text-base font-semibold text-ink-gray-9"
+            >
               {{ __("Proposals and onboarding") }}
             </h2>
             <span class="text-xs text-ink-gray-6">{{ rangeText(data) }}</span>
           </header>
-          <dl class="grid grid-cols-2 gap-x-4 gap-y-3 p-4 sm:grid-cols-3">
+          <dl class="grid grid-cols-2 gap-x-4 gap-y-3 p-5 sm:grid-cols-3">
             <div v-for="fact in facts" :key="fact.label" class="min-w-0">
               <dt class="text-xs text-ink-gray-6">{{ fact.label }}</dt>
               <dd
@@ -236,11 +252,14 @@
 
         <section class="panel" :aria-labelledby="ids.trendLeads">
           <header class="panel-head">
-            <h2 :id="ids.trendLeads" class="text-base-medium text-ink-gray-9">
+            <h2
+              :id="ids.trendLeads"
+              class="text-base font-semibold text-ink-gray-9"
+            >
               {{ __("Last 6 months: leads and wins") }}
             </h2>
           </header>
-          <div class="p-4">
+          <div class="p-5">
             <BusinessBars
               :labels="trend.labels"
               :series="trend.people"
@@ -252,11 +271,14 @@
 
         <section class="panel" :aria-labelledby="ids.trendMoney">
           <header class="panel-head">
-            <h2 :id="ids.trendMoney" class="text-base-medium text-ink-gray-9">
+            <h2
+              :id="ids.trendMoney"
+              class="text-base font-semibold text-ink-gray-9"
+            >
               {{ __("Last 6 months: invoiced and collected") }}
             </h2>
           </header>
-          <div class="p-4">
+          <div class="p-5">
             <BusinessBars
               :labels="trend.labels"
               :series="trend.money"
@@ -268,15 +290,18 @@
 
         <section class="panel" :aria-labelledby="ids.clients">
           <header class="panel-head">
-            <h2 :id="ids.clients" class="text-base-medium text-ink-gray-9">
+            <h2
+              :id="ids.clients"
+              class="text-base font-semibold text-ink-gray-9"
+            >
               {{ __("Top clients by invoiced value") }}
             </h2>
             <span class="text-xs text-ink-gray-6">{{ rangeText(data) }}</span>
           </header>
-          <p v-if="!clients.length" class="px-4 py-4 text-p-sm text-ink-gray-6">
+          <p v-if="!clients.length" class="px-4 py-3 text-p-sm text-ink-gray-6">
             {{ __("Nothing invoiced in this period.") }}
           </p>
-          <div v-else class="p-4"><BusinessRows :rows="clients" /></div>
+          <div v-else class="p-5"><BusinessRows :rows="clients" /></div>
         </section>
 
         <section
@@ -285,14 +310,17 @@
           :aria-labelledby="ids.profit"
         >
           <header class="panel-head">
-            <h2 :id="ids.profit" class="text-base-medium text-ink-gray-9">
+            <h2
+              :id="ids.profit"
+              class="text-base font-semibold text-ink-gray-9"
+            >
               {{ __("Profit") }}
             </h2>
             <span class="text-xs text-ink-gray-6">{{
               __("Income minus expense, {0}", rangeText(data))
             }}</span>
           </header>
-          <dl class="grid grid-cols-3 gap-4 p-4">
+          <dl class="grid grid-cols-3 gap-4 p-5">
             <div v-for="item in profit" :key="item.label">
               <dt class="text-xs text-ink-gray-6">{{ item.label }}</dt>
               <dd
@@ -310,11 +338,14 @@
           :aria-labelledby="ids.profit"
         >
           <header class="panel-head">
-            <h2 :id="ids.profit" class="text-base-medium text-ink-gray-9">
+            <h2
+              :id="ids.profit"
+              class="text-base font-semibold text-ink-gray-9"
+            >
               {{ __("Profit") }}
             </h2>
           </header>
-          <p class="px-4 py-4 text-p-sm text-ink-gray-6">
+          <p class="px-4 py-3 text-p-sm text-ink-gray-6">
             {{ data.profit.reason }}
           </p>
         </section>
@@ -322,7 +353,10 @@
 
       <section class="panel" :aria-labelledby="ids.departments">
         <header class="panel-head">
-          <h2 :id="ids.departments" class="text-base-medium text-ink-gray-9">
+          <h2
+            :id="ids.departments"
+            class="text-base font-semibold text-ink-gray-9"
+          >
             {{ __("By department") }}
           </h2>
           <span class="text-xs text-ink-gray-6">{{
@@ -333,22 +367,24 @@
         </header>
         <p
           v-if="!data.by_department.length"
-          class="px-4 py-4 text-p-sm text-ink-gray-6"
+          class="px-4 py-3 text-p-sm text-ink-gray-6"
         >
           {{ __("Nothing to split by department yet.") }}
         </p>
         <div v-else class="overflow-x-auto">
-          <table class="w-full min-w-[40rem] text-sm">
+          <table class="w-full min-w-[40rem] text-[13px]">
             <thead>
-              <tr class="text-left text-xs text-ink-gray-6">
-                <th scope="col" class="px-4 py-2 font-normal">
+              <tr
+                class="h-11 border-b border-outline-gray-2 bg-surface-gray-1 text-left text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6"
+              >
+                <th scope="col" class="pl-4 pr-3 md:pl-4">
                   {{ __("Department") }}
                 </th>
                 <th
                   v-for="col in DEPARTMENT_COLUMNS"
                   :key="col.label"
                   scope="col"
-                  class="px-3 py-2 text-right font-normal"
+                  class="px-3 text-right last:pr-4 md:last:pr-5"
                 >
                   {{ col.label }}
                 </th>
@@ -358,18 +394,18 @@
               <tr
                 v-for="row in data.by_department"
                 :key="row.label"
-                class="border-t border-outline-gray-1"
+                class="border-b border-outline-gray-1 last:border-b-0 hover:bg-surface-gray-1"
               >
                 <th
                   scope="row"
-                  class="max-w-[14rem] truncate px-4 py-2 text-left font-normal text-ink-gray-9"
+                  class="max-w-[14rem] truncate py-3 pl-4 pr-3 text-left font-medium text-ink-gray-9 md:pl-4"
                 >
                   {{ row.label }}
                 </th>
                 <td
                   v-for="col in DEPARTMENT_COLUMNS"
                   :key="col.label"
-                  class="px-3 py-2 text-right font-mono tabular-nums text-ink-gray-9"
+                  class="px-3 py-3 text-right font-mono tabular-nums text-ink-gray-9 last:pr-4 md:last:pr-5"
                 >
                   {{ col.cell(row, data.currency) }}
                 </td>
@@ -651,6 +687,6 @@ function printSlides() {
   @apply min-w-0 overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base;
 }
 .panel-head {
-  @apply flex flex-wrap items-baseline justify-between gap-2 border-b border-outline-gray-1 px-4 py-3;
+  @apply flex flex-wrap items-baseline justify-between gap-2 border-b border-outline-gray-2 px-4 py-3;
 }
 </style>

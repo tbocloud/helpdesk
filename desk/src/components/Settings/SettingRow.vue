@@ -3,7 +3,11 @@
     class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-6"
   >
     <div class="flex min-w-0 flex-col gap-1">
-      <label :id="labelId" :for="id" class="text-base-medium text-ink-gray-8">
+      <label
+        :id="labelId"
+        :for="id"
+        class="text-base font-medium text-ink-gray-9"
+      >
         {{ label }}
       </label>
       <p v-if="description" class="max-w-prose text-p-sm text-ink-gray-6">

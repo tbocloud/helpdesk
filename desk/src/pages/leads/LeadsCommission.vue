@@ -8,6 +8,7 @@
       <FormControl
         v-model="month"
         type="select"
+        size="md"
         class="w-full sm:w-56"
         :label="__('Month')"
         :options="monthOptions"
@@ -15,6 +16,7 @@
       <div v-if="data?.can_manage" class="ml-auto flex flex-wrap gap-2">
         <Button
           variant="solid"
+          size="md"
           :label="__('Generate drafts')"
           :loading="generating"
           @click="generate"
@@ -28,6 +30,7 @@
 
     <TaskyState
       v-if="page.error && !data"
+      class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
       error
       :icon="LucideCircleAlert"
       :title="__('Couldn\'t load the commission')"
@@ -40,6 +43,7 @@
 
     <TaskyState
       v-else-if="page.data && !page.data.available"
+      class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
       :icon="LucideCloudOff"
       :title="__('Commission isn\'t available yet')"
       :message="__('The ERP site needs the latest TBO Smart.')"
@@ -47,18 +51,18 @@
 
     <div
       v-else-if="!data"
-      class="flex flex-col gap-3"
+      class="flex flex-col gap-5"
       aria-busy="true"
       :aria-label="__('Loading')"
     >
-      <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div class="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4">
         <div
           v-for="i in 4"
           :key="i"
-          class="h-[72px] animate-pulse rounded-xl bg-surface-gray-2"
+          class="h-[130px] animate-pulse rounded-xl bg-surface-gray-3"
         />
       </div>
-      <div class="h-56 animate-pulse rounded-xl bg-surface-gray-2" />
+      <div class="h-56 animate-pulse rounded-xl bg-surface-gray-3" />
     </div>
 
     <template v-else>
@@ -90,22 +94,23 @@
       </p>
 
       <section
-        class="grid grid-cols-2 gap-3 md:grid-cols-4"
+        class="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4"
         :aria-label="__('Totals')"
       >
         <StatTile
-          compact
           :label="mine ? __('My collected') : __('Collected')"
+          :icon="LucideWallet"
+          icon-tone="brand"
           :value="fullAmount(data.totals.collected, data.currency)"
         />
         <StatTile
-          compact
           :label="mine ? __('My commission') : __('Commission')"
+          :icon="LucideCoins"
+          icon-tone="brand"
           :value="fullAmount(data.totals.commission, data.currency)"
         />
         <StatTile
           v-if="mine && data.rows[0]"
-          compact
           :label="__('Target reached')"
           :value="
             data.rows[0].target > 0 ? `${data.rows[0].achievement}%` : '–'
@@ -114,13 +119,11 @@
         />
         <StatTile
           v-else
-          compact
           :label="__('People')"
           :value="String(data.rows.length)"
         />
         <StatTile
           v-if="data.unattributed"
-          compact
           :label="__('Unattributed')"
           :value="fullAmount(data.unattributed.amount, data.currency)"
           :sub="__('{0} payments', String(data.unattributed.count))"
@@ -129,6 +132,7 @@
 
       <TaskyState
         v-if="!data.rows.length"
+        class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
         :icon="LucideCoins"
         :title="
           mine
@@ -138,7 +142,7 @@
         :message="emptyMessage"
       />
 
-      <ul v-else role="list" class="flex flex-col gap-3">
+      <ul v-else role="list" class="flex flex-col gap-4">
         <li
           v-for="person in data.rows"
           :key="person.user"
@@ -158,11 +162,13 @@
                   class="size-4 shrink-0 text-ink-gray-5"
                   aria-hidden="true"
                 />
-                <span class="truncate text-base-medium text-ink-gray-9">{{
-                  person.full_name
-                }}</span>
+                <PersonAvatar :name="person.full_name" size="md" />
+                <span
+                  class="truncate text-[14px] font-semibold text-ink-gray-9"
+                  >{{ person.full_name }}</span
+                >
               </span>
-              <span class="ps-[22px] text-p-xs text-ink-gray-6">
+              <span class="ps-[56px] text-[12px] text-ink-gray-6">
                 {{
                   person.plans.length
                     ? person.plans.join(", ")
@@ -257,7 +263,7 @@
           <div
             v-if="isOpen(person)"
             :id="`${uid}-${person.user}`"
-            class="flex flex-col gap-4 border-t border-outline-gray-1 bg-surface-gray-1 px-4 py-4"
+            class="flex flex-col gap-4 border-t border-outline-gray-2 bg-surface-gray-1 px-4 py-3"
           >
             <p v-if="person.frozen" class="text-p-xs text-ink-gray-6">
               {{
@@ -269,7 +275,7 @@
             </p>
 
             <section :aria-label="__('Projects')">
-              <h3 class="mb-1.5 text-sm text-ink-gray-7">
+              <h3 class="mb-1.5 text-[13px] font-semibold text-ink-gray-8">
                 {{ __("Projects") }}
               </h3>
               <div class="overflow-x-auto">
@@ -318,7 +324,7 @@
             </section>
 
             <section v-if="person.breakdown.length" :aria-label="__('Slabs')">
-              <h3 class="mb-1.5 text-sm text-ink-gray-7">
+              <h3 class="mb-1.5 text-[13px] font-semibold text-ink-gray-8">
                 {{ __("Slab breakdown") }}
               </h3>
               <div class="overflow-x-auto">
@@ -375,7 +381,7 @@
             </section>
 
             <section :aria-label="__('Payments')">
-              <h3 class="mb-1.5 text-sm text-ink-gray-7">
+              <h3 class="mb-1.5 text-[13px] font-semibold text-ink-gray-8">
                 {{ __("Payments") }}
               </h3>
               <CommissionPayments
@@ -389,7 +395,7 @@
 
       <section
         v-if="data.unattributed"
-        class="rounded-xl border border-outline-gray-2 bg-surface-base"
+        class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
         :aria-labelledby="`${uid}-unattributed`"
       >
         <header
@@ -397,7 +403,7 @@
         >
           <h2
             :id="`${uid}-unattributed`"
-            class="text-base-medium text-ink-gray-9"
+            class="text-base font-semibold text-ink-gray-9"
           >
             {{ __("Unattributed") }}
           </h2>
@@ -406,7 +412,7 @@
           }}</span>
         </header>
         <div
-          class="flex flex-col gap-3 border-t border-outline-gray-1 px-4 py-3"
+          class="flex flex-col gap-3 border-t border-outline-gray-2 px-4 py-3"
         >
           <p class="max-w-prose text-p-sm text-ink-gray-6">
             {{
@@ -451,6 +457,7 @@
 </template>
 
 <script setup lang="ts">
+import PersonAvatar from "@/components/PersonAvatar.vue";
 import StatTile from "@/components/StatTile.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";

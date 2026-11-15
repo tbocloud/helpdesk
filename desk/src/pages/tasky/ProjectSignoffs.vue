@@ -3,20 +3,23 @@
     <ProjectNav :project-id="projectId">
       <template #actions>
         <Button
-          variant="ghost"
+          size="md"
           :label="__('Refresh')"
           :loading="signoffs.loading && !!signoffs.data"
           @click="signoffs.reload()"
         >
-          <template #icon><LucideRefreshCw class="size-4" /></template>
+          <template #icon
+            ><LucideRefreshCw class="size-[18px]" aria-hidden="true"
+          /></template>
         </Button>
       </template>
     </ProjectNav>
 
     <div class="relative flex-1 overflow-auto">
-      <div class="mx-auto w-full max-w-5xl px-4 py-5 md:px-6">
+      <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
         <TaskyState
           v-if="signoffs.error && !signoffs.data"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
           error
           :icon="LucideCircleAlert"
           :title="__('Couldn\'t load the sign-offs')"
@@ -26,7 +29,7 @@
         </TaskyState>
 
         <template v-else>
-          <div class="mb-4 flex flex-wrap items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2">
             <h2 class="text-lg-semibold text-ink-gray-9">
               {{ __("Sign-offs") }}
             </h2>
@@ -56,10 +59,9 @@
           <!-- roll-up: every sign-off, training and UAT -->
           <div
             v-if="!data || data.signoffs.length"
-            class="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3"
+            class="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4"
           >
             <StatTile
-              compact
               :label="__('Signed off')"
               :value="
                 data
@@ -81,7 +83,6 @@
               :loading="!data"
             />
             <StatTile
-              compact
               :label="__('Needs clarification')"
               :value="followUpCount"
               :sub="
@@ -94,7 +95,6 @@
               :loading="!data"
             />
             <StatTile
-              compact
               :label="__('With the customer')"
               :value="withCustomerCount"
               :sub="__('Sent and not signed off yet')"
@@ -106,12 +106,12 @@
           <!-- what holds up each sign-off not signed yet, in words -->
           <section
             v-if="waiting.length"
-            class="mb-4 rounded-lg border border-outline-gray-2 bg-surface-base"
+            class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
             :aria-labelledby="waitingHeading"
           >
             <h3
               :id="waitingHeading"
-              class="border-b border-outline-gray-1 px-4 py-2 text-sm font-medium text-ink-gray-8"
+              class="border-b border-outline-gray-2 px-4 py-3 text-base font-semibold text-ink-gray-9"
             >
               {{ __("Waiting on") }}
             </h3>
@@ -126,7 +126,7 @@
                     name: 'TaskySignoff',
                     params: { projectId, signoffId: w.name },
                   }"
-                  class="flex min-h-[44px] flex-wrap items-center gap-x-2 gap-y-0.5 px-4 py-2 text-sm hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-highlight"
+                  class="flex min-h-[44px] flex-wrap items-center gap-x-2 gap-y-0.5 px-5 py-3 text-[13px] hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-highlight"
                 >
                   <component
                     :is="w.onUs ? LucideCircleHelp : LucideClock"
@@ -143,14 +143,14 @@
 
           <div
             v-if="data?.completion_letter"
-            class="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-outline-gray-2 bg-surface-base px-4 py-3"
+            class="flex flex-wrap items-center gap-3 rounded-xl border border-outline-gray-2 bg-surface-base p-4"
           >
             <LucideBadgeCheck
               class="size-5 shrink-0 text-success"
               aria-hidden="true"
             />
             <div class="min-w-0 flex-1">
-              <p class="text-base-medium text-ink-gray-9">
+              <p class="text-base font-semibold text-ink-gray-9">
                 {{ __("All training signed off") }}
               </p>
               <p class="text-p-sm text-ink-gray-6">
@@ -165,7 +165,7 @@
               :href="data.completion_letter.file_url"
               target="_blank"
               rel="noopener"
-              class="inline-flex h-8 items-center gap-1.5 rounded-md border border-outline-gray-2 bg-surface-base px-3 text-sm font-medium text-ink-gray-8 hover:bg-surface-gray-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+              class="inline-flex h-10 items-center gap-1.5 rounded-[10px] border border-outline-gray-3 bg-surface-base px-3.5 text-[13px] font-medium text-ink-gray-8 hover:bg-surface-gray-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
             >
               <LucideDownload class="size-4" aria-hidden="true" />
               {{ __("Completion letter") }}
@@ -182,22 +182,23 @@
             <div
               v-for="i in 3"
               :key="i"
-              class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-4 last:border-b-0"
+              class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-3 last:border-b-0"
             >
               <div class="flex flex-1 flex-col gap-2">
                 <div
-                  class="h-3.5 w-1/3 animate-pulse rounded bg-surface-gray-2"
+                  class="h-3.5 w-1/3 animate-pulse rounded bg-surface-gray-3"
                 />
                 <div
-                  class="h-3 w-1/2 animate-pulse rounded bg-surface-gray-2"
+                  class="h-3 w-1/2 animate-pulse rounded bg-surface-gray-3"
                 />
               </div>
-              <div class="h-2 w-24 animate-pulse rounded bg-surface-gray-2" />
+              <div class="h-2 w-24 animate-pulse rounded bg-surface-gray-3" />
             </div>
           </div>
 
           <TaskyState
             v-else-if="!data.signoffs.length"
+            class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
             :icon="LucideClipboardCheck"
             :title="__('No sign-offs yet')"
             :message="
@@ -223,28 +224,20 @@
           </TaskyState>
 
           <template v-else>
-            <div class="-mx-1 mb-3 min-w-0 overflow-x-auto px-1">
-              <TabButtons
+            <div class="max-w-full overflow-x-auto">
+              <ViewTabs
                 :model-value="statusFilter"
-                size="md"
                 :aria-label="__('Filter sign-offs by status')"
                 :aria-controls="listId"
                 :options="
                   STATUS_TABS.map((t) => ({
                     label: t === 'All' ? __('All') : __(t),
                     value: t,
+                    count: countFor(t),
                   }))
                 "
                 @update:model-value="(v: string) => (statusFilter = v)"
-              >
-                <template #suffix="{ button, checked }">
-                  <span
-                    class="font-mono text-xs tabular-nums"
-                    :class="checked ? '' : 'text-ink-gray-5'"
-                    >{{ countFor(button.modelValue) }}</span
-                  >
-                </template>
-              </TabButtons>
+              />
             </div>
 
             <div
@@ -253,7 +246,7 @@
             >
               <!-- the columns of TBO's Sign-off requirements; on a phone each row stacks -->
               <div
-                class="hidden border-b border-outline-gray-2 px-4 py-2 text-xs text-ink-gray-5 md:grid md:grid-cols-[minmax(0,1.6fr)_minmax(0,1.2fr)_8.5rem_6.5rem_6.5rem] md:gap-4"
+                class="hidden h-11 items-center border-b border-outline-gray-2 bg-surface-gray-1 px-5 text-left text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6 md:grid md:grid-cols-[minmax(0,1.6fr)_minmax(0,1.2fr)_8.5rem_6.5rem_6.5rem] md:gap-4"
                 aria-hidden="true"
               >
                 <span>{{ __("Sign-off · template") }}</span>
@@ -264,7 +257,7 @@
               </div>
               <p
                 v-if="!shown.length"
-                class="px-4 py-6 text-center text-p-sm text-ink-gray-6"
+                class="px-5 py-6 text-center text-p-sm text-ink-gray-6"
               >
                 {{
                   __("No sign-offs are {0}.", __(statusFilter).toLowerCase())
@@ -281,12 +274,12 @@
                       name: 'TaskySignoff',
                       params: { projectId, signoffId: s.name },
                     }"
-                    class="flex flex-col gap-1.5 px-4 py-3 transition-colors hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-highlight md:grid md:grid-cols-[minmax(0,1.6fr)_minmax(0,1.2fr)_8.5rem_6.5rem_6.5rem] md:items-center md:gap-4"
+                    class="flex flex-col gap-1.5 px-5 py-3 transition-colors hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-highlight md:grid md:grid-cols-[minmax(0,1.6fr)_minmax(0,1.2fr)_8.5rem_6.5rem_6.5rem] md:items-center md:gap-4"
                   >
                     <div class="flex min-w-0 flex-col gap-0.5">
                       <div class="flex min-w-0 items-center gap-2">
                         <span
-                          class="truncate text-base-medium text-ink-gray-9"
+                          class="truncate text-[13px] font-semibold text-ink-gray-9"
                           >{{ s.module_title || s.template || s.name }}</span
                         >
                         <TaskyBadge
@@ -311,13 +304,22 @@
                         </template>
                       </span>
                     </div>
-                    <span class="min-w-0 truncate text-sm text-ink-gray-8">
-                      {{ s.signatory_name || "—" }}
-                      <span
-                        v-if="s.signatory_email"
-                        class="block truncate font-mono text-xs text-ink-gray-5"
-                        >{{ s.signatory_email }}</span
-                      >
+                    <span
+                      class="flex min-w-0 items-center gap-2.5 text-[13px] text-ink-gray-8"
+                    >
+                      <PersonAvatar
+                        v-if="s.signatory_name"
+                        :name="s.signatory_name"
+                        size="md"
+                      />
+                      <span class="min-w-0 truncate">
+                        {{ s.signatory_name || "—" }}
+                        <span
+                          v-if="s.signatory_email"
+                          class="block truncate font-mono text-xs text-ink-gray-6"
+                          >{{ s.signatory_email }}</span
+                        >
+                      </span>
                     </span>
                     <span>
                       <TaskyBadge
@@ -366,12 +368,14 @@
 </template>
 
 <script setup lang="ts">
+import PersonAvatar from "@/components/PersonAvatar.vue";
 import StatTile from "@/components/StatTile.vue";
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import TaskyState from "@/components/TaskyState.vue";
+import ViewTabs from "@/components/ViewTabs.vue";
 import { __ } from "@/translation";
 import { dateFormat } from "@/utils";
-import { Button, TabButtons, createResource } from "frappe-ui";
+import { Button, createResource } from "frappe-ui";
 import { computed, ref, useId, watch } from "vue";
 import { useRouter } from "vue-router";
 import LucideBadgeCheck from "~icons/lucide/badge-check";

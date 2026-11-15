@@ -3,20 +3,23 @@
     <ProjectNav :project-id="projectId">
       <template #actions>
         <Button
-          variant="ghost"
+          size="md"
           :label="__('Refresh')"
           :loading="rules.loading && !!rules.data"
           @click="rules.reload()"
         >
-          <template #icon><LucideRefreshCw class="size-4" /></template>
+          <template #icon
+            ><LucideRefreshCw class="size-[18px]" aria-hidden="true"
+          /></template>
         </Button>
       </template>
     </ProjectNav>
 
     <div class="relative flex-1 overflow-auto">
-      <div class="mx-auto w-full max-w-5xl px-4 py-5 md:px-6">
+      <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
         <TaskyState
           v-if="rules.error && !rules.data"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
           error
           :icon="LucideCircleAlert"
           :title="__('Couldn\'t load the recurring tasks')"
@@ -26,9 +29,9 @@
         </TaskyState>
 
         <template v-else>
-          <div class="mb-4 flex flex-wrap items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2">
             <div class="min-w-0 flex-1">
-              <h2 class="text-lg-semibold text-ink-gray-9">
+              <h2 class="text-base font-semibold text-ink-gray-9">
                 {{ __("Recurring tasks") }}
               </h2>
               <p class="text-p-sm text-ink-gray-6">
@@ -41,6 +44,7 @@
             </div>
             <Button
               v-if="data?.can_manage && data.rules.length"
+              size="md"
               :label="__('New recurring task')"
               @click="openEditor(null)"
             >
@@ -60,17 +64,18 @@
             <div
               v-for="i in 3"
               :key="i"
-              class="flex flex-col gap-2 border-b border-outline-gray-1 px-4 py-4 last:border-b-0"
+              class="flex flex-col gap-2 border-b border-outline-gray-1 px-4 py-3 last:border-b-0"
             >
               <div
-                class="h-3.5 w-1/3 animate-pulse rounded bg-surface-gray-2"
+                class="h-3.5 w-1/3 animate-pulse rounded bg-surface-gray-3"
               />
-              <div class="h-3 w-1/2 animate-pulse rounded bg-surface-gray-2" />
+              <div class="h-3 w-1/2 animate-pulse rounded bg-surface-gray-3" />
             </div>
           </div>
 
           <TaskyState
             v-else-if="!data.rules.length"
+            class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
             :icon="LucideRepeat"
             :title="__('No recurring tasks yet')"
             :message="
@@ -109,7 +114,7 @@
               <div class="flex min-w-0 flex-1 flex-col gap-1">
                 <div class="flex min-w-0 flex-wrap items-center gap-2">
                   <span
-                    class="min-w-0 truncate text-base-medium"
+                    class="min-w-0 truncate text-[13px] font-semibold"
                     :class="
                       rule.is_active ? 'text-ink-gray-9' : 'text-ink-gray-6'
                     "
@@ -138,11 +143,18 @@
                 <div
                   class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-gray-6"
                 >
-                  <span>{{
-                    rule.assignee_name
-                      ? __("For {0}", rule.assignee_name)
-                      : __("Unassigned")
-                  }}</span>
+                  <span class="inline-flex items-center gap-1.5">
+                    <PersonAvatar
+                      v-if="rule.assignee_name"
+                      :name="rule.assignee_name"
+                      size="xs"
+                    />
+                    {{
+                      rule.assignee_name
+                        ? __("For {0}", rule.assignee_name)
+                        : __("Unassigned")
+                    }}</span
+                  >
                   <template v-if="rule.is_active && rule.next_due_date">
                     <span aria-hidden="true">·</span>
                     <span class="tabular-nums">
@@ -303,6 +315,7 @@
 </template>
 
 <script setup lang="ts">
+import PersonAvatar from "@/components/PersonAvatar.vue";
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";

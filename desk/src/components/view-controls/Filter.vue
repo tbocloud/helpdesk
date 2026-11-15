@@ -3,6 +3,7 @@
     <template #target="{ togglePopover, close }">
       <div class="flex items-center w-fit">
         <Button
+          size="md"
           :label="'Filter'"
           :class="filters?.size ? 'rounded-r-none' : ''"
           @click="togglePopover"
@@ -20,6 +21,7 @@
           <div>
             <Button
               class="rounded-l-none border-l"
+              size="md"
               icon="lucide-x"
               @click.stop="clearfilter(close)"
             />

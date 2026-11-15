@@ -2,7 +2,7 @@
   <aside class="flex flex-col gap-4" :aria-label="__('Figures')">
     <div
       v-if="!tickets && !tasks && !projects.length"
-      class="rounded-lg border border-outline-gray-2 bg-surface-base p-4 text-p-sm text-ink-gray-5"
+      class="rounded-xl border border-outline-gray-2 bg-surface-base p-4 text-p-sm text-ink-gray-5"
     >
       {{ __("No figures were saved with this summary.") }}
     </div>
@@ -10,12 +10,12 @@
     <section
       v-for="group in tileGroups"
       :key="group.key"
-      class="rounded-lg border border-outline-gray-2 bg-surface-base p-4"
+      class="rounded-xl border border-outline-gray-2 bg-surface-base p-4"
       :aria-labelledby="`summary-stats-${group.key}`"
     >
       <h2
         :id="`summary-stats-${group.key}`"
-        class="mb-3 flex items-center gap-1.5 text-sm-medium text-ink-gray-8"
+        class="mb-3 flex items-center gap-1.5 text-base font-semibold text-ink-gray-9"
       >
         <component
           :is="group.icon"
@@ -56,12 +56,12 @@
     <section
       v-for="list in taskLists"
       :key="list.key"
-      class="rounded-lg border border-outline-gray-2 bg-surface-base p-4"
+      class="rounded-xl border border-outline-gray-2 bg-surface-base p-4"
       :aria-labelledby="`summary-stats-${list.key}`"
     >
       <h2
         :id="`summary-stats-${list.key}`"
-        class="mb-2 flex items-center gap-1.5 text-sm-medium text-ink-gray-8"
+        class="mb-2 flex items-center gap-1.5 text-base font-semibold text-ink-gray-9"
       >
         <component
           :is="list.icon"
@@ -121,12 +121,12 @@
 
     <section
       v-if="projects.length"
-      class="rounded-lg border border-outline-gray-2 bg-surface-base p-4"
+      class="rounded-xl border border-outline-gray-2 bg-surface-base p-4"
       aria-labelledby="summary-stats-projects"
     >
       <h2
         id="summary-stats-projects"
-        class="mb-3 flex items-center gap-1.5 text-sm-medium text-ink-gray-8"
+        class="mb-3 flex items-center gap-1.5 text-base font-semibold text-ink-gray-9"
       >
         <LucideFolderKanban
           class="size-3.5 text-ink-gray-5"

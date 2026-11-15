@@ -13,6 +13,9 @@ and states. It follows [ui-guidelines.md](ui-guidelines.md) and
   hairline, brand icon). Up/Down, Home and End move between pages.
 - **Small screens**: the sidebar is replaced by one native select (grouped by the same
   headings), so every page stays reachable.
+- **Close button**: an X at the modal's top right, always visible (Escape and a click outside
+  are off while a page is dirty, so it is the one way out). On a dirty page it asks the same
+  "Leave without saving?" first. `SettingsLayoutBase` keeps the header's right edge clear of it.
 - **Leaving a dirty page**: while a page holds unsaved changes the modal can't be dismissed by
   an outside click, and switching pages asks "Leave without saving?".
 - Pages and their role gates live in `tabs` (`settingsModal.ts`); `setActiveSettingsTab(name)`

@@ -9,11 +9,12 @@
       <template #actions>
         <Button
           v-if="canManage"
+          size="md"
           :label="__('Generate checklist')"
           @click="showChecklistModal = true"
         >
           <template #prefix
-            ><LucideClipboardList class="size-4" aria-hidden="true"
+            ><LucideClipboardList class="size-[18px]" aria-hidden="true"
           /></template>
           <span class="hidden md:inline">{{ __("Generate checklist") }}</span>
         </Button>
@@ -21,9 +22,10 @@
     </ProjectNav>
 
     <div class="relative flex-1 overflow-auto">
-      <div class="mx-auto w-full max-w-5xl px-4 py-5 md:px-6">
+      <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
         <TaskyState
           v-if="phases.error && !phases.data"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
           error
           :icon="LucideCircleAlert"
           :title="__('Couldn\'t load the checklist')"
@@ -43,10 +45,10 @@
             :key="i"
             class="flex items-center gap-3 rounded-xl border border-outline-gray-2 bg-surface-base p-4"
           >
-            <div class="size-4 animate-pulse rounded bg-surface-gray-2" />
-            <div class="h-4 w-1/3 animate-pulse rounded bg-surface-gray-2" />
+            <div class="size-4 animate-pulse rounded bg-surface-gray-3" />
+            <div class="h-4 w-1/3 animate-pulse rounded bg-surface-gray-3" />
             <div
-              class="ml-auto h-1.5 w-24 animate-pulse rounded-full bg-surface-gray-2"
+              class="ml-auto h-1.5 w-24 animate-pulse rounded-full bg-surface-gray-3"
             />
           </div>
         </div>
@@ -54,7 +56,7 @@
         <!-- Filtered by a dashboard tile -->
         <template v-else-if="filterKey">
           <div
-            class="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-outline-gray-2 bg-surface-gray-1 py-1.5 pl-3 pr-1.5 text-sm text-ink-gray-7"
+            class="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-outline-gray-2 bg-surface-base py-2 pl-5 pr-2 text-[13px] text-ink-gray-7"
           >
             <LucideListFilter
               class="size-4 shrink-0 text-ink-gray-5"
@@ -83,6 +85,7 @@
             class="rounded-xl border border-outline-gray-2 bg-surface-base"
           >
             <TaskyState
+              class="py-10"
               :icon="LucideListFilter"
               :title="__('No tasks match this filter')"
               :message="
@@ -93,11 +96,11 @@
             </TaskyState>
           </div>
 
-          <div v-else class="flex flex-col gap-3">
+          <div v-else class="flex flex-col gap-4">
             <section
               v-for="group in filteredGroups"
               :key="group.phase"
-              class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base shadow-sm"
+              class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
             >
               <h2 class="flex items-center gap-3 px-4 py-3">
                 <LucideInbox
@@ -106,7 +109,7 @@
                   aria-hidden="true"
                 />
                 <span
-                  class="min-w-0 flex-1 truncate text-base-medium text-ink-gray-9"
+                  class="min-w-0 flex-1 truncate text-base font-semibold text-ink-gray-9"
                   >{{ group.phase || __("No phase") }}</span
                 >
                 <span class="font-mono text-xs tabular-nums text-ink-gray-6">
@@ -137,6 +140,7 @@
           class="rounded-xl border border-outline-gray-2 bg-surface-base"
         >
           <TaskyState
+            class="py-10"
             :icon="LucideListChecks"
             :title="__('No tasks yet')"
             :message="
@@ -170,8 +174,8 @@
 
         <template v-else>
           <!-- Summary -->
-          <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div class="text-sm text-ink-gray-6">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="text-[13px] text-ink-gray-6">
               <span class="font-mono tabular-nums text-ink-gray-9">{{
                 stats.completed ?? 0
               }}</span>
@@ -203,7 +207,7 @@
             </div>
             <div class="flex items-center gap-2">
               <div
-                class="h-1.5 w-40 overflow-hidden rounded-full bg-surface-gray-2"
+                class="h-2 w-40 overflow-hidden rounded-full bg-surface-gray-3"
                 role="progressbar"
                 :aria-valuenow="stats.completion_pct ?? 0"
                 aria-valuemin="0"
@@ -211,7 +215,7 @@
                 :aria-label="__('Project progress')"
               >
                 <div
-                  class="h-full rounded-full bg-surface-gray-7 transition-[width] duration-500"
+                  class="h-full rounded-full bg-brand transition-[width] duration-500"
                   :style="{ width: `${stats.completion_pct ?? 0}%` }"
                 />
               </div>
@@ -223,11 +227,11 @@
             </div>
           </div>
 
-          <div class="flex flex-col gap-3">
+          <div class="flex flex-col gap-4">
             <section
               v-for="phase in phaseList"
               :key="phase.name"
-              class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base shadow-sm"
+              class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
             >
               <h2>
                 <button
@@ -247,7 +251,7 @@
                     aria-hidden="true"
                   />
                   <span
-                    class="min-w-0 flex-1 truncate text-base-medium text-ink-gray-9"
+                    class="min-w-0 flex-1 truncate text-base font-semibold text-ink-gray-9"
                   >
                     {{ phase.phase_name || phase.name }}
                   </span>
@@ -261,11 +265,11 @@
                     role="img"
                   />
                   <div
-                    class="hidden h-1.5 w-24 overflow-hidden rounded-full bg-surface-gray-2 sm:block"
+                    class="hidden h-2 w-24 overflow-hidden rounded-full bg-surface-gray-3 sm:block"
                     aria-hidden="true"
                   >
                     <div
-                      class="h-full rounded-full bg-surface-gray-7 transition-[width] duration-500"
+                      class="h-full rounded-full bg-brand transition-[width] duration-500"
                       :style="{ width: `${phase.progress_pct || 0}%` }"
                     />
                   </div>
@@ -296,10 +300,10 @@
                     class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-3 last:border-b-0"
                   >
                     <div
-                      class="size-4 animate-pulse rounded bg-surface-gray-2"
+                      class="size-4 animate-pulse rounded bg-surface-gray-3"
                     />
                     <div
-                      class="h-3.5 w-2/5 animate-pulse rounded bg-surface-gray-2"
+                      class="h-3.5 w-2/5 animate-pulse rounded bg-surface-gray-3"
                     />
                   </div>
                 </div>
@@ -333,7 +337,7 @@
                 </ul>
                 <p
                   v-else
-                  class="px-4 py-6 text-center text-p-sm text-ink-gray-5"
+                  class="px-5 py-6 text-center text-p-sm text-ink-gray-6"
                 >
                   {{ __("No tasks in this phase") }}
                 </p>
@@ -342,14 +346,14 @@
 
             <section
               v-if="unphasedTasks.length"
-              class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base shadow-sm"
+              class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
             >
               <h2 class="flex items-center gap-3 px-4 py-3">
                 <LucideInbox
                   class="size-4 shrink-0 text-ink-gray-5"
                   aria-hidden="true"
                 />
-                <span class="flex-1 text-base-medium text-ink-gray-9">{{
+                <span class="flex-1 text-base font-semibold text-ink-gray-9">{{
                   __("No phase")
                 }}</span>
                 <span class="font-mono text-xs tabular-nums text-ink-gray-6">

@@ -1,36 +1,39 @@
 <template>
   <div class="flex h-full flex-col">
-    <LayoutHeader>
-      <template #left-header>
-        <div class="text-lg-medium text-ink-gray-9">{{ __("Calendar") }}</div>
-      </template>
+    <LayoutHeader
+      :title="__('Calendar')"
+      :subtitle="
+        __('Meetings, due tasks, holidays and leave, by day, week or month.')
+      "
+    >
       <template #right-header>
-        <TabButtons
-          v-if="data?.can_see_team"
-          v-model="scope"
-          :buttons="[
-            { label: __('Mine'), value: 'mine' },
-            { label: __('Team'), value: 'team' },
-          ]"
-        />
         <Button
-          variant="ghost"
+          size="md"
           :loading="loading"
           :aria-label="__('Refresh')"
           @click="load"
         >
           <template #icon>
-            <LucideRefreshCw class="size-4" aria-hidden="true" />
+            <LucideRefreshCw class="size-[18px]" aria-hidden="true" />
           </template>
         </Button>
       </template>
     </LayoutHeader>
 
     <div
-      class="flex min-h-0 flex-1 flex-col gap-3 px-4 py-4 md:px-6"
+      class="flex min-h-0 flex-1 flex-col gap-4 px-4 pb-8 pt-4 md:px-8"
       :aria-busy="loading"
     >
-      <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+      <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+        <ViewTabs
+          v-if="data?.can_see_team"
+          v-model="scope"
+          :aria-label="__('Whose calendar')"
+          :options="[
+            { label: __('Mine'), value: 'mine' },
+            { label: __('Team'), value: 'team' },
+          ]"
+        />
         <ul
           role="list"
           class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-gray-6"
@@ -63,7 +66,7 @@
       <div
         v-if="loadError"
         role="alert"
-        class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-outline-gray-2 bg-danger-soft px-3 py-2"
+        class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-outline-gray-2 bg-danger-soft px-4 py-3"
       >
         <p class="flex items-center gap-2 text-p-sm text-danger">
           <LucideCircleAlert class="size-4 shrink-0" aria-hidden="true" />
@@ -111,17 +114,22 @@
             <div
               v-for="i in 4"
               :key="i"
-              class="h-14 animate-pulse rounded-lg bg-surface-gray-2"
+              class="h-14 animate-pulse rounded-lg bg-surface-gray-3"
             />
           </div>
         </div>
 
-        <TaskyState
+        <div
           v-else-if="!agenda.length && !loadError"
-          :icon="LucideCalendarCheck"
-          :title="__('Nothing this week')"
-          :message="emptyText"
-        />
+          class="rounded-xl border border-outline-gray-2 bg-surface-base"
+        >
+          <TaskyState
+            class="py-10"
+            :icon="LucideCalendarCheck"
+            :title="__('Nothing this week')"
+            :message="emptyText"
+          />
+        </div>
 
         <div v-else class="relative min-h-0 flex-1 overflow-y-auto">
           <section
@@ -132,7 +140,7 @@
           >
             <h3
               :id="`agenda-${day.date}`"
-              class="mb-1.5 flex items-center gap-2 text-sm text-ink-gray-6"
+              class="mb-2 flex items-center gap-2 text-sm text-ink-gray-6"
             >
               <span
                 :class="day.isToday ? 'text-base-medium text-ink-gray-9' : ''"
@@ -148,12 +156,12 @@
             </h3>
             <ul
               role="list"
-              class="overflow-hidden rounded-lg border border-outline-gray-2 bg-surface-base"
+              class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
             >
               <li
                 v-for="event in day.events"
                 :key="event.id"
-                class="flex items-center gap-3 border-b border-outline-gray-1 px-3 py-2.5 last:border-b-0"
+                class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-3 last:border-b-0"
               >
                 <component
                   :is="KINDS[event.type].icon"
@@ -166,7 +174,9 @@
                   :to="detail(event).route ?? undefined"
                   class="flex min-w-0 flex-1 flex-col rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
                 >
-                  <span class="truncate text-base text-ink-gray-9">
+                  <span
+                    class="truncate text-[13px] font-medium text-ink-gray-9"
+                  >
                     {{ event.title }}
                   </span>
                   <span class="truncate text-p-xs text-ink-gray-6">
@@ -191,7 +201,10 @@
         </div>
       </section>
 
-      <div v-else class="work-calendar min-h-0 flex-1">
+      <div
+        v-else
+        class="work-calendar min-h-0 flex-1 rounded-xl border border-outline-gray-2 bg-surface-base p-4"
+      >
         <Calendar
           :events="events"
           :config="calendarConfig"
@@ -210,7 +223,7 @@
               selectedMonthDate,
             }"
           >
-            <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
               <!-- the month is also the date picker: jump to any month or day -->
               <h2>
                 <DatePicker
@@ -221,7 +234,7 @@
                   <template #target="{ togglePopover }">
                     <Button
                       variant="ghost"
-                      class="text-lg-medium tabular-nums text-ink-gray-9"
+                      class="text-lg font-semibold tabular-nums text-ink-gray-9"
                       :label="currentMonthYear"
                       :aria-label="
                         __('{0}, pick a date', [String(currentMonthYear)])
@@ -317,6 +330,7 @@
 <script setup lang="ts">
 import { errorText } from "@/utils";
 import LayoutHeader from "@/components/LayoutHeader.vue";
+import ViewTabs from "@/components/ViewTabs.vue";
 import { useScreenSize } from "@/composables/screen";
 import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";
@@ -606,7 +620,7 @@ const agenda = computed(() => {
     }));
 });
 
-function timeLabel(event: typeof events.value[number]) {
+function timeLabel(event: (typeof events.value)[number]) {
   if (event.fromTime) return `${event.fromTime}–${event.toTime}`;
   return (
     {

@@ -10,7 +10,7 @@
     class="overflow-hidden"
   >
     <div
-      class="hidden gap-3 border-b border-outline-gray-2 bg-surface-gray-1 px-4 py-2 text-xs text-ink-gray-5 lg:grid"
+      class="hidden h-11 items-center gap-3 border-b border-outline-gray-2 bg-surface-gray-1 px-5 text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6 lg:grid"
       :class="GRID"
       aria-hidden="true"
     >
@@ -30,7 +30,7 @@
         <NativeButton
           v-if="!row.future"
           type="button"
-          class="flex w-full flex-col gap-1 px-4 py-2.5 text-left transition-colors hover:bg-surface-gray-1 focus-visible:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-gray-4 lg:grid lg:items-center lg:gap-3"
+          class="flex w-full flex-col gap-1 px-5 py-3 text-left transition-colors hover:bg-surface-gray-1 focus-visible:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-gray-4 lg:grid lg:items-center lg:gap-3"
           :class="GRID"
           :aria-label="__('Show {0}', monthName(row))"
           @click="emit('open', row.month)"
@@ -94,7 +94,7 @@
         </NativeButton>
         <div
           v-else
-          class="flex items-center justify-between gap-3 px-4 py-2.5 text-p-sm text-ink-gray-5"
+          class="flex items-center justify-between gap-3 px-5 py-3 text-p-sm text-ink-gray-5"
         >
           <span>{{ monthName(row) }}</span>
           <span>{{ __("Not started") }}</span>

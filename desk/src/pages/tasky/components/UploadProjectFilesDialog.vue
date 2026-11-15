@@ -4,13 +4,13 @@
     :title="
       folder ? __('Add files to {0}', folder.folder_name) : __('Add files')
     "
-    size="lg"
+    size="md"
     :dismissible="!uploading"
     @update:open="onOpenChange"
   >
     <div class="flex flex-col gap-4">
       <div
-        class="flex flex-col items-center gap-2 rounded-lg border border-dashed px-4 py-6 text-center transition-colors"
+        class="flex flex-col items-center gap-2 rounded-xl border border-dashed px-4 py-6 text-center transition-colors"
         :class="
           dragging
             ? 'border-brand bg-brand-soft'
@@ -99,7 +99,7 @@
         <li
           v-for="(item, i) in queue"
           :key="i"
-          class="flex flex-wrap items-center gap-2 rounded-md border border-outline-gray-2 px-3 py-2 text-sm"
+          class="flex flex-wrap items-center gap-2 rounded-[10px] border border-outline-gray-2 px-3 py-2 text-sm"
         >
           <component
             :is="fileIcon(item.file.name)"

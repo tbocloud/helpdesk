@@ -5,24 +5,24 @@
            from); the project list when the page was opened directly (owner's request,
            2026-10-14) -->
       <Button
-        variant="ghost"
+        size="md"
         class="me-1 shrink-0"
         :label="__('Back')"
         :tooltip="__('Back')"
         @click="goBack"
       >
         <template #icon>
-          <LucideArrowLeft class="size-4" aria-hidden="true" />
+          <LucideArrowLeft class="size-[18px]" aria-hidden="true" />
         </template>
       </Button>
       <nav
-        class="flex min-w-0 items-center gap-1.5 text-lg-medium"
+        class="flex min-w-0 items-center gap-1.5 text-lg md:text-[22px] md:leading-[1.2] md:tracking-[-0.01em]"
         :aria-label="__('Breadcrumb')"
       >
         <!-- below md the Back button stands in for this link, so the project name fits -->
         <router-link
           :to="{ name: 'TaskyProjects' }"
-          class="hidden shrink-0 rounded text-ink-gray-5 transition-colors hover:text-ink-gray-8 md:inline"
+          class="hidden shrink-0 rounded font-medium text-ink-gray-6 transition-colors hover:text-ink-gray-9 md:inline"
         >
           {{ __("Projects") }}
         </router-link>
@@ -32,9 +32,13 @@
         />
         <span
           v-if="detail.loading && !detail.data"
-          class="inline-block h-4 w-32 animate-pulse rounded bg-surface-gray-2"
+          class="inline-block h-5 w-40 animate-pulse rounded bg-surface-gray-3"
         />
-        <span v-else class="truncate text-ink-gray-9" aria-current="page">
+        <span
+          v-else
+          class="truncate font-bold text-ink-gray-9"
+          aria-current="page"
+        >
           {{ detail.data?.project_name || projectId }}
         </span>
       </nav>
@@ -45,19 +49,19 @@
            (the label stays as the accessible name), so they fit beside the breadcrumb -->
       <Button
         v-if="detail.data?.can_change_lead"
-        variant="ghost"
+        size="md"
         :label="__('Edit project')"
         @click="showEdit = true"
       >
         <template #prefix
-          ><LucidePencil class="size-4" aria-hidden="true"
+          ><LucidePencil class="size-[18px]" aria-hidden="true"
         /></template>
         <span class="hidden lg:inline">{{ __("Edit project") }}</span>
       </Button>
       <Dropdown v-if="detail.data?.can_change_lead" :options="leadOptions">
-        <Button :loading="changingLead" :label="leadLabel">
+        <Button size="md" :loading="changingLead" :label="leadLabel">
           <template #prefix
-            ><LucideUserStar class="size-4" aria-hidden="true"
+            ><LucideUserStar class="size-[18px]" aria-hidden="true"
           /></template>
           <span class="hidden max-w-48 truncate lg:inline">{{
             leadLabel
@@ -79,51 +83,60 @@
       <Button
         v-if="detail.data?.can_add_tasks"
         variant="solid"
+        size="md"
         :label="__('New task')"
         @click="showNewTask = true"
       >
         <template #prefix
-          ><LucidePlus class="size-4" aria-hidden="true"
+          ><LucidePlus class="size-[18px]" aria-hidden="true"
         /></template>
         <span class="hidden sm:inline">{{ __("New task") }}</span>
       </Button>
     </template>
   </LayoutHeader>
 
-  <nav
-    class="flex shrink-0 gap-1 overflow-x-auto border-b border-outline-gray-2 bg-surface-base px-3 md:px-4"
-    :aria-label="__('Project sections')"
-  >
-    <router-link
-      v-for="tab in visibleTabs"
-      :key="tab.to"
-      :to="{ name: tab.to, params: { projectId } }"
-      class="-mb-px flex h-10 shrink-0 items-center gap-1.5 border-b-2 px-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-gray-4"
-      :class="
-        isCurrent(tab)
-          ? 'border-brand text-ink-gray-9'
-          : 'border-transparent text-ink-gray-5 hover:text-ink-gray-8'
-      "
-      :aria-current="isCurrent(tab) ? 'page' : undefined"
+  <!-- the project's sections as pills on the canvas, the current one filled dark -->
+  <div class="shrink-0 px-4 pt-5 md:px-8">
+    <nav
+      class="inline-flex max-w-full gap-1 overflow-x-auto rounded-full border border-outline-gray-2 bg-surface-base p-1"
+      :aria-label="__('Project sections')"
     >
-      <component :is="tab.icon" class="size-4" aria-hidden="true" />
-      {{ __(tab.label) }}
-      <span
-        v-if="tab.to === 'TaskyFiles' && detail.data?.file_count"
-        class="rounded bg-surface-gray-2 px-1.5 font-mono text-xs tabular-nums text-ink-gray-6"
-        :aria-label="__('{0} files', String(detail.data.file_count))"
+      <router-link
+        v-for="tab in visibleTabs"
+        :key="tab.to"
+        :to="{ name: tab.to, params: { projectId } }"
+        class="inline-flex h-10 shrink-0 items-center gap-2 rounded-full px-3.5 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-highlight"
+        :class="
+          isCurrent(tab)
+            ? 'bg-surface-gray-10 text-ink-base'
+            : 'text-ink-gray-7 hover:bg-surface-gray-3'
+        "
+        :aria-current="isCurrent(tab) ? 'page' : undefined"
       >
-        {{ detail.data.file_count }}
-      </span>
-    </router-link>
-  </nav>
+        <component :is="tab.icon" class="size-4" aria-hidden="true" />
+        {{ __(tab.label) }}
+        <span
+          v-if="tab.to === 'TaskyFiles' && detail.data?.file_count"
+          class="min-w-[22px] rounded-full px-[7px] py-px text-center text-xs font-semibold tabular-nums"
+          :class="
+            isCurrent(tab)
+              ? 'bg-white/20 text-ink-base'
+              : 'bg-surface-gray-4 text-ink-gray-7'
+          "
+          :aria-label="__('{0} files', String(detail.data.file_count))"
+        >
+          {{ detail.data.file_count }}
+        </span>
+      </router-link>
+    </nav>
+  </div>
 
   <p
     v-if="showsOwnTasksOnly"
-    class="flex shrink-0 items-start gap-2 border-b border-outline-gray-2 bg-surface-gray-1 px-4 py-2 text-p-sm text-ink-gray-6 md:px-5"
+    class="mx-4 mt-4 flex shrink-0 items-start gap-2 rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-3 text-p-sm text-ink-gray-6 md:mx-8"
   >
     <LucideEyeOff
-      class="mt-0.5 size-4 shrink-0 text-ink-gray-5"
+      class="mt-0.5 size-4 shrink-0 text-ink-gray-6"
       aria-hidden="true"
     />
     {{
@@ -155,12 +168,13 @@ let lastRecorded = "";
 </script>
 
 <script setup lang="ts">
+import { useGoBack } from "@/composables/goBack";
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import { Button, call, createResource, Dropdown, toast } from "frappe-ui";
 import { computed, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { useRoute } from "vue-router";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
 import LucideCalendarRange from "~icons/lucide/calendar-range";
 import LucideChevronDown from "~icons/lucide/chevron-down";
@@ -194,14 +208,8 @@ const props = defineProps<{
 const emit = defineEmits<{ taskCreated: [] }>();
 
 const route = useRoute();
-const router = useRouter();
 
-// vue-router keeps the previous in-app address in history.state.back; with none (a page
-// opened directly, a new tab) there is no previous page here, so go to the project list
-function goBack() {
-  if (window.history.state?.back) router.back();
-  else router.push({ name: "TaskyProjects" });
-}
+const { goBack } = useGoBack({ name: "TaskyProjects" });
 const showNewTask = ref(false);
 const showEdit = ref(false);
 

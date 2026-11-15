@@ -1,20 +1,19 @@
 <template>
   <div class="flex h-full flex-col">
-    <LayoutHeader>
-      <template #left-header>
-        <h1 class="text-lg-medium text-ink-gray-9">{{ __("Stand-up") }}</h1>
-      </template>
-    </LayoutHeader>
+    <LayoutHeader
+      :title="__('Stand-up')"
+      :subtitle="
+        __('What you did, what is next and what is blocking you, day by day.')
+      "
+    />
 
     <div class="relative flex-1 overflow-y-auto overflow-x-hidden">
-      <div
-        class="mx-auto flex w-full max-w-4xl flex-col gap-4 px-4 py-5 md:px-6"
-      >
+      <!-- a form and a read-out: a reading width, on the canvas -->
+      <div class="flex w-full max-w-5xl flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
         <div class="flex flex-wrap items-end justify-between gap-3">
-          <div class="overflow-x-auto">
-            <TabButtons
+          <div class="max-w-full overflow-x-auto">
+            <ViewTabs
               :model-value="tab"
-              size="md"
               :aria-label="__('Stand-up view')"
               :options="tabs"
               @update:model-value="go({ tab: $event, person: undefined })"
@@ -24,6 +23,7 @@
             v-if="tab !== 'history'"
             :model-value="date || today"
             type="date"
+            size="md"
             class="w-full sm:w-44"
             :label="__('Day')"
             :max="today"
@@ -32,7 +32,9 @@
             "
           />
         </div>
-        <p class="text-p-sm text-ink-gray-6">{{ dayLabel(date || today) }}</p>
+        <p class="-mt-2 text-[13px] text-ink-gray-6">
+          {{ dayLabel(date || today) }}
+        </p>
 
         <MyStandup v-if="tab === 'mine'" :date="date" />
         <TeamStandup
@@ -49,8 +51,9 @@
 
 <script setup lang="ts">
 import LayoutHeader from "@/components/LayoutHeader.vue";
+import ViewTabs from "@/components/ViewTabs.vue";
 import { __ } from "@/translation";
-import { dayjs, FormControl, TabButtons } from "frappe-ui";
+import { dayjs, FormControl } from "frappe-ui";
 import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import MyStandup from "./components/MyStandup.vue";

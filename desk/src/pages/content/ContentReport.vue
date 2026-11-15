@@ -2,21 +2,33 @@
   <div class="flex h-full flex-col">
     <LayoutHeader>
       <template #left-header>
-        <div class="flex items-center gap-1.5 text-lg-medium">
-          <router-link
-            :to="{ name: 'ContentCalendar' }"
-            class="text-ink-gray-5 hover:text-ink-gray-8"
-            >{{ __("Content Calendar") }}</router-link
+        <div class="flex min-w-0 flex-col gap-1">
+          <div
+            class="flex min-w-0 items-center gap-1.5 text-lg font-bold md:text-[28px] md:leading-[1.2] md:tracking-[-0.02em]"
           >
-          <LucideChevronRight
-            class="size-4 text-ink-gray-4"
-            aria-hidden="true"
-          />
-          <span class="text-ink-gray-9">{{ __("Delivery report") }}</span>
+            <router-link
+              :to="{ name: 'ContentCalendar' }"
+              class="truncate rounded text-ink-gray-6 hover:text-ink-gray-9"
+              >{{ __("Content Calendar") }}</router-link
+            >
+            <LucideChevronRight
+              class="size-5 shrink-0 text-ink-gray-5"
+              aria-hidden="true"
+            />
+            <h1 class="truncate text-ink-gray-9">
+              {{ __("Delivery report") }}
+            </h1>
+          </div>
+          <p class="hidden text-[14px] text-ink-gray-6 md:block">
+            {{
+              __("How each client's posts went out: on time, late or not yet.")
+            }}
+          </p>
         </div>
       </template>
       <template #right-header>
         <Button
+          size="md"
           :label="__('Download PDF')"
           :tooltip="
             __(
@@ -27,10 +39,11 @@
           @click="downloadReport('export_pdf')"
         >
           <template #prefix
-            ><LucideFileText class="size-4" aria-hidden="true"
+            ><LucideFileText class="size-[18px]" aria-hidden="true"
           /></template>
         </Button>
         <Button
+          size="md"
           :label="__('Export to Excel')"
           :tooltip="
             __('Download this report with the current dates and customer')
@@ -39,43 +52,49 @@
           @click="downloadReport('export_xlsx')"
         >
           <template #prefix
-            ><LucideDownload class="size-4" aria-hidden="true"
+            ><LucideDownload class="size-[18px]" aria-hidden="true"
           /></template>
         </Button>
       </template>
     </LayoutHeader>
 
-    <div
-      class="flex flex-wrap items-end gap-3 border-b border-outline-gray-2 px-4 py-3 md:px-5"
-    >
-      <div class="w-40">
-        <FormControl
-          v-model="filters.from_date"
-          type="date"
-          :label="__('From')"
-        />
-      </div>
-      <div class="w-40">
-        <FormControl v-model="filters.to_date" type="date" :label="__('To')" />
-      </div>
-      <div class="w-full sm:w-60">
-        <Link
-          v-model="filters.customer"
-          doctype="HD Customer"
-          :label="__('Customer')"
-          :placeholder="__('All customers')"
-        />
-      </div>
-      <span class="pb-1.5 text-sm text-ink-gray-5">{{ periodLabel }}</span>
-    </div>
-
     <div class="relative flex-1 overflow-auto">
-      <div
-        class="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-5 md:px-6"
-      >
+      <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
+        <div
+          class="flex flex-wrap items-end gap-3 rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-4 md:px-4"
+        >
+          <div class="w-full sm:w-44">
+            <FormControl
+              v-model="filters.from_date"
+              type="date"
+              size="md"
+              :label="__('From')"
+            />
+          </div>
+          <div class="w-full sm:w-44">
+            <FormControl
+              v-model="filters.to_date"
+              type="date"
+              size="md"
+              :label="__('To')"
+            />
+          </div>
+          <div class="w-full sm:w-64">
+            <Link
+              v-model="filters.customer"
+              doctype="HD Customer"
+              :label="__('Customer')"
+              :placeholder="__('All customers')"
+            />
+          </div>
+          <span class="pb-2.5 text-[13px] text-ink-gray-6">{{
+            periodLabel
+          }}</span>
+        </div>
+
         <div
           v-if="report.error"
-          class="flex items-center justify-between gap-3 rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger"
+          class="flex items-center justify-between gap-3 rounded-xl bg-danger-soft px-4 py-3.5 text-[13px] text-danger"
           role="alert"
         >
           {{ report.error?.messages?.[0] || __("Couldn't load the report.") }}
@@ -84,31 +103,31 @@
 
         <div
           v-else-if="report.loading && !report.data"
-          class="grid grid-cols-1 gap-4 lg:grid-cols-3"
+          class="grid grid-cols-1 gap-5 lg:grid-cols-3"
           aria-busy="true"
         >
           <div
             v-for="i in 3"
             :key="i"
-            class="h-56 animate-pulse rounded-xl bg-surface-gray-2"
+            class="h-56 animate-pulse rounded-xl bg-surface-gray-3"
           />
         </div>
 
         <p
           v-else-if="!rows.length"
-          class="rounded-xl border border-dashed border-outline-gray-3 px-4 py-16 text-center text-p-sm text-ink-gray-5"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-14 text-center text-p-sm text-ink-gray-6"
         >
           {{ __("No posts planned in this period.") }}
         </p>
 
         <div
           v-else
-          class="flex flex-col gap-4 transition-opacity"
+          class="flex flex-col gap-5 transition-opacity"
           :class="report.loading ? 'opacity-60' : ''"
         >
           <!-- the headline: how delivery went, at a glance -->
           <section
-            class="grid grid-cols-1 gap-5 rounded-xl border border-outline-gray-2 bg-surface-base p-5 lg:grid-cols-[auto_minmax(0,1fr)]"
+            class="grid grid-cols-1 gap-5 rounded-xl border border-outline-gray-2 bg-surface-base p-4 lg:grid-cols-[auto_minmax(0,1fr)]"
           >
             <div class="flex flex-wrap items-center gap-6">
               <DeliveryDonut
@@ -121,7 +140,7 @@
                   <h2 class="text-base font-semibold text-ink-gray-9">
                     {{ __("Delivery health") }}
                   </h2>
-                  <p class="text-p-sm text-ink-gray-5">
+                  <p class="text-p-sm text-ink-gray-6">
                     {{
                       __(
                         "{0} of {1} posts due are published",
@@ -147,7 +166,7 @@
                       segments[s.key]
                     }}</b>
                     <span
-                      class="w-10 text-right text-xs tabular-nums text-ink-gray-5"
+                      class="w-10 text-right text-xs tabular-nums text-ink-gray-6"
                       >{{ pctText(pct(segments[s.key], total.planned)) }}</span
                     >
                   </li>
@@ -159,11 +178,11 @@
               <div
                 v-for="k in kpis"
                 :key="k.label"
-                class="flex items-start gap-3 rounded-lg p-3"
+                class="flex items-start gap-3 rounded-xl p-4"
                 :class="k.bg"
               >
                 <span
-                  class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-surface-base"
+                  class="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-surface-base"
                   :class="k.ink"
                   aria-hidden="true"
                 >
@@ -174,7 +193,7 @@
                     {{ k.label }}
                   </div>
                   <div
-                    class="text-2xl font-semibold leading-tight tabular-nums text-ink-gray-9"
+                    class="text-[28px] font-bold leading-tight tracking-[-0.02em] tabular-nums text-ink-gray-9"
                   >
                     {{ k.value }}
                   </div>
@@ -186,7 +205,7 @@
             </div>
           </section>
 
-          <div class="grid grid-cols-1 gap-4 xl:grid-cols-3">
+          <div class="grid grid-cols-1 gap-5 xl:grid-cols-3">
             <section
               class="rounded-xl border border-outline-gray-2 bg-surface-base p-4 xl:col-span-2"
             >
@@ -197,7 +216,7 @@
                   <h2 class="text-base font-semibold text-ink-gray-9">
                     {{ __("Delivery by customer") }}
                   </h2>
-                  <p class="text-p-sm text-ink-gray-5">
+                  <p class="text-p-sm text-ink-gray-6">
                     {{ __("Every planned post, split by how it went") }}
                   </p>
                 </div>
@@ -232,7 +251,7 @@
               <h2 class="text-base font-semibold text-ink-gray-9">
                 {{ __("Where posts are now") }}
               </h2>
-              <p class="mb-4 text-p-sm text-ink-gray-5">
+              <p class="mb-4 text-p-sm text-ink-gray-6">
                 {{ __("Planned posts by workflow stage") }}
               </p>
               <ul class="flex flex-col gap-4">
@@ -250,7 +269,7 @@
                       s.count
                     }}</b>
                     <span
-                      class="w-10 text-right text-xs tabular-nums text-ink-gray-5"
+                      class="w-10 text-right text-xs tabular-nums text-ink-gray-6"
                       >{{ pctText(pct(s.count, total.planned)) }}</span
                     >
                   </div>
@@ -270,7 +289,7 @@
                       }"
                     />
                   </div>
-                  <p class="mt-1 text-xs text-ink-gray-5">{{ s.hint }}</p>
+                  <p class="mt-1 text-xs text-ink-gray-6">{{ s.hint }}</p>
                 </li>
               </ul>
             </section>
@@ -280,37 +299,34 @@
           <section
             class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
           >
-            <header class="p-4">
+            <header class="border-b border-outline-gray-2 p-5">
               <h2 class="text-base font-semibold text-ink-gray-9">
                 {{ __("Customers") }}
               </h2>
-              <p class="text-p-sm text-ink-gray-5">
+              <p class="text-p-sm text-ink-gray-6">
                 {{ __("Click a customer to see only their numbers") }}
               </p>
             </header>
             <div class="overflow-x-auto">
-              <table class="w-full min-w-[900px] text-sm">
-                <thead
-                  class="border-y border-outline-gray-2 bg-surface-gray-1 text-xs text-ink-gray-5"
-                >
-                  <tr>
-                    <th scope="col" class="px-4 py-2.5 text-left font-medium">
+              <table class="w-full min-w-[900px] text-[13px]">
+                <thead>
+                  <tr
+                    class="h-11 border-b border-outline-gray-2 bg-surface-gray-1 text-left text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6"
+                  >
+                    <th scope="col" class="pl-4 pr-3 md:pl-4">
                       {{ __("Customer") }}
                     </th>
-                    <th scope="col" class="px-3 py-2.5 text-left font-medium">
+                    <th scope="col" class="px-3">
                       {{ __("Health") }}
                     </th>
-                    <th
-                      scope="col"
-                      class="w-56 px-3 py-2.5 text-left font-medium"
-                    >
+                    <th scope="col" class="w-56 px-3">
                       {{ __("Delivery") }}
                     </th>
                     <th
                       v-for="col in NUMERIC"
                       :key="col.key"
                       scope="col"
-                      class="whitespace-nowrap px-3 py-2.5 text-right font-medium"
+                      class="whitespace-nowrap px-3 text-right last:pr-4 md:last:pr-5"
                     >
                       {{ col.label }}
                     </th>
@@ -320,7 +336,7 @@
                   <tr
                     v-for="row in rows"
                     :key="row.customer"
-                    class="cursor-pointer border-b border-outline-gray-1 last:border-0"
+                    class="cursor-pointer border-b border-outline-gray-1 last:border-b-0"
                     :class="
                       row.customer === filters.customer
                         ? 'bg-brand-soft'
@@ -330,12 +346,17 @@
                     @click="toggleCustomer(row.customer)"
                     @keydown.enter="toggleCustomer(row.customer)"
                   >
-                    <td class="px-4 py-3 font-medium text-ink-gray-9">
-                      {{ row.customer }}
+                    <td class="py-3 pl-4 pr-3 md:pl-4">
+                      <span
+                        class="flex min-w-0 items-center gap-3 font-semibold text-ink-gray-9"
+                      >
+                        <PersonAvatar :name="row.customer" size="md" neutral />
+                        <span class="truncate">{{ row.customer }}</span>
+                      </span>
                     </td>
                     <td class="px-3 py-3">
                       <span
-                        class="inline-flex h-6 items-center gap-1 whitespace-nowrap rounded-full px-2 text-xs font-medium"
+                        class="inline-flex h-[26px] items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-xs font-semibold"
                         :class="health(row).classes"
                       >
                         <component
@@ -348,7 +369,7 @@
                     </td>
                     <td class="px-3 py-3">
                       <div
-                        class="flex h-2.5 w-full overflow-hidden rounded-full bg-surface-gray-2"
+                        class="flex h-2.5 w-full overflow-hidden rounded-full bg-surface-gray-3"
                         role="img"
                         :aria-label="segmentLabel(row)"
                         :title="segmentLabel(row)"
@@ -370,7 +391,7 @@
                     <td
                       v-for="col in NUMERIC"
                       :key="col.key"
-                      class="px-3 py-3 text-right tabular-nums"
+                      class="px-3 py-3 text-right tabular-nums last:pr-4 md:last:pr-5"
                     >
                       <span
                         v-if="col.tone && col.tone(row)"
@@ -396,6 +417,7 @@
 <script setup lang="ts">
 import { Link } from "@/components";
 import LayoutHeader from "@/components/LayoutHeader.vue";
+import PersonAvatar from "@/components/PersonAvatar.vue";
 import DeliveryByCustomerChart from "@/pages/performance/components/DeliveryByCustomerChart.vue";
 import type { Timing } from "@/pages/performance/performanceMeta";
 import { __ } from "@/translation";

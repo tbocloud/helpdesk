@@ -6,9 +6,9 @@
     :aria-labelledby="titleId"
   >
     <div
-      class="flex flex-wrap items-center gap-2 border-b border-outline-gray-1 px-4 py-3"
+      class="flex flex-wrap items-center gap-2 border-b border-outline-gray-2 px-4 py-3"
     >
-      <h2 :id="titleId" class="text-base-medium text-ink-gray-9">
+      <h2 :id="titleId" class="text-base font-semibold text-ink-gray-9">
         {{ __("Client questionnaire") }}
       </h2>
       <span class="text-sm tabular-nums text-ink-gray-6">
@@ -44,7 +44,7 @@
 
     <p
       v-if="!questionnaire.open"
-      class="px-4 pt-3 text-p-sm text-ink-gray-6"
+      class="px-5 pt-3 text-p-sm text-ink-gray-6"
       role="status"
     >
       {{
@@ -55,7 +55,7 @@
     </p>
     <p
       v-else-if="questionnaire.sent_on"
-      class="px-4 pt-3 text-p-sm text-ink-gray-6"
+      class="px-5 pt-3 text-p-sm text-ink-gray-6"
     >
       {{
         __(
@@ -77,7 +77,7 @@
       <li
         v-for="(row, i) in rows"
         :key="row.name || `new-${i}`"
-        class="flex flex-col gap-1.5 border-b border-outline-gray-1 px-4 py-3 last:border-b-0"
+        class="flex flex-col gap-1.5 border-b border-outline-gray-2 px-4 py-3 last:border-b-0"
       >
         <div class="flex items-start gap-2">
           <div class="flex min-w-0 flex-1 flex-col gap-1">
@@ -130,7 +130,7 @@
 
     <div
       v-if="editable"
-      class="flex flex-wrap items-end gap-2 border-t border-outline-gray-1 px-4 py-3"
+      class="flex flex-wrap items-end gap-2 border-t border-outline-gray-1 px-5 py-3"
     >
       <FormControl
         v-model="newSection"
@@ -156,7 +156,7 @@
     <Dialog
       v-model:open="showSend"
       :title="__('Send the questionnaire')"
-      size="lg"
+      size="md"
     >
       <form
         :id="sendFormId"

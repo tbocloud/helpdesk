@@ -28,78 +28,81 @@
     </p>
   </DefineTodayMarker>
 
-  <div class="flex flex-col gap-3">
+  <div class="flex flex-col gap-4">
     <section
-      class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"
+      class="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4"
       :aria-label="__('Summary')"
     >
+      <!-- the stat card's shape (StatTile): label and icon on top, the figure under -->
       <div
         v-for="tile in tiles"
         :key="tile.key"
-        class="flex items-center gap-3 rounded-xl border px-4 py-3"
+        class="flex min-w-0 flex-col gap-3 rounded-xl border p-4"
         :class="
           tile.warn
             ? 'stat-warning bg-warning-soft'
             : 'border-outline-gray-2 bg-surface-base'
         "
       >
-        <div class="min-w-0 flex-1">
+        <div class="flex items-center justify-between gap-2">
           <p
-            class="text-sm"
-            :class="tile.warn ? 'text-warning' : 'text-ink-gray-7'"
+            class="min-w-0 text-[13px] font-medium"
+            :class="tile.warn ? 'text-warning' : 'text-ink-gray-6'"
           >
             {{ tile.label }}
           </p>
+          <!-- how much of the period is published, as a ring -->
+          <svg
+            v-if="tile.ring !== undefined"
+            viewBox="0 0 38 38"
+            class="size-9 shrink-0 -rotate-90"
+            aria-hidden="true"
+          >
+            <circle
+              cx="19"
+              cy="19"
+              r="15"
+              fill="none"
+              stroke-width="4"
+              style="stroke: var(--outline-gray-2)"
+            />
+            <circle
+              v-if="tile.ring > 0"
+              cx="19"
+              cy="19"
+              r="15"
+              fill="none"
+              stroke-width="4"
+              stroke-linecap="round"
+              style="stroke: var(--brand)"
+              :stroke-dasharray="`${(tile.ring / 100) * RING} ${RING}`"
+            />
+            <!-- at 0% a dot marks where progress starts -->
+            <circle v-else cx="34" cy="19" r="2.5" style="fill: var(--brand)" />
+          </svg>
+          <span
+            v-else
+            class="grid size-9 shrink-0 place-items-center rounded-[10px]"
+            :class="tile.iconClass"
+          >
+            <component :is="tile.icon" class="size-[18px]" aria-hidden="true" />
+          </span>
+        </div>
+        <div class="flex min-w-0 flex-col gap-1">
           <p
-            class="truncate font-mono text-[20px] font-semibold tabular-nums leading-snug"
+            class="truncate text-[28px] font-bold leading-none tracking-[-0.02em] tabular-nums"
             :class="tile.warn ? 'text-warning' : 'text-ink-gray-9'"
           >
             {{ tile.value }}
           </p>
           <p
-            class="truncate text-xs"
+            class="mt-1 truncate text-[12px]"
             :class="tile.warn ? 'text-warning' : 'text-ink-gray-6'"
             :title="tile.sub"
           >
             {{ tile.sub }}
           </p>
         </div>
-        <!-- how much of the period is published, as a ring -->
-        <svg
-          v-if="tile.ring !== undefined"
-          viewBox="0 0 38 38"
-          class="size-8 shrink-0 -rotate-90"
-          aria-hidden="true"
-        >
-          <circle
-            cx="19"
-            cy="19"
-            r="15"
-            fill="none"
-            stroke-width="4"
-            style="stroke: var(--outline-gray-2)"
-          />
-          <circle
-            v-if="tile.ring > 0"
-            cx="19"
-            cy="19"
-            r="15"
-            fill="none"
-            stroke-width="4"
-            stroke-linecap="round"
-            style="stroke: var(--brand)"
-            :stroke-dasharray="`${(tile.ring / 100) * RING} ${RING}`"
-          />
-          <!-- at 0% a dot marks where progress starts -->
-          <circle v-else cx="34" cy="19" r="2.5" style="fill: var(--brand)" />
-        </svg>
-        <span
-          v-else
-          class="grid size-8 shrink-0 place-items-center rounded-[10px]"
-          :class="tile.iconClass"
-        >
-          <component :is="tile.icon" class="size-4" aria-hidden="true" />
-        </span>
       </div>
     </section>
 
@@ -151,7 +154,7 @@
 
     <div
       v-if="missed.length"
-      class="action-banner flex flex-wrap items-center gap-2.5 rounded-xl border bg-danger-soft px-3 py-2 text-sm text-danger"
+      class="action-banner flex flex-wrap items-center gap-2.5 rounded-xl border bg-danger-soft px-4 py-3 text-[13px] text-danger"
       role="status"
     >
       <span
@@ -174,7 +177,7 @@
       <button
         v-if="filter !== 'missed'"
         type="button"
-        class="action-banner-btn inline-flex h-7 shrink-0 items-center rounded-[8px] border bg-surface-base px-3 text-sm font-medium text-danger transition-colors hover:bg-danger-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+        class="action-banner-btn inline-flex h-9 shrink-0 items-center rounded-[10px] border bg-surface-base px-3 text-sm font-medium text-danger transition-colors hover:bg-danger-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
         @click="filter = 'missed'"
       >
         {{ missed.length === 1 ? __("Show it") : __("Show them") }}
@@ -188,7 +191,7 @@
       :aria-labelledby="comingUpId"
     >
       <div class="flex items-center justify-between gap-2">
-        <h2 :id="comingUpId" class="text-sm font-medium text-ink-gray-7">
+        <h2 :id="comingUpId" class="text-base font-semibold text-ink-gray-9">
           {{ __("Coming up") }}
         </h2>
         <button
@@ -207,7 +210,7 @@
         <li v-for="p in comingUp" :key="p.name" class="shrink-0">
           <button
             type="button"
-            class="flex min-h-[44px] w-[272px] flex-col gap-0.5 rounded-xl border border-outline-gray-2 bg-surface-base px-3 py-1.5 text-left transition-colors hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+            class="flex min-h-[44px] w-[272px] flex-col gap-0.5 rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-2.5 text-left transition-colors hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
             :aria-label="
               __(
                 'Go to {0}: {1}, {2}, {3}',
@@ -283,15 +286,15 @@
       <div
         v-for="i in 3"
         :key="i"
-        class="h-28 animate-pulse rounded-lg bg-surface-gray-2"
+        class="h-28 animate-pulse rounded-xl bg-surface-gray-3"
       />
     </div>
 
     <div
       v-else-if="!days.length"
-      class="flex flex-col items-center gap-3 rounded-lg border border-dashed border-outline-gray-3 px-4 py-12 text-center"
+      class="flex flex-col items-center gap-3 rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-14 text-center"
     >
-      <p class="text-p-sm text-ink-gray-5">
+      <p class="text-p-sm text-ink-gray-6">
         {{
           posts.length
             ? __("No entries match this filter.")
@@ -314,7 +317,7 @@
     <!-- past days with nothing left to do fold away; missed ones stay listed -->
     <div
       v-if="plan.earlier.length"
-      class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-outline-gray-2 bg-surface-base px-3 py-1.5 text-sm"
+      class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-2.5 text-[13px]"
     >
       <LucideHistory
         class="size-4 shrink-0 text-ink-gray-5"
@@ -378,7 +381,7 @@
             </div>
           </div>
           <div class="flex flex-col gap-1.5 sm:items-start">
-            <span class="text-[13px] text-ink-gray-6">
+            <span class="text-[12px] text-ink-gray-6">
               <template v-if="day.date === today"
                 ><span class="font-medium text-ink-gray-8 sm:block">{{
                   __("Today")
@@ -547,7 +550,7 @@
               <div
                 class="min-w-0 rounded-xl border border-outline-gray-2 bg-surface-base px-3 py-2"
               >
-                <p class="text-[13px] text-ink-gray-6">{{ __("Sub copy") }}</p>
+                <p class="text-[12px] text-ink-gray-6">{{ __("Sub copy") }}</p>
                 <p
                   class="mt-0.5 line-clamp-2 whitespace-pre-line text-sm leading-snug"
                   :class="
@@ -562,7 +565,7 @@
               <div
                 class="min-w-0 rounded-xl border border-outline-gray-2 bg-surface-base px-3 py-2"
               >
-                <p class="text-[13px] text-ink-gray-6">
+                <p class="text-[12px] text-ink-gray-6">
                   {{ __("Description") }}
                 </p>
                 <p

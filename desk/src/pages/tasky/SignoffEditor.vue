@@ -3,7 +3,7 @@
     <ProjectNav :project-id="projectId" />
     <div class="flex-1 overflow-auto">
       <div
-        class="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-5 md:px-6"
+        class="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 pb-8 pt-4 md:px-8"
       >
         <router-link
           :to="{ name: 'TaskySignoffs', params: { projectId } }"

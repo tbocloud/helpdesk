@@ -8,17 +8,18 @@
       aria-busy="true"
     >
       <div v-for="i in 4" :key="i" class="flex flex-col gap-2">
-        <div class="h-5 w-28 animate-pulse rounded bg-surface-gray-2" />
+        <div class="h-5 w-28 animate-pulse rounded bg-surface-gray-3" />
         <div
           v-for="j in 2"
           :key="j"
-          class="h-36 animate-pulse rounded-xl bg-surface-gray-2"
+          class="h-36 animate-pulse rounded-xl bg-surface-gray-3"
         />
       </div>
     </div>
 
     <TaskyState
       v-else-if="error && !data"
+      class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
       error
       :icon="LucideCircleAlert"
       :title="__('Couldn\'t load the tasks')"
@@ -30,6 +31,7 @@
     <template v-else-if="data">
       <TaskyState
         v-if="!data.tasks.length"
+        class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
         :icon="LucideClipboardCheck"
         :title="
           person === auth.userId
@@ -54,6 +56,7 @@
 
       <TaskyState
         v-else-if="!shown.length"
+        class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
         :icon="LucideSearchX"
         :title="
           person === auth.userId
@@ -81,7 +84,7 @@
       <template v-else>
         <p
           v-if="!openCount"
-          class="flex items-center gap-2 rounded-xl border border-dashed border-outline-gray-3 px-3 py-2 text-sm text-ink-gray-7"
+          class="flex items-center gap-2 rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-3 text-[13px] text-ink-gray-7"
           role="status"
         >
           <LucideCircleCheck
@@ -132,11 +135,11 @@
           >
             <h2
               :id="`stage-${column.key}`"
-              class="flex items-center gap-2 px-0.5 text-sm font-medium text-ink-gray-7 max-lg:sr-only"
+              class="flex items-center gap-2 px-0.5 text-base font-semibold text-ink-gray-9 max-lg:sr-only"
             >
               <component
                 :is="column.icon"
-                class="size-4 text-ink-gray-5"
+                class="size-4 text-ink-gray-6"
                 aria-hidden="true"
               />
               {{ column.label }}
@@ -147,7 +150,7 @@
             </h2>
             <p
               v-if="!column.tasks.length"
-              class="rounded-xl border border-dashed border-outline-gray-2 px-3 py-4 text-center text-sm text-ink-gray-5"
+              class="rounded-xl border border-dashed border-outline-gray-3 px-4 py-5 text-center text-sm text-ink-gray-6"
             >
               {{ column.empty }}
             </p>
@@ -174,7 +177,7 @@
           aria-labelledby="stage-done"
         >
           <div
-            class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-outline-gray-2 bg-surface-base px-3 py-1.5 text-sm"
+            class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-2.5 text-[13px]"
           >
             <LucideCircleCheck
               class="size-4 shrink-0 text-success"

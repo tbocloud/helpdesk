@@ -4,14 +4,16 @@
     <span
       v-for="person in people"
       :key="person.user"
-      class="rounded bg-surface-gray-2 px-1.5 py-0.5 text-xs text-ink-gray-7"
+      class="inline-flex items-center gap-1.5 rounded-full bg-surface-gray-2 py-0.5 pl-0.5 pr-2 text-xs text-ink-gray-7"
     >
+      <PersonAvatar :name="person.full_name" size="xs" />
       {{ person.full_name }}
     </span>
   </div>
 </template>
 
 <script setup lang="ts">
+import PersonAvatar from "@/components/PersonAvatar.vue";
 import { __ } from "@/translation";
 import type { Person } from "../projectFiles";
 

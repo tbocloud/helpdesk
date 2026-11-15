@@ -21,33 +21,40 @@
       </template>
       <template #right-header>
         <Button
-          variant="ghost"
+          size="md"
           :loading="summary.loading"
           :aria-label="__('Refresh')"
           @click="summary.reload()"
         >
           <template #icon>
-            <LucideRefreshCw class="size-4" aria-hidden="true" />
+            <LucideRefreshCw class="size-[18px]" aria-hidden="true" />
           </template>
         </Button>
       </template>
     </LayoutHeader>
 
     <div class="relative flex-1 overflow-auto">
-      <div class="mx-auto w-full max-w-6xl px-4 py-5 md:px-6">
-        <TaskyState
+      <div
+        class="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 pb-8 pt-4 md:px-8"
+      >
+        <div
           v-if="summary.error && !detail"
-          :icon="LucideCircleAlert"
-          :title="__('Couldn\'t load this summary')"
-          :message="loadError"
-          error
+          class="rounded-xl border border-outline-gray-2 bg-surface-base"
         >
-          <Button :label="__('Retry')" @click="summary.reload()" />
-          <Button
-            :label="__('All summaries')"
-            @click="router.push({ name: 'WorkSummaries' })"
-          />
-        </TaskyState>
+          <TaskyState
+            class="py-10"
+            :icon="LucideCircleAlert"
+            :title="__('Couldn\'t load this summary')"
+            :message="loadError"
+            error
+          >
+            <Button :label="__('Retry')" @click="summary.reload()" />
+            <Button
+              :label="__('All summaries')"
+              @click="router.push({ name: 'WorkSummaries' })"
+            />
+          </TaskyState>
+        </div>
 
         <div
           v-else-if="!detail"
@@ -56,29 +63,29 @@
           aria-busy="true"
         >
           <div class="flex flex-col gap-2">
-            <div class="h-5 w-1/3 animate-pulse rounded bg-surface-gray-2" />
-            <div class="h-3.5 w-40 animate-pulse rounded bg-surface-gray-2" />
+            <div class="h-5 w-1/3 animate-pulse rounded bg-surface-gray-3" />
+            <div class="h-3.5 w-40 animate-pulse rounded bg-surface-gray-3" />
           </div>
           <div class="grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
             <div
-              class="flex flex-col gap-3 rounded-lg border border-outline-gray-2 bg-surface-base p-5"
+              class="flex flex-col gap-3 rounded-xl border border-outline-gray-2 bg-surface-base p-4"
             >
               <div
                 v-for="i in 7"
                 :key="i"
-                class="h-3.5 animate-pulse rounded bg-surface-gray-2"
+                class="h-3.5 animate-pulse rounded bg-surface-gray-3"
                 :class="i % 3 === 0 ? 'w-1/4' : 'w-full'"
               />
             </div>
-            <div
-              class="h-64 animate-pulse rounded-lg border border-outline-gray-2 bg-surface-gray-1"
-            />
+            <div class="h-64 animate-pulse rounded-xl bg-surface-gray-3" />
           </div>
         </div>
 
         <template v-else>
           <header class="flex flex-col gap-1.5">
-            <h1 class="text-xl font-semibold text-ink-gray-9">
+            <h1
+              class="text-xl font-bold tracking-[-0.02em] text-ink-gray-9 md:text-[28px] md:leading-[1.2]"
+            >
               {{ detail.customer }}
             </h1>
             <div class="flex flex-wrap items-center gap-2">
@@ -95,9 +102,9 @@
             </div>
           </header>
 
-          <div class="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
+          <div class="grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
             <section
-              class="rounded-lg border border-outline-gray-2 bg-surface-base p-4 md:p-5"
+              class="rounded-xl border border-outline-gray-2 bg-surface-base p-4"
               :aria-label="__('Summary')"
             >
               <!-- the server builds this from escaped text with only

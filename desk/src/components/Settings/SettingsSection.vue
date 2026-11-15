@@ -5,12 +5,12 @@
   >
     <div class="mb-4 flex items-start justify-between gap-3">
       <div class="min-w-0">
-        <h2 :id="headingId" class="text-base-semibold text-ink-gray-9">
+        <h2 :id="headingId" class="text-base font-semibold text-ink-gray-9">
           {{ title }}
         </h2>
         <p
           v-if="description"
-          class="mt-1 max-w-prose text-p-sm text-ink-gray-6"
+          class="mt-1 max-w-prose text-[13px] leading-snug text-ink-gray-6"
         >
           {{ description }}
         </p>

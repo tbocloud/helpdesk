@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col gap-4">
+  <div class="flex flex-col gap-5">
     <!-- the day and whose report: kept in the URL, so a view can be shared -->
     <div
       class="flex flex-wrap items-end gap-3"
@@ -61,6 +61,7 @@
 
     <TaskyState
       v-if="report.error && !data"
+      class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
       error
       :icon="LucideCircleAlert"
       :title="__('Couldn\'t load the daily report')"
@@ -73,16 +74,17 @@
 
     <div
       v-else-if="!data"
-      class="flex flex-col gap-4"
+      class="flex flex-col gap-5"
       aria-busy="true"
       :aria-label="__('Loading')"
     >
-      <div class="h-40 animate-pulse rounded-xl bg-surface-gray-2" />
-      <div class="h-40 animate-pulse rounded-xl bg-surface-gray-2" />
+      <div class="h-40 animate-pulse rounded-xl bg-surface-gray-3" />
+      <div class="h-40 animate-pulse rounded-xl bg-surface-gray-3" />
     </div>
 
     <TaskyState
       v-else-if="!data.available"
+      class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
       :icon="LucideCalendarX"
       :title="__('The daily report isn\'t available yet')"
       :message="__('The ERP site needs the latest TBO Smart.')"
@@ -115,6 +117,7 @@
 
       <TaskyState
         v-if="!people.length"
+        class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
         :icon="LucideUsers"
         :title="__('No salespeople in your view')"
         :message="
@@ -156,9 +159,14 @@
               @click="person = p.user"
             >
               <span
-                class="col-span-2 truncate text-sm-medium text-ink-gray-9 md:col-span-1"
-                >{{ p.full_name }}</span
+                class="col-span-2 flex min-w-0 items-center gap-2.5 md:col-span-1"
               >
+                <PersonAvatar :name="p.full_name" size="md" />
+                <span
+                  class="truncate text-[13px] font-semibold text-ink-gray-9"
+                  >{{ p.full_name }}</span
+                >
+              </span>
               <span
                 v-for="col in COLUMNS"
                 :key="col.key"
@@ -233,7 +241,7 @@
     <Dialog
       :open="showFallback"
       :title="__('Copy the report')"
-      size="lg"
+      size="md"
       @update:open="(value: boolean) => (showFallback = value)"
     >
       <p class="mb-2 text-p-sm text-ink-gray-7">
@@ -255,6 +263,7 @@
 </template>
 
 <script setup lang="ts">
+import PersonAvatar from "@/components/PersonAvatar.vue";
 import { money } from "@/components/invoicing/invoices";
 import TaskyState from "@/components/TaskyState.vue";
 import { TONE_CLASSES } from "@/components/tone";
@@ -453,13 +462,13 @@ async function copy(text: string, done: string) {
 
 <style scoped>
 .row {
-  @apply grid grid-cols-2 items-start gap-x-3 gap-y-2 px-4 py-3;
+  @apply grid grid-cols-2 items-start gap-x-3 gap-y-2 px-4 py-3.5 md:items-center md:px-4;
 }
 .row-head {
-  @apply items-center border-b border-outline-gray-1 bg-surface-gray-1 py-2 text-xs text-ink-gray-6;
+  @apply h-11 items-center border-b border-outline-gray-2 bg-surface-gray-1 py-0 text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6;
 }
 .chip {
-  @apply inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs;
+  @apply inline-flex h-[26px] items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-xs font-semibold;
 }
 @media (min-width: 768px) {
   .row {

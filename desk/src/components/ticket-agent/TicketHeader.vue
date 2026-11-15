@@ -15,7 +15,7 @@
       </div>
     </template>
     <template #right-header>
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2.5">
         <MultipleAvatar
           :avatars="JSON.stringify(viewers)"
           size="md"
@@ -28,7 +28,7 @@
         </div>
         <!-- Custom Actions: inline only where the header has room, else in More -->
         <div v-if="roomyHeader && normalActions.length" class="flex gap-2">
-          <Button v-for="action in normalActions" v-bind="action">
+          <Button v-for="action in normalActions" size="md" v-bind="action">
             <template v-if="action.icon" #prefix>
               <FeatherIcon :name="action.icon" class="h-4 w-4" />
             </template>
@@ -37,7 +37,7 @@
         <div v-if="roomyHeader && groupedWithLabelActions.length">
           <div v-for="g in groupedWithLabelActions" :key="g.label">
             <Dropdown v-slot="{ open }" :options="g.action">
-              <Button :label="g.label">
+              <Button size="md" :label="g.label">
                 <template #suffix>
                   <FeatherIcon
                     :name="open ? 'chevron-up' : 'chevron-down'"
@@ -53,6 +53,7 @@
           <template #default="{ open }">
             <Button
               ref="statusRef"
+              size="md"
               :label="ticket.doc.status"
               :aria-label="__('Status: {0}. Change status', ticket.doc.status)"
               aria-keyshortcuts="s"
@@ -75,6 +76,7 @@
              fits beside the subject -->
         <Button
           class="lg:hidden"
+          size="md"
           :aria-label="__('Details')"
           :tooltip="__('Details')"
           :aria-expanded="detailsOpen"
@@ -90,6 +92,7 @@
         </div>
         <Button
           v-if="showMergeOption"
+          size="md"
           :label="__('Merge')"
           @click="showMergeModal = true"
         >
@@ -100,6 +103,7 @@
         </Button>
         <Button
           :variant="canResolve ? 'subtle' : 'solid'"
+          size="md"
           :label="__('Reply')"
           aria-keyshortcuts="r"
           @click="openReplyBox()"
@@ -113,6 +117,7 @@
         <Button
           v-if="canResolve"
           variant="solid"
+          size="md"
           :label="resolveStatus.label_agent"
           @click="setStatus(resolveStatus.label_agent)"
         >
@@ -124,6 +129,7 @@
         <Dropdown :options="groupedActions" placement="right">
           <Button
             icon="lucide-more-horizontal"
+            size="md"
             :aria-label="__('More actions')"
           />
         </Dropdown>

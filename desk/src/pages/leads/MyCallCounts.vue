@@ -2,15 +2,14 @@
   <!-- hidden quietly while the ERP site's TBO Smart can't count them, and on a failed read -->
   <section
     v-if="counts.data?.available"
-    class="rounded-xl border border-outline-gray-2 bg-surface-base"
+    class="flex flex-col gap-3"
     :aria-label="__('Your calls')"
   >
-    <div class="flex items-center justify-between gap-2 px-4 pt-3">
-      <h2 class="text-sm font-medium text-ink-gray-8">
+    <div class="flex items-center justify-between gap-2">
+      <h2 class="text-base font-semibold text-ink-gray-9">
         {{ __("Your calls") }}
       </h2>
       <Button
-        variant="ghost"
         :label="__('By day')"
         :disabled="!counts.data.days?.length"
         @click="showDays = true"
@@ -20,31 +19,25 @@
         </template>
       </Button>
     </div>
-    <dl class="grid grid-cols-2 sm:grid-cols-4">
-      <div
+    <div class="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4">
+      <StatTile
         v-for="period in PERIODS"
         :key="period.key"
-        class="flex flex-col gap-0.5 px-4 pb-3 pt-2"
-      >
-        <dt class="text-xs text-ink-gray-5">{{ period.label }}</dt>
-        <dd class="font-mono text-xl tabular-nums text-ink-gray-9">
-          {{ (counts.data[period.key]?.calls ?? 0).toLocaleString() }}
-        </dd>
-        <dd class="text-xs text-ink-gray-6">
-          {{
-            __(
-              "{0} contacted",
-              (counts.data[period.key]?.connected ?? 0).toLocaleString()
-            )
-          }}
-        </dd>
-      </div>
-    </dl>
+        :label="period.label"
+        :value="(counts.data[period.key]?.calls ?? 0).toLocaleString()"
+        :sub="
+          __(
+            '{0} contacted',
+            (counts.data[period.key]?.connected ?? 0).toLocaleString()
+          )
+        "
+      />
+    </div>
   </section>
 
   <Dialog
     :open="showDays"
-    size="lg"
+    size="md"
     :title="__('Your calls by day')"
     @update:open="(value: boolean) => (showDays = value)"
   >
@@ -59,12 +52,14 @@
       <div class="max-h-[60vh] overflow-y-auto">
         <table class="w-full text-sm">
           <thead class="sticky top-0 bg-surface-base">
-            <tr class="text-left text-xs text-ink-gray-5">
-              <th scope="col" class="py-2 font-normal">{{ __("Day") }}</th>
-              <th scope="col" class="py-2 text-right font-normal">
+            <tr
+              class="h-11 border-b border-outline-gray-2 text-left text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6"
+            >
+              <th scope="col" class="px-3 first:pl-0">{{ __("Day") }}</th>
+              <th scope="col" class="px-3 text-right last:pl-3 last:pr-0">
                 {{ __("Calls") }}
               </th>
-              <th scope="col" class="py-2 text-right font-normal">
+              <th scope="col" class="px-3 text-right last:pl-3 last:pr-0">
                 {{ __("Contacted") }}
               </th>
             </tr>
@@ -75,14 +70,16 @@
               :key="day.date"
               class="border-t border-outline-gray-1"
             >
-              <td class="py-2 text-ink-gray-8">{{ dayLabel(day.date) }}</td>
+              <td class="py-3 pr-3 text-ink-gray-8">
+                {{ dayLabel(day.date) }}
+              </td>
               <td
-                class="py-2 text-right font-mono tabular-nums text-ink-gray-9"
+                class="px-3 py-3 text-right font-mono tabular-nums text-ink-gray-9"
               >
                 {{ day.calls }}
               </td>
               <td
-                class="py-2 text-right font-mono tabular-nums text-ink-gray-7"
+                class="py-3 pl-3 text-right font-mono tabular-nums text-ink-gray-7"
               >
                 {{ day.connected }}
               </td>
@@ -95,6 +92,7 @@
 </template>
 
 <script setup lang="ts">
+import StatTile from "@/components/StatTile.vue";
 import { __ } from "@/translation";
 import { Button, createResource, dayjs, Dialog } from "frappe-ui";
 import { ref } from "vue";

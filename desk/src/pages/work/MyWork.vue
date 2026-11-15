@@ -1,13 +1,19 @@
 <template>
   <div class="flex h-full flex-col">
-    <LayoutHeader>
+    <LayoutHeader
+      :title="pageTitle"
+      :subtitle="
+        viewUser
+          ? undefined
+          : __(
+              'What\'s on your plate, most urgent first. Start, finish or pause work right from the list.'
+            )
+      "
+    >
       <template #left-header>
-        <div class="truncate text-lg-medium text-ink-gray-9">
-          {{ pageTitle }}
-        </div>
         <span
           v-if="work.data"
-          class="hidden whitespace-nowrap text-p-sm tabular-nums text-ink-gray-5 sm:inline"
+          class="hidden self-start whitespace-nowrap pt-2.5 text-[12px] tabular-nums text-ink-gray-6 sm:inline"
         >
           {{
             __(
@@ -32,23 +38,24 @@
           />
         </div>
         <Button
-          variant="ghost"
+          size="md"
           :loading="work.loading || given.loading"
           :aria-label="__('Refresh')"
           @click="reload"
         >
           <template #icon>
-            <LucideRefreshCw class="size-4" aria-hidden="true" />
+            <LucideRefreshCw class="size-[18px]" aria-hidden="true" />
           </template>
         </Button>
         <Button
           v-if="!viewUser"
           variant="solid"
+          size="md"
           :label="__('New task')"
           @click="showNewTask = true"
         >
           <template #prefix>
-            <LucidePlus class="size-4" aria-hidden="true" />
+            <LucidePlus class="size-[18px]" aria-hidden="true" />
           </template>
           <!-- icon only below sm (the label stays as the accessible name) -->
           <span class="hidden sm:inline">{{ __("New task") }}</span>
@@ -57,11 +64,11 @@
     </LayoutHeader>
 
     <div class="relative flex-1 overflow-auto">
-      <div class="mx-auto w-full max-w-6xl px-4 py-5 md:px-6">
+      <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
         <!-- whose work this is, when it isn't yours -->
         <div
           v-if="viewUser"
-          class="flex flex-col gap-3 rounded-lg border border-outline-gray-2 bg-surface-gray-1 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+          class="flex flex-col gap-3 rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
           role="status"
         >
           <div class="flex min-w-0 items-center gap-3">
@@ -93,34 +100,31 @@
             </template>
           </Button>
         </div>
-        <p v-else class="text-p-sm text-ink-gray-6">
-          {{
-            __(
-              "What's on your plate, most urgent first. Start, finish or pause work right from the list."
-            )
-          }}
-        </p>
 
-        <TaskyState
+        <div
           v-if="work.error && !work.data"
-          class="mt-6"
-          :icon="LucideCircleAlert"
-          :title="
-            viewUser
-              ? __('Couldn\'t load {0}\'s work', viewName)
-              : __('Couldn\'t load your work')
-          "
-          :message="
-            errorText(work.error, __('Check your connection and try again.'))
-          "
-          error
+          class="rounded-xl border border-outline-gray-2 bg-surface-base"
         >
-          <Button :label="__('Retry')" @click="work.reload()" />
-        </TaskyState>
+          <TaskyState
+            class="py-10"
+            :icon="LucideCircleAlert"
+            :title="
+              viewUser
+                ? __('Couldn\'t load {0}\'s work', viewName)
+                : __('Couldn\'t load your work')
+            "
+            :message="
+              errorText(work.error, __('Check your connection and try again.'))
+            "
+            error
+          >
+            <Button :label="__('Retry')" @click="work.reload()" />
+          </TaskyState>
+        </div>
 
         <div
           v-else
-          class="mt-4 grid grid-cols-1 gap-x-6 gap-y-4 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start"
+          class="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start"
         >
           <!-- the timer comes first on phones, where it matters most -->
           <WorkingNow
@@ -134,7 +138,7 @@
             class="rounded-xl border border-outline-gray-2 bg-surface-base p-4 lg:col-start-2"
             :aria-label="__('This week')"
           >
-            <h2 class="text-sm-semibold text-ink-gray-9">
+            <h2 class="text-base font-semibold text-ink-gray-9">
               {{ __("This week") }}
             </h2>
             <dl class="mt-2 text-sm">
@@ -143,7 +147,7 @@
                 :key="row.label"
                 class="flex items-center justify-between py-1.5"
               >
-                <dt class="text-ink-gray-6">{{ row.label }}</dt>
+                <dt class="text-[13px] text-ink-gray-6">{{ row.label }}</dt>
                 <dd class="font-mono tabular-nums text-ink-gray-9">
                   <span
                     v-if="isLoading"
@@ -155,44 +159,27 @@
             </dl>
           </section>
           <div class="min-w-0 lg:col-start-1 lg:row-span-2 lg:row-start-1">
-            <div class="-mx-1 overflow-x-auto px-1">
-              <TabButtons
+            <div class="max-w-full overflow-x-auto">
+              <ViewTabs
                 v-model="activeTab"
-                size="md"
                 :aria-label="__('Filter work')"
                 :aria-controls="listId"
                 :options="
                   tabs.map((t) => ({
                     label: t.label,
                     value: t.key,
-                    iconLeft: t.icon,
+                    icon: t.icon,
+                    count: (t.key === 'assigned' ? givenLoading : isLoading)
+                      ? null
+                      : countFor(t.key),
                   }))
                 "
-              >
-                <template #suffix="{ button, checked }">
-                  <span
-                    class="font-mono text-xs tabular-nums"
-                    :class="checked ? '' : 'text-ink-gray-5'"
-                  >
-                    <span
-                      v-if="
-                        button.modelValue === 'assigned'
-                          ? givenLoading
-                          : isLoading
-                      "
-                      class="inline-block h-3 w-3 animate-pulse rounded bg-surface-gray-2 align-middle"
-                    />
-                    <template v-else>{{
-                      countFor(button.modelValue)
-                    }}</template>
-                  </span>
-                </template>
-              </TabButtons>
+              />
             </div>
 
             <div
               :id="listId"
-              class="mt-4"
+              class="mt-5"
               :aria-busy="
                 activeTab === 'assigned' ? given.loading : work.loading
               "
@@ -200,25 +187,25 @@
               <!-- Loading -->
               <div
                 v-if="activeTab === 'assigned' ? givenLoading : isLoading"
-                class="overflow-hidden rounded-lg border border-outline-gray-2 bg-surface-base"
+                class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
                 :aria-label="__('Loading')"
               >
                 <div
                   v-for="i in 6"
                   :key="i"
-                  class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-3.5 last:border-b-0"
+                  class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-3 last:border-b-0"
                 >
-                  <div class="size-4 animate-pulse rounded bg-surface-gray-2" />
+                  <div class="size-4 animate-pulse rounded bg-surface-gray-3" />
                   <div class="flex flex-1 flex-col gap-2">
                     <div
-                      class="h-3.5 w-2/5 animate-pulse rounded bg-surface-gray-2"
+                      class="h-3.5 w-2/5 animate-pulse rounded bg-surface-gray-3"
                     />
                     <div
-                      class="h-3 w-1/4 animate-pulse rounded bg-surface-gray-2"
+                      class="h-3 w-1/4 animate-pulse rounded bg-surface-gray-3"
                     />
                   </div>
                   <div
-                    class="hidden h-3 w-20 animate-pulse rounded bg-surface-gray-2 md:block"
+                    class="hidden h-3 w-20 animate-pulse rounded bg-surface-gray-3 md:block"
                   />
                 </div>
               </div>
@@ -227,9 +214,10 @@
               <template v-else-if="activeTab === 'assigned'">
                 <div
                   v-if="given.error && !given.data"
-                  class="rounded-lg border border-outline-gray-2 bg-surface-base"
+                  class="rounded-xl border border-outline-gray-2 bg-surface-base"
                 >
                   <TaskyState
+                    class="py-10"
                     :icon="LucideCircleAlert"
                     :title="__('Couldn\'t load the tasks given out')"
                     :message="
@@ -245,9 +233,10 @@
                 </div>
                 <div
                   v-else-if="!givenItems.length"
-                  class="rounded-lg border border-outline-gray-2 bg-surface-base"
+                  class="rounded-xl border border-outline-gray-2 bg-surface-base"
                 >
                   <TaskyState
+                    class="py-10"
                     :icon="LucideInbox"
                     :title="
                       viewUser
@@ -300,9 +289,10 @@
                   </div>
                   <div
                     v-if="!givenGroups.length"
-                    class="rounded-lg border border-outline-gray-2 bg-surface-base"
+                    class="rounded-xl border border-outline-gray-2 bg-surface-base"
                   >
                     <TaskyState
+                      class="py-10"
                       :icon="LucideCircleCheck"
                       :title="__('Nothing matches these filters')"
                       :message="__('Pick another person or project.')"
@@ -424,6 +414,7 @@
                 </ul>
                 <TaskyState
                   v-else
+                  class="py-10"
                   :icon="LucideCircleCheck"
                   :title="__('Nothing completed lately')"
                   :message="
@@ -437,9 +428,10 @@
               <!-- Empty: nothing open, or the filter matches nothing -->
               <div
                 v-else-if="!visibleItems.length"
-                class="rounded-lg border border-outline-gray-2 bg-surface-base"
+                class="rounded-xl border border-outline-gray-2 bg-surface-base"
               >
                 <TaskyState
+                  class="py-10"
                   :icon="emptyState.icon"
                   :title="emptyState.title"
                   :message="emptyState.message"
@@ -513,6 +505,7 @@
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import SectionCard from "@/components/SectionCard.vue";
 import TaskyState from "@/components/TaskyState.vue";
+import ViewTabs from "@/components/ViewTabs.vue";
 import TaskDetailDialog, {
   type TaskAction,
   type TaskRef,
@@ -530,7 +523,6 @@ import {
   createResource,
   dayjs,
   Select,
-  TabButtons,
   toast,
 } from "frappe-ui";
 import { computed, reactive, ref, useId, watch, type Component } from "vue";

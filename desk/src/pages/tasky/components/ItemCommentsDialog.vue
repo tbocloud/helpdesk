@@ -56,7 +56,10 @@
             class="flex flex-col gap-1 border-b border-outline-gray-1 py-3 first:pt-0 last:border-b-0"
           >
             <div class="flex min-w-0 flex-wrap items-center gap-x-2 text-xs">
-              <span class="text-sm font-medium text-ink-gray-8">
+              <span
+                class="inline-flex items-center gap-2 text-sm font-medium text-ink-gray-8"
+              >
+                <PersonAvatar :name="c.author_name" size="xs" />
                 {{ c.author_name }}
               </span>
               <time
@@ -211,6 +214,7 @@
 </template>
 
 <script setup lang="ts">
+import PersonAvatar from "@/components/PersonAvatar.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";
 import { dateFormat, dateTooltipFormat, errorText, timeAgo } from "@/utils";

@@ -1,95 +1,128 @@
 <template>
   <div class="flex h-full flex-col">
-    <LayoutHeader>
-      <template #left-header>
-        <h1 class="text-lg-medium text-ink-gray-9">{{ __("Leads") }}</h1>
-      </template>
+    <LayoutHeader :title="heading.title" :subtitle="heading.subtitle">
       <template #right-header>
         <Button
-          variant="ghost"
+          size="md"
           :loading="isList && leads.loading && !!data"
-          :aria-label="__('Refresh')"
+          :aria-label="__('Refresh leads')"
           @click="refresh"
         >
           <template #icon>
-            <LucideRefreshCw class="size-4" aria-hidden="true" />
+            <LucideRefreshCw class="size-[18px]" aria-hidden="true" />
           </template>
         </Button>
         <Button
           v-if="options?.can_find_prospects && !isBd"
+          size="md"
           :label="__('Find prospects')"
           :route="{ name: 'FindProspects' }"
         >
           <template #prefix>
-            <LucideRadar class="size-4" aria-hidden="true" />
+            <LucideRadar class="size-[18px]" aria-hidden="true" />
           </template>
         </Button>
-        <Button variant="solid" :label="__('New lead')" @click="showNew = true">
+        <Button
+          variant="solid"
+          size="md"
+          :label="__('New lead')"
+          @click="showNew = true"
+        >
           <template #prefix>
-            <LucidePlus class="size-4" aria-hidden="true" />
+            <LucidePlus class="size-[18px]" aria-hidden="true" />
           </template>
         </Button>
       </template>
     </LayoutHeader>
 
-    <div class="relative flex-1 overflow-auto">
-      <div class="mx-auto w-full max-w-6xl px-4 py-5 md:px-6">
-        <div class="flex flex-col gap-3">
-          <div class="overflow-x-auto">
-            <TabButtons
-              :model-value="view"
-              size="md"
-              :aria-label="__('Which leads')"
-              :options="tabs"
-              @update:model-value="
-                view = $event as LeadTab;
-                picked = true;
-              "
+    <div class="relative flex-1">
+      <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
+        <!-- the day's new leads; the reports bring their own figures -->
+        <template v-if="isList && !isBd">
+          <!-- hidden quietly until the ERP site's TBO Smart counts it, and on a failed read -->
+          <div
+            v-if="!intakeData && intakeLoading"
+            class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3"
+            aria-hidden="true"
+          >
+            <div
+              v-for="i in 3"
+              :key="i"
+              class="h-[150px] animate-pulse rounded-xl bg-surface-gray-3"
             />
           </div>
-          <!-- the Daily report has the day's new leads itself, and loads in one request -->
-          <template
-            v-if="
-              view !== 'daily' &&
-              view !== 'today' &&
-              view !== 'business' &&
-              view !== 'outreach' &&
-              view !== 'commission'
-            "
-          >
-            <!-- hidden quietly until the ERP site's TBO Smart counts it, and on a failed read -->
-            <div
-              v-if="!intakeData && intakeLoading"
-              class="h-[118px] animate-pulse rounded-xl bg-surface-gray-2 md:h-[94px]"
-              aria-hidden="true"
-            />
-            <LeadIntakeStrip v-else-if="intakeOn" :intake="intakeData!" />
+          <LeadIntakeStrip v-else-if="intakeOn" :intake="intakeData!" />
+        </template>
+
+        <!-- the lists as pills, the reports as links beside them -->
+        <nav
+          class="flex flex-wrap items-center justify-between gap-3"
+          :aria-label="__('Lead views')"
+        >
+          <!-- on a report: the reports as pills, and the way back to the lists -->
+          <template v-if="isReport">
+            <div class="max-w-full overflow-x-auto">
+              <ViewTabs
+                :model-value="view"
+                :aria-label="__('Reports')"
+                :options="reportTabs"
+                @update:model-value="pickView($event as LeadTab)"
+              />
+            </div>
+            <button
+              type="button"
+              class="rounded text-[13px] font-semibold text-brand-ink underline-offset-4 hover:text-brand-ink-hover hover:underline"
+              @click="pickView(listHome)"
+            >
+              {{ __("Go to all leads") }} <span aria-hidden="true">→</span>
+            </button>
           </template>
-        </div>
+          <div v-else class="max-w-full overflow-x-auto">
+            <ViewTabs
+              :model-value="view"
+              :aria-label="__('Which leads')"
+              :options="listTabs"
+              @update:model-value="pickView($event as LeadTab)"
+            />
+          </div>
+          <div
+            v-if="!isReport && reportTabs.length"
+            class="flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px]"
+          >
+            <span class="font-medium text-ink-gray-6">{{
+              __("Reports:")
+            }}</span>
+            <button
+              v-for="tab in reportTabs"
+              :key="tab.value"
+              type="button"
+              class="rounded font-semibold text-brand-ink underline-offset-4 hover:text-brand-ink-hover hover:underline"
+              :class="view === tab.value && 'underline decoration-2'"
+              :aria-current="view === tab.value ? 'page' : undefined"
+              @click="pickView(tab.value)"
+            >
+              {{ tab.label }}
+            </button>
+          </div>
+        </nav>
 
         <!-- the batch of calls for this slot; it replaces Call today for those who have it -->
-        <TodaysCalls v-if="view === 'today'" ref="todayPanel" class="mt-4" />
+        <TodaysCalls v-if="view === 'today'" ref="todayPanel" />
 
         <LeadsOverview
           v-else-if="view === 'overview'"
           ref="overviewPanel"
-          class="mt-4"
           @intake="takeOverviewIntake"
         />
 
         <!-- the Daily Sales Performance Report; only when the ERP site has it -->
-        <LeadsDailyReport
-          v-else-if="view === 'daily'"
-          ref="dailyPanel"
-          class="mt-4"
-        />
+        <LeadsDailyReport v-else-if="view === 'daily'" ref="dailyPanel" />
 
         <!-- management only: the ERP site decides who (System Manager or TBO Management) -->
         <template v-else-if="view === 'business'">
           <LeadsBusiness
             v-if="canViewBusiness"
             ref="businessPanel"
-            class="mt-4"
             :options="options"
           />
         </template>
@@ -98,18 +131,16 @@
         <LeadsCommission
           v-else-if="view === 'commission'"
           ref="commissionPanel"
-          class="mt-4"
         />
 
         <!-- first messages the AI drafted, for a person to approve; only while Outreach is on -->
         <LeadsOutreach
           v-else-if="view === 'outreach'"
           ref="outreachPanel"
-          class="mt-4"
           :options="options"
         />
 
-        <div v-else class="mt-3 flex flex-col gap-3">
+        <template v-else>
           <!-- what they called: today, this week, this month, all time, and by day -->
           <MyCallCounts v-if="view === 'mine'" ref="callCounts" />
           <!-- overdue, today, tomorrow, the week, later: a card lists its leads -->
@@ -119,600 +150,701 @@
             v-model="filters.due"
             :owner="filters.owner"
           />
-          <!-- one toolbar: search, the filters people use most, the rest behind More filters -->
-          <div
-            class="flex flex-wrap items-center gap-2"
-            role="group"
-            :aria-label="__('Filter the leads')"
+
+          <section
+            class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
+            :aria-label="__('Leads')"
           >
-            <FormControl
-              v-model="search"
-              type="search"
-              class="w-full sm:w-72"
-              :aria-label="__('Search')"
-              :placeholder="__('Name, company, email or mobile')"
-              autocomplete="off"
+            <!-- one toolbar: search, the filters people use most, the rest behind More filters -->
+            <div
+              class="flex flex-wrap items-center gap-2.5 border-b border-outline-gray-2 px-4 py-4 md:px-4"
+              role="group"
+              :aria-label="__('Filter the leads')"
             >
-              <template #prefix>
-                <LucideSearch
-                  class="size-4 text-ink-gray-5"
-                  aria-hidden="true"
-                />
-              </template>
-            </FormControl>
-            <FormControl
-              v-model="filters.stage"
-              type="select"
-              class="w-36"
-              :aria-label="__('Stage')"
-              :options="stageOptions"
-            />
-            <FormControl
-              v-if="!isBd"
-              v-model="filters.owner"
-              type="select"
-              class="w-40"
-              :aria-label="__('Owner')"
-              :options="ownerOptions"
-            />
-            <FormControl
-              v-if="isBd || view === 'mine'"
-              v-model="filters.created_by"
-              type="select"
-              class="w-44"
-              :aria-label="__('Created by')"
-              :options="CREATED_BY"
-            />
-            <FormControl
-              v-if="view === 'called'"
-              v-model="filters.called"
-              type="select"
-              class="w-40"
-              :aria-label="__('Last called')"
-              :options="LAST_CALLED"
-            />
-            <LeadCategoryFilters
-              ref="productPanel"
-              v-model="categories"
-              class="w-44"
-              :options="options"
-              :only="['product']"
-              bare
-            />
-            <Button
-              :label="
-                hiddenChips.length
-                  ? __('More filters ({0})', String(hiddenChips.length))
-                  : __('More filters')
-              "
-              :aria-expanded="showMore"
-              @click="showMore = true"
-            >
-              <template #prefix>
-                <LucideSlidersHorizontal class="size-4" aria-hidden="true" />
-              </template>
-            </Button>
-            <div class="ml-auto flex flex-wrap items-center gap-2">
-              <Button
-                v-if="canCategorise"
-                :label="selecting ? __('Done') : __('Select leads')"
-                @click="toggleSelecting"
+              <FormControl
+                v-model="search"
+                type="search"
+                size="md"
+                class="min-w-0 flex-[1_1_280px]"
+                :aria-label="__('Search leads')"
+                :placeholder="__('Search by name, company, email or phone')"
+                autocomplete="off"
               >
                 <template #prefix>
-                  <LucideListChecks class="size-4" aria-hidden="true" />
+                  <LucideSearch
+                    class="size-[18px] text-ink-gray-6"
+                    aria-hidden="true"
+                  />
+                </template>
+              </FormControl>
+              <FormControl
+                v-model="filters.stage"
+                type="select"
+                size="md"
+                class="w-full sm:w-[150px]"
+                :aria-label="__('Stage')"
+                :options="stageOptions"
+              />
+              <FormControl
+                v-if="!isBd"
+                v-model="filters.owner"
+                type="select"
+                size="md"
+                class="w-full sm:w-[150px]"
+                :aria-label="__('Owner')"
+                :options="ownerOptions"
+              />
+              <FormControl
+                v-if="isBd || view === 'mine'"
+                v-model="filters.created_by"
+                type="select"
+                size="md"
+                class="w-full sm:w-44"
+                :aria-label="__('Created by')"
+                :options="CREATED_BY"
+              />
+              <FormControl
+                v-if="view === 'called'"
+                v-model="filters.called"
+                type="select"
+                size="md"
+                class="w-full sm:w-40"
+                :aria-label="__('Last called')"
+                :options="LAST_CALLED"
+              />
+              <LeadCategoryFilters
+                ref="productPanel"
+                v-model="categories"
+                class="w-full sm:w-[150px]"
+                :options="options"
+                :only="['product']"
+                bare
+              />
+              <Button
+                size="md"
+                :label="
+                  hiddenChips.length
+                    ? __('More filters ({0})', String(hiddenChips.length))
+                    : __('More filters')
+                "
+                :aria-expanded="showMore"
+                @click="showMore = true"
+              >
+                <template #prefix>
+                  <LucideSlidersHorizontal
+                    class="size-[18px]"
+                    aria-hidden="true"
+                  />
                 </template>
               </Button>
             </div>
-          </div>
-          <!-- the days a follow-up is due; on Follow-up they take the place of the cards -->
-          <div
-            v-if="hasDueDays"
-            class="flex flex-wrap items-end gap-3"
-            role="group"
-            :aria-label="__('Follow-up due between')"
-          >
-            <FormControl
-              v-model="filters.due_from"
-              type="date"
-              class="w-40"
-              :label="__('Follow-up due from')"
-              :max="filters.due_to || undefined"
-            />
-            <FormControl
-              v-model="filters.due_to"
-              type="date"
-              class="w-40"
-              :label="__('To')"
-              :min="filters.due_from || undefined"
-            />
-            <Button
-              v-if="filters.due_from || filters.due_to"
-              variant="ghost"
-              :label="__('Clear dates')"
-              @click="clearDueDays"
-            />
-          </div>
-          <div
-            v-if="created === 'custom'"
-            class="flex flex-wrap items-end gap-3"
-            role="group"
-            :aria-label="__('Created between')"
-          >
-            <FormControl
-              v-model="extra.from"
-              type="date"
-              class="w-40"
-              :label="__('From')"
-            />
-            <FormControl
-              v-model="extra.to"
-              type="date"
-              class="w-40"
-              :label="__('To')"
-            />
-          </div>
-          <!-- bulk actions, once Select leads is on -->
-          <div
-            v-if="canCategorise && selecting"
-            class="flex flex-wrap items-center gap-2"
-          >
-            <span
-              class="mr-auto font-mono text-p-sm tabular-nums text-ink-gray-7"
-              aria-live="polite"
-              >{{ __("{0} selected", String(selected.size)) }}</span
-            >
-            <Button :label="__('Select this page')" @click="selectPage" />
-            <Button
-              :label="__('Merge')"
-              :disabled="selected.size !== 2"
-              :tooltip="
-                selected.size === 2 ? '' : __('Pick the two leads to merge.')
-              "
-              @click="showMerge = true"
-            >
-              <template #prefix>
-                <LucideMerge class="size-4" aria-hidden="true" />
-              </template>
-            </Button>
-            <Button
-              variant="solid"
-              :label="__('Set category')"
-              :disabled="!selected.size"
-              @click="showSet = true"
-            />
-          </div>
-          <!-- what narrows the list beyond the toolbar, each one removable -->
-          <div
-            v-if="hasFilters"
-            class="flex flex-wrap items-center gap-2"
-            role="group"
-            :aria-label="__('Active filters')"
-          >
-            <button
-              v-for="chip in hiddenChips"
-              :key="chip.key"
-              type="button"
-              class="inline-flex h-8 items-center gap-1.5 rounded-full border border-brand bg-brand-soft px-3 text-sm text-brand-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
-              :aria-label="__('Remove filter: {0}', chip.label)"
-              @click="chip.remove()"
-            >
-              {{ chip.label }}
-              <LucideX class="size-3.5" aria-hidden="true" />
-            </button>
-            <Button
-              variant="ghost"
-              :label="__('Clear all')"
-              @click="clearFilters"
-            />
-          </div>
-        </div>
-
-        <template v-if="isList">
-          <TaskyState
-            v-if="waitingForDates"
-            class="mt-6"
-            :icon="LucideCalendarRange"
-            :title="__('Pick both dates')"
-            :message="
-              __('Choose a from and a to date to see the leads created then.')
-            "
-          />
-          <TaskyState
-            v-else-if="leads.error && !data"
-            class="mt-6"
-            error
-            :icon="LucideCircleAlert"
-            :title="__('Couldn\'t load the leads')"
-            :message="
-              errorText(leads.error, __('Check your connection and try again.'))
-            "
-          >
-            <Button :label="__('Try again')" @click="leads.reload()" />
-          </TaskyState>
-
-          <!-- loading: the rows' shape is known -->
-          <div
-            v-else-if="!data"
-            class="mt-4 overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
-            aria-busy="true"
-            :aria-label="__('Loading')"
-          >
+            <!-- the days a follow-up is due; on Follow-up they take the place of the cards -->
             <div
-              v-for="i in 6"
-              :key="i"
-              class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-4 last:border-b-0"
+              v-if="hasDueDays"
+              class="flex flex-wrap items-end gap-3 border-b border-outline-gray-2 px-4 py-3 md:px-4"
+              role="group"
+              :aria-label="__('Follow-up due between')"
             >
-              <div class="flex flex-1 flex-col gap-2">
+              <FormControl
+                v-model="filters.due_from"
+                type="date"
+                class="w-40"
+                :label="__('Follow-up due from')"
+                :max="filters.due_to || undefined"
+              />
+              <FormControl
+                v-model="filters.due_to"
+                type="date"
+                class="w-40"
+                :label="__('To')"
+                :min="filters.due_from || undefined"
+              />
+              <Button
+                v-if="filters.due_from || filters.due_to"
+                variant="ghost"
+                :label="__('Clear dates')"
+                @click="clearDueDays"
+              />
+            </div>
+            <div
+              v-if="created === 'custom'"
+              class="flex flex-wrap items-end gap-3 border-b border-outline-gray-2 px-4 py-3 md:px-4"
+              role="group"
+              :aria-label="__('Created between')"
+            >
+              <FormControl
+                v-model="extra.from"
+                type="date"
+                class="w-40"
+                :label="__('From')"
+              />
+              <FormControl
+                v-model="extra.to"
+                type="date"
+                class="w-40"
+                :label="__('To')"
+              />
+            </div>
+            <!-- what narrows the list beyond the toolbar, each one removable -->
+            <div
+              v-if="hasFilters"
+              class="flex flex-wrap items-center gap-2 border-b border-outline-gray-2 px-4 py-3 md:px-4"
+              role="group"
+              :aria-label="__('Active filters')"
+            >
+              <button
+                v-for="chip in hiddenChips"
+                :key="chip.key"
+                type="button"
+                class="inline-flex h-8 items-center gap-1.5 rounded-full border border-brand-soft-border bg-brand-soft px-3 text-sm font-medium text-brand-ink"
+                :aria-label="__('Remove filter: {0}', chip.label)"
+                @click="chip.remove()"
+              >
+                {{ chip.label }}
+                <LucideX class="size-3.5" aria-hidden="true" />
+              </button>
+              <Button
+                variant="ghost"
+                :label="__('Clear all')"
+                @click="clearFilters"
+              />
+            </div>
+
+            <!-- bulk actions on the leads picked -->
+            <div
+              v-if="canCategorise && selected.size"
+              class="flex flex-wrap items-center gap-3 bg-surface-gray-10 px-4 py-2.5 text-[13px] text-ink-base md:px-4"
+            >
+              <strong class="tabular-nums" aria-live="polite">{{
+                __("{0} selected", String(selected.size))
+              }}</strong>
+              <span class="flex-1" />
+              <button
+                type="button"
+                :class="BULK_BUTTON"
+                :disabled="selected.size !== 2"
+                :title="
+                  selected.size === 2 ? '' : __('Pick the two leads to merge.')
+                "
+                @click="showMerge = true"
+              >
+                <LucideMerge class="size-4" aria-hidden="true" />
+                {{ __("Merge") }}
+              </button>
+              <button
+                type="button"
+                :class="BULK_BUTTON"
+                @click="showSet = true"
+              >
+                {{ __("Set category") }}
+              </button>
+              <button
+                type="button"
+                :class="BULK_BUTTON"
+                @click="clearSelection"
+              >
+                {{ __("Clear") }}
+              </button>
+            </div>
+
+            <TaskyState
+              v-if="waitingForDates"
+              class="py-10"
+              :icon="LucideCalendarRange"
+              :title="__('Pick both dates')"
+              :message="
+                __('Choose a from and a to date to see the leads created then.')
+              "
+            />
+            <TaskyState
+              v-else-if="leads.error && !data"
+              class="py-10"
+              error
+              :icon="LucideCircleAlert"
+              :title="__('Couldn\'t load the leads')"
+              :message="
+                errorText(
+                  leads.error,
+                  __('Check your connection and try again.')
+                )
+              "
+            >
+              <Button :label="__('Try again')" @click="leads.reload()" />
+            </TaskyState>
+
+            <!-- loading: the rows' shape is known -->
+            <div v-else-if="!data" aria-busy="true" :aria-label="__('Loading')">
+              <div
+                v-for="i in 6"
+                :key="i"
+                class="flex h-14 items-center gap-3 border-b border-outline-gray-1 px-5 last:border-b-0"
+              >
                 <div
-                  class="h-3.5 w-1/3 animate-pulse rounded bg-surface-gray-2"
+                  class="size-[38px] animate-pulse rounded-full bg-surface-gray-3"
                 />
+                <div class="flex flex-1 flex-col gap-2">
+                  <div
+                    class="h-3.5 w-1/4 animate-pulse rounded bg-surface-gray-3"
+                  />
+                  <div
+                    class="h-3 w-1/3 animate-pulse rounded bg-surface-gray-3"
+                  />
+                </div>
                 <div
-                  class="h-3 w-1/2 animate-pulse rounded bg-surface-gray-2"
+                  class="h-6 w-24 animate-pulse rounded-full bg-surface-gray-3"
                 />
               </div>
-              <div class="h-5 w-20 animate-pulse rounded bg-surface-gray-2" />
             </div>
-          </div>
 
-          <TaskyState
-            v-else-if="!data.total && (hasFilters || view !== 'all')"
-            class="mt-6"
-            :icon="LucideSearchX"
-            :title="__('No leads match')"
-            :message="
-              __(
-                'Nothing in this view with these filters. Try All, or clear the filters.'
-              )
-            "
-          >
-            <Button :label="__('Show all leads')" @click="showAll" />
-          </TaskyState>
-
-          <TaskyState
-            v-else-if="!data.total"
-            class="mt-6"
-            :icon="LucideUserPlus"
-            :title="__('No leads yet')"
-            :message="
-              __(
-                'Leads you can see on the ERP site show up here. Add the first one when someone shows interest.'
-              )
-            "
-          >
-            <Button
-              variant="solid"
-              :label="__('New lead')"
-              @click="showNew = true"
-            />
-          </TaskyState>
-
-          <template v-else>
-            <div
-              class="mt-4 overflow-x-auto rounded-xl border border-outline-gray-2 bg-surface-base"
-              :aria-busy="leads.loading"
+            <TaskyState
+              v-else-if="!data.total && (hasFilters || view !== 'all')"
+              class="py-10"
+              :icon="LucideSearchX"
+              :title="__('No leads match this view')"
+              :message="__('Try another tab or clear your search.')"
             >
-              <table class="w-full text-sm" :aria-label="__('Leads')">
-                <thead>
-                  <tr
-                    class="border-b border-outline-gray-2 bg-surface-gray-1 text-left text-xs text-ink-gray-6"
-                  >
-                    <th v-if="selecting" scope="col" class="w-10 py-2.5 pl-4">
-                      <span class="sr-only">{{ __("Select") }}</span>
-                    </th>
-                    <th scope="col" class="px-4 py-2.5 font-medium">
-                      {{ __("Lead") }}
-                    </th>
-                    <th
-                      scope="col"
-                      class="hidden px-3 py-2.5 font-medium md:table-cell"
-                    >
-                      {{ __("Stage") }}
-                    </th>
-                    <th
-                      scope="col"
-                      class="hidden px-3 py-2.5 font-medium md:table-cell"
-                    >
-                      {{ __("Owner") }}
-                    </th>
-                    <th
-                      scope="col"
-                      class="hidden px-3 py-2.5 font-medium lg:table-cell"
-                    >
-                      {{ __("Product") }}
-                    </th>
-                    <th
-                      scope="col"
-                      class="hidden px-3 py-2.5 font-medium lg:table-cell"
-                    >
-                      {{ __("Last call") }}
-                    </th>
-                    <th
-                      scope="col"
-                      class="hidden px-3 py-2.5 font-medium lg:table-cell"
-                    >
-                      {{ __("Next follow-up") }}
-                    </th>
-                    <th
-                      scope="col"
-                      class="hidden px-3 py-2.5 text-right font-medium xl:table-cell"
-                    >
-                      {{ __("Updated") }}
-                    </th>
-                    <th scope="col" class="w-12 py-2.5 pr-3">
-                      <span class="sr-only">{{ __("Call") }}</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr
-                    v-for="row in data.rows"
-                    :key="row.name"
-                    class="border-b border-outline-gray-1 last:border-b-0 hover:bg-surface-gray-1"
-                  >
-                    <td v-if="selecting" class="w-10 py-3 pl-4 align-middle">
-                      <Checkbox
-                        :model-value="selected.has(row.name)"
-                        :label="__('Select {0}', row.lead_name || row.name)"
-                        @update:model-value="toggleRow(row.name)"
-                      />
-                    </td>
-                    <td class="min-w-64 px-4 py-3 align-middle">
-                      <router-link
-                        :to="{ name: 'Lead', params: { leadId: row.name } }"
-                        class="block rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+              <Button :label="__('Show all leads')" @click="showAll" />
+            </TaskyState>
+
+            <TaskyState
+              v-else-if="!data.total"
+              class="py-10"
+              :icon="LucideUserPlus"
+              :title="__('No leads yet')"
+              :message="
+                __(
+                  'Leads you can see on the ERP site show up here. Add the first one when someone shows interest.'
+                )
+              "
+            >
+              <Button
+                variant="solid"
+                :label="__('New lead')"
+                @click="showNew = true"
+              />
+            </TaskyState>
+
+            <template v-else>
+              <div class="overflow-x-auto" :aria-busy="leads.loading">
+                <table class="w-full text-[13px]" :aria-label="__('Leads')">
+                  <thead>
+                    <tr :class="TH_ROW">
+                      <th
+                        v-if="canCategorise"
+                        scope="col"
+                        class="w-11 pl-4 md:pl-4"
                       >
-                        <span
-                          class="block truncate text-base-medium text-ink-gray-9"
-                          :title="row.lead_name || row.name"
-                          >{{ row.lead_name || row.name }}</span
-                        >
-                        <span
-                          class="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-gray-6"
-                        >
-                          <span v-if="row.company_name" class="truncate">{{
-                            row.company_name
-                          }}</span>
-                          <template v-if="departmentLabel(row)">
-                            <span aria-hidden="true">·</span>
-                            <span>
-                              <span class="sr-only">{{
-                                __("Department")
-                              }}</span>
-                              {{ departmentLabel(row) }}
-                            </span>
-                          </template>
-                          <template v-if="row.segment">
-                            <span aria-hidden="true">·</span>
-                            <span>{{ row.segment }}</span>
-                          </template>
-                          <template v-if="categoryLabel(row)">
-                            <span aria-hidden="true">·</span>
-                            <span>
-                              <span class="sr-only">{{ __("Category") }}</span>
-                              {{ categoryLabel(row) }}
-                            </span>
-                          </template>
-                          <template v-if="row.mobile_no || row.email_id">
-                            <span aria-hidden="true">·</span>
-                            <span class="truncate font-mono tabular-nums">{{
-                              row.mobile_no || row.email_id
-                            }}</span>
-                          </template>
-                          <template
-                            v-if="row.score !== null && row.score !== undefined"
-                          >
-                            <span aria-hidden="true">·</span>
-                            <span
-                              class="font-mono tabular-nums"
-                              :title="__('Lead score')"
-                              >{{ __("Score {0}", String(row.score)) }}</span
-                            >
-                          </template>
-                        </span>
-                      </router-link>
-                      <!-- on a phone the columns fold in under the name -->
-                      <div
-                        class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 md:hidden"
-                      >
-                        <TaskyBadge
-                          v-if="row.tbo_stage"
-                          :label="stageLabel(options, row.tbo_stage)"
-                          :tone="stageTone(options, row.tbo_stage)"
-                          :icon="stageIcon(row.tbo_stage)"
+                        <Checkbox
+                          :model-value="allPicked"
+                          :label="__('Select all leads on this page')"
+                          class="[&_label]:sr-only"
+                          @update:model-value="togglePage"
                         />
-                        <span
-                          v-if="row.next_follow_up"
-                          class="text-xs tabular-nums"
-                          :class="
-                            followUpLate(row)
-                              ? 'font-medium text-danger'
-                              : 'text-ink-gray-7'
-                          "
-                          >{{ followUpText(row) }}</span
-                        >
-                        <span class="text-xs text-ink-gray-6">{{
-                          row.owner_name ||
-                          ownerName(options, row.lead_owner) ||
-                          __("No owner")
+                      </th>
+                      <th scope="col" class="px-3 first:pl-4 md:first:pl-4">
+                        {{ __("Lead") }}
+                      </th>
+                      <th scope="col" class="hidden px-3 md:table-cell">
+                        {{ __("Stage") }}
+                      </th>
+                      <th scope="col" class="hidden px-3 xl:table-cell">
+                        {{ __("Score") }}
+                      </th>
+                      <th scope="col" class="hidden px-3 md:table-cell">
+                        {{ __("Owner") }}
+                      </th>
+                      <th scope="col" class="hidden px-3 lg:table-cell">
+                        {{ __("Product") }}
+                      </th>
+                      <th scope="col" class="hidden px-3 lg:table-cell">
+                        {{ __("Last call") }}
+                      </th>
+                      <th scope="col" class="hidden px-3 lg:table-cell">
+                        {{ __("Next follow-up") }}
+                      </th>
+                      <th scope="col" class="hidden px-3 2xl:table-cell">
+                        {{ __("Updated") }}
+                      </th>
+                      <th scope="col" class="pr-4 text-right md:pr-4">
+                        <span class="sr-only md:not-sr-only">{{
+                          __("Actions")
                         }}</span>
-                      </div>
-                      <div
-                        v-if="
-                          createdNotOwned(row) ||
-                          quiet.get(row.name) ||
-                          statuses.get(row.name)
-                        "
-                        class="mt-1.5 flex flex-wrap items-center gap-1.5"
-                      >
-                        <!-- one they created and handed on: they read it, its owner works it -->
-                        <TaskyBadge
-                          v-if="createdNotOwned(row)"
-                          :icon="LucideUserPlus"
-                          :label="__('Created by you')"
-                          :title="
-                            __(
-                              'You created this lead; {0} owns it now',
-                              row.owner_name || row.lead_owner || ''
-                            )
-                          "
-                          class="font-normal"
-                        />
-                        <!-- gone quiet: no activity for longer than its department allows -->
-                        <TaskyBadge
-                          v-if="quiet.get(row.name)"
-                          tone="warning"
-                          :icon="LucideClock"
-                          :label="
-                            __(
-                              'No activity {0} days',
-                              String(quiet.get(row.name))
-                            )
-                          "
-                          class="font-normal tabular-nums"
-                        />
-                        <!-- where it stands with the client: the proposal or quotation -->
-                        <TaskyBadge
-                          v-if="statuses.get(row.name)"
-                          :label="statuses.get(row.name)!.label"
-                          :tone="statuses.get(row.name)!.tone"
-                          :title="statuses.get(row.name)!.title"
-                          class="font-normal tabular-nums"
-                        />
-                      </div>
-                    </td>
-                    <td class="hidden px-3 py-3 align-middle md:table-cell">
-                      <TaskyBadge
-                        v-if="row.tbo_stage"
-                        :label="stageLabel(options, row.tbo_stage)"
-                        :tone="stageTone(options, row.tbo_stage)"
-                        :icon="stageIcon(row.tbo_stage)"
-                      />
-                    </td>
-                    <td
-                      class="hidden max-w-44 truncate px-3 py-3 align-middle text-ink-gray-8 md:table-cell"
-                    >
-                      {{
-                        row.owner_name ||
-                        ownerName(options, row.lead_owner) ||
-                        __("No owner")
-                      }}
-                    </td>
-                    <td
-                      class="hidden max-w-40 truncate px-3 py-3 align-middle text-ink-gray-7 lg:table-cell"
-                    >
-                      {{ row.product }}
-                    </td>
-                    <td class="hidden px-3 py-3 align-middle lg:table-cell">
-                      <div class="flex flex-col items-start gap-1">
-                        <TaskyBadge
-                          v-if="lastCall(row)"
-                          :label="lastCall(row)!.label"
-                          :tone="lastCall(row)!.tone"
-                          :icon="lastCall(row)!.icon"
-                          :title="__('Last call')"
-                          class="font-normal tabular-nums"
-                        />
-                        <span
-                          v-if="row.call_count"
-                          class="font-mono text-xs tabular-nums text-ink-gray-6"
-                          :title="__('Calls made to this lead')"
-                          >{{
-                            row.call_count === 1
-                              ? __("1 call")
-                              : __("{0} calls", String(row.call_count))
-                          }}</span
-                        >
-                      </div>
-                    </td>
-                    <td
-                      class="hidden whitespace-nowrap px-3 py-3 align-middle text-xs tabular-nums lg:table-cell"
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="row in data.rows"
+                      :key="row.name"
+                      class="border-b border-outline-gray-1 text-ink-gray-8 last:border-b-0"
                       :class="
-                        followUpLate(row)
-                          ? 'font-medium text-danger'
-                          : 'text-ink-gray-7'
+                        selected.has(row.name)
+                          ? 'bg-brand-soft/60'
+                          : 'hover:bg-surface-gray-1'
                       "
                     >
-                      <template v-if="row.next_follow_up">
-                        <LucideCalendarX
-                          v-if="followUpLate(row)"
-                          class="mr-1 inline size-3.5 align-text-bottom"
-                          aria-hidden="true"
+                      <td
+                        v-if="canCategorise"
+                        class="w-11 py-3 pl-4 align-middle md:pl-4"
+                      >
+                        <Checkbox
+                          :model-value="selected.has(row.name)"
+                          :label="__('Select {0}', row.lead_name || row.name)"
+                          class="[&_label]:sr-only"
+                          @update:model-value="toggleRow(row.name)"
                         />
-                        {{ followUpText(row) }}
-                      </template>
-                    </td>
-                    <td
-                      class="hidden whitespace-nowrap px-3 py-3 text-right align-middle font-mono text-xs tabular-nums text-ink-gray-6 xl:table-cell"
-                    >
-                      <time
-                        v-if="row.modified"
-                        :datetime="row.modified"
-                        :title="
-                          dayjs(row.modified).format('D MMM YYYY, h:mm a')
-                        "
-                        >{{ dayjs(row.modified).fromNow() }}</time
+                      </td>
+                      <td
+                        class="min-w-64 px-3 py-3 align-middle first:pl-4 md:first:pl-4"
                       >
-                    </td>
-                    <td class="w-12 py-2 pr-3 align-middle">
-                      <Button
-                        v-if="options?.can_call && row.mobile_no"
-                        variant="ghost"
-                        :label="__('Call {0}', row.lead_name || row.name)"
-                        :tooltip="__('Rings your phone first, then the lead')"
-                        :loading="placing?.lead === row.name"
-                        :disabled="!!placing"
-                        @click="
-                          placeCall({
-                            lead: row.name,
-                            lead_name: row.lead_name || row.name,
-                            company: row.company_name,
-                            phone: row.mobile_no,
-                            number: null,
-                          })
-                        "
+                        <div class="flex min-w-0 items-center gap-3">
+                          <PersonAvatar
+                            :name="row.lead_name || row.name"
+                            size="md"
+                            neutral
+                          />
+                          <div class="flex min-w-0 flex-col gap-0.5">
+                            <router-link
+                              :to="{
+                                name: 'Lead',
+                                params: { leadId: row.name },
+                              }"
+                              class="truncate rounded font-semibold text-ink-gray-9 hover:text-brand-ink"
+                              :title="row.lead_name || row.name"
+                              >{{ row.lead_name || row.name }}</router-link
+                            >
+                            <span
+                              class="flex min-w-0 flex-wrap items-center gap-x-1.5 text-[12px] text-ink-gray-6"
+                            >
+                              <span v-if="row.company_name" class="truncate">{{
+                                row.company_name
+                              }}</span>
+                              <template v-if="departmentLabel(row)">
+                                <span aria-hidden="true">·</span>
+                                <span>
+                                  <span class="sr-only">{{
+                                    __("Department")
+                                  }}</span>
+                                  {{ departmentLabel(row) }}
+                                </span>
+                              </template>
+                              <template v-if="row.segment">
+                                <span aria-hidden="true">·</span>
+                                <span>{{ row.segment }}</span>
+                              </template>
+                              <template v-if="categoryLabel(row)">
+                                <span aria-hidden="true">·</span>
+                                <span>
+                                  <span class="sr-only">{{
+                                    __("Category")
+                                  }}</span>
+                                  {{ categoryLabel(row) }}
+                                </span>
+                              </template>
+                              <template v-if="row.mobile_no || row.email_id">
+                                <span aria-hidden="true">·</span>
+                                <span class="truncate tabular-nums">{{
+                                  row.mobile_no || row.email_id
+                                }}</span>
+                              </template>
+                            </span>
+                          </div>
+                        </div>
+                        <!-- on a phone the columns fold in under the name -->
+                        <div
+                          class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 pl-[42px] md:hidden"
+                        >
+                          <span
+                            v-if="row.tbo_stage"
+                            :class="[
+                              PILL,
+                              stagePillClass(options, row.tbo_stage),
+                            ]"
+                          >
+                            <component
+                              :is="stageIcon(row.tbo_stage)"
+                              v-if="stageIcon(row.tbo_stage)"
+                              class="size-3.5"
+                              aria-hidden="true"
+                            />
+                            <i
+                              v-else
+                              class="size-1.5 rounded-full bg-current"
+                              aria-hidden="true"
+                            />
+                            {{ stageLabel(options, row.tbo_stage) }}
+                          </span>
+                          <span
+                            v-if="followUp(row).text"
+                            class="text-xs font-medium tabular-nums"
+                            :class="followUp(row).ink"
+                            >{{ followUp(row).text }}</span
+                          >
+                          <span class="text-xs text-ink-gray-6">{{
+                            ownerOf(row)
+                          }}</span>
+                        </div>
+                        <div
+                          v-if="
+                            createdNotOwned(row) ||
+                            quiet.get(row.name) ||
+                            statuses.get(row.name)
+                          "
+                          class="mt-2 flex flex-wrap items-center gap-1.5 pl-[42px]"
+                        >
+                          <!-- one they created and handed on: they read it, its owner works it -->
+                          <TaskyBadge
+                            v-if="createdNotOwned(row)"
+                            :icon="LucideUserPlus"
+                            :label="__('Created by you')"
+                            :title="
+                              __(
+                                'You created this lead; {0} owns it now',
+                                row.owner_name || row.lead_owner || ''
+                              )
+                            "
+                            class="font-normal"
+                          />
+                          <!-- gone quiet: no activity for longer than its department allows -->
+                          <TaskyBadge
+                            v-if="quiet.get(row.name)"
+                            tone="warning"
+                            :icon="LucideClock"
+                            :label="
+                              __(
+                                'No activity {0} days',
+                                String(quiet.get(row.name))
+                              )
+                            "
+                            class="font-normal tabular-nums"
+                          />
+                          <!-- where it stands with the client: the proposal or quotation -->
+                          <TaskyBadge
+                            v-if="statuses.get(row.name)"
+                            :label="statuses.get(row.name)!.label"
+                            :tone="statuses.get(row.name)!.tone"
+                            :title="statuses.get(row.name)!.title"
+                            class="font-normal tabular-nums"
+                          />
+                        </div>
+                      </td>
+                      <td class="hidden px-3 py-3 align-middle md:table-cell">
+                        <span
+                          v-if="row.tbo_stage"
+                          :class="[
+                            PILL,
+                            stagePillClass(options, row.tbo_stage),
+                          ]"
+                        >
+                          <component
+                            :is="stageIcon(row.tbo_stage)"
+                            v-if="stageIcon(row.tbo_stage)"
+                            class="size-3.5"
+                            aria-hidden="true"
+                          />
+                          <i
+                            v-else
+                            class="size-1.5 rounded-full bg-current"
+                            aria-hidden="true"
+                          />
+                          {{ stageLabel(options, row.tbo_stage) }}
+                        </span>
+                      </td>
+                      <td class="hidden px-3 py-3 align-middle xl:table-cell">
+                        <span
+                          v-if="row.score !== null && row.score !== undefined"
+                          class="flex items-center gap-2"
+                          :title="__('Lead score')"
+                        >
+                          <strong
+                            class="w-[22px] tabular-nums text-ink-gray-9"
+                            >{{ row.score }}</strong
+                          >
+                          <span
+                            class="h-1.5 w-14 overflow-hidden rounded-full bg-surface-gray-3"
+                            aria-hidden="true"
+                          >
+                            <span
+                              class="block h-full rounded-full"
+                              :class="scoreBand(row.score).fill"
+                              :style="{
+                                width: `${Math.min(
+                                  Math.max(row.score, 0),
+                                  100
+                                )}%`,
+                              }"
+                            />
+                          </span>
+                          <span
+                            class="text-xs font-semibold"
+                            :class="scoreBand(row.score).ink"
+                            >{{ scoreBand(row.score).label }}</span
+                          >
+                        </span>
+                      </td>
+                      <td class="hidden px-3 py-3 align-middle md:table-cell">
+                        <span class="flex min-w-0 max-w-44 items-center gap-2">
+                          <PersonAvatar
+                            v-if="row.lead_owner"
+                            :name="ownerOf(row)"
+                            size="md"
+                          />
+                          <span
+                            class="truncate"
+                            :class="!row.lead_owner && 'text-ink-gray-6'"
+                            >{{ ownerOf(row) }}</span
+                          >
+                        </span>
+                      </td>
+                      <td
+                        class="hidden max-w-40 truncate px-3 py-3 align-middle lg:table-cell"
+                        :class="!row.product && 'text-ink-gray-6'"
                       >
-                        <template #icon>
-                          <LucidePhone class="size-4" aria-hidden="true" />
-                        </template>
-                      </Button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            <nav
-              class="mt-3 flex flex-wrap items-center justify-between gap-2"
-              :aria-label="__('Pages')"
-            >
-              <span
-                class="font-mono text-p-sm tabular-nums text-ink-gray-6"
-                aria-live="polite"
-              >
-                {{ rangeText }}
-              </span>
-              <div class="flex gap-2">
-                <Button
-                  :label="__('Previous')"
-                  :disabled="page === 1 || leads.loading"
-                  @click="page--"
-                >
-                  <template #prefix>
-                    <LucideChevronLeft class="size-4" aria-hidden="true" />
-                  </template>
-                </Button>
-                <Button
-                  :label="__('Next')"
-                  :disabled="page >= pageCount || leads.loading"
-                  @click="page++"
-                >
-                  <template #suffix>
-                    <LucideChevronRight class="size-4" aria-hidden="true" />
-                  </template>
-                </Button>
+                        {{ row.product || __("Not set") }}
+                      </td>
+                      <td class="hidden px-3 py-3 align-middle lg:table-cell">
+                        <div class="flex flex-col items-start gap-1">
+                          <TaskyBadge
+                            v-if="lastCall(row)"
+                            :label="lastCall(row)!.label"
+                            :tone="lastCall(row)!.tone"
+                            :icon="lastCall(row)!.icon"
+                            :title="__('Last call')"
+                            class="font-normal tabular-nums"
+                          />
+                          <span v-else class="text-ink-gray-6">{{
+                            __("Never")
+                          }}</span>
+                          <span
+                            v-if="row.call_count"
+                            class="text-xs tabular-nums text-ink-gray-6"
+                            :title="__('Calls made to this lead')"
+                            >{{
+                              row.call_count === 1
+                                ? __("1 call")
+                                : __("{0} calls", String(row.call_count))
+                            }}</span
+                          >
+                        </div>
+                      </td>
+                      <td class="hidden px-3 py-3 align-middle lg:table-cell">
+                        <span
+                          class="inline-flex items-center gap-1.5 whitespace-nowrap text-[12px] font-medium tabular-nums"
+                          :class="followUp(row).ink"
+                        >
+                          <span
+                            v-if="followUp(row).tag"
+                            class="rounded-md px-[7px] py-0.5 text-[11px] font-bold"
+                            :class="followUp(row).tagBg"
+                            >{{ followUp(row).tag }}</span
+                          >
+                          {{ followUp(row).text || __("No follow-up") }}
+                        </span>
+                      </td>
+                      <td
+                        class="hidden whitespace-nowrap px-3 py-3 align-middle text-[12px] text-ink-gray-6 2xl:table-cell"
+                      >
+                        <time
+                          v-if="row.modified"
+                          :datetime="row.modified"
+                          :title="
+                            dayjs(row.modified).format('D MMM YYYY, h:mm a')
+                          "
+                          >{{ dayjs(row.modified).fromNow() }}</time
+                        >
+                      </td>
+                      <td class="py-3 pr-4 align-middle md:pr-4">
+                        <span class="flex items-center justify-end gap-1">
+                          <Tooltip
+                            v-if="options?.can_call && row.mobile_no"
+                            :text="__('Rings your phone first, then the lead')"
+                          >
+                            <button
+                              type="button"
+                              class="grid size-9 place-items-center rounded-[10px] border border-brand-soft-border bg-brand-soft text-brand-ink transition-colors hover:border-brand disabled:opacity-60"
+                              :aria-label="
+                                __('Call {0}', row.lead_name || row.name)
+                              "
+                              :disabled="!!placing"
+                              @click="
+                                placeCall({
+                                  lead: row.name,
+                                  lead_name: row.lead_name || row.name,
+                                  company: row.company_name,
+                                  phone: row.mobile_no,
+                                  number: null,
+                                })
+                              "
+                            >
+                              <LoadingIndicator
+                                v-if="placing?.lead === row.name"
+                                class="size-4"
+                              />
+                              <LucidePhone
+                                v-else
+                                class="size-4"
+                                aria-hidden="true"
+                              />
+                            </button>
+                          </Tooltip>
+                          <Dropdown :options="rowActions(row)" align="end">
+                            <button
+                              type="button"
+                              class="grid size-9 place-items-center rounded-[10px] text-ink-gray-7 transition-colors hover:bg-surface-gray-3"
+                              :aria-label="
+                                __(
+                                  'More actions for {0}',
+                                  row.lead_name || row.name
+                                )
+                              "
+                            >
+                              <LucideEllipsis
+                                class="size-[18px]"
+                                aria-hidden="true"
+                              />
+                            </button>
+                          </Dropdown>
+                        </span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
-            </nav>
-          </template>
+
+              <nav
+                class="flex flex-wrap items-center justify-between gap-3 border-t border-outline-gray-2 px-4 py-3.5 text-[13px] text-ink-gray-6 md:px-4"
+                :aria-label="__('Pages')"
+              >
+                <span class="tabular-nums" aria-live="polite">
+                  {{ __("Showing") }}
+                  <strong class="text-ink-gray-9">{{ rangeText }}</strong>
+                  {{ __("leads") }}
+                </span>
+                <div class="flex gap-2">
+                  <Button
+                    size="md"
+                    :label="__('Previous')"
+                    :disabled="page === 1 || leads.loading"
+                    @click="page--"
+                  >
+                    <template #prefix>
+                      <LucideChevronLeft class="size-4" aria-hidden="true" />
+                    </template>
+                  </Button>
+                  <Button
+                    size="md"
+                    :label="__('Next')"
+                    :disabled="page >= pageCount || leads.loading"
+                    @click="page++"
+                  >
+                    <template #suffix>
+                      <LucideChevronRight class="size-4" aria-hidden="true" />
+                    </template>
+                  </Button>
+                </div>
+              </nav>
+            </template>
+          </section>
         </template>
       </div>
     </div>
@@ -778,6 +910,8 @@
 
 <script setup lang="ts">
 import LayoutHeader from "@/components/LayoutHeader.vue";
+import PersonAvatar from "@/components/PersonAvatar.vue";
+import ViewTabs from "@/components/ViewTabs.vue";
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import { useAuthStore } from "@/stores/auth";
@@ -790,22 +924,25 @@ import {
   createResource,
   dayjs,
   Dialog,
+  Dropdown,
   FormControl,
-  TabButtons,
+  LoadingIndicator,
+  Tooltip,
 } from "frappe-ui";
 import { computed, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LucideCalendarRange from "~icons/lucide/calendar-range";
-import LucideCalendarX from "~icons/lucide/calendar-x";
 import LucideChevronLeft from "~icons/lucide/chevron-left";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideClock from "~icons/lucide/clock";
+import LucideEllipsis from "~icons/lucide/ellipsis";
+import LucideExternalLink from "~icons/lucide/external-link";
+import LucideSquareArrowOutUpRight from "~icons/lucide/square-arrow-out-up-right";
 import LucidePhone from "~icons/lucide/phone";
 import LucidePlus from "~icons/lucide/plus";
 import LucideRadar from "~icons/lucide/radar";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
-import LucideListChecks from "~icons/lucide/list-checks";
 import LucideMerge from "~icons/lucide/merge";
 import LucideSearch from "~icons/lucide/search";
 import LucideSlidersHorizontal from "~icons/lucide/sliders-horizontal";
@@ -840,8 +977,9 @@ import {
   METRIC_LABELS,
   ownerName,
   stageIcon,
+  scoreBand,
   stageLabel,
-  stageTone,
+  stagePillClass,
   staleLeads,
   usableDepartments,
   type LeadIntake,
@@ -1063,12 +1201,10 @@ const emptyCategories = (): LeadCategories => ({
 const canCategorise = computed(
   () => authStore.isManager && !!options.value?.org_sizes
 );
-const selecting = ref(false);
 const selected = ref(new Set<string>());
 const showSet = ref(false);
 const showMerge = ref(false);
-function toggleSelecting() {
-  selecting.value = !selecting.value;
+function clearSelection() {
   selected.value = new Set();
 }
 function toggleRow(name: string) {
@@ -1076,23 +1212,30 @@ function toggleRow(name: string) {
   if (!next.delete(name)) next.add(name);
   selected.value = next;
 }
-function selectPage() {
-  selected.value = new Set([
-    ...selected.value,
-    ...(data.value?.rows ?? []).map((r) => r.name),
-  ]);
+const allPicked = computed(
+  () =>
+    !!data.value?.rows.length &&
+    data.value.rows.every((r) => selected.value.has(r.name))
+);
+// the header box picks every lead on this page, or lets them all go
+function togglePage() {
+  const rows = (data.value?.rows ?? []).map((r) => r.name);
+  const next = new Set(selected.value);
+  const all = allPicked.value;
+  rows.forEach((name) => (all ? next.delete(name) : next.add(name)));
+  selected.value = next;
 }
 function categorised() {
   leads.reload();
   reloadCategories();
   leadOptions.reload();
-  toggleSelecting();
+  clearSelection();
 }
 
 function mergedLeads() {
   leads.reload();
   reloadCategories();
-  toggleSelecting();
+  clearSelection();
 }
 
 // set by a number on the Overview: the leads it counts, and its period
@@ -1297,6 +1440,67 @@ const tabs = computed(() =>
     return true;
   })
 );
+// the lists sit in the pills, with the count of the one open; the reports are links beside them
+const REPORTS: LeadTab[] = [
+  "overview",
+  "daily",
+  "outreach",
+  "commission",
+  "business",
+];
+const listTabs = computed(() =>
+  tabs.value
+    .filter((tab) => !REPORTS.includes(tab.value))
+    .map((tab) => ({
+      ...tab,
+      count: tab.value === view.value && data.value ? data.value.total : null,
+    }))
+);
+const reportTabs = computed(() =>
+  tabs.value.filter((tab) => REPORTS.includes(tab.value))
+);
+const isReport = computed(() => REPORTS.includes(view.value));
+// "Go to all leads" opens the list a person starts on: Today's calls or All
+const listHome = computed<LeadTab>(() =>
+  listTabs.value.some((t) => t.value === "all")
+    ? "all"
+    : listTabs.value[0]?.value ?? "all"
+);
+// each report names itself in the header; the lists share "Leads"
+const HEADINGS: Partial<Record<LeadTab, { title: string; subtitle: string }>> =
+  {
+    overview: {
+      title: __("Team overview"),
+      subtitle: __("How the team is doing, and who to call next."),
+    },
+    daily: {
+      title: __("Daily report"),
+      subtitle: __("Calls, meetings, proposals and new leads, day by day."),
+    },
+    commission: {
+      title: __("Commission"),
+      subtitle: __("What each person earned on the money collected."),
+    },
+    business: {
+      title: __("Business"),
+      subtitle: __("Revenue, pipeline and departments at a glance."),
+    },
+    outreach: {
+      title: __("Outreach"),
+      subtitle: __("First messages the AI drafted, waiting for a person."),
+    },
+  };
+const heading = computed(
+  () =>
+    HEADINGS[view.value] ?? {
+      title: __("Leads"),
+      subtitle: __("Track, call and follow up with every lead in one place."),
+    }
+);
+function pickView(tab: LeadTab) {
+  view.value = tab;
+  picked.value = true;
+}
 const homeTab = computed<LeadTab>(defaultTab);
 // the tab was picked by hand: the options arriving later don't move it
 const picked = ref(false);
@@ -1594,19 +1798,65 @@ function createdNotOwned(row: LeadRow) {
   return !!row.created_by && row.created_by === me && row.lead_owner !== me;
 }
 
-function followUpLate(row: LeadRow) {
+// the redesign's table: uppercase headings on the light band, pills for the stage
+const TH_ROW =
+  "h-11 border-b border-outline-gray-2 bg-surface-gray-1 text-left text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6";
+const PILL =
+  "inline-flex h-[26px] items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-xs font-semibold";
+const BULK_BUTTON =
+  "inline-flex h-9 items-center gap-2 rounded-[10px] border border-white/30 px-3.5 text-[13px] font-semibold text-ink-base transition-colors hover:bg-white/10 disabled:opacity-50";
+
+/** The next follow-up as the table shows it: a tag for overdue and today, in its tone. */
+function followUp(row: LeadRow) {
+  if (!row.next_follow_up)
+    return { text: "", tag: "", ink: "text-ink-gray-6", tagBg: "" };
+  const day = dayjs(row.next_follow_up);
+  const today = dayjs().startOf("day");
+  if (day.isBefore(today))
+    return {
+      text: day.format("D MMM"),
+      tag: __("OVERDUE"),
+      ink: "text-danger",
+      tagBg: "bg-danger-soft",
+    };
+  if (day.isSame(today, "day"))
+    return {
+      // a follow-up with a time shows it; one set for the day shows only the tag
+      text: row.next_follow_up.length > 10 ? day.format("h:mm A") : "",
+      tag: __("TODAY"),
+      ink: "text-warning",
+      tagBg: "bg-warning-soft",
+    };
+  return {
+    text: day.isSame(today.add(1, "day"), "day")
+      ? __("Tomorrow")
+      : day.format("ddd, D MMM"),
+    tag: "",
+    ink: "text-ink-gray-8",
+    tagBg: "",
+  };
+}
+
+function ownerOf(row: LeadRow) {
   return (
-    !!row.next_follow_up &&
-    dayjs(row.next_follow_up).isBefore(dayjs().startOf("day"))
+    row.owner_name || ownerName(options.value, row.lead_owner) || __("No owner")
   );
 }
 
-function followUpText(row: LeadRow) {
-  const day = dayjs(row.next_follow_up);
-  if (day.isSame(dayjs(), "day")) return __("Follow up today");
-  if (followUpLate(row))
-    return __("Follow-up was due {0}", day.format("D MMM"));
-  return __("Follow up {0}", day.format("D MMM"));
+function rowActions(row: LeadRow) {
+  const to = router.resolve({ name: "Lead", params: { leadId: row.name } });
+  return [
+    {
+      label: __("Open lead"),
+      icon: LucideSquareArrowOutUpRight,
+      onClick: () => router.push(to),
+    },
+    {
+      label: __("Open in a new tab"),
+      icon: LucideExternalLink,
+      onClick: () => window.open(to.href, "_blank", "noopener"),
+    },
+  ];
 }
 
 function openLead(name: string) {
