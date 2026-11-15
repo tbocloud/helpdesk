@@ -578,9 +578,7 @@ class TestAttentionList(FollowUpCase):
         found = follow_ups.evaluate(follow_up_context())
 
         mine = follow_ups.attention_for(DEV[0], follow_ups=found)
-        self.assertEqual(
-            mine["total"], follow_ups.summary_for(DEV[0], found)["total"]
-        )
+        self.assertEqual(mine["total"], follow_ups.summary_for(DEV[0], found)["total"])
         self.assertEqual(
             [row["name"] for row in mine["rows"]], [str(monday), str(friday)]
         )

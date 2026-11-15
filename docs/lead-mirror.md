@@ -1,6 +1,6 @@
 # Lead mirror and save queue
 
-**Status:** spec, 2026-11-10. Phase 1 built; phases 2 to 4 not started. This document is the living source of truth for
+**Status:** spec, 2026-11-15. Phase 1 and phase 2a (the copy when the ERP is away) built; the rest of phase 2 and phases 3 and 4 not started. This document is the living source of truth for
 the feature; update it with every change.
 
 ## Why
@@ -28,7 +28,8 @@ telephony, AI, the mobile app and the Lead Bank all work on the ERP's Lead.
 | Phase | What | Visible change |
 | --- | --- | --- |
 | 1 (built) | ERP change feed + hub mirror doctypes + initial and continuous sync + health page | None yet (mirror fills in the background) |
-| 2 | Leads list, lead page and My leads read from the mirror; ERP down shows the copy with "last updated" | Faster lists; leads open when the ERP is down |
+| 2a (built) | When the ERP can't answer, the Leads list (All, Mine) and a lead's page come from the mirror, read only, with a notice | Leads open when the ERP is down or being updated |
+| 2b | Leads list, lead page and My leads read from the mirror first | Faster lists |
 | 3 | Save queue: writes go to the ERP, or wait in the queue when it is down, and are replayed in order | Saving works through an outage |
 | 4 | Overview, Daily report, Business and Today's calls from the mirror where it is safe | Faster dashboards |
 
@@ -100,6 +101,36 @@ telephony, AI, the mobile app and the Lead Bank all work on the ERP's Lead.
 paging and rerun, sync order, idempotency, deletes, paging, failure without moving `since`,
 unreadable leads, scopes, the lock, lag, drift, the settings API and permissions.
 
-## Phase 2 to 4
+## Phase 2a (built): the copy when the ERP is away
+
+The ERP is still asked first on every request; nothing changes while it answers.
+
+- `helpdesk.api.leads.read_or_copy`: when the ERP call fails as **unavailable** (unreachable,
+  5xx, Frappe Cloud maintenance, a refused API key; not "TBO Smart too old", not a refusal of the
+  person or the lead) and the copy is **ready**, the answer comes from `helpdesk/lead_mirror_read.py`
+  and carries `from_copy: true` and `copied_at`. When the copy has no answer the ERP's error stands.
+- **Ready** (`lead_mirror_read.ready`): the copy is on and its first full copy has finished
+  (`since` is set). Not `last_synced_on`: an empty Datetime on a Single reads back as now.
+- **Leads list** (`list_from_copy`, `list_copy`): the All and Mine tabs, with search (ID, name,
+  company, mobile, email) and the filters the copy has columns for (stage, owner, department,
+  source, temperature, industry, state, district, size, product, last call result), the last
+  changed first. Any other tab or filter (Follow-up, Call today, Called, segment, an Overview
+  number, reply class, Created by me, due dates) is the ERP's to work out, so it stays an error
+  rather than a wrong list. A BD's Mine is the leads they own (the ERP also adds the ones they
+  created; the copy has no column for that).
+- **A lead's page** (`lead_copy`): the stored `get_lead` answer with `can_write`, `can_call`,
+  `can_remove_numbers` and `can_merge` false and no `allowed_stages`. The page hides Edit and Log
+  call; its other parts (documents, AI, WhatsApp) ask the ERP themselves and show their own
+  "couldn't load" until it is back.
+- **Visibility** (`scope_of`, `visible`): the person's scope from `HD Lead Sync State.scopes`:
+  every lead, or the leads whose owner or an assignee is in their team, or whose department they
+  head. Someone the ERP never listed gets no copy (the ERP's error stands).
+- **On screen** (`LeadCopyNotice.vue`): "The CRM can't be reached right now. You're seeing the
+  copy saved on …" with Try again, above the list and on the lead.
+- Tests: `helpdesk/tests/test_lead_mirror_read.py`.
+- **Needs** the copy switched on (Settings → CRM → Local copy of leads) and filled once. On
+  2026-11-15 it was still off on the live hub.
+
+## Phase 2b to 4
 
 To be detailed when phase 1 is live and its lag and counts have been checked against the ERP.

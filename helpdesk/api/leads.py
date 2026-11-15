@@ -16,11 +16,12 @@ from frappe.utils import (
     today,
 )
 
-from helpdesk import whatsapp_outreach
+from helpdesk import lead_mirror_read, whatsapp_outreach
 from helpdesk.api import pending_calls
 from helpdesk.content_team import is_sales_bd_role, only_sales_team
 from helpdesk.integrations.crm.leads import (
     LeadsError,
+    LeadsNotDeployedError,
     LeadsUnavailableError,
     call,
     call_if_deployed,
@@ -29,6 +30,16 @@ from helpdesk.integrations.crm.leads import (
 )
 
 VIEWS = ("all", "mine", "call_today", "follow_up", "called")
+# what the hub's copy of the leads can answer while the ERP site is away (docs/lead-mirror.md)
+COPY_VIEWS = ("all", "mine")
+COPY_PARAMS = {
+    "view",
+    "mine",
+    "search",
+    "start",
+    "page_length",
+    *lead_mirror_read.FILTER_COLUMNS,
+}
 # when a lead's earliest open follow-up is due: the Follow-up view's cards
 DUE_BUCKETS = ("overdue", "today", "tomorrow", "week", "later")
 # the tabs with a Follow-up due date filter
@@ -223,8 +234,7 @@ def list_leads(
             "from_date": from_date or None,
             "to_date": to_date or None,
         }
-    result = call(
-        "list_leads",
+    params = dict(
         search=(search or "").strip() or None,
         stage=stage or None,
         owner=owner or None,
@@ -252,7 +262,44 @@ def list_leads(
         start=max(cint(start), 0),
         page_length=min(max(cint(page_length) or 20, 1), MAX_PAGE),
     )
+    result = read_or_copy(
+        lambda: call("list_leads", **params), lambda: list_from_copy(params)
+    )
     return result or {"rows": [], "total": 0}
+
+
+def read_or_copy(read, copy):
+    """`read` from the ERP site; when it can't be used right now and the hub's copy of the
+    leads is ready, `copy` instead (docs/lead-mirror.md, phase 2a). The ERP's error stands
+    when the copy has no answer either (`copy` returns None)."""
+    try:
+        return read()
+    except LeadsUnavailableError as error:
+        if isinstance(error, LeadsNotDeployedError) or not lead_mirror_read.ready():
+            raise
+        answer = copy()
+        if answer is None:
+            raise
+        # frappe.throw queued the ERP's error for a toast; the page says it its own way
+        frappe.clear_last_message()
+        return answer
+
+
+def list_from_copy(params: dict) -> dict | None:
+    """The Leads list from the hub's copy: All and Mine, with the search and the filters the
+    copy has columns for. None for anything else (a tab or filter only the ERP can work out),
+    so the person is told the ERP is away instead of shown a wrong list."""
+    asked = {key for key, value in params.items() if value not in (None, "")}
+    if params["view"] not in COPY_VIEWS or asked - COPY_PARAMS:
+        return None
+    return lead_mirror_read.list_copy(
+        frappe.session.user,
+        search=params["search"],
+        mine=params["view"] == "mine" or bool(params["mine"]),
+        start=params["start"],
+        page_length=params["page_length"],
+        **{key: params.get(key) for key in lead_mirror_read.FILTER_COLUMNS},
+    )
 
 
 @frappe.whitelist()
@@ -690,7 +737,13 @@ def erp_period(period: str, from_date: str | None, to_date: str | None) -> dict:
 def get_lead(name: str) -> dict:
     """The lead, its timeline, its quotations and the stages it may move to."""
     require_leads()
-    detail = call("get_lead", name=name) or {}
+    detail = (
+        read_or_copy(
+            lambda: call("get_lead", name=name),
+            lambda: lead_mirror_read.lead_copy(frappe.session.user, name),
+        )
+        or {}
+    )
     lead = detail.get("lead", {})
     user = frappe.session.user
     if user not in (lead.get("lead_owner"), lead.get("created_by")) and is_bd():

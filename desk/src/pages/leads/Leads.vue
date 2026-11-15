@@ -347,6 +347,14 @@
               </button>
             </div>
 
+            <LeadCopyNotice
+              v-if="data?.from_copy"
+              class="mb-3"
+              list
+              :copied-at="data.copied_at"
+              :loading="leads.loading"
+              @retry="leads.reload()"
+            />
             <TaskyState
               v-if="waitingForDates"
               class="py-10"
@@ -914,6 +922,7 @@ import PersonAvatar from "@/components/PersonAvatar.vue";
 import ViewTabs from "@/components/ViewTabs.vue";
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import TaskyState from "@/components/TaskyState.vue";
+import LeadCopyNotice from "./LeadCopyNotice.vue";
 import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
@@ -1639,7 +1648,16 @@ function reloadLeads() {
 }
 
 const data = computed(
-  () => leads.data as { rows: LeadRow[]; total: number } | undefined
+  () =>
+    leads.data as
+      | {
+          rows: LeadRow[];
+          total: number;
+          /** the ERP site is away: the hub's saved copy, as of `copied_at` */
+          from_copy?: boolean;
+          copied_at?: string;
+        }
+      | undefined
 );
 // idle days by lead name; empty while the ERP site's TBO Smart is older than this
 const quiet = computed(
