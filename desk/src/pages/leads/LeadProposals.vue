@@ -9,7 +9,7 @@
     >
       <h2 class="text-base-medium text-ink-gray-9">{{ __("Proposals") }}</h2>
       <Button
-        v-if="canWrite"
+        v-if="canWrite && !blocked"
         class="ml-auto"
         size="sm"
         :label="__('New proposal')"
@@ -20,9 +20,17 @@
         </template>
       </Button>
     </div>
+    <!-- a lost lead gets no new proposal: say why instead -->
+    <p
+      v-if="blocked && canWrite"
+      class="flex items-start gap-1.5 border-b border-outline-gray-1 px-4 py-3 text-p-sm text-ink-gray-6"
+    >
+      <LucideLock class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+      {{ blocked }}
+    </p>
     <p v-if="!proposals.length" class="px-4 py-4 text-p-sm text-ink-gray-6">
       {{
-        canWrite
+        canWrite && !blocked
           ? __("No proposals yet. Start one from the client's requirements.")
           : __("No proposals for this lead yet.")
       }}
@@ -63,6 +71,7 @@ import TaskyBadge from "@/components/TaskyBadge.vue";
 import { __ } from "@/translation";
 import { Button } from "frappe-ui";
 import { computed } from "vue";
+import LucideLock from "~icons/lucide/lock";
 import LucidePlus from "~icons/lucide/plus";
 import {
   loadProposalOptions,
@@ -76,6 +85,8 @@ defineProps<{
   leadId: string;
   proposals: ProposalRow[];
   canWrite: boolean;
+  /** the lead is lost: why no document moves (the chain's `blocked`) */
+  blocked?: string | null;
 }>();
 
 loadProposalOptions();

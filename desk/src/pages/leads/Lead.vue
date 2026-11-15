@@ -217,6 +217,7 @@
             :lead-id="leadId"
             :chain="data.documents"
             :can-write="!!lead?.can_write"
+            @changed="detail.reload()"
           />
 
           <!-- the card column comes first on a phone: the numbers are what a call needs -->
@@ -331,6 +332,7 @@
                 )
               "
               :can-write="!!lead?.can_write"
+              :blocked="data.documents?.blocked"
             />
           </aside>
 

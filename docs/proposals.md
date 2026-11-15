@@ -18,8 +18,8 @@ library and section libraries on the ERP site fill every factual section at no A
 AI call writes the narrative. Presales should not have to type content.
 
 The ERP side's spec is TBO Smart's `docs/proposals.md` (v2.6) and, for the documents after an
-accepted proposal, `docs/client-documents.md` (v1.5); its contract is `docs/hub-proposals-api.md`
-(v2.8).
+accepted proposal, `docs/client-documents.md` (v1.6); its contract is `docs/hub-proposals-api.md`
+(v3.0).
 
 **The documents after the proposal** (the owner's chain of 2026-10-19): **Proposal → Project
 Agreement / Work Order → BRD → SRS → Implementation Plan → Project → UAT sign-off** (the UAT is
@@ -69,7 +69,9 @@ sending `acting_user`; each maps 1:1 to `tbo_smart.api.hub_proposals.<same name>
 | `save_questions(name, questions)`, `share_questionnaire(name)`, `send_questionnaire(name, recipients, message)`, `apply_answers(name)` | A BRD's client questionnaire (the questions as a list; blank recipients and message trimmed) |
 | `create_project_from_plan(plan)` | The hub project from an approved plan, once (see below) |
 | `create_project_from_proposal(proposal)` | The hub project from an accepted strategy proposal (Content / Digital Marketing leads), once; see [leads.md](leads.md#content-and-digital-marketing-leads) |
-| `create_document(source, document_type)`, `get_document_chain(lead)` | The next document (`Quotation`, `Work Order`, `BRD`, `SRS`, `Implementation Plan`; anything else refused here) from the accepted `source`; the lead's chain. `get_lead` carries the chain too (`documents`) |
+| `create_document(source, document_type, lead)`, `get_document_chain(lead)` | A step's document (`Quotation`, `Work Order`, `BRD`, `SRS`, `Implementation Plan`; anything else refused here) from the accepted `source`, or from the `lead` when no document before it is accepted (one of the two is required here); the lead's chain. `get_lead` carries the chain too (`documents`) |
+| `skip_steps(lead, document_types, reason, status)`, `bring_back_step(lead, document_type)` | Skip steps (`Skipped`) or mark earlier ones `Not used`, with a reason; bring one back. Refused here before sending: no step, steps not sent as a list, a blank reason or one over 500 characters, another status. The ERP site decides who may and what may be skipped |
+| `create_project_from_lead(lead)` | The hub project straight from the lead, once, when no plan makes it (below) |
 | `upload_proposal_image(name, filename, content)`, `use_library_image(name, image)` | Images over 5 MB or not base64 are refused here before anything is sent |
 | `save_template(data)`, `set_default_letter_head(letter_head)` | |
 | `get_proposal_library()`, `save_library_record(kind, data)`, `delete_library_record(kind, name)`, `upload_library_image(filename, content, data)`, `draft_library_module(module)` | Editors only (checked on the ERP site) |
@@ -88,21 +90,52 @@ so the API key never reaches the browser.
 Across the top of the lead, while at least one document after the proposal is switched on: each
 switched-on type in the ERP site's order (Proposal → Project Agreement → BRD → SRS →
 Implementation Plan → Project → UAT sign-off while the proposal is the quotation; with the
-Quotation after the Proposal otherwise), each with its status in words (Draft, Sent, Viewed, Accepted / Signed / Approved,
-Declined, Expired, Created, or Not started), a check when accepted, a step number otherwise, and
-for a priced one in progress its quotation's state ("Price: Pending Approval"). A step with a
-document opens it. The **one primary button** is the next action from the ERP site: *New
-proposal*, *Create project agreement* (from the accepted proposal) / *Create quotation* (only while
-the proposal isn't the quotation) / *Create BRD* / *Create SRS* /
-*Create implementation plan* (made on the ERP site from the accepted one, then opened; its
-warnings shown), *Create project* (below), *Send for sign-off* (the UAT sign-off, made and sent
-from here in one dialog) or *Open sign-off* once it exists, or *Continue the …* for the one in
-progress; the Project step opens the project. The **UAT step** shows the hub's sign-off live
-(Sent, Viewed, Changes Requested, Signed Off with who signed off and a
-**Signed PDF** link), read every 30 seconds while the page is in view; people who can't send it
-see its status in words ([project-signoff.md](project-signoff.md), From the lead). "Every
-document is accepted" when the chain is done. The step it points at is
-brand-outlined. One column on a phone; 44px targets.
+Quotation after the Proposal otherwise), each with its status in words (Draft, Sent, Viewed,
+Accepted / Signed / Approved, Declined, Expired, Created, Not started, or **Skipped** / **Not
+used**), a check when done, a gray minus when skipped or not used, a step number otherwise, and
+for a priced one in progress its quotation's state ("Price: Pending Approval"). A skipped step
+shows who skipped it, when and why ("Bina, 14 Nov: Repeat client"), in gray, never green. A step
+with a document opens it.
+
+**The one primary button** is the ERP site's next action (TBO Smart's `docs/client-documents.md`
+§9): *New proposal*; **Review and send** for a draft (the next document is made as a draft as
+soon as the client accepts, signs or approves the one before, so the card moves straight on;
+while the proposal isn't the quotation that draft is the Quotation, made from the accepted
+proposal automatically); *Open the …* while it is with the client; *Revise the …* once declined
+or expired; *Create …* (from the latest accepted document before it, or from the lead when every
+step before it was skipped); *Create project* (from the approved plan, below, or straight from
+the lead when the plan was skipped); *Send for sign-off* (the UAT sign-off, made and sent from
+here in one dialog) or *Open sign-off* once it exists. The step it points at is brand-outlined.
+"Every document is accepted", or "Every step is done or skipped", when nothing is left.
+
+**Flexible, not locked** (the ERP site decides who may: the lead's owner, a head of its department
+or a manager; a BD only on their own leads). Each step has a **⋯ menu** with what the person may
+do with it:
+
+- **Create …** a step out of order or in between (the BRD after the SRS started): made on the ERP
+  site, filled from whatever exists before it, and opened. The ERP site's reason shows when it
+  can't ("…Make this once it is accepted, or skip that step first.").
+- **Skip…** asks "Skip BRD?" with what happens in plain words ("The next step, SRS, opens. You can
+  bring BRD back later.") and a reason (required, up to 500 characters), then the card moves on.
+  A step with the client or decided has no Skip (only a revision changes it).
+- **Bring back** a skipped step: it is a step to do again.
+
+A chain started further on (a repeat client straight at the plan) shows the steps before it as
+**Not used**, with "…weren't used: the documents started further on." and **Mark them not used**:
+one reason for all, recorded on the ERP site for the app and the reports. Skipping, marking and
+bringing back read the lead again; each is a line on the lead's timeline and the owner is told.
+
+**A lost lead** (Closed – Lost, Not Interested, Wrong Number, Small Business) shows the ERP
+site's reason with a lock ("This lead is Wrong Number. Move it back to an open stage to work on
+its documents.") instead of any button or menu, and the Proposals card shows it instead of
+*New proposal*.
+
+The **UAT step** shows the hub's sign-off live (Sent, Viewed, Changes Requested, Signed Off with
+who signed off and a **Signed PDF** link), read every 30 seconds while the page is in view;
+people who can't send it see its status in words ([project-signoff.md](project-signoff.md), From
+the lead). A UAT with no project (the project skipped) waits with the ERP site's note. A Sales
+Employee's card stops at the client documents (no menu on the Project and UAT). One column on a
+phone; the cards and the ⋯ buttons are 44px targets there.
 
 ### Lead page: Proposals (`LeadProposals.vue`)
 
@@ -241,6 +274,9 @@ lead's first proposal with a website (the summary is kept on the lead); none wit
   Quotation's number as a small staff-only reference linking to its desk form, its status, lines
   and discount, then the **net total, each tax line ("GST 18%") and the grand total**, the same
   figures as the client's Investment section; "No GST on this price…" when it has no taxes.
+- **Changes asked:** a revision the ERP site made because the client asked for changes shows who
+  asked, when and their words at the top ("No reason given. Ask the client what to change." when
+  they gave none).
 - **Versions**, the **Send dialog** and **What the client sees** (`ProposalPreview.vue`: the
   cover, the contents with the parts, numbered sections and subsections, tables, workflow
   chains, the module cards, the timeline bar, payment amounts (of the grand total), the price
@@ -282,6 +318,18 @@ Closed once the BRD is approved, declined or revised.
 A project made from a plan (`custom_crm_lead`) shows the same Documents strip above its overview,
 read only (no next action: the lead is where the documents are worked), for people who use Leads;
 anyone else doesn't see it (`get_project_detail` returns `crm_lead`).
+
+### The project straight from the lead (`create_project_from_lead`)
+
+When the steps before the project were skipped (or a repeat client starts at the project), *Create
+project* makes the hub's project from the lead, once: named "<client> - <lead type>", the client
+when an HD Customer has its name, `custom_crm_lead` kept. The ERP site checks that the person may
+make it now and keeps it on the lead's Project step (`link_project` with no plan); when it refuses,
+the project just made is deleted, so nothing is left behind (it refuses while an approved plan,
+or a content lead's accepted proposal, is what makes the project). Pressing it again finds the
+same project. The UAT sign-off tests the plan's SRS, so on such a project the card shows the ERP
+site's note instead of a UAT button, and the UAT step can be skipped from its menu (a UAT without
+an SRS is a follow-up to TASK-2026-01777).
 
 ### The project from the plan (`create_project_from_plan`)
 
@@ -338,4 +386,10 @@ methods posted with their arguments; a library image over 5 MB refused here; the
 the proposal (`create_document` posted with its source and type, an unknown type refused here,
 `get_document_chain` read); Mark ready / Reopen and the off-script chat answer posted with their
 arguments, a blank answer refused here; the BRD's questionnaire methods posted (questions as a
-list, a non-list refused here, blank recipients dropped).
+list, a non-list refused here, blank recipients dropped); a step made from the lead
+(`create_document` with `lead`, one of `source` or `lead` required); skipping and bringing back
+posted with their arguments (the reason trimmed, the steps as compact JSON) and refused here
+without a step, with steps that aren't a list, a blank or over-long reason, or another status; the
+ERP site's reason for a refused skip reaching the page; the project straight from the lead (named
+from the client and the lead type, linked with no plan, made once) and not left behind when the
+ERP site refuses it.
