@@ -318,6 +318,37 @@ call ending) then *Call ended*; after 45 seconds it already offers **Record the 
 after 3 minutes without any sign of the call it stops asking and says *Can't see this call any
 more*. MyOperator calls only ever go from *Calling your phone…* to *Call ended*.
 
+**Ending a call, and another number.** CallerDesk's documented API has **no hang-up call** (its
+Postman collection, read 2026-11-14, only reports a `hangup_cause`), so the box does not fake an
+*End call* button. While the call is on (*Calling your phone…* to *On call*) it says **Hang up on
+your phone to end the call**. **Stop waiting** (shown from *Calling your phone…* on, not while the
+call is being placed) is for a phone that never rang or a call dialled by mistake: it stops the
+ring sound and the asking, says *Stopped waiting* and opens the result sheet at once, whose
+*Not a real call?* choices (*I didn't call*, *Tapped by mistake*) take the call off the list. A
+hang-up API is a question for CallerDesk (tbo_smart `telephony-callerdesk.md` §1.3).
+When the call didn't connect (*Not answered* or busy, *Can't see this call any more*, *Stopped
+waiting*, or CallerDesk refused it) and the lead has other usable numbers (Active or Not
+reachable; Wrong number and Old are left out; the dialled one too), the box shows **Try another
+number**: one button each with the number, its label and the person. Tapping one places the call
+at once to that number (the lead page passes the lead's numbers; every other Call makes the box read
+them from the lead when it needs them), and the result names the number dialled. On the lead page,
+**Call** dials the main number at once; with two or more usable numbers an arrow beside it opens a
+menu of them (`Lead.vue`).
+
+**Recordings.** The ended box, once the report is in and the call was answered, says **Recording
+is being saved…** and then **Recording saved.** with **Listen on the lead**, which opens the lead
+scrolled to that call (`#call-<name>`). It asks again every 4 seconds, up to 8 times, until the
+ERP site says the recording is saved (`get_call_status` brings `recording_state`). On the lead's
+Activity every call shows its status, talk time and an audio player; an answered call whose
+recording is still being downloaded says *Recording is being saved…* (up to an hour after the
+call), one without a recording says *Not recorded* (`recording_state` of the timeline entry:
+saved, pending or none; an older TBO Smart sends none and nothing extra shows). Managers listen on
+the lead; there is no hub list of TBO calls with recordings (`call-logs` is Helpdesk's own
+telephony log, not these calls). If the box loses the call, it asks the ERP site once to look the
+call up at CallerDesk (`helpdesk.api.leads.refresh_call`, TBO Smart's `refresh_call`); a call
+found ends the wait with its result, and TBO Smart also reconciles every 10 minutes
+(`telephony-callerdesk.md` §3.2).
+
 **Sound.** A soft ring-back tone loops while the box says *Calling your phone…*, *Pick up your
 phone* or *Ringing <lead>*, and stops the moment the call is picked, ended or refused. It is made
 in the browser (Web Audio, no files), starts from the Call tap so browsers allow it, and has a
@@ -983,7 +1014,7 @@ Settings → CRM → **Referral (Lead Bank)** (`ReferralSettings.vue`), under th
 `helpdesk/api/leads.py`, thin typed proxies (writes are POST only): `get_options`,
 `list_leads`, `get_overview_page`, `get_overview`, `get_business_overview`, `get_lead_intake`, `get_proposal_money`, `get_lead`, `get_lead_ai`, `refresh_lead_ai`, `apply_ai_stage`,
 `dismiss_ai_stage`, `draft_lead_message`, `log_message_sent`, `create_lead`, `update_lead`,
-`set_stage`, `add_note`, `get_category_counts`, `add_industry`, `bulk_set_lead_category`, `find_duplicate_leads`, `get_stale_leads`, `get_lead_departments`, `save_lead_department`, `set_lead_department_active`, `add_lead_number`, `update_lead_number`, `remove_lead_number`, `get_merge_preview`, `merge_leads`, `click_to_call`, `call_recording`, `get_daily_report`, `log_call`, `get_lead_photos`, `upload_lead_photo`, `delete_lead_photo`, `lead_photo`. Find prospects has its own `helpdesk/api/prospects.py`: `estimate_prospect_run`, `start_prospect_run`, `get_prospect_runs`, `get_prospect_run`; Outreach has `helpdesk/api/outreach.py` (see [Outreach](#outreach)). They check
+`set_stage`, `add_note`, `get_category_counts`, `add_industry`, `bulk_set_lead_category`, `find_duplicate_leads`, `get_stale_leads`, `get_lead_departments`, `save_lead_department`, `set_lead_department_active`, `add_lead_number`, `update_lead_number`, `remove_lead_number`, `get_merge_preview`, `merge_leads`, `click_to_call`, `refresh_call`, `call_recording`, `get_daily_report`, `log_call`, `get_lead_photos`, `upload_lead_photo`, `delete_lead_photo`, `lead_photo`. Find prospects has its own `helpdesk/api/prospects.py`: `estimate_prospect_run`, `start_prospect_run`, `get_prospect_runs`, `get_prospect_run`; Outreach has `helpdesk/api/outreach.py` (see [Outreach](#outreach)). They check
 `can_use_leads`, validate the view and page size, trim notes, and pass `acting_user`. The
 client is `CRMClient.call` in `helpdesk/integrations/crm/client.py`; the call and error
 mapping live in `helpdesk/integrations/crm/leads.py`. The API key and secret never reach the

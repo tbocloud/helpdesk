@@ -371,6 +371,8 @@ export interface LeadTimelineEntry {
   call?: string;
   /** talk time in seconds */
   duration?: number;
+  /** a call's recording: saved, pending (still being downloaded) or none; absent from an older TBO Smart */
+  recording_state?: "saved" | "pending" | "none";
   /** a call's, or for a WhatsApp message: what the lead wrote (incoming) or we sent */
   direction?: "incoming" | "outgoing" | null;
   status?: "answered" | "missed" | "voicemail" | null;
