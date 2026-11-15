@@ -155,7 +155,5 @@ def lead_copy(user: str, name: str) -> dict | None:
     if not detail.get("lead"):
         return None
     detail["lead"].update(READ_ONLY)
-    detail.update(
-        allowed_stages=[], from_copy=True, copied_at=str(found[0].synced_at)
-    )
+    detail.update(allowed_stages=[], from_copy=True, copied_at=str(found[0].synced_at))
     return detail

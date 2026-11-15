@@ -4,10 +4,7 @@ import frappe
 
 from helpdesk import lead_mirror, lead_mirror_read
 from helpdesk.api import leads as leads_api
-from helpdesk.integrations.crm.leads import (
-    LeadsNotDeployedError,
-    LeadsUnavailableError,
-)
+from helpdesk.integrations.crm.leads import LeadsNotDeployedError, LeadsUnavailableError
 from helpdesk.tests.test_lead_mirror import ANN, BOB, LeadMirrorCase
 
 CARA = "cara@erp.example"
@@ -26,7 +23,9 @@ class LeadCopyCase(LeadMirrorCase):
             "Administrator": {"all": True, "team": [], "departments": []},
         }
         self.erp.put("L-1", lead_name="Ravi Traders", lead_owner=ANN)
-        self.erp.put("L-2", lead_name="Bob's Own", lead_owner=BOB, tbo_stage="Contacted")
+        self.erp.put(
+            "L-2", lead_name="Bob's Own", lead_owner=BOB, tbo_stage="Contacted"
+        )
         self.erp.put("L-3", lead_name="Given To Bob", lead_owner=ANN, assignees=[BOB])
         self.erp.put(
             "L-4", lead_name="Growth Lead", lead_owner=ANN, tbo_department="Growth"
@@ -57,7 +56,11 @@ class TestWhoSeesWhat(LeadCopyCase):
         detail = lead_mirror_read.lead_copy(BOB, "L-2")
         self.assertEqual(detail["lead"]["name"], "L-2")
         self.assertEqual(
-            (detail["lead"]["can_write"], detail["allowed_stages"], detail["from_copy"]),
+            (
+                detail["lead"]["can_write"],
+                detail["allowed_stages"],
+                detail["from_copy"],
+            ),
             (False, [], True),
         )
         self.assertTrue(detail["copied_at"])
