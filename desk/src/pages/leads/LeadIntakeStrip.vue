@@ -189,7 +189,7 @@ const shown = computed(() => {
 });
 
 /** "Fri, 14 Nov · all to Fidha V P": the day, and who took them. */
-function daySub(day: (typeof days.value)[number]) {
+function daySub(day: typeof days.value[number]) {
   const date = dayjs(day.date).format("ddd, D MMM");
   const took = day.people.filter((p) => p.count);
   if (!day.total) return __("{0} · none taken yet", date);
