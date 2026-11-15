@@ -420,7 +420,7 @@ interface Department {
 }
 
 const STATUS_TABS = ["Open", "Completed", "Cancelled", "All"] as const;
-type StatusTab = (typeof STATUS_TABS)[number];
+type StatusTab = typeof STATUS_TABS[number];
 type Show = "" | "overdue" | "ending";
 
 const projects = createResource({
