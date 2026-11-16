@@ -31,8 +31,10 @@ from helpdesk.test_utils import (
     fake_request,
     forget_signoff_lead_access,
     get_reminder_messages,
+    give_email_account,
     hold_commits,
     make_customer_address,
+    make_email_account,
     make_portal_contact,
     make_project,
     make_signoff,
@@ -199,6 +201,50 @@ class TestProjectSignoff(FrappeTestCase):
                     self.project, "Nobody", "nobody@malabar-spices.example"
                 ),
             )
+
+    # --- From ---
+
+    def from_accounts(self):
+        """A default account, a shared one given to the project manager and the trainer's own."""
+        default = make_email_account(
+            "signoff-default@signoff-tests.example", default_outgoing=1
+        ).name
+        shared = make_email_account("projects@signoff-tests.example").name
+        trainers = make_email_account(TRAINER[0]).name
+        give_email_account(PM[0], shared)
+        give_email_account(TRAINER[0], trainers)
+        return default, shared, trainers
+
+    def test_from_offers_your_accounts_and_the_default(self):
+        default, shared, trainers = self.from_accounts()
+        offered = [a["name"] for a in HDProjectSignoff.sender_accounts(PM[0])]
+        self.assertIn(default, offered)
+        self.assertIn(shared, offered)
+        self.assertNotIn(trainers, offered, "Never a colleague's mailbox")
+        self.assertEqual(offered[0], default)
+
+    def test_mail_goes_from_the_picked_account_with_the_senders_name(self):
+        _default, shared, _trainers = self.from_accounts()
+        doc = run_as_user(PM[0], lambda: self.signoff(sender_email_account=shared))
+        self.mail.reset_mock()
+        run_as_user(PM[0], lambda: api.send_signoff(doc.name))
+        self.assertEqual(
+            self.mail.call_args.kwargs["sender"],
+            f"{PM[1]} <projects@signoff-tests.example>",
+        )
+
+    def test_from_must_be_one_of_your_accounts(self):
+        _default, _shared, trainers = self.from_accounts()
+        with self.assertRaises(frappe.ValidationError):
+            run_as_user(PM[0], lambda: self.signoff(sender_email_account=trainers))
+
+    def test_sender_cant_send_from_a_colleagues_account(self):
+        _default, _shared, trainers = self.from_accounts()
+        doc = run_as_user(
+            TRAINER[0], lambda: self.signoff(sender_email_account=trainers)
+        )
+        with self.assertRaises(frappe.ValidationError):
+            run_as_user(PM[0], lambda: api.send_signoff(doc.name))
 
     # --- link and code ---
 

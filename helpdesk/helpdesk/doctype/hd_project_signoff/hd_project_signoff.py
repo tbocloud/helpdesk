@@ -131,6 +131,7 @@ LOCKED_FIELDS = (
     "trainer",
     "signatory_contact",
     "customer_address",
+    "sender_email_account",
     "cc_emails",
     "email_subject",
     "email_body",
@@ -199,6 +200,7 @@ class HDProjectSignoff(Document):
         self.validate_trainer()
         self.set_signatory()
         self.validate_address()
+        self.validate_sender_account()
         self.clean_items()
         self.clean_details()
         self.clean_mail()
@@ -386,6 +388,54 @@ class HDProjectSignoff(Document):
                     self.customer_address, self.customer
                 )
             )
+
+    def validate_sender_account(self):
+        """Whoever picks the From picks one of the accounts they may send from."""
+        if self.has_value_changed("sender_email_account"):
+            self.check_sender_account(frappe.session.user)
+
+    def check_sender_account(self, user: str):
+        if not self.sender_email_account:
+            return
+        if self.sender_email_account not in {
+            a["name"] for a in self.sender_accounts(user)
+        }:
+            frappe.throw(
+                _(
+                    "You can't send from {0}. Pick your own address or the default one as From."
+                ).format(self.sender_email_account)
+            )
+
+    @staticmethod
+    def sender_accounts(user: str) -> list[dict]:
+        """The outgoing accounts `user` may send a sign-off from: the site's default and the
+        ones given to them (their User Emails), the default first. Nobody sends from a
+        colleague's mailbox."""
+        account = frappe.qb.DocType("Email Account")
+        user_email = frappe.qb.DocType("User Email")
+        theirs = (
+            frappe.qb.from_(user_email)
+            .select(user_email.email_account)
+            .where((user_email.parenttype == "User") & (user_email.parent == user))
+        )
+        rows = (
+            frappe.qb.from_(account)
+            .select(account.name, account.email_id, account.default_outgoing)
+            .where(account.enable_outgoing == 1)
+            .where((account.default_outgoing == 1) | account.name.isin(theirs))
+            .orderby(account.default_outgoing, order=frappe.qb.desc)
+            .orderby(account.email_id)
+            .run(as_dict=True)
+        )
+        return [
+            {
+                "name": r.name,
+                "email": r.email_id,
+                "is_default": bool(r.default_outgoing),
+            }
+            for r in rows
+            if r.email_id
+        ]
 
     def clean_items(self):
         # questions are optional: a sign-off accepted by reply needs none
@@ -702,6 +752,8 @@ class HDProjectSignoff(Document):
         self.check_ready_to_send()
         sender = (self.link_sent_by if reminder else None) or frappe.session.user
         if not reminder:
+            self.check_sender_account(sender)
+        if not reminder:
             self.snapshot_customer()
         token = self.issue_link() if self.items else None
         attachments = self.mail_attachments(fresh=not reminder)
@@ -767,8 +819,9 @@ class HDProjectSignoff(Document):
         attachments: list | None = None,
     ):
         """A mail to the signatory as a Communication on the sign-off, so it shows in the mail
-        history and the customer's reply lands in the same thread. It goes from the sender's
-        own email account when they have one, else the site's default."""
+        history and the customer's reply lands in the same thread. It goes from the From
+        account with the sender's name (Frappe sends through the account matching the
+        address); without one, from the sender's own address."""
         from frappe.core.doctype.communication.email import _make
 
         sender = sender or self.link_sent_by or frappe.session.user
@@ -777,12 +830,19 @@ class HDProjectSignoff(Document):
             name=self.name,
             subject=subject,
             content=message,
-            sender=get_formatted_email(sender),
+            sender=get_formatted_email(sender, mail=self.sender_account_email()),
             sender_full_name=get_fullname(sender),
             recipients=[self.signatory_email],
             cc=cc or None,
             attachments=attachments or None,
             send_email=True,
+        )
+
+    def sender_account_email(self) -> str | None:
+        if not self.sender_email_account:
+            return None
+        return frappe.db.get_value(
+            "Email Account", self.sender_email_account, "email_id"
         )
 
     def cc_list(self) -> list[str]:

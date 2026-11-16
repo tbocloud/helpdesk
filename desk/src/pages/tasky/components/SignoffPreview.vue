@@ -22,6 +22,12 @@
         <dd class="text-base-medium text-ink-gray-9">
           {{ mail.subject || "—" }}
         </dd>
+        <template v-if="mail.from">
+          <dt class="text-ink-gray-5">{{ __("From") }}</dt>
+          <dd class="min-w-0 truncate font-mono text-xs text-ink-gray-7">
+            {{ mail.from }}
+          </dd>
+        </template>
         <dt class="text-ink-gray-5">{{ __("To") }}</dt>
         <dd class="min-w-0 truncate text-ink-gray-8">
           <template v-if="mail.toEmail">
@@ -87,6 +93,8 @@ import LucideCircleAlert from "~icons/lucide/circle-alert";
 const props = defineProps<{
   mail: {
     subject: string;
+    /** the From account's address; empty: the sender's own */
+    from?: string | null;
     toName: string;
     toEmail: string;
     cc: string[];
