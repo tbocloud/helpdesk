@@ -411,7 +411,15 @@ neither; they have the batch table on the Daily report.
 title, the **Calling for** switch (`CallingFor.vue`, a button that opens the same picker) and a red
 *N overdue* pill. Then the batch card (slot, time left, progress bar, called, contacted, call backs,
 the product it calls for, the day's total) with **Get next batch** on its right, or why it has to
-wait. Then the queue, full width: pending calls first, then the overdue ones (red pill), each row
+wait. Under them, **Today by slot** (`slots` from `get_my_calls`; left out by an older TBO
+Smart): one row per slot of the day, its later batches counted with it
+(*Morning* and *Morning +2*): *36 of 50 called · 25 contacted*, out of the plan's calls for the
+slot (or what was handed, when more), a thin progress bar, and where the called leads stand now
+in plain words, for example *20 Contacted · 8 Not Responding · 3 Wrong Number · 5 Small
+Business · 14 not called yet* (and *N of the plan not handed out yet* when the batch came out
+smaller than the plan). A slot of the plan not handed out yet is there too: *Afternoon 0 of 50
+called*, *50 planned, not handed out yet* (none on a day off). Stages a call sets carry their icon. The department shows next to the
+slot only when the day has more than one. Then the queue, full width: pending calls first, then the overdue ones (red pill), each row
 with its number, name, place, main number and reason. **A row opens the lead's page**
 (`/leads/<lead>?item=<batch item>`), where the person calls (the Call button or a number in the
 Numbers list) and the result sheet asks how it went. There is no call panel on Today's calls any
@@ -429,7 +437,7 @@ move the lead to: **Contacted** (Connected), **Not Responding** (Not answered), 
 call sheet, Log call, the Last call filter and each lead's last-call chip
 (`callBatches.OUTCOMES`). Busy keeps its own name; like Not responding it makes the lead Not
 Responding. Only the labels changed: the values the ERP site takes (Connected, Not answered, Call
-back, Not interested, Wrong number) are the same, so the names in brackets below are those values. The counts say **contacted** for the answered calls too (Today's calls, the Call batches table, the Daily report, Your calls and the Teams summary; the data keeps `connected`), and a lead moved by hand to a stage that means they spoke (for example Not answered, then Move stage to Contacted) counts as contacted (TBO Smart's `call-batches.md` §5).
+back, Not interested, Wrong number) are the same, so the names in brackets below are those values. The counts say **contacted** for the answered calls too (Today's calls, the Call batches table, the Daily report, Your calls and the Teams summary; the data keeps `connected`), and a lead moved by hand to a stage that means they spoke (for example Not answered, then Move stage to Contacted, or a new lead moved to Small Business) counts as contacted. A new lead moved by hand to Not Responding or Wrong Number counts as called, not contacted, so moving leads instead of logging calls no longer leaves them out of *N of 40 called* (TBO Smart's `call-batches.md` §5).
 
 **What it shows** (`desk/src/pages/leads/TodaysCalls.vue`):
 - the batch header: slot name, time left (a live countdown, a warning icon under 15 minutes),

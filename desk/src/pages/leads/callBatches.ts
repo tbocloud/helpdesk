@@ -92,6 +92,24 @@ export interface QueueCall extends CallingFor {
   summary: QueueLead;
 }
 
+/** How many of the called leads stand at one stage now. */
+export interface StageCount {
+  stage: string;
+  count: number;
+}
+
+/** One slot of the day ("Morning" with its "Morning +2"): the plan's calls, those handed out,
+ * called and contacted, and where the called leads stand now, in pipeline order. */
+export interface SlotTotals {
+  slot: string;
+  department: string;
+  planned: number;
+  handed: number;
+  called: number;
+  connected: number;
+  stages: StageCount[];
+}
+
 export interface CallCounts {
   size: number;
   called: number;
@@ -147,6 +165,8 @@ export interface MyCalls {
   } | null;
   counts?: CallCounts;
   today?: { size: number; called: number; connected: number };
+  /** the day by slot (an older TBO Smart leaves it out) */
+  slots?: SlotTotals[];
   pending: QueueCall[];
   scheduled: QueueCall[];
   overdue: QueueCall[];

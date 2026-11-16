@@ -252,6 +252,107 @@
             </p>
           </div>
         </div>
+
+        <!-- the day by slot against the plan, and where the called leads went -->
+        <div
+          v-if="slots.length"
+          class="mt-4 border-t border-outline-gray-2 pt-3"
+        >
+          <h4 :id="ids.slots" class="text-sm font-medium text-ink-gray-9">
+            {{ __("Today by slot") }}
+          </h4>
+          <ul
+            :aria-labelledby="ids.slots"
+            class="mt-1 divide-y divide-outline-gray-1"
+          >
+            <li
+              v-for="slot in slots"
+              :key="`${slot.department}-${slot.slot}`"
+              class="py-2.5"
+            >
+              <div
+                class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1"
+              >
+                <span class="text-sm font-medium text-ink-gray-9">
+                  {{ slot.slot }}
+                  <span
+                    v-if="departmentCount > 1"
+                    class="font-normal text-ink-gray-6"
+                    >· {{ slot.department }}</span
+                  >
+                </span>
+                <span class="text-sm text-ink-gray-7">
+                  <b
+                    class="font-mono font-medium tabular-nums text-ink-gray-9"
+                    >{{ slot.called }}</b
+                  >
+                  {{ __("of {0} called", String(slot.of)) }}
+                  ·
+                  <b
+                    class="font-mono font-medium tabular-nums text-ink-gray-9"
+                    >{{ slot.connected }}</b
+                  >
+                  {{ __("contacted") }}
+                </span>
+              </div>
+              <div
+                class="mt-1.5 h-1 overflow-hidden rounded-full"
+                :class="TRACK.neutral"
+                role="progressbar"
+                :aria-valuemin="0"
+                :aria-valuemax="slot.of"
+                :aria-valuenow="slot.called"
+                :aria-label="__('Calls made in {0}', slot.slot)"
+              >
+                <div
+                  class="h-full rounded-full"
+                  :class="slot.called >= slot.of ? FILL.success : 'bg-brand'"
+                  :style="{ width: `${slot.progress}%` }"
+                />
+              </div>
+              <ul
+                class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-ink-gray-7"
+                :aria-label="__('Where the {0} calls went', slot.slot)"
+              >
+                <li
+                  v-for="row in slot.stages"
+                  :key="row.stage"
+                  class="inline-flex items-center gap-1"
+                >
+                  <component
+                    :is="stageIcon(row.stage)"
+                    v-if="stageIcon(row.stage)"
+                    class="size-3.5 text-ink-gray-6"
+                    aria-hidden="true"
+                  />
+                  <b
+                    class="font-mono font-medium tabular-nums text-ink-gray-9"
+                    >{{ row.count }}</b
+                  >
+                  {{ __(row.stage) }}
+                </li>
+                <li v-if="slot.waiting">
+                  <b
+                    class="font-mono font-medium tabular-nums text-ink-gray-9"
+                    >{{ slot.waiting }}</b
+                  >
+                  {{ __("not called yet") }}
+                </li>
+                <li v-if="slot.notHanded">
+                  <b
+                    class="font-mono font-medium tabular-nums text-ink-gray-9"
+                    >{{ slot.notHanded }}</b
+                  >
+                  {{
+                    slot.handed
+                      ? __("of the plan not handed out yet")
+                      : __("planned, not handed out yet")
+                  }}
+                </li>
+              </ul>
+            </li>
+          </ul>
+        </div>
       </section>
 
       <!-- the queue: pending first, then what was missed in its slot (kept, and still
@@ -480,6 +581,7 @@ import {
   type MyCalls,
   type QueueCall,
 } from "./callBatches";
+import { stageIcon } from "./leads";
 import { queueChanged } from "./pendingCalls";
 
 const ids = {
@@ -487,6 +589,7 @@ const ids = {
   pending: `calls-pending-${useId()}`,
   reason: `calls-reason-${useId()}`,
   called: `calls-called-${useId()}`,
+  slots: `calls-slots-${useId()}`,
 };
 
 const props = defineProps<{
@@ -560,6 +663,23 @@ const counts = computed<CallCounts>(
       scheduled: 0,
       overdue: 0,
     }
+);
+// each slot out of its plan (or what was handed, when more): called, not called yet, and
+// what the plan still has to hand out
+const slots = computed(() =>
+  (shown.value?.slots ?? []).map((slot) => {
+    const of = Math.max(slot.planned, slot.handed);
+    return {
+      ...slot,
+      of,
+      waiting: Math.max(slot.handed - slot.called, 0),
+      notHanded: Math.max(slot.planned - slot.handed, 0),
+      progress: of ? Math.min(Math.round((slot.called / of) * 100), 100) : 0,
+    };
+  })
+);
+const departmentCount = computed(
+  () => new Set(slots.value.map((slot) => slot.department)).size
 );
 const progress = computed(() =>
   counts.value.size
