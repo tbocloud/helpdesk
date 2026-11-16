@@ -921,6 +921,16 @@ def get_ticket_linked_work(ticket: str | int) -> list[dict]:
     return items
 
 
+def _made_by_the_hub() -> bool:
+    """The automation user's own work, or Administrator in a job or test (no person's web request)."""
+    from helpdesk.automation import automation_user
+
+    user = frappe.session.user
+    if user == "Administrator" and getattr(frappe.local, "request", None) is not None:
+        return False  # a person signed in as Administrator
+    return user == automation_user()
+
+
 @frappe.whitelist()
 @agent_only
 def create_task_from_ticket(
@@ -973,7 +983,10 @@ def create_task_from_ticket(
     if ticket_doc.get("custom_estimate_status") == "Approved":
         due_date = due_date or ticket_doc.get("custom_agreed_delivery")
         estimated_hours = estimated_hours or ticket_doc.get("custom_estimate_hours")
-    require_due_or_estimate(due_date, estimated_hours)
+    # the rule is for tasks a person creates; the hub's own (a Copilot hand-over or fix task, made as
+    # the automation user) are dated by the AI below, like the other tasks the hub makes itself
+    if not _made_by_the_hub():
+        require_due_or_estimate(due_date, estimated_hours)
     task = frappe.get_doc(
         {
             "doctype": "Task",
