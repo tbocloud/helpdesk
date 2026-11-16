@@ -7,7 +7,7 @@ import frappe
 from frappe import _
 from frappe.core.api.user_invitation import invite_by_email
 from frappe.model.document import Document
-from frappe.utils import validate_email_address
+from frappe.utils import cstr, validate_email_address
 
 from helpdesk.integrations.erpnext.utils import (
     cascade_rename,
@@ -344,6 +344,36 @@ class HDCustomer(Document):
         validate_email_address(entry, throw=True)
         return frappe.db.get_value("Contact", {"email_id": entry}, "name"), entry
 
+    @frappe.whitelist()
+    def create_contact(
+        self, full_name: str, email: str, designation: str | None = None
+    ) -> str:
+        """Add someone by name and email as a contact, without a portal invite."""
+        self.validate_contact_update_permission("HD Customer")
+        return self.add_contact_by_email(full_name, email, designation)
+
+    def add_contact_by_email(
+        self, full_name: str, email: str, designation: str | None = None
+    ) -> str:
+        """Make `email` a contact of this customer, reusing an existing Contact with that
+        email. No User and no invite: they get portal access only when invited. Returns the
+        Contact's name."""
+        email = validate_email_address(cstr(email).strip().lower(), throw=True)
+        first_name, _sep, last_name = cstr(full_name).strip().partition(" ")
+        if not first_name:
+            frappe.throw(_("Enter the contact's name."))
+        existing = frappe.db.get_value("Contact", {"email_id": email}, "name")
+        if existing and any(row.contact_name == existing for row in self.contacts):
+            frappe.throw(
+                _("{0} is already a contact of {1}.").format(
+                    email, self.customer_name or self.name
+                )
+            )
+        add_customer_contact(
+            self.name, email, first_name, last_name.strip(), cstr(designation).strip()
+        )
+        return existing or frappe.db.get_value("Contact", {"email_id": email}, "name")
+
     def add_contact(self, contact_name: str, role: str = "HD Customer") -> bool:
         """Add a contact to membership. Returns False if already a member."""
         if any(row.contact_name == contact_name for row in self.contacts):
@@ -577,8 +607,16 @@ def active_agents(users: list[str]) -> set[str]:
     return set(rows)
 
 
-def add_customer_contact(customer: str, email: str) -> bool:
+def add_customer_contact(
+    customer: str,
+    email: str,
+    first_name: str | None = None,
+    last_name: str | None = None,
+    designation: str | None = None,
+) -> bool:
     """Make `email` a contact of `customer`; True if a new Contact was created.
+
+    The names and designation are only used for a new Contact; an existing one is kept as is.
 
     The member row is inserted directly, not through HD Customer.save(): saving grants
     the HD Customer role to any existing User with this email, and these emails are
@@ -591,7 +629,9 @@ def add_customer_contact(customer: str, email: str) -> bool:
             frappe.get_doc(
                 {
                     "doctype": "Contact",
-                    "first_name": email.split("@")[0],
+                    "first_name": first_name or email.split("@")[0],
+                    "last_name": last_name,
+                    "designation": designation,
                     "email_id": email,
                     "email_ids": [{"email_id": email, "is_primary": 1}],
                 }

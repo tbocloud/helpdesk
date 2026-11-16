@@ -185,6 +185,27 @@ def get_signoff_form(project: str, lead: str | None = None) -> dict:
 
 
 @frappe.whitelist()
+def add_signoff_contact(
+    project: str,
+    full_name: str,
+    email: str,
+    designation: str | None = None,
+    lead: str | None = None,
+) -> dict:
+    """Add who signs, typed in the sign-off form by name and email, as a contact of the
+    project's customer (no portal invite), so they can be picked as To. Returns them as
+    get_signoff_form lists contacts."""
+    project = _project_for(project, lead, manage=True)
+    customer = frappe.db.get_value("Project", project, "customer")
+    if not customer:
+        frappe.throw(_("Set the customer on project {0} first.").format(project))
+    contact = frappe.get_doc("HD Customer", customer).add_contact_by_email(
+        full_name, email, designation
+    )
+    return next(c for c in _customer_contacts(customer) if c["contact"] == contact)
+
+
+@frappe.whitelist()
 def preview_signoff_mail(
     project: str,
     signoff_type: str = TRAINING,

@@ -1,3 +1,4 @@
+import type { NewContact } from "@/components/customer/NewContactFields.vue";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
 import { useDebounceFn } from "@vueuse/core";
@@ -459,6 +460,42 @@ export function useSignoffForm(opts: {
       description: [c.designation, c.email].filter(Boolean).join(" · "),
     }))
   );
+  const addingContact = ref(false);
+  const contactError = ref("");
+  /** Who signs, typed by name and email: picked when already a contact of the customer, else
+   *  made one (no portal invite) and picked. False when it couldn't be added. */
+  async function addSignatory(person: NewContact): Promise<boolean> {
+    contactError.value = "";
+    const email = person.email.trim().toLowerCase();
+    if (!person.full_name.trim() || !email) {
+      contactError.value = __("Enter their name and email.");
+      return false;
+    }
+    const known = contacts.value.find((c) => c.email.toLowerCase() === email);
+    if (known) {
+      form.signatory_contact = known.contact;
+      return true;
+    }
+    addingContact.value = true;
+    try {
+      const added: SignoffContact = await call(
+        "helpdesk.api.project_signoff.add_signoff_contact",
+        {
+          project: opts.projectId(),
+          lead: opts.lead?.() || null,
+          ...person,
+        }
+      );
+      data.value?.contacts.push(added);
+      form.signatory_contact = added.contact;
+      return true;
+    } catch (e) {
+      contactError.value = errorText(e, __("Couldn't add the contact."));
+      return false;
+    } finally {
+      addingContact.value = false;
+    }
+  }
   const signatory = computed(() =>
     contacts.value.find((c) => c.contact === form.signatory_contact)
   );
@@ -813,6 +850,9 @@ export function useSignoffForm(opts: {
     trainerOptions,
     contacts,
     contactOptions,
+    addSignatory,
+    addingContact,
+    contactError,
     signatory,
     addresses,
     address,

@@ -14,7 +14,7 @@ import { computed } from "vue";
 const props = withDefaults(
   defineProps<{
     name?: string | null;
-    size?: "xs" | "sm" | "md" | "lg";
+    size?: "xs" | "sm" | "md" | "lg" | "xl";
     /** gray, for things rather than people (a lead, a company) */
     neutral?: boolean;
   }>(),
@@ -27,6 +27,7 @@ const SIZES = {
   sm: "size-[26px] text-[11px]",
   md: "size-7 text-[11px]",
   lg: "size-[30px] text-[11px]",
+  xl: "size-14 text-lg",
 };
 const TONES = [
   "bg-person-1-soft text-person-1",

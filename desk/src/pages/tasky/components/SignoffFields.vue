@@ -136,23 +136,57 @@
               (v: string | null) => (f.form.signatory_contact = v || '')
             "
           />
-          <p class="text-p-xs text-ink-gray-5">
-            <template v-if="f.contacts.length">
+          <!-- someone not yet a contact: typed here, added to the customer and picked.
+               Enter in its fields adds them, not sends the sign-off (this sits in its form). -->
+          <div
+            v-if="addingPerson"
+            role="group"
+            :aria-label="__('Add who signs')"
+            class="flex flex-col gap-3 rounded border border-outline-gray-2 p-3"
+          >
+            <NewContactFields
+              v-model="person"
+              @keydown.enter.prevent="addPerson"
+            />
+            <p v-if="f.contactError" role="alert" class="text-p-xs text-danger">
+              {{ f.contactError }}
+            </p>
+            <p class="text-p-xs text-ink-gray-5">
               {{
                 __(
-                  "The mail goes to this person's email. To send it to someone else, add them as a contact of the customer first."
+                  "They are added as a contact of {0}, without portal access.",
+                  customerLabel
                 )
               }}
+            </p>
+            <div class="flex justify-end gap-2">
+              <Button
+                :label="__('Cancel')"
+                :disabled="f.addingContact"
+                @click="addingPerson = false"
+              />
+              <Button
+                :label="__('Add and pick')"
+                :loading="f.addingContact"
+                @click="addPerson"
+              />
+            </div>
+          </div>
+          <p v-else class="text-p-xs text-ink-gray-5">
+            <template v-if="f.contacts.length">
+              {{ __("The mail goes to this person's email.") }}
             </template>
             <template v-else>
               {{ __("{0} has no contacts with an email yet.", customerLabel) }}
-              <router-link
-                v-if="f.data?.customer"
-                :to="{ name: 'Customer', params: { id: f.data.customer } }"
-                class="rounded text-ink-gray-8 underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
-                >{{ __("Add contacts to the customer") }}</router-link
-              >
             </template>
+            <button
+              v-if="f.data?.customer"
+              type="button"
+              class="rounded text-ink-gray-8 underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+              @click="startAdding"
+            >
+              {{ __("Add someone by email") }}
+            </button>
           </p>
         </div>
         <div class="flex flex-col gap-1.5">
@@ -267,6 +301,9 @@
 
 <script setup lang="ts">
 import CompactEditor from "@/components/CompactEditor.vue";
+import NewContactFields, {
+  blankContact,
+} from "@/components/customer/NewContactFields.vue";
 import { __ } from "@/translation";
 import {
   Button,
@@ -276,7 +313,7 @@ import {
   FormControl,
   TextInput,
 } from "frappe-ui";
-import { computed, useId } from "vue";
+import { computed, ref, useId } from "vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideTriangleAlert from "~icons/lucide/triangle-alert";
 import { projectTypeOptions } from "../taskMeta";
@@ -290,6 +327,19 @@ const props = defineProps<{
 }>();
 
 const id = `signoff-${useId()}`;
+const addingPerson = ref(false);
+const person = ref(blankContact());
+
+function startAdding() {
+  person.value = blankContact();
+  props.f.contactError = "";
+  addingPerson.value = true;
+}
+
+async function addPerson() {
+  if (props.f.addingContact) return;
+  if (await props.f.addSignatory(person.value)) addingPerson.value = false;
+}
 // a UAT names who tests with the client (no UAT stage asks for it among its details)
 const uatTester = computed(
   () => props.f.isUat && !props.f.shownFields.includes("trainer")
