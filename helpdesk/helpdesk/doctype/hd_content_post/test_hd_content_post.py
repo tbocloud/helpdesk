@@ -102,6 +102,19 @@ class TestHDContentPost(FrappeTestCase):
         post = make_content_post("അതു കണ്ടു, business-ും ടാക്സും", CUSTOMER)
         self.assertEqual(post.title, "അതു കണ്ടു, business-ും ടാക്സും")
 
+    def test_a_copy_keeps_one_point_per_line(self):
+        copy = "Diwali offer\nFlat 20% off\nTill 5 November"
+        post = make_content_post(copy, CUSTOMER)
+        post.reload()
+        self.assertEqual(post.title, copy)
+        # subjects and notifications stay on one line
+        self.assertEqual(post.label, "Diwali offer · Flat 20% off · Till 5 November")
+        self.assertNotIn("\n", post.task_subject("Writer"))
+        self.assertIn(
+            "<p>Diwali offer<br>Flat 20% off<br>Till 5 November</p>",
+            post.task_description(post),
+        )
+
     def test_every_post_needs_a_date(self):
         # an undated post has no slot on the calendar, so nobody would see it
         for status in ("Idea", "Drafting"):

@@ -222,8 +222,7 @@ page_title }} · {{ brand_name }}{% endblock %} {% block head %}
     margin: 12px 0 0 28px;
   }
   .followup label,
-  .comment-box label,
-  .sign label {
+  .comment-box label {
     display: block;
     margin-bottom: 6px;
     font-size: 13px;
@@ -257,39 +256,11 @@ page_title }} · {{ brand_name }}{% endblock %} {% block head %}
     min-height: 44px;
   }
 
-  .sign {
-    padding: 20px;
-    margin-top: 8px;
-  }
-  .sign h2,
   .done-card h2 {
     margin: 0 0 4px;
     font-size: 16px;
     font-weight: 600;
     color: var(--ink-9);
-  }
-  .sign p {
-    margin: 0 0 16px;
-  }
-  .grid2 {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-  }
-  .sign .check {
-    display: flex;
-    margin: 16px 0;
-    align-items: flex-start;
-    font-size: 14px;
-    color: var(--ink-8);
-  }
-  .sign .check input {
-    margin-top: 3px;
-  }
-  .sign .btn.primary,
-  .done-card .btn {
-    height: 44px;
-    padding: 0 18px;
   }
   .locked {
     padding: 16px;
@@ -308,7 +279,6 @@ page_title }} · {{ brand_name }}{% endblock %} {% block head %}
     display: flex;
     gap: 10px;
     align-items: flex-start;
-    margin-bottom: 14px;
   }
   .done-card .head .icon {
     width: 20px;
@@ -322,9 +292,6 @@ page_title }} · {{ brand_name }}{% endblock %} {% block head %}
   @media (max-width: 560px) {
     .page-title {
       font-size: 20px;
-    }
-    .grid2 {
-      grid-template-columns: minmax(0, 1fr);
     }
     .help,
     .note,
@@ -381,8 +348,6 @@ page_title }} · {{ brand_name }}{% endblock %} {% block head %}
       check: '<path d="M20 6 9 17l-5-5"/>',
       help: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
       alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
-      lock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
-      download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>',
       info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
       badge: '<path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"/><path d="m9 12 2 2 4-4"/>',
     });
@@ -518,7 +483,6 @@ page_title }} · {{ brand_name }}{% endblock %} {% block head %}
     function render() {
       const focusId = document.activeElement && document.activeElement.id;
       const c = view.counts;
-      const signed = view.signed;
       const pct = c.total ? Math.round((c.done / c.total) * 100) : 0;
       const followUp = c.not_clear + c.escalated;
 
@@ -533,29 +497,19 @@ page_title }} · {{ brand_name }}{% endblock %} {% block head %}
         </dl>
       </header>`;
 
-      if (signed) {
-        html += `<section class="card done-card" aria-labelledby="h-signed">
-          <div class="head">${icon("badge")}<div>
-            <h2 id="h-signed">${esc(W.signed_heading)}</h2>
-            <p class="muted">${esc({{ _("Signed by {0}, {1} on {2}. A copy is in your email.")|tojson }}.replace("{0}", signed.name).replace("{1}", signed.designation).replace("{2}", signed.on))}</p>
-          </div></div>
-          ${signed.has_pdf ? `<a class="btn" href="/api/method/helpdesk.api.signoff_portal.download_pdf?token=${encodeURIComponent(DATA.token)}">${icon("download")} {{ _("Download the signed record") }}</a>` : ""}
-        </section>`;
-      } else {
-        html += `<section class="card progress" aria-labelledby="h-progress">
-          <div class="progress-head">
-            <strong id="h-progress" class="num">${esc({{ _("{0} of {1} confirmed")|tojson }}.replace("{0}", c.done).replace("{1}", c.total))}</strong>
-            <span class="muted">${
-              followUp
-                ? esc((followUp === 1 ? {{ _("1 item is with your trainer")|tojson }} : {{ _("{0} items are with your trainer")|tojson }}).replace("{0}", followUp))
-                : c.done === c.total
-                ? {{ _("Everything is confirmed. Sign off below.")|tojson }}
-                : {{ _("Mark each item once you're comfortable with it.")|tojson }}
-            }</span>
-          </div>
-          <div class="bar ${c.done === c.total ? "complete" : ""}" role="progressbar" aria-valuemin="0" aria-valuemax="${c.total}" aria-valuenow="${c.done}" aria-label="{{ _('Items confirmed') }}"><span style="width:${pct}%"></span></div>
-        </section>`;
-      }
+      html += `<section class="card progress" aria-labelledby="h-progress">
+        <div class="progress-head">
+          <strong id="h-progress" class="num">${esc({{ _("{0} of {1} confirmed")|tojson }}.replace("{0}", c.done).replace("{1}", c.total))}</strong>
+          <span class="muted">${
+            followUp
+              ? esc((followUp === 1 ? {{ _("1 item is with your trainer")|tojson }} : {{ _("{0} items are with your trainer")|tojson }}).replace("{0}", followUp))
+              : c.done === c.total
+              ? {{ _("Everything is confirmed.")|tojson }}
+              : {{ _("Mark each item once you're comfortable with it.")|tojson }}
+          }</span>
+        </div>
+        <div class="bar ${c.done === c.total ? "complete" : ""}" role="progressbar" aria-valuemin="0" aria-valuemax="${c.total}" aria-valuenow="${c.done}" aria-label="{{ _('Items confirmed') }}"><span style="width:${pct}%"></span></div>
+      </section>`;
 
       // sections, in the order the questions come
       const sections = [];
@@ -572,7 +526,7 @@ page_title }} · {{ brand_name }}{% endblock %} {% block head %}
         </section>`;
       });
 
-      if (!signed) html += renderSign(c);
+      html += renderNext(c);
       app.innerHTML = html;
       bind();
       const back = focusId && document.getElementById(focusId);
@@ -580,7 +534,6 @@ page_title }} · {{ brand_name }}{% endblock %} {% block head %}
     }
 
     function renderItem(item) {
-      const signed = !!view.signed;
       const id = esc(item.name);
       const draft = drafting && drafting.item === item.name ? drafting : null;
       const current = draft ? draft.response : item.response;
@@ -588,7 +541,7 @@ page_title }} · {{ brand_name }}{% endblock %} {% block head %}
 
       const choices = CHOICES.map(
         (ch) => `<label class="choice ${ch.cls}">
-          <input type="radio" name="r-${id}" id="r-${id}-${ch.cls}" value="${esc(ch.value)}" data-item="${id}" ${current === ch.value ? "checked" : ""} ${signed ? "disabled" : ""}>
+          <input type="radio" name="r-${id}" id="r-${id}-${ch.cls}" value="${esc(ch.value)}" data-item="${id}" ${current === ch.value ? "checked" : ""}>
           <span>${icon(ch.icon)} ${esc(ch.label)}</span>
         </label>`
       ).join("");
@@ -617,7 +570,7 @@ page_title }} · {{ brand_name }}{% endblock %} {% block head %}
             esc(item.response === "Escalated" ? W.escalated_status : W.with_team)
           }</span></p>`;
       } else if (item.response === "Done") {
-        if (commenting.has(item.name) && !signed) {
+        if (commenting.has(item.name)) {
           below += `<div class="comment-box">
             <label for="cm-${id}">{{ _("Comment (optional)") }}</label>
             <textarea class="input" id="cm-${id}" data-comment="${id}" maxlength="1000">${esc(item.customer_comment || "")}</textarea>
@@ -625,7 +578,7 @@ page_title }} · {{ brand_name }}{% endblock %} {% block head %}
         } else if (item.customer_comment) {
           below += `<p class="said"><b>{{ _("Your comment:") }}</b> ${esc(item.customer_comment)}</p>`;
         }
-        if (!signed && !commenting.has(item.name)) {
+        if (!commenting.has(item.name)) {
           below += `<button type="button" class="btn ghost add-comment" data-add-comment="${id}">${
             item.customer_comment ? {{ _("Edit comment")|tojson }} : {{ _("Add a comment")|tojson }}
           }</button>`;
@@ -642,24 +595,17 @@ page_title }} · {{ brand_name }}{% endblock %} {% block head %}
       </li>`;
     }
 
-    function renderSign(c) {
-      if (c.done !== c.total) {
-        const left = c.total - c.done;
-        return `<div class="card locked">${icon("lock")}<p style="margin:0">${esc(
-          (left === 1 ? W.locked_one : W.locked_many).replace("{0}", left)
-        )}</p></div>`;
+    // what is left to do; once every item is done, the customer confirms by replying to our mail
+    function renderNext(c) {
+      if (view.all_done) {
+        return `<section class="card done-card" aria-labelledby="h-done">
+          <div class="head">${icon("badge")}<p id="h-done">${esc(W.all_done)}</p></div>
+        </section>`;
       }
-      return `<form class="card sign" id="f-sign" novalidate aria-labelledby="h-sign">
-        <h2 id="h-sign">${esc(W.sign_heading)}</h2>
-        <p class="muted">{{ _("Your name, designation and the time of signing are recorded with this sign-off, and a PDF copy is emailed to you.") }}</p>
-        <div class="grid2">
-          <div><label for="in-name">{{ _("Full name") }}</label><input class="input" id="in-name" autocomplete="name" maxlength="140" required value="${esc(view.signatory_name || "")}"></div>
-          <div><label for="in-designation">{{ _("Designation") }}</label><input class="input" id="in-designation" autocomplete="organization-title" maxlength="140" required></div>
-        </div>
-        <label class="check"><input type="checkbox" id="in-confirm" required> <span>${esc(W.confirm)}</span></label>
-        <p class="msg err" id="m-sign" role="alert"></p>
-        <button class="btn primary" type="submit">${esc(W.sign_button)}</button>
-      </form>`;
+      const left = c.total - c.done;
+      return `<div class="card locked">${icon("info")}<p style="margin:0">${esc(
+        (left === 1 ? W.left_one : W.left_many).replace("{0}", left)
+      )}</p></div>`;
     }
 
     // ----------------------------------------------------------- actions --
@@ -772,40 +718,6 @@ page_title }} · {{ brand_name }}{% endblock %} {% block head %}
           render();
         });
       });
-
-      const signForm = document.getElementById("f-sign");
-      if (signForm) {
-        signForm.addEventListener("submit", async (e) => {
-          e.preventDefault();
-          const msg = document.getElementById("m-sign");
-          const name = document.getElementById("in-name").value.trim();
-          const designation = document.getElementById("in-designation").value.trim();
-          const confirm = document.getElementById("in-confirm").checked;
-          if (!name || !designation) {
-            msg.textContent = {{ _("Enter your full name and designation.")|tojson }};
-            document.getElementById(name ? "in-designation" : "in-name").focus();
-            return;
-          }
-          if (!confirm) {
-            msg.textContent = {{ _("Tick the confirmation to sign.")|tojson }};
-            document.getElementById("in-confirm").focus();
-            return;
-          }
-          const submit = signForm.querySelector("button[type=submit]");
-          submit.disabled = true;
-          submit.textContent = {{ _("Signing…")|tojson }};
-          try {
-            view = await call("sign", { token: DATA.token, full_name: name, designation, confirm: 1 });
-            render();
-            window.scrollTo({ top: 0 });
-            say(`${W.signed_heading}. ${ {{ _("A copy is in your email.")|tojson }} }`);
-          } catch (err) {
-            msg.textContent = err.message;
-            submit.disabled = false;
-            submit.textContent = W.sign_button;
-          }
-        });
-      }
     }
   })();
 </script>

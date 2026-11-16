@@ -4,7 +4,7 @@
       {{ __("Pull requests") }}
     </h3>
     <ul
-      class="divide-y divide-outline-gray-1 rounded-md border border-outline-gray-2"
+      class="divide-y divide-outline-gray-1 overflow-hidden rounded-xl border border-outline-gray-2"
     >
       <li
         v-for="row in rows"

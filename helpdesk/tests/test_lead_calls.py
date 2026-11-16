@@ -47,6 +47,54 @@ class TestLeadCalls(FrappeTestCase):
         )
         self.assertEqual(self.crm.lead_paths, [f"{TELEPHONY}.click_to_call"])
 
+    def test_the_call_status_is_asked_as_the_signed_in_person(self):
+        self.crm.lead_answers["get_call_status"] = {"state": "on_call"}
+        frappe.set_user(BDE)
+        self.assertEqual(leads_api.get_call_status(" 57305000 "), {"state": "on_call"})
+        ((method, post, params),) = self.crm.lead_calls
+        self.assertEqual(
+            (method, post, params["acting_user"], params["reference_id"]),
+            ("get_call_status", False, BDE, "57305000"),
+        )
+        self.assertEqual(self.crm.lead_paths, [f"{TELEPHONY}.get_call_status"])
+
+    def test_the_box_asks_the_erp_site_to_look_for_its_call(self):
+        self.crm.lead_answers["refresh_call"] = {"stored": 1}
+        frappe.set_user(BDE)
+        self.assertEqual(leads_api.refresh_call(" 57305000 "), {"stored": 1})
+        ((method, post, params),) = self.crm.lead_calls
+        self.assertEqual(
+            (method, post, params["acting_user"], params["reference_id"]),
+            ("refresh_call", True, BDE, "57305000"),
+        )
+        self.assertEqual(self.crm.lead_paths, [f"{TELEPHONY}.refresh_call"])
+
+    def test_end_call_goes_to_the_erp_site_as_the_signed_in_person(self):
+        self.crm.lead_answers["end_call"] = {"ok": True}
+        frappe.set_user(BDE)
+        self.assertEqual(leads_api.end_call(" 57305000 "), {"ok": True})
+        ((method, post, params),) = self.crm.lead_calls
+        self.assertEqual(
+            (method, post, params["acting_user"], params["reference_id"]),
+            ("end_call", True, BDE, "57305000"),
+        )
+        self.assertEqual(self.crm.lead_paths, [f"{TELEPHONY}.end_call"])
+
+    def test_another_persons_call_status_is_refused_here_too(self):
+        self.crm.lead_error = CRMError("no", 403, "PermissionError", "Not yours")
+        frappe.set_user(BDE)
+        with self.assertRaises(frappe.ValidationError):
+            leads_api.get_call_status("57305000")
+
+    def test_the_incoming_call_is_asked_as_the_signed_in_person(self):
+        self.crm.lead_answers["get_incoming_call"] = {"enabled": True, "call": None}
+        frappe.set_user(BDE)
+        self.assertEqual(leads_api.get_incoming_call(), {"enabled": True, "call": None})
+        ((method, post, params),) = self.crm.lead_calls
+        self.assertEqual(
+            (method, post, params["acting_user"]), ("get_incoming_call", False, BDE)
+        )
+
     def test_the_recording_streams_from_the_erp_site(self):
         self.crm.lead_answers["call_recording"] = (b"ID3\xff\xfb", "audio/mpeg")
         frappe.set_user(BDE)

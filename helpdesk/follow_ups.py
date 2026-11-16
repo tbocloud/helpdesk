@@ -1707,6 +1707,32 @@ def summary_for(user: str, follow_ups: list[FollowUp] | None = None) -> dict:
     }
 
 
+def attention_for(
+    user: str, limit: int | None = None, follow_ups: list[FollowUp] | None = None
+) -> dict:
+    """What the banner counts, as a list: the user's items, the most pressing first (by
+    severity, then level, then the longest wait). `limit` rows at most; `total` is all of
+    them. `yours` is False for work that waits on them as a reviewer, lead or head."""
+    follow_ups = current() if follow_ups is None else follow_ups
+    mine = sorted(
+        items_by_user(follow_ups).get(user, []),
+        key=lambda f: (*f.rank(), f.days),
+        reverse=True,
+    )
+    return {
+        "total": len(mine),
+        "rows": [
+            {
+                **_row(f),
+                "rule": f.rule,
+                "rule_label": f.rule_label(),
+                "yours": user in f.owners,
+            }
+            for f in (mine[:limit] if limit else mine)
+        ],
+    }
+
+
 def escalations(follow_ups: list[FollowUp] | None = None) -> list[FollowUp]:
     """Overdue work and breached SLAs escalated to L2 or above, the highest level and
     the longest wait first."""

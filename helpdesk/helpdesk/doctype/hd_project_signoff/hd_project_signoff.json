@@ -1,7 +1,7 @@
 {
 	"actions": [],
-	"autoname": "SO-.#####",
-	"description": "A customer's sign-off that training on one module of a project is complete.",
+	"autoname": "SO-.YYYY.-.####",
+	"description": "A customer's sign-off for one stage of a project (a module's training, UAT, go-live...), sent by mail and marked signed off from their reply.",
 	"creation": "2026-10-08 10:00:00.000000",
 	"doctype": "DocType",
 	"engine": "InnoDB",
@@ -9,8 +9,10 @@
 		"project",
 		"project_name",
 		"customer",
+		"project_type",
 		"module_title",
 		"template",
+		"stage",
 		"signoff_type",
 		"crm_plan",
 		"crm_recorded",
@@ -22,12 +24,68 @@
 		"signatory_contact",
 		"signatory_name",
 		"signatory_email",
+		"signatory_designation",
+		"customer_address",
+		"address_display",
 		"mail_section",
 		"cc_emails",
 		"email_subject",
 		"email_body",
+		"declaration",
+		"attach_pdf",
+		"sent_pdf",
 		"items_section",
 		"items",
+		"erpnext_section",
+		"erpnext_version",
+		"uat_site_url",
+		"live_site_url",
+		"srs_reference",
+		"srs_version",
+		"srs_date",
+		"column_break_erp",
+		"uat_start_date",
+		"uat_end_date",
+		"issues_raised",
+		"issues_resolved",
+		"go_live_date",
+		"support_start_date",
+		"support_end_date",
+		"support_channel",
+		"migration_section",
+		"masters_migrated",
+		"opening_balances_migrated",
+		"migration_remarks",
+		"modules_section",
+		"modules",
+		"open_items_section",
+		"open_items",
+		"attendees_section",
+		"attendees",
+		"digital_section",
+		"services",
+		"platforms",
+		"period_from",
+		"period_to",
+		"pages_delivered",
+		"column_break_digital",
+		"reach",
+		"impressions",
+		"engagement_rate",
+		"followers_gained",
+		"website_visits",
+		"leads",
+		"approved_budget",
+		"actual_spend",
+		"billed_through",
+		"digital_text_section",
+		"performance_summary",
+		"next_period_plan",
+		"delivery_report",
+		"deliverables_section",
+		"deliverables",
+		"carry_forward_section",
+		"carry_forward",
 		"link_section",
 		"link_token_hash",
 		"link_expires_on",
@@ -40,10 +98,11 @@
 		"signer_name",
 		"signer_designation",
 		"signer_email",
+		"signed_off_by",
+		"acceptance_reference",
+		"signed_copy",
+		"remarks",
 		"column_break_3",
-		"signer_ip",
-		"signer_user_agent",
-		"audit_ref",
 		"signed_pdf",
 		"log_section",
 		"log"
@@ -76,11 +135,18 @@
 			"read_only": 1
 		},
 		{
+			"fieldname": "project_type",
+			"fieldtype": "Data",
+			"label": "Project Type",
+			"fetch_from": "project.project_type",
+			"read_only": 1
+		},
+		{
 			"fieldname": "module_title",
 			"fieldtype": "Data",
-			"label": "Module",
-			"reqd": 1,
-			"in_list_view": 1
+			"label": "Title",
+			"in_list_view": 1,
+			"description": "The sign-off's title: its modules for a training, else its stage or template."
 		},
 		{
 			"fieldname": "template",
@@ -88,6 +154,16 @@
 			"label": "Template",
 			"options": "HD Signoff Template",
 			"read_only": 1
+		},
+		{
+			"fieldname": "stage",
+			"fieldtype": "Select",
+			"label": "Stage",
+			"options": "\nSRS / Requirement Sign-off\nModule Training Sign-off\nUAT Sign-off\nUAT Sign-off and Go-Live\nGo-Live Confirmation\nProject Completion / Handover\nContent Calendar / Strategy Approval\nMonthly Deliverables Sign-off\nCampaign Completion Sign-off\nWebsite / Landing Page Go-Live",
+			"read_only": 1,
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"description": "From the template: decides the details it shows and needs."
 		},
 		{
 			"fieldname": "signoff_type",
@@ -127,7 +203,7 @@
 			"fieldname": "status",
 			"fieldtype": "Select",
 			"label": "Status",
-			"options": "Draft\nSent\nIn progress\nNeeds clarification\nReady to sign\nSigned\nReopened",
+			"options": "Draft\nSent\nChanges Requested\nSigned Off\nCancelled",
 			"default": "Draft",
 			"read_only": 1,
 			"in_list_view": 1,
@@ -168,6 +244,25 @@
 			"reqd": 1
 		},
 		{
+			"fieldname": "signatory_designation",
+			"fieldtype": "Data",
+			"label": "Signatory Designation",
+			"read_only": 1
+		},
+		{
+			"fieldname": "customer_address",
+			"fieldtype": "Link",
+			"label": "Customer Address",
+			"options": "Address"
+		},
+		{
+			"fieldname": "address_display",
+			"fieldtype": "Small Text",
+			"label": "Address",
+			"read_only": 1,
+			"description": "The address as it was when the mail went out."
+		},
+		{
 			"fieldname": "mail_section",
 			"fieldtype": "Section Break",
 			"label": "Mail"
@@ -190,6 +285,26 @@
 			"label": "Body"
 		},
 		{
+			"fieldname": "declaration",
+			"fieldtype": "Small Text",
+			"label": "Declaration",
+			"description": "What the customer declares; printed on the document."
+		},
+		{
+			"fieldname": "attach_pdf",
+			"fieldtype": "Check",
+			"label": "Attach sign-off document (PDF)",
+			"default": "1"
+		},
+		{
+			"fieldname": "sent_pdf",
+			"fieldtype": "Link",
+			"label": "Sent Document",
+			"options": "File",
+			"read_only": 1,
+			"no_copy": 1
+		},
+		{
 			"fieldname": "items_section",
 			"fieldtype": "Section Break",
 			"label": "Questions"
@@ -199,6 +314,273 @@
 			"fieldtype": "Table",
 			"label": "Questions",
 			"options": "HD Project Signoff Item"
+		},
+		{
+			"fieldname": "erpnext_section",
+			"fieldtype": "Section Break",
+			"label": "ERPNext Implementation",
+			"collapsible": 0
+		},
+		{
+			"fieldname": "erpnext_version",
+			"fieldtype": "Data",
+			"label": "ERPNext Version",
+			"default": "V16"
+		},
+		{
+			"fieldname": "uat_site_url",
+			"fieldtype": "Data",
+			"label": "UAT Site URL"
+		},
+		{
+			"fieldname": "live_site_url",
+			"fieldtype": "Data",
+			"label": "Live Site URL"
+		},
+		{
+			"fieldname": "srs_reference",
+			"fieldtype": "Data",
+			"label": "SRS Document"
+		},
+		{
+			"fieldname": "srs_version",
+			"fieldtype": "Data",
+			"label": "SRS Version"
+		},
+		{
+			"fieldname": "srs_date",
+			"fieldtype": "Date",
+			"label": "SRS Date"
+		},
+		{
+			"fieldname": "column_break_erp",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "uat_start_date",
+			"fieldtype": "Date",
+			"label": "UAT Start Date"
+		},
+		{
+			"fieldname": "uat_end_date",
+			"fieldtype": "Date",
+			"label": "UAT End Date"
+		},
+		{
+			"fieldname": "issues_raised",
+			"fieldtype": "Int",
+			"label": "Issues Raised"
+		},
+		{
+			"fieldname": "issues_resolved",
+			"fieldtype": "Int",
+			"label": "Issues Resolved"
+		},
+		{
+			"fieldname": "go_live_date",
+			"fieldtype": "Date",
+			"label": "Go-Live Date"
+		},
+		{
+			"fieldname": "support_start_date",
+			"fieldtype": "Date",
+			"label": "Support Start Date"
+		},
+		{
+			"fieldname": "support_end_date",
+			"fieldtype": "Date",
+			"label": "Support End Date"
+		},
+		{
+			"fieldname": "support_channel",
+			"fieldtype": "Select",
+			"label": "Support Channel",
+			"options": "\nEmail\nHelpdesk"
+		},
+		{
+			"fieldname": "migration_section",
+			"fieldtype": "Section Break",
+			"label": "Data Migration",
+			"collapsible": 0
+		},
+		{
+			"fieldname": "masters_migrated",
+			"fieldtype": "Check",
+			"label": "Masters Migrated"
+		},
+		{
+			"fieldname": "opening_balances_migrated",
+			"fieldtype": "Check",
+			"label": "Opening Balances Migrated"
+		},
+		{
+			"fieldname": "migration_remarks",
+			"fieldtype": "Small Text",
+			"label": "Migration Remarks"
+		},
+		{
+			"fieldname": "modules_section",
+			"fieldtype": "Section Break",
+			"label": "Modules Covered",
+			"collapsible": 0
+		},
+		{
+			"fieldname": "modules",
+			"fieldtype": "Table",
+			"label": "Modules Covered",
+			"options": "HD Signoff Module Item"
+		},
+		{
+			"fieldname": "open_items_section",
+			"fieldtype": "Section Break",
+			"label": "Open Items",
+			"collapsible": 0
+		},
+		{
+			"fieldname": "open_items",
+			"fieldtype": "Table",
+			"label": "Known Exceptions Accepted by the Customer",
+			"options": "HD Signoff Open Item"
+		},
+		{
+			"fieldname": "attendees_section",
+			"fieldtype": "Section Break",
+			"label": "Training Attendees",
+			"collapsible": 0
+		},
+		{
+			"fieldname": "attendees",
+			"fieldtype": "Table",
+			"label": "Attendees",
+			"options": "HD Signoff Attendee"
+		},
+		{
+			"fieldname": "digital_section",
+			"fieldtype": "Section Break",
+			"label": "Digital Marketing",
+			"collapsible": 0
+		},
+		{
+			"fieldname": "services",
+			"fieldtype": "Small Text",
+			"label": "Services",
+			"description": "Comma separated: Social Media, SEO, Paid Ads, Content, Website, Email Marketing."
+		},
+		{
+			"fieldname": "platforms",
+			"fieldtype": "Small Text",
+			"label": "Platforms",
+			"description": "Comma separated: Instagram, Facebook, LinkedIn, YouTube, Google."
+		},
+		{
+			"fieldname": "period_from",
+			"fieldtype": "Date",
+			"label": "Period From"
+		},
+		{
+			"fieldname": "period_to",
+			"fieldtype": "Date",
+			"label": "Period To"
+		},
+		{
+			"fieldname": "pages_delivered",
+			"fieldtype": "Small Text",
+			"label": "Pages Delivered"
+		},
+		{
+			"fieldname": "column_break_digital",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "reach",
+			"fieldtype": "Int",
+			"label": "Reach"
+		},
+		{
+			"fieldname": "impressions",
+			"fieldtype": "Int",
+			"label": "Impressions"
+		},
+		{
+			"fieldname": "engagement_rate",
+			"fieldtype": "Percent",
+			"label": "Engagement Rate"
+		},
+		{
+			"fieldname": "followers_gained",
+			"fieldtype": "Int",
+			"label": "Followers Gained"
+		},
+		{
+			"fieldname": "website_visits",
+			"fieldtype": "Int",
+			"label": "Website Visits"
+		},
+		{
+			"fieldname": "leads",
+			"fieldtype": "Int",
+			"label": "Leads"
+		},
+		{
+			"fieldname": "approved_budget",
+			"fieldtype": "Currency",
+			"label": "Approved Budget"
+		},
+		{
+			"fieldname": "actual_spend",
+			"fieldtype": "Currency",
+			"label": "Actual Spend"
+		},
+		{
+			"fieldname": "billed_through",
+			"fieldtype": "Select",
+			"label": "Billed Through",
+			"options": "\nCustomer's card\nTBO"
+		},
+		{
+			"fieldname": "digital_text_section",
+			"fieldtype": "Section Break",
+			"label": "",
+			"collapsible": 0
+		},
+		{
+			"fieldname": "performance_summary",
+			"fieldtype": "Small Text",
+			"label": "Performance Summary"
+		},
+		{
+			"fieldname": "next_period_plan",
+			"fieldtype": "Small Text",
+			"label": "Next Period Plan"
+		},
+		{
+			"fieldname": "delivery_report",
+			"fieldtype": "Attach",
+			"label": "Delivery Report"
+		},
+		{
+			"fieldname": "deliverables_section",
+			"fieldtype": "Section Break",
+			"label": "Deliverables",
+			"collapsible": 0
+		},
+		{
+			"fieldname": "deliverables",
+			"fieldtype": "Table",
+			"label": "Deliverables",
+			"options": "HD Signoff Deliverable"
+		},
+		{
+			"fieldname": "carry_forward_section",
+			"fieldtype": "Section Break",
+			"label": "Carry-forward Items",
+			"collapsible": 0
+		},
+		{
+			"fieldname": "carry_forward",
+			"fieldtype": "Table",
+			"label": "Carry-forward Items",
+			"options": "HD Signoff Carry Forward Item"
 		},
 		{
 			"fieldname": "link_section",
@@ -247,55 +629,69 @@
 		{
 			"fieldname": "signature_section",
 			"fieldtype": "Section Break",
-			"label": "Signature"
+			"label": "Signed Off"
 		},
 		{
 			"fieldname": "signed_on",
 			"fieldtype": "Datetime",
-			"label": "Signed On",
+			"label": "Signed Off On",
 			"read_only": 1
 		},
 		{
 			"fieldname": "signer_name",
 			"fieldtype": "Data",
-			"label": "Signer Name",
+			"label": "Signed Off By (Name)",
 			"read_only": 1
 		},
 		{
 			"fieldname": "signer_designation",
 			"fieldtype": "Data",
-			"label": "Signer Designation",
+			"label": "Signed Off By (Designation)",
 			"read_only": 1
 		},
 		{
 			"fieldname": "signer_email",
 			"fieldtype": "Data",
-			"label": "Signer Email",
+			"label": "Signed Off By (Email)",
 			"options": "Email",
 			"read_only": 1
 		},
 		{
+			"fieldname": "signed_off_by",
+			"fieldtype": "Link",
+			"label": "Signed Off By",
+			"options": "Contact",
+			"read_only": 1,
+			"no_copy": 1
+		},
+		{
+			"fieldname": "acceptance_reference",
+			"fieldtype": "Link",
+			"label": "Acceptance Reference",
+			"options": "Communication",
+			"read_only": 1,
+			"no_copy": 1,
+			"description": "The customer's reply that accepts the sign-off."
+		},
+		{
+			"fieldname": "signed_copy",
+			"fieldtype": "Attach",
+			"label": "Signed Copy",
+			"read_only": 1,
+			"no_copy": 1,
+			"description": "A signed copy the customer sent, when that is the acceptance."
+		},
+		{
+			"fieldname": "remarks",
+			"fieldtype": "Small Text",
+			"label": "Remarks",
+			"read_only": 1,
+			"no_copy": 1,
+			"description": "Why the customer asked for changes, or why it was cancelled."
+		},
+		{
 			"fieldname": "column_break_3",
 			"fieldtype": "Column Break"
-		},
-		{
-			"fieldname": "signer_ip",
-			"fieldtype": "Data",
-			"label": "Signer IP",
-			"read_only": 1
-		},
-		{
-			"fieldname": "signer_user_agent",
-			"fieldtype": "Small Text",
-			"label": "Signer User Agent",
-			"read_only": 1
-		},
-		{
-			"fieldname": "audit_ref",
-			"fieldtype": "Data",
-			"label": "Audit Reference",
-			"read_only": 1,
-			"description": "SHA-256 of the signed questions and answers, printed on the PDF."
 		},
 		{
 			"fieldname": "signed_pdf",
@@ -319,7 +715,7 @@
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-11-13 12:00:00.000000",
+	"modified": "2026-11-14 10:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Project Signoff",

@@ -241,7 +241,7 @@ Closed – Won. **Meeting** is one step for Meeting Scheduled and the First, Sec
 Completed; while the lead is in one of them the step shows that stage's name. Done steps are
 `brand-soft` with a check, the current one `brand` (`aria-current="step"`), later ones gray. Every
 other stage (Not Responding, Positive / Interested, Follow-up Required, On Hold, Closed – Lost, Not
-Interested, Wrong Number, and any stage the ERP site adds) is a side stage: **Move to…** at the end
+Interested, Wrong Number, Small Business, and any stage the ERP site adds) is a side stage: **Move to…** at the end
 of the row lists the ones the ERP site allows from here, and a lead in a side stage shows it as a
 "Now" pill (the list's stage tone and icon). Only what the ERP site allows from here moves the
 lead: a step opens the Move stage dialog with its first allowed stage picked (the current Meeting
@@ -251,8 +251,8 @@ refuses a move. A path stage the ERP site doesn't have is left out. On a phone t
 **Stage: Contacted** button that opens the same dialog. Left: the AI suggests and WhatsApp cards
 and the **Activity** timeline with the add-note box. Right (first on a phone): the duplicate
 notice (unchanged: Open and Merge), **Next step** (the follow-up date), **Numbers**
-(`LeadNumbers.vue`, old and wrong numbers struck through), **Details**, then place, photos, why
-call, quotations and proposals.
+(`LeadNumbers.vue`, old and wrong numbers struck through), **Details**, then place, photos,
+attachments, why call, quotations and proposals.
 
 **The list tabs** (All, My leads, Call today, Follow-up, Called): one toolbar row of Search,
 Stage, Owner, Product (and Created by or Last called where they apply), **More filters** (a
@@ -286,6 +286,112 @@ The ERP site's `tbo_smart.api.telephony` takes the same `acting_user`:
   `helpdesk/api/myoperator.py` for the settings (hub admins and managers who use leads; the
   ERP site checks its own System Manager role).
 
+## The call box
+
+The box and the "How did the call go?" sheet show for **everyone who can use Leads** (a manager or
+the owner pressing Call too), not only Sales Employees.
+
+Every **Call** that rings the person's phone (the lead page, Today's calls, the lead's numbers,
+the leads list) opens the **call box** instead of only a toast. It lives in the app shell
+(`CallBox.vue`, state in `callBox.ts`), so it survives moving between pages. **The conversation is
+on the person's phone**; the box only shows where the call is and holds the note. There is no
+browser audio or softphone: CallerDesk's WebRTC needs per-agent credentials and a VPN we don't
+have.
+
+**Layout (modelled on a dialler card, and on Frappe CRM's call popup).** From the top: the
+**header** (status in plain words, the timer, mute-ring while it connects, **Minimise**, **Close**
+once allowed), the **contact block** (initial, lead name, company, the lead's stage, **Calling
+for: <product>** with the intro line when there is one, the number being called with its label and
+person), the **hang-up line**, the **result** (or a note while the call is on), the **Numbers**
+list, **This lead's recent calls** and **Open the lead**. On a computer the box can be dragged by
+its header and stays where it was put on that device (`call-box-position`); on a phone it is a
+sheet at the bottom. **Esc** minimises. The minimised pill shows the lead, the status and the
+timer.
+
+What it says, in order: *Calling your phone…* → *Pick up your phone* → *Ringing <lead>* →
+*On call* (the timer runs in the header) → *Call ended · 2m 10s* or *Not answered*; a refusal
+shows CallerDesk's reason with **Try again**. In every state up to *On call* the box has a red
+**End call** button (CallerDesk), but only once the person has picked up their own phone:
+CallerDesk cannot end a call, or stop the person's phone ringing, before that (the owner pressed
+it three times while his phone rang, 2026-11-16). Until then the box says "Your phone is ringing.
+Pick it up to connect the call, or decline it on your phone to cancel." The button also shows
+after 45 seconds without any news of the call, in case the box never hears of the pick-up; with
+MyOperator the line reads **To end the call, hang up on your phone.**
+
+**The result is recorded in the box.** When the call ends (or **Stop waiting**, or **Record the
+result** after 45 seconds without live updates) the box shows the six answers (*Contacted*, *Not
+Responding*, *Busy*, *Follow-up Required*, *Not Interested*, *Wrong Number*) and the note typed
+during the call. *Follow-up Required* asks when (1 hour, 2 hours, tomorrow 10:00, or **Or pick a day
+and time**), *Not Interested* asks why, and *Not a real call?* (*I didn't call*, *Tapped by
+mistake*) takes the call off the list. The same six answers (`CallOutcomeChoices.vue`) and the same
+saving (`answerCall`, `record_call_outcome` or `log_call`) are used by the separate **How did the
+call go?** sheet (`CallResultSheet`), which remains for calls dialled from the phone's own dialler
+and for the *You have N calls without a result* banner. The stage follows the answer, as before (the flow never asked for a stage). The box can be closed once the result is in.
+
+**After the result.** *Saved: <answer>* with **Next call: <lead>** when the call came from Today's
+calls (the box reads the queue again and opens the next lead's page, ready to call; it says so when
+none is left) and **Close**.
+
+**Numbers.** The box reads the lead when it opens (`get_lead`) and always lists its usable numbers
+(Active or Not reachable) with label and person, the one being called marked, and **Add number**
+(the existing dialog; also for a lead with one number). One tap on **Call** calls that number. While
+a call is still on the box first says *This call is still on. Hang up on your phone first.* and asks
+to confirm; it never ends a call itself. An answered call must have its result before another
+number is called. When the call didn't connect the list says *Not reached? Try another number.*
+
+**This lead's recent calls** (collapsed): the last three calls from the lead's timeline with status,
+talk time, when, and **Play recording** (the file loads only when tapped).
+
+**Live status.** The ERP site keeps the call's live state on its TBO Call (from CallerDesk's
+**Live Call** events and the final Call Report: TBO Smart's `telephony-callerdesk.md` §3.1). The
+box asks `helpdesk.api.leads.get_call_status` (proxy of `tbo_smart.api.telephony.get_call_status`,
+as the signed-in person; only their own call) every 2.5 seconds **only while it is open**, backs
+off to 15 seconds after errors, and stops when the call ends. If no Live Call event ever arrives
+the box says *Calling your phone…* until the Call Report lands (usually within a minute of the
+call ending) then *Call ended*; after 45 seconds it already offers **Record the result**, and
+after 3 minutes without any sign of the call it stops asking and says *Can't see this call any
+more*. MyOperator calls only ever go from *Calling your phone…* to *Call ended*.
+
+**Ending a call.** **End call** asks the ERP site (`helpdesk.api.leads.end_call` → TBO Smart's
+`end_call`, tbo_smart `telephony-callerdesk.md` §4.2) to have CallerDesk drop the call; CallerDesk
+support gave the command on 2026-11-16. The box shows it only when the ERP site says the provider
+can (`can_end` in `click_to_call`'s answer). The call's report then closes the box as for any call;
+six seconds after a successful End call the box also looks for the call once, in case the report is
+slow. A refusal ("no call in progress", CallerDesk unreachable) is a toast that says to hang up on
+the phone. There is still no *Mute* or *Hold*: the audio is on the person's phone, not in the
+browser. **Stop waiting** (from *Calling your phone…* on, not while the call is being placed) is
+for a phone that never rang or a call dialled by mistake: it stops the ring sound and the asking
+and asks for the result; it does not end a call. **Browser phone:** CallerDesk can give SIP/WSS
+logins, but their calling needs a VPN and they recommend their softphone, so it is not planned.
+
+**Recordings.** The ended box, once the report is in and the call was answered, says **Recording
+is being saved…** and then **Recording saved.** with **Listen on the lead**, which opens the lead
+scrolled to that call (`#call-<name>`). It asks again every 4 seconds, up to 8 times, until the
+ERP site says the recording is saved (`get_call_status` brings `recording_state`). On the lead's
+Activity every call reads like *Outgoing call · Answered · 0:02* with an audio player; an answered call whose
+recording is still being downloaded says *Recording is being saved…* (up to an hour after the
+call), one without a recording says *Not recorded* (`recording_state` of the timeline entry:
+saved, pending or none; an older TBO Smart sends none and nothing extra shows). Managers listen on
+the lead; a recording that can't be played (a file error or zero length) says *Recording not available* instead of a dead player; there is no hub list of TBO calls with recordings (`call-logs` is Helpdesk's own
+telephony log, not these calls). If the box loses the call, it asks the ERP site once to look the
+call up at CallerDesk (`helpdesk.api.leads.refresh_call`, TBO Smart's `refresh_call`); a call
+found ends the wait with its result, and TBO Smart also reconciles every 10 minutes
+(`telephony-callerdesk.md` §3.2).
+
+**Sound.** A soft ring-back tone loops while the box says *Calling your phone…*, *Pick up your
+phone* or *Ringing <lead>*, and stops the moment the call is picked, ended or refused. It is made
+in the browser (Web Audio, no files), starts from the Call tap so browsers allow it, and has a
+**mute** button on the box, remembered on that device (`call-box-muted`). It is only a ring sound:
+the call itself is on the phone.
+
+**Incoming calls.** With CallerDesk's Live Call on, a telecaller with the hub open sees **Incoming
+call: <lead or number>** with **Open lead** and **Dismiss**, and a different, brighter ring (only
+where the browser lets the page play sound; otherwise silent). The hub asks
+`get_incoming_call` every 10 seconds, only while the tab is visible and only for people the ERP
+site says are set up for calling (`enabled`); the notice goes when the call is picked up or ends.
+
+Owner step: in CallerDesk, add **Live Call** to the webhook (same address, method POST).
+
 ## Today's calls
 
 Salespeople used to see every lead at once and cherry-picked, skipping many. For a department
@@ -294,25 +400,43 @@ is handed a **batch** of leads per time slot and must call them within it. TBO S
 batches and keeps the outcomes ([call-batches.md](https://github.com/tbocloud/tbo_smart/blob/main/docs/call-batches.md));
 the hub shows them. Nothing is stored here.
 
+**Only new leads (TASK-2026-01848).** A batch holds leads at **New Lead** that nobody has called
+yet, hot first, then the newest; follow-ups, yesterday's unanswered calls and quiet leads are not
+handed out (they are on *Follow-up* and the lead page). A call is listed only while its lead is
+still at New Lead: an answer that moves the stage (Not Responding, Busy, Follow-up Required,
+Contacted, …) or a stage moved by hand takes it off. **Duplicates** stay out too: when two leads
+share a number (last 10 digits, a shared number aside), only the oldest is handed out and listed,
+so the client is called once (TBO Smart's `call-batches.md` §3, §5).
+
 **The tab.** *Today's calls* is the first tab of Leads for people in a department that hands out
 batches, and the page opens on it for Sales Employees. It **replaces Call today** for those people
 (an old `?view=call_today` link lands on it): both answer "who do I phone now", so they would be two
 places for one job. People without batches keep Call today. Managers who are not members see
 neither; they have the batch table on the Daily report.
 
-**The screen (2026-11-12 redesign; presentation only, the data and calls are unchanged).** A
-header with the title, the **Calling for** switch (`CallingFor.vue`, a button that opens the same
-picker) and a red *N overdue* pill. Left: the batch card (slot, time left, progress bar, called,
-contacted, call backs, the product it calls for), then the queue: pending calls first, then the
-overdue ones (red pill), each with its number, name, place and reason; picking a row makes it the
-current call, and the first one is current by default. Right: the **current call** (`CallRow.vue`):
-name and place, a big **Call +91...** button (MyOperator, or the phone's dialler), **WhatsApp**
-(a `wa.me` link on the main number), "+N more numbers", the **Say first** block (the product's
-intro line, under *Calling for*), the six outcomes in a 3-column grid (2 on a phone) and an optional
-note. The note is saved with Not Responding, Busy and Wrong Number, and starts filled in the dialog
-the other three open. On a phone the batch card comes first, then the current call, then the queue.
-Loading, error ("Try again"), empty ("Nothing left to call in this batch") and a failed refresh
-that keeps the last queue are all shown.
+**The screen (2026-11-14: one list; the call is made on the lead's page).** A header with the
+title, the **Calling for** switch (`CallingFor.vue`, a button that opens the same picker) and a red
+*N overdue* pill. Then the batch card (slot, time left, progress bar, called, contacted, call backs,
+the product it calls for, the day's total) with **Get next batch** on its right, or why it has to
+wait. Under them, **Today by slot** (`slots` from `get_my_calls`; left out by an older TBO
+Smart): one row per slot of the day, its later batches counted with it
+(*Morning* and *Morning +2*): *36 of 50 called · 25 contacted*, out of the plan's calls for the
+slot (or what was handed, when more), a thin progress bar, and where the called leads stand now
+in plain words, for example *20 Contacted · 8 Not Responding · 3 Wrong Number · 5 Small
+Business · 14 not called yet* (and *N of the plan not handed out yet* when the batch came out
+smaller than the plan). A slot of the plan not handed out yet is there too: *Afternoon 0 of 50
+called*, *50 planned, not handed out yet* (none on a day off). Stages a call sets carry their icon. The department shows next to the
+slot only when the day has more than one. Then the queue, full width: pending calls first, then the overdue ones (red pill), each row
+with its number, name, place, main number and reason. **A row opens the lead's page**
+(`/leads/<lead>?item=<batch item>`), where the person calls (the Call button or a number in the
+Numbers list) and the result sheet asks how it went. There is no call panel on Today's calls any
+more: the lead page already shows the numbers, WhatsApp, the why-call note and the timeline, so one
+place does the call. The `item` in the link makes the pending call carry the batch item, so the
+result goes to `record_call_outcome` and counts in the batch; once a result is saved
+(`queueChanged`) the lead page drops `item`, and a later call there is logged with `log_call`. A
+watcher's rows (Assign leads, read-only) open the lead without `item`. Loading, error ("Try
+again"), empty ("Nothing left to call in this batch") and a failed refresh that keeps the last
+queue are all shown.
 
 **One name for a call and its stage.** The six call answers are labelled with the lead stage they
 move the lead to: **Contacted** (Connected), **Not Responding** (Not answered), **Busy**,
@@ -320,27 +444,22 @@ move the lead to: **Contacted** (Connected), **Not Responding** (Not answered), 
 call sheet, Log call, the Last call filter and each lead's last-call chip
 (`callBatches.OUTCOMES`). Busy keeps its own name; like Not responding it makes the lead Not
 Responding. Only the labels changed: the values the ERP site takes (Connected, Not answered, Call
-back, Not interested, Wrong number) are the same, so the names in brackets below are those values. The counts say **contacted** for the answered calls too (Today's calls, the Call batches table, the Daily report, Your calls and the Teams summary; the data keeps `connected`), and a lead moved by hand to a stage that means they spoke (for example Not answered, then Move stage to Contacted) counts as contacted (TBO Smart's `call-batches.md` §5).
+back, Not interested, Wrong number) are the same, so the names in brackets below are those values. The counts say **contacted** for the answered calls too (Today's calls, the Call batches table, the Daily report, Your calls and the Teams summary; the data keeps `connected`), and a lead moved by hand to a stage that means they spoke (for example Not answered, then Move stage to Contacted, or a new lead moved to Small Business) counts as contacted. A new lead moved by hand to Not Responding or Wrong Number counts as called, not contacted, so moving leads instead of logging calls no longer leaves them out of *N of 40 called* (TBO Smart's `call-batches.md` §5).
 
 **What it shows** (`desk/src/pages/leads/TodaysCalls.vue`):
 - the batch header: slot name, time left (a live countdown, a warning icon under 15 minutes),
   *37 / 50 called* with a progress bar, and the day's total;
-- the calls to make now, best priority first. Each row has a big **Call** button (MyOperator
-  click-to-call when set up for the person, otherwise a `tel:` link), the lead's company, industry,
-  district, phone, last note, the AI's next step, why it is in the batch, and six outcome chips;
-- **Connected** opens a quick sheet (what was said, the stage to move the lead to, an optional next
-  follow-up); **Call back** asks for a date and time (with quick choices); **Not interested** asks
-  for a reason (the ERP site moves the lead to Not Interested, no second step). *Not answered*, *Busy* and *Wrong number* save
-  at once. The counter drops the moment an outcome is chosen and is put back with the reason if the
-  ERP site refuses;
+- the calls to make now, best priority first: name, place, main number and why it is in the
+  batch. A row opens the lead's page, where the call is made and the result sheet records how it
+  went (Call back asks when, Not interested asks why); the queue reads again once it is saved;
 - calls that come back later (a retry two hours after Not answered or Busy, or a call back) wait
-  under the list and join it at their time;
+  under the list and join it at their time, while the lead is still at New Lead (with the lead
+  pipeline on, those answers move it on, so they rarely show);
 - **Get next batch**, disabled with the ERP site's reason in words under it (calls still pending,
   too many overdue, the day's limit reached, no slot open);
 - **Overdue** at the bottom: calls of a slot that ended, with a danger icon and the word
   *Overdue*. They stay, and are still callable. The ERP site lists a lead once (its latest missed
-  call), so the count is leads, not missed days. A lead comes first in a batch only for a
-  follow-up a person set; one the TBO AI scheduled after a call does not bring it back.
+  call), so the count is leads, not missed days.
 
 States: loading skeleton, error with retry (and a banner that keeps the last queue when an update
 fails), an older ERP site, a department without batches, no batch right now (with the next slot),
@@ -359,30 +478,53 @@ district). The same rules are validated here (no overlaps, an end after the star
 site.
 
 Code: `helpdesk/api/call_batches.py` (proxies; `report_lines` for the 6 pm text),
-`desk/src/pages/leads/callBatches.ts` (types, outcome list, optimistic update, rules helpers),
-`TodaysCalls.vue`, `CallRow.vue`, `CallOutcomeDialog.vue`, `CallBatchesTable.vue`,
+`desk/src/pages/leads/callBatches.ts` (types, outcome list, rules helpers),
+`TodaysCalls.vue`, `CallBatchesTable.vue`,
 `desk/src/components/Settings/CRM/CallBatchRules.vue`.
 
 ## Assign leads
 
 The department's slots hand every member the same number (by default Morning 40, Afternoon 30, Evening 30). On
 **Assign leads** (Sales, Team; `/leads/assign`, `AssignLeads.vue`) a manager or department head
-plans each person instead: the **product** they are handed and the **calls per slot**. The ERP
-site keeps the plan on the member's row and the call batches follow it from the next slot
-(TBO Smart's `call-batches.md` §11). Nothing is stored here.
+plans each person instead: the **product** they are handed, the **calls per slot** and, per
+slot, **which districts** they come from. The ERP site keeps the plan on the member's row and the
+call batches follow it from the next slot (TBO Smart's `call-batches.md` §11). Nothing is stored
+here.
 
-**What the page shows.** A **Department** field first (the departments with call batches on;
-`?department=` in the URL). The **People** list and the **Product** choices are that
-department's own. The **People** list has each member's product ("Any product" without one), their calls per
-slot (gray: the department's size, no plan of their own) and today's *called / handed*. On a phone
-each row is the name with "PhoebiX · 50 + 50" under it. The **Assign** panel (beside the list on a
-wide screen, under it on a phone) has the product, one number per slot, the day's total ("100
-calls a day each, 300 together"), how many unassigned leads of that product are ready (with a
-warning icon and words when it is fewer than the plan; each batch starts with the person's own
-leads anyway), one primary **Assign leads** button and, for people who have a plan, **Back to
-department sizes**. On a wide screen the panel scrolls in itself and its buttons stay pinned to
-its bottom, so Assign leads is always in view. A department's campaign product is the only product (the picker is locked
-and says why).
+**What the page shows.** The header: *Leads › Assign leads*, the title and *Pick people on the
+left, then choose what to do on the right.* Then the **Department** picker on the left, labelled
+and always shown, so it is the first thing to choose (`?department=` in the URL). Then one strip
+of four numbers, as the owner's mockup draws it (figure over label, no icons): **Leads waiting in
+the pool** (in warning ink with *Less than a day of planned calls* when the pool is smaller than
+the day's plans and the department pulls from it), **Calls planned per day**, **Called today**
+(*99 of 170*) and **People on a daily plan** (*3 of 4*). Under them, the **People** list beside one action panel
+(sticky on a wide screen, under the list on a phone).
+
+**The people list.** A card headed *People · 1 selected* with a search box; the pick-everyone
+box sits in the table's header row (half-ticked when some are picked). Each row: a tick box, the person
+(`PersonAvatar` and name), **Daily plan**, **Called today** and **Leads they own**. The plan is a
+pill in words and colour (`callPlans.planKind`): **Default · 100 a day** (gray, the department's
+slot sizes), **Custom · 70 a day** (brand, a plan of their own) or **No plan** (warning, a plan of
+0 calls: they get only the leads given by hand), with the plan spelled out under it: the product
+or industry (*For PhoebiX*), then one line per slot (*Morning: Ernakulam 40*, *Afternoon: Idukki
+20, Mixed 10*; `memberShares`, `sharesText`). Called today is a bar and *38 of 70 called*, or
+*Nothing handed out yet*; it opens the person's Today's calls. Leads they own opens their leads.
+A click on a row picks only that person; the tick box adds or drops one, for several at once. A
+legend under the list explains the three pills. The list is a table only while its card is at
+least 650 px wide (compact columns; the action panel is 24rem, 26rem on very wide screens) (measured with `useElementSize`, not the screen width, so an open sidebar or the
+panel beside it never squeezes the columns into each other); narrower, each row stacks: the name,
+the plan, then today's calls and the leads on one line, with pick-everyone in the card's header.
+
+**The action panel.** With nobody picked it says *Pick someone to start*. Otherwise its header
+names who (*Fidha V P*, with *Owns 452 leads · 100 calls a day*; or *3 people* and their names),
+then three tabs of equal width (`?tab=give|plan|back` in the URL) with a one-line hint and
+one main button each, pinned to the panel's bottom on a wide screen:
+- **Give now** (`AssignGiveNow.vue`): waiting leads now, without changing the daily plan.
+- **Daily plan** (`AssignDailyPlan.vue`): the calls of each slot, from which districts.
+- **Take back** (`AssignTakeBack.vue`): their leads back to the pool.
+
+A department's campaign product is the only product (the picker is locked and says why), and its
+campaign district the only district.
 
 **A department without products gives leads by industry.** When a department has no products
 (TBO) and the ERP site sends its industries, Assign leads uses **Industry** where it would use
@@ -394,32 +536,35 @@ TBO Smart keeps it as the member's `call_industry`, and the batches and the 11:0
 follow it). The leads window filters and gives by industry too and hides Set product. An older
 TBO Smart sends no industries, so the page stays as it was.
 
-**A district narrows it all.** When the ERP site sends a department's districts (those its open
-leads are in; `callPlans.hasDistricts`), the Assign panel has a **District** list under Product
-(or Industry) that shows each district's balance: *Any district* with the total, then every
-district with its unassigned leads of the product (or industry) chosen, the fullest first
-(*Malappuram 40*). Picking a row chooses that district, and the product's counts follow it. The box says
-*40 unassigned PhoebiX leads in Malappuram*; **See leads** opens the Unassigned window on that
-product and district, **Give now** gives the next leads of both, and **Assign leads** saves the
-district with the plan, so the batches, *Calling for* and the 11:00 auto-assign take only that
-district's new leads (TBO Smart keeps it as the member's `call_district`; `save_call_plan`,
-`assign_leads`, `get_department_leads` send `district` only when one is chosen). The people
-table's plan column reads *PhoebiX · Malappuram* (*Product · District*). A department's campaign
-district is the only one: the field is locked and says why. The leads window gets a **District**
-filter with counts (*All districts*, each district, *No district*), each lead shows its district
-next to the stage, and *Give the next* takes an **In district** too. An older TBO Smart sends no
-districts, so the field stays out instead of filtering nothing.
+**Districts.** When the ERP site sends a department's districts (those its open leads are in;
+`callPlans.hasDistricts`) with what waits in each (`unassigned_districts`), Give now lists them to
+take from, Daily plan offers them per slot, and Take back lists the people's own. District names
+are shown as the leads carry them (spellings that differ only in case or spacing are one). The
+leads window gets a **District** filter with counts (*All districts*, each district, *No
+district*), each lead shows its district next to the stage, and *Give the next* takes an **In
+district** too. `save_call_plan`, `assign_leads` and `get_department_leads` send `district` only
+when one is chosen. An older TBO Smart sends no districts, so the district parts stay out instead
+of filtering nothing.
 
-**The product's unassigned leads, there and then.** Each product in the picker says how many
-unassigned leads with a phone it has (*PhoebiX · 120 unassigned*; *Any product* the total). With
-people picked, a box under it says *120 unassigned PhoebiX leads* with **See leads** (the
-Unassigned window, already on that product; with one person picked it opens on their pool, ready
-to give picked leads to them) and **Give now** (*Give each now* for several people): that many of
-the next unassigned leads of the product go to each person at once (`assign_leads` with `count`
-and `product`, one call per person, as *Give the next 25* in the window). Give now is always
-there; with nothing to give it is disabled and says to pick a district with a balance or another
-product. Given leads are theirs
-straight away and their next batch can call them; the plan below still sets the calls a day.
+**Give now.** A **Product** (or **Industry**) picker with how many wait (*StayveX · 291
+waiting*). With districts: **1. Where should leads come from?**, a list of tick boxes (frappe-ui
+`Checkbox`): *Any district* with the total (so leads without a district can be given too), then
+each district with its waiting leads, the fullest first; a district with none says *none* and
+can't be ticked; *Any district* and named districts don't mix (the last kind ticked wins); **Pick
+all with leads** ticks every district that has some; with one person picked a **They own** column
+shows their open leads there (one `get_department_leads` call, asked again only when their lead
+total changes). **2. How many?** (*How many each?* for several): a number and quick chips 10, 25,
+50, 100 and *All N* (what the ticked districts hold, per person). A preview says *Fidha V P gets 25
+leads now*, how many from each district, and *They own them at once. Their next batch can call
+them, at the latest the Afternoon slot at 14:00* (`nextSlotText`). Instead of a silently disabled
+button it says what is in the way: nothing waiting for the product, no district ticked, no number,
+more than 500, or *Only 60 leads are waiting in the districts you picked, and you need 75. Pick
+more districts or lower the amount.* The button says it all (*Give 25 leads to Fidha V P*, *Give
+25 leads each to 3 people*). Each person in turn takes from the fullest district left, so two
+people may get theirs from different districts; one `assign_leads` call per person and district.
+The toast says how many went (*Gave 50 leads to 2 people*, or *… The rest were taken meanwhile*),
+and the page reads its numbers again. **Pick leads one by one** opens the Unassigned window on that
+product (and the one district ticked).
 
 **Auto-assign when nobody did.** Under the panel, a clock line says when the department hands
 out leads on its own: *At 11:00, anyone with a plan who wasn't given leads here today is topped up
@@ -443,43 +588,74 @@ phone):
   department);
 - under Unassigned, tick leads and **Assign to** the person, or **Give the next 25 of PhoebiX**
   without picking (the ERP site takes the next unassigned leads with a phone, hot then newest);
-- the header's **Unassigned leads** button opens the pool on its own.
+- Give now's **Pick leads one by one** opens the pool on the product and district chosen.
 
-**No daily calls: assign by hand.** With people ticked, the panel's footer has a quiet **No daily
-calls · assign by hand**. It asks first ("From the next slot they get no automatic calls (the
-department's 50 + 50 stops for them)…") and saves their plan as 0 in every slot (`save_call_plan`
-with zeros, the product and district as picked), so the batches and the 11:00 top-up hand them
-nothing; they get only the leads given here: **Give now** (a number of the product and district
-picked) or **See leads** (pick them one by one). The people table's plan reads *By hand: no daily
-calls*. To go back to batches, set calls per slot and press Assign leads, or **Remove plan** for
-the department's default. Today's calls leaves out a lead moved to another stage since its call
-was handed out (TBO Smart's `call-batches.md`, "A lead dealt with leaves Today's calls").
+**Daily plan.** A box with the current plan (*Current plan (the department's): Morning: Mixed 50 /
+Afternoon: Mixed 50*; *No daily plan. Fidha V P gets leads only when you use Give now.*; for
+several people, how many have a plan of their own), the **Calls for product** (or industry), then
+two choices:
+- **Use the department plan**: the department's slot sizes from any district (each slot reads
+  *50 mixed, from any district*). Saving sends `clear`.
+- **Choose districts for each slot**: a box per department slot (*Morning 10:00–13:00 · 50
+  calls*; as many slots as the department has), each a list of rows: a district picker (*Mixed ·
+  any district · 291 waiting*, then every district with what waits there; a district or Mixed
+  already in the slot is greyed out), the calls and a remove button. **+ Add district** adds a
+  row. Under a row whose district has fewer waiting leads than it asks of everyone picked: *Only 40
+  waiting in Idukki. The rest comes from their own leads there.* Saving sends `slot_districts`
+  (`{"Morning": [{"district": "Ernakulam", "calls": 50}], "Afternoon": [{"district": "Idukki",
+  "calls": 20}, {"district": "", "calls": 10}]}`; a blank district is Mixed). The ERP site checks
+  it again (each district once a slot, 0 to 500 calls a slot, the campaign district).
 
-**All of someone's leads back to the pool at once.** With people ticked who own open leads, the
-panel's footer has a quiet **Send their 555 leads back to the pool** (the count is theirs
-together). It opens a window (`SendBackLeadsDialog.vue`) that asks which: a **Product** (or
-**Industry**) and a **District**, each listing only what those people have, with counts (*All
-products (555)*, *StayveX (555)*, *No product (12)*). It counts the leads that match, says what
-happens ("555 leads go back to StayVeX's unassigned pool. Fidha will no longer see them or their
-notes, and their calls not made yet leave Fidha's list."), and *Keep them* is the primary button;
-**Send 555 back to the pool** is the red one. Only open leads go: won and lost ones stay theirs.
-It works through them 100 at a time (`get_department_leads` for the person and the choice, then
-`unassign_leads` on those names, round after round), showing *Sending back: 200 of 555 done*, and
-can't be closed while it runs. Each round reads what the person still owns, so a lead moved to
-someone else meanwhile is never taken from them, and it never sends back more than it counted, so
-leads handed to the person meanwhile don't keep it going. If a call fails it stops, says how many went
-back, and counts again, so the button then sends the rest. No new endpoint: the ERP site's
-`unassign_leads` takes at most 500 named leads, and the hub lists 100 at a time.
+Then the day's total (*100 calls a day*, *100 calls a day each · 300 together*), whether the pool
+carries it (a bar and *291 leads waiting: enough for about 2 days*, or a warning that only part can
+come from the pool; when the department doesn't pull waiting leads it says each person calls their
+own), and a folded **How daily calls are handed out** (each slot's batch takes their own new leads
+first, then waiting ones; district rows first, Mixed after them; the department's auto-assign line
+with its real time and days; calls already handed out stay). The main button is **Save plan for
+X**, **Start plan for X** for people with no plan, **Use the department plan for X**, or disabled as
+*Add calls to save a plan* / *Already on the department plan*. A plan is not saved with 0 calls a
+day: that is Remove plan. A number outside 0–500, or a slot over 500, says which slot to fix and
+sends nothing. The form is filled from the first person picked and filled again only when other
+people are picked or their plan changes, not on the 15-second reload.
 
-**Made hard to get wrong.** *Send N back to the pool* is a quiet secondary button and asks first
-("Send 71 leads back to the pool? Shahana V K will no longer see them or their notes. They go to
-the next person's call batch."); *Keep them with X* is the primary button of that question. Under
-Unassigned, *Give N to X* is the solid button. Every action leaves a plain result line in the
-window ("71 leads given to Fidha V P", "71 leads are now in the pool") and the list says who owns
-what it shows ("owned by X" / "no owner yet"). When leads wait in a department's pool and nobody
-will be handed them, the page shows a warning above the people: every member's plan is 0 (with a
-*Set the plan* button that picks everyone) or the department doesn't pull unassigned leads
-(`poolStuck` in `callPlans.ts`).
+**Remove plan.** For people picked who have a plan (default or their own), a red outlined
+**Remove plan** under the main button. It asks in place (no browser dialog): *Remove the daily plan
+for Fidha V P? Automatic calls stop from the next slot, and the 11:00 top-up skips them. Leads they
+already own stay with them.* with **Keep plan** and **Remove plan**. It saves 0 calls in every slot
+(`save_call_plan` with zeros), so the batches and the top-up hand them nothing; the pill becomes
+**No plan** and the main button **Start plan**. It works for several people at once. Today's calls
+lists only leads still at New Lead, and no newer duplicate (TBO Smart's `call-batches.md`, "Only
+new leads are listed").
+
+**An older TBO Smart** sends no `slot_districts` (`callPlans.splitsSlots`): the second choice is
+**Set calls for each slot**, one number per slot and one **District** for the whole plan, saved as
+`sizes` and `district` as before, with *A different district for each slot needs the latest TBO
+Smart on the ERP site.* The hub sends `slot_districts` only when it is given.
+
+**Take back.** For the people picked who own open leads: a **Product** (or **Industry**) picker
+listing only what they have, with counts (*All products (555)*, *StayveX (555)*, *No product
+(12)*), then **All districts** (*555 leads*) or **Only some districts** (their districts as tick
+boxes with counts, *No district* too). It counts the leads that match, per person and district
+(`get_department_leads`), and says what happens (*555 leads go back to StayVeX's unassigned pool.
+Fidha will no longer see them or their notes, and their calls not made yet leave Fidha's list.*).
+**Send 555 leads back to the pool** (red outline) asks in place (*Send 555 leads from Fidha V P back
+to the pool?*) with **Keep them** as the solid button and **Yes, send back**. Only open leads go:
+won and lost ones stay theirs. It works through them 100 at a time (`get_department_leads` for the
+person, the choice and each district, then `unassign_leads` on those names, round after round),
+showing *Sending back: 200 of 555 done*. Each round reads what the person still owns, so a lead
+moved to someone else meanwhile is never taken from them, and it never sends back more than it
+counted. If a call fails it stops, says how many went back, and counts again, so sending again
+takes the rest. (The mockup's note that today's calls stay on their list is not what happens:
+`unassign_leads` takes the calls not made yet off the person's list, so the page says that.)
+
+**Made hard to get wrong.** Every action says what it will do, with names and numbers, and the
+two that take something away (Remove plan, Take back) ask in place first, with keeping things as
+the safe choice. Every action ends in a toast (*Gave 25 leads to Fidha V P*, *Saved the daily plan
+for Fidha V P*, *Removed the daily plan for Fidha V P*, *Sent 44 leads back to the pool*) and the
+numbers update without reloading the page. When leads wait in a department's pool and nobody will
+be handed them, the page shows a warning above the people: every member's plan is 0 (with a *Set a
+daily plan* button that picks everyone and opens Daily plan) or the department doesn't pull waiting
+leads (`poolStuck` in `callPlans.ts`).
 
 The owner, the ToDo assignment and a waiting call in the previous owner's running batch move with
 the lead (TBO Smart's `call-batches.md` §12). At most 500 leads at a time; 50 a page with **Show
@@ -493,40 +669,40 @@ can be planned; the page says to add people in Settings, CRM, Lead departments.
 
 **States.** Loading skeleton; an error with Try again; an older ERP site (*The ERP site can't
 assign leads yet*); no department with batches (turn them on in Settings); a department with no
-members; the save's own error under the button.
+members; a search with no match (*Clear search*); nobody picked; each tab's own error under its
+fields, after which its button works again.
 
 **What a plan does on the ERP site.** The slot's batch holds the person's number (0: none in
-that slot), the day's cap is at least the plan's total, new leads are only the plan's product, the
-person's *Calling for* offers only that product in the department, and their batches there open
-even when they focus on another department. Calls already handed out stay.
+that slot), split by the slot's district rows (named districts first, then Mixed; each takes their
+own leads of that district first, then waiting ones), the day's cap is at least the plan's total,
+new leads are only the plan's product, the person's *Calling for* offers only that product in the
+department, and their batches there open even when they focus on another department. The 11:00
+top-up fills each district's shortfall, then Mixed. Calls already handed out stay.
 
-Code: `helpdesk/api/call_batches.py` (`get_call_plans`, `save_call_plan`; a 403 becomes
-`LeadsForbiddenError` with the ERP site's reason), `desk/src/pages/leads/callPlans.ts` (types,
-`leadsReady`), `AssignLeads.vue`; the nav item `assign-leads` (`callPlannerOnly` in
-`useNavigation.ts`).
+Code: `helpdesk/api/call_batches.py` (`get_call_plans`, `save_call_plan` with `slot_districts`;
+a 403 becomes `LeadsForbiddenError` with the ERP site's reason), `desk/src/pages/leads/callPlans.ts`
+(types, `leadsReady`, `planKind`, `memberShares`, `nextSlotText`), `AssignLeads.vue` with
+`AssignGiveNow.vue`, `AssignDailyPlan.vue` and `AssignTakeBack.vue`; the nav item `assign-leads`
+(`callPlannerOnly` in `useNavigation.ts`).
 
 ### How to use (managers and heads)
 
-1. Open **Sales → Assign leads** and pick the **Department**. The list shows its people.
-2. Tick the people (or the box at the top for everyone).
-3. Choose the **Product** and, to call one place only, the **District**. Type the calls for each
-   slot, for example Morning 40, Afternoon 30, Evening 30.
-4. Check the line under it: if fewer unassigned leads are ready than you plan, the batches give
-   what there is.
-5. Press **Assign leads**. It counts from the next slot.
-6. To see or move someone's leads, press **N leads** on their row. Tick leads to **Move to**
-   someone else, **Unassign** or **Set product**. Under **Unassigned**, tick leads and assign them,
-   or type how many to give (and of which product and district) and press **Give to**.
-7. For someone who should get no automatic calls, tick them and press **No daily calls · assign
-   by hand**, then give them leads with **Give now** or **See leads**.
-8. To take back the leads someone already has (they leave, or change department), tick them and
-   press **Send their N leads back to the pool**. Leave *All products* and *All districts* for
-   every open lead, or choose one product or district, then press **Send N back to the pool**.
-   Keep the page open until it says they are in the pool.
-9. To remove someone's plan, tick them and press **Remove plan · use (department) default
-   (50 + 50)**; the button shows the department's slot sizes. It asks first ("Remove Fidha V P's
-   plan? From the next slot they get GrowthX's default: Morning 50 + Afternoon 50, any
-   product."), naming the campaign product instead of "any product" when the department has one.
+1. Open **Sales → Assign leads** and pick the **Department**. The list shows its people and
+   their plans.
+2. Click a person (or tick several, or the box at the top for everyone).
+3. **Give now**: choose the product, tick the districts, say how many, check the preview and press
+   **Give 25 leads to …**.
+4. **Daily plan**: choose **Use the department plan**, or **Choose districts for each slot** and
+   add rows, for example Morning: Ernakulam 50; Afternoon: Idukki 20 and Mixed 10. Check the warning
+   lines and whether the pool is enough, then press **Save plan for …**. It counts from the next
+   slot.
+5. For someone who should get no automatic calls, press **Remove plan** on Daily plan, then
+   **Remove plan** again to confirm. Give them leads with **Give now**.
+6. **Take back**: choose all their districts or some, press **Send N leads back to the pool** and
+   confirm. Keep the page open until it says they are in the pool.
+7. To see or move single leads, press the number under **Leads they own**: tick leads to **Move
+   to** someone else, **Unassign** or **Set product**; under **Unassigned**, assign them or give the
+   next N.
 
 **Viewers (read-only).** A department's **Viewers** (Settings → CRM → Lead departments, next to
 Heads; shown once the ERP site's TBO Smart has them) open Assign leads for it but change nothing:
@@ -556,6 +732,15 @@ created; else the Owner filter's, or everyone they see). Picking a card lists it
 on `list_leads`, kept in the URL); picking it again goes back to the list as before, overdue
 and due today. `helpdesk.api.leads.get_follow_up_counts` (cached 60 seconds per person) reads TBO
 Smart's `get_follow_up_counts`; the cards stay out while an older TBO Smart can't count.
+
+**Follow-up date.** On *Follow-up* and *My leads*, one **Follow-up date** field in the toolbar
+keeps the leads whose earliest open follow-up falls on that day; Clear all drops it. One day, not a
+from/to range: people look for the follow-ups of a day, and two stacked date fields took more room
+than the list. On Follow-up the date and a card are two ways to pick the same list, so picking one
+drops the other. The date is kept in the URL (`follow_up_date`) and sent only from these two tabs,
+as `due_from` and `due_to` of the same day: `helpdesk.api.leads.list_leads` takes a range (a real
+date, the end not before the start) and passes only the sides given to TBO Smart's `list_leads`,
+so an older TBO Smart still answers while the date is empty.
 
 **Your calls on My leads.** At the top of *My leads*, a strip (`MyCallCounts.vue`) shows the
 person's own calls **Today**, **This week** (from Monday), **This month** and **All time**, each
@@ -605,10 +790,10 @@ Today's calls.* `helpdesk.api.call_batches.set_calling_focus`; the choice is rem
 the ERP site, and `get_my_calls` carries `focus` and `focus_options`.
 
 **Recording results** (`helpdesk/api/pending_calls.py`, `PendingCalls.vue`, `CallResultSheet.vue`).
-Tapping **Call** on a lead (a row in Today's calls, the lead page's Call button or its phone number)
+Tapping **Call** on a lead (the lead page's Call button or one of its numbers; opened from Today's calls it carries the batch item)
 remembers the lead. The cache holds it per person for 3 days, at most 50. When the person comes back
-to the page (`visibilitychange` or window focus; for MyOperator, 45 seconds later) the **result
-sheet** opens for it: six big buttons (Connected, Not answered, Busy, Call back, Not interested,
+to the page (`visibilitychange` or window focus; for a call the **call box** placed, when the box
+sees the call end) the **result sheet** opens for it: six big buttons (Connected, Not answered, Busy, Call back, Not interested,
 Wrong number), an optional note; Call back asks *In 1 hour / In 2 hours / Tomorrow 10:00*, Not
 interested asks why in one tap. A small banner, *You have N calls without a result*, stays on every
 screen for Sales Employees with **Add results**, which opens them one by one. The result goes to
@@ -622,7 +807,7 @@ mistake* (`dismiss_pending_call`). Endpoints: `start_call`, `get_pending_calls`,
 1. Open **Leads**. You see **Today's calls**: only your own calls, nobody else's.
 2. Check **Calling for** at the top. Tap **Change** to call for another department or product (a
    district too, if you like), then **Start calling**.
-3. Tap **Call** on a lead and make the call.
+3. Tap a lead in the list. Its page opens: tap **Call** and make the call.
 4. Back on the page, tap how it went: Connected, Not answered, Busy, Call back, Not interested or
    Wrong number. That is all.
 5. If you forget, the banner *You have N calls without a result* waits. Tap **Add results**.
@@ -658,9 +843,8 @@ office's). A lead keeps all of them, and the old one is never lost. TBO Smart st
   up, otherwise the phone's `tel:` link), a WhatsApp link, and the **...** menu. Old and Wrong
   numbers are greyed and struck through under **Old numbers (n)**. An older TBO Smart, which sends no
   list, keeps the single Mobile line.
-- *Today's calls:* the row shows the main number and, when the lead has more in use, **+1 more**;
-  tap it to call one of the others. The result is recorded against the number that was dialled
-  (`number` on `record_call_outcome`).
+- *Today's calls:* the row shows the main number; the lead's page it opens has every number. The
+  result is recorded against the number that was dialled (`number` on `record_call_outcome`).
 - *Log call:* a **Number called** choice appears when the lead has several numbers in use.
 - *Calls without a result:* the pending call remembers the number that was dialled
   (`pending_calls.start_call`'s `number`), and the result sheet sends it with the outcome.
@@ -919,7 +1103,7 @@ Settings → CRM → **Referral (Lead Bank)** (`ReferralSettings.vue`), under th
 `helpdesk/api/leads.py`, thin typed proxies (writes are POST only): `get_options`,
 `list_leads`, `get_overview_page`, `get_overview`, `get_business_overview`, `get_lead_intake`, `get_proposal_money`, `get_lead`, `get_lead_ai`, `refresh_lead_ai`, `apply_ai_stage`,
 `dismiss_ai_stage`, `draft_lead_message`, `log_message_sent`, `create_lead`, `update_lead`,
-`set_stage`, `add_note`, `get_category_counts`, `add_industry`, `bulk_set_lead_category`, `find_duplicate_leads`, `get_stale_leads`, `get_lead_departments`, `save_lead_department`, `set_lead_department_active`, `add_lead_number`, `update_lead_number`, `remove_lead_number`, `get_merge_preview`, `merge_leads`, `click_to_call`, `call_recording`, `get_daily_report`, `log_call`, `get_lead_photos`, `upload_lead_photo`, `delete_lead_photo`, `lead_photo`. Find prospects has its own `helpdesk/api/prospects.py`: `estimate_prospect_run`, `start_prospect_run`, `get_prospect_runs`, `get_prospect_run`; Outreach has `helpdesk/api/outreach.py` (see [Outreach](#outreach)). They check
+`set_stage`, `add_note`, `get_category_counts`, `add_industry`, `bulk_set_lead_category`, `find_duplicate_leads`, `get_stale_leads`, `get_lead_departments`, `save_lead_department`, `set_lead_department_active`, `add_lead_number`, `update_lead_number`, `remove_lead_number`, `get_merge_preview`, `merge_leads`, `click_to_call`, `refresh_call`, `call_recording`, `get_daily_report`, `log_call`, `get_lead_photos`, `upload_lead_photo`, `delete_lead_photo`, `lead_photo`, `get_lead_files`, `upload_lead_file`, `delete_lead_file`, `lead_file`. Find prospects has its own `helpdesk/api/prospects.py`: `estimate_prospect_run`, `start_prospect_run`, `get_prospect_runs`, `get_prospect_run`; Outreach has `helpdesk/api/outreach.py` (see [Outreach](#outreach)). They check
 `can_use_leads`, validate the view and page size, trim notes, and pass `acting_user`. The
 client is `CRMClient.call` in `helpdesk/integrations/crm/client.py`; the call and error
 mapping live in `helpdesk/integrations/crm/leads.py`. The API key and secret never reach the
@@ -988,16 +1172,31 @@ doesn't show without its fields. The hub can be deployed before TBO Smart.
     to dates) and, for
     a team lead or a manager, **Owner** ("My team" / "Everyone" or one person). Both are in
     the URL (`period`, `from`, `to`, `owner`).
-  - **This period** (one bordered row of five cells: New leads, Contacted, Meetings held,
-    Proposals sent, Won with its value; each opens its leads). The second row holds **Needs
-    attention** now and Lost. **Needs attention** now: Overdue follow-ups (red), Gone quiet (no touch for
-    the ERP site's stale days, amber), Hot leads.
-  - **Pipeline now**: every open stage with its leads and their latest quotations' value, as
-    neutral bars (Won and Lost only when they have leads). **Funnel**: of the period's new
-    leads, how many got to Contacted, Meeting, Proposal and Won, with the win rate. **Why
-    leads were lost** (top five). **Hot leads** (the six best, each opens the lead). **By
-    owner** (new, contacted, meetings, proposals, won, open), **By segment** and **By
-    source** (new, open, won).
+  - **Header and tabs** (2026-11-14): on a report the page is titled for it ("Team overview",
+    "Daily report", …, each with a one-line subtitle), the reports (Overview, Daily report,
+    Outreach, Commission, Business) are the pills, and **Go to all leads →** opens the lists.
+    On a list the lists are the pills and the reports are links beside them.
+  - **Period card**: the period pills and Owner in one white card, with the range and whose
+    leads on the right ("Fri, 14 Nov 2026 · everyone's leads · tap any number…").
+  - **Pipeline progress** (one card, five numbered steps: New leads, Contacted, Meetings
+    held, Proposals sent, Won; each opens its leads). Each step has a bar and its share of
+    the step before ("9% of new leads"); New leads reads "Came in this period", Won adds its
+    value. This replaces the old Funnel panel, which showed the same steps.
+  - **Needs attention**: four cards, each with its icon and the next move under the number:
+    Overdue follow-ups (red, "Call these first →"), Gone quiet (no touch for the ERP site's
+    stale days, amber, "Re-engage →"), Hot leads ("Close them →"), Lost this period ("See
+    why →", or "Nothing lost, nice"). A zero says so instead of asking for action.
+  - **Two columns** below: on the left **Your plan for today** (the AI's rows, each with the
+    lead, why it's there as a chip, its stage pill, an Open button and the AI's **Next step**
+    in a box; the AI counts as tinted chips) and **Pipeline by stage**; on the right **New
+    leads by person** (the intake strip's by-person card, Today / Yesterday), **Pipeline
+    now** (open leads and win rate, with a link down to every stage) and **Why leads were
+    lost**. The plan's button opens the lead rather than calling, because the plan rows
+    carry no phone number.
+  - **Pipeline by stage**: every open stage with its leads and their latest quotations'
+    value, as neutral bars (Won and Lost only when they have leads). **Hot leads** (the six
+    best, each opens the lead). **By owner** (new, contacted, meetings, proposals, won,
+    open), **By segment** and **By source** (new, open, won).
   - **Every number opens its leads**: a tile, a stage, an owner's or a segment's number
     goes to the list with `metric` and the period (or a stage, owner, segment or source
     filter); the list shows what it was opened with ("Won, this month") and *Clear filters*
@@ -1006,7 +1205,7 @@ doesn't show without its fields. The hub can be deployed before TBO Smart.
     unfinished custom period, an empty line in each panel with nothing to show.
   - Colour: one brand accent (the selected period); green only for Won, red only for
     overdue, amber for gone quiet, each with its icon and label. No other colour.
-  - **Proposals & money** (`LeadsMoney.vue`, under Pipeline and Funnel, read by its own
+  - **Proposals & money** (`LeadsMoney.vue`, under the two columns, read by its own
     `get_proposal_money` with the same period and owner): four tiles, *Proposals sent* (their
     value, how many; opens the Proposals sent list), *Won* (value, leads), *Advances received*
     in the period, and *Still to collect* (with what is overdue); a note when proposals went
@@ -1162,6 +1361,25 @@ doesn't show without its fields. The hub can be deployed before TBO Smart.
     `helpdesk.api.leads.lead_photo?lead=&file=&thumb=`, which streams the ERP bytes as the signed-in
     person (only PNG, JPEG or WebP are passed on, `Content-Disposition: inline`) and, through the
     `after_request` hook `cache_lead_photo`, `Cache-Control: private, max-age=3600`.
+- **Attachments** (`LeadAttachments.vue`; needs TBO Smart's hub leads API v1.33,
+  `hub-leads-api.md` §2.34; the card stays out while the ERP site is older: `get_lead_files`
+  answers `available: false` through `call_if_deployed`), under Photos on every lead (it doesn't
+  wait for a place): the requirement sheet, a quotation the client sent, a visiting card.
+  - A list, newest first: an icon by type, the file name (opens it in a new tab), size, who added
+    it and when. Every file on the ERP Lead but its photos is listed, so a file attached on the
+    desk form shows here too.
+  - **Attach** (anyone who can write the lead) takes several files: PDF, Word, Excel, PowerPoint,
+    OpenDocument, CSV, text, PNG/JPEG/WebP or ZIP, at most 10 MB each and 50 per lead. Others are
+    left out by name before anything is sent; the rest upload one at a time (base64, as they are)
+    with a status line per file, a named error for a refused one and a toast when done.
+  - The trash button shows only where `can_delete` is true (who added it, the lead's owner or a
+    manager); it asks in place (*Delete* / *Keep*).
+  - The files are private on the ERP site. The browser opens them through
+    `helpdesk.api.leads.lead_file?lead=&file=&filename=`, which streams the ERP bytes as the
+    signed-in person. Only PDFs and PNG/JPEG/WebP open in the browser (`inline`); anything else,
+    including an HTML or SVG file attached on the desk, is sent as `application/octet-stream`
+    to save (`attachment`), so it never runs as a hub page. `filename` is only the saved name
+    and is cleaned of path and control characters.
 - The pickers' options (`get_options`) are fetched once per session (`leadOptions` in
   `desk/src/pages/leads/leads.ts`).
 - Sidebar: *Leads* in Workspace (teal group), shown when `can_use_leads`.
@@ -1409,6 +1627,10 @@ and the lead page's facts).
 site), an upload passed on with a trimmed caption, an empty or oversize upload kept at the hub,
 the ERP site's refusal reaching the person, delete, the image streamed (and only image types),
 no access without leads, and the private cache header.
+`helpdesk/tests/test_lead_files.py`: the file list (and the card staying out on an older ERP site),
+an upload passed on, an empty or oversize upload kept at the hub, the ERP site's refusal reaching
+the person, delete, no access without leads, PDFs and pictures opened inline and anything else
+(HTML, SVG, Office files) only saved as bytes, and the saved name cleaned.
 `helpdesk/tests/test_stale_leads.py`: wave 1: the duplicate check proxied as the person (and skipped
 quietly on an older ERP site), `allow_duplicate` sent only when confirmed, the quiet leads kept
 per department threshold and cached per person, and the follow-up rule (owner at L0, heads at
@@ -1434,6 +1656,7 @@ trimmed product and sizes, clearing, no people refused before the ERP site is as
 `helpdesk/tests/test_lead_calls.py`: Call posted as the signed-in person to TBO Smart's
 telephony API, the recording streamed (audio only) and a refusal refused, the MyOperator
 settings for admins only and proxied.
+`helpdesk/tests/test_lead_calls.py` also covers the call box's `get_call_status` and `get_incoming_call` proxies (as the signed-in person, a refusal refused here too).
 `helpdesk/tests/test_outreach.py`: see [Outreach](#outreach).
 `helpdesk/tests/test_whatsapp_outreach.py`: see [whatsapp-outreach.md](whatsapp-outreach.md).
 `helpdesk/tests/test_prospects.py`: an estimate and a start proxied as the person (POST, the values as a set of fields), the runs read live, a refusal naming who may, an older ERP site (the list hides quietly, estimate and start say so), and no access without leads.

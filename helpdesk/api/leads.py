@@ -3,6 +3,7 @@ signed-in person (docs/leads.md). Thin proxies to `tbo_smart.api.hub_leads`; the
 site decides what each person may see and do, and the API key never leaves the hub."""
 
 import json
+import re
 
 import frappe
 from frappe import _
@@ -16,11 +17,12 @@ from frappe.utils import (
     today,
 )
 
-from helpdesk import whatsapp_outreach
+from helpdesk import lead_mirror_read, whatsapp_outreach
 from helpdesk.api import pending_calls
 from helpdesk.content_team import is_sales_bd_role, only_sales_team
 from helpdesk.integrations.crm.leads import (
     LeadsError,
+    LeadsNotDeployedError,
     LeadsUnavailableError,
     call,
     call_if_deployed,
@@ -29,8 +31,20 @@ from helpdesk.integrations.crm.leads import (
 )
 
 VIEWS = ("all", "mine", "call_today", "follow_up", "called")
+# what the hub's copy of the leads can answer while the ERP site is away (docs/lead-mirror.md)
+COPY_VIEWS = ("all", "mine")
+COPY_PARAMS = {
+    "view",
+    "mine",
+    "search",
+    "start",
+    "page_length",
+    *lead_mirror_read.FILTER_COLUMNS,
+}
 # when a lead's earliest open follow-up is due: the Follow-up view's cards
 DUE_BUCKETS = ("overdue", "today", "tomorrow", "week", "later")
+# the tabs with a Follow-up due date filter
+DUE_DAYS_VIEWS = ("follow_up", "mine")
 PERIODS = ("today", "yesterday", "week", "month", "quarter", "custom")
 # a day is a custom range of that one day on the ERP site, which an older TBO Smart reads too
 DAYS_AGO = {"today": 0, "yesterday": 1}
@@ -67,8 +81,11 @@ TELEPHONY = "tbo_smart.api.telephony"
 AUDIO_TYPES = ("audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/ogg")
 # what a lead photo may be handed back as: the ERP site only stores these
 PHOTO_TYPES = ("image/jpeg", "image/png", "image/webp")
-# a photo is at most 10 MB on the ERP site; as base64 a third more
+# a photo or a file is at most 10 MB on the ERP site; as base64 a third more
 MAX_PHOTO_BASE64 = 14 * 1024 * 1024
+# what a lead's file may open as in the browser; anything else is only saved, so a file
+# attached on the ERP desk (HTML, SVG) never runs as this site's page
+FILE_INLINE_TYPES = (*PHOTO_TYPES, "application/pdf")
 PHOTO_METHOD = "helpdesk.api.leads.lead_photo"
 PHOTO_CACHE = "private, max-age=3600"
 MAX_PAGE = 100
@@ -132,7 +149,8 @@ def clear_cached_reads() -> None:
 def get_options(fresh: int | str = 0) -> dict:
     """Stages, sources, segments, owners, territories and industries for the pickers,
     and whether the ERP site has the Daily report and can log a call made outside
-    MyOperator (`has_daily_report`, `can_log_call`: both came with the same TBO Smart)."""
+    MyOperator (`has_daily_report`, `can_log_call`: both came with the same TBO Smart).
+    """
     require_leads()
     options = read_options(fresh)
     deployed = report_deployed()
@@ -177,11 +195,15 @@ def list_leads(
     # the page sends null while the Created by filter is off
     created_by_me: bool | int | str | None = None,
     due: str | None = None,
+    due_from: str | None = None,
+    due_to: str | None = None,
 ) -> dict:
     """A page of leads. `view` called lists the leads called at least once, last called first
     (`from_date` and `to_date` without a `metric` keep those last called in those days);
     `created_by_me` keeps the leads the person created, whoever owns them now. `due` (Follow-up only) keeps the leads whose earliest open
-    follow-up is overdue, today, tomorrow, in the week after (`week`) or `later`. `industry`, `state`, `district`, `org_size`, `product`, `last_call_result`
+    follow-up is overdue, today, tomorrow, in the week after (`week`) or `later`. `due_from` and
+    `due_to` (Follow-up and Mine only; either may be left out) keep the leads whose earliest open
+    follow-up falls in those days, earliest first; on Follow-up they take the place of `due`. `industry`, `state`, `district`, `org_size`, `product`, `last_call_result`
     (the outcome of the lead's last call) and `last_reply_class` (how its last email reply
     was sorted) each take one value or a list (any of them); a
     list goes to the ERP site as JSON. `metric` with its period keeps the leads one number of the
@@ -192,6 +214,8 @@ def list_leads(
         frappe.throw(_("Pick All, Mine, Call today, Follow-up or Called."))
     if due and due not in DUE_BUCKETS:
         frappe.throw(_("Pick when the follow-ups are due."))
+    # only the tabs that show the dates, read before a BD's All becomes Mine
+    due_days = follow_up_days(due_from, due_to) if view in DUE_DAYS_VIEWS else {}
     mine = False
     if is_bd():
         # another BD may be calling the same lead: every list of a BD is the leads they own or
@@ -215,8 +239,7 @@ def list_leads(
             "from_date": from_date or None,
             "to_date": to_date or None,
         }
-    result = call(
-        "list_leads",
+    params = dict(
         search=(search or "").strip() or None,
         stage=stage or None,
         owner=owner or None,
@@ -238,12 +261,50 @@ def list_leads(
         view=view,
         mine=1 if mine else None,
         created_by_me=1 if cint(created_by_me) else None,
-        **({"due": due} if due and view == "follow_up" else {}),
+        **({"due": due} if due and view == "follow_up" and not due_days else {}),
+        **due_days,
         # cint: a malformed number is 0, never a server error
         start=max(cint(start), 0),
         page_length=min(max(cint(page_length) or 20, 1), MAX_PAGE),
     )
+    result = read_or_copy(
+        lambda: call("list_leads", **params), lambda: list_from_copy(params)
+    )
     return result or {"rows": [], "total": 0}
+
+
+def read_or_copy(read, copy):
+    """`read` from the ERP site; when it can't be used right now and the hub's copy of the
+    leads is ready, `copy` instead (docs/lead-mirror.md, phase 2a). The ERP's error stands
+    when the copy has no answer either (`copy` returns None)."""
+    try:
+        return read()
+    except LeadsUnavailableError as error:
+        if isinstance(error, LeadsNotDeployedError) or not lead_mirror_read.ready():
+            raise
+        answer = copy()
+        if answer is None:
+            raise
+        # frappe.throw queued the ERP's error for a toast; the page says it its own way
+        frappe.clear_last_message()
+        return answer
+
+
+def list_from_copy(params: dict) -> dict | None:
+    """The Leads list from the hub's copy: All and Mine, with the search and the filters the
+    copy has columns for. None for anything else (a tab or filter only the ERP can work out),
+    so the person is told the ERP is away instead of shown a wrong list."""
+    asked = {key for key, value in params.items() if value not in (None, "")}
+    if params["view"] not in COPY_VIEWS or asked - COPY_PARAMS:
+        return None
+    return lead_mirror_read.list_copy(
+        frappe.session.user,
+        search=params["search"],
+        mine=params["view"] == "mine" or bool(params["mine"]),
+        start=params["start"],
+        page_length=params["page_length"],
+        **{key: params.get(key) for key in lead_mirror_read.FILTER_COLUMNS},
+    )
 
 
 @frappe.whitelist()
@@ -650,6 +711,19 @@ def check_period(
         frappe.throw(_("Pick both dates for your own period."))
 
 
+def follow_up_days(due_from: str | None, due_to: str | None) -> dict:
+    """The follow-up days as the ERP site takes them, only the sides given (an older ERP site
+    without them still answers while the filter is off)."""
+    days = {
+        key: str(getdate(value))
+        for key, value in (("due_from", due_from), ("due_to", due_to))
+        if value
+    }
+    if len(days) == 2 and days["due_to"] < days["due_from"]:
+        frappe.throw(_("The follow-up end date is before the start date."))
+    return days
+
+
 def erp_period(period: str, from_date: str | None, to_date: str | None) -> dict:
     """The period as the ERP site takes it: today and yesterday as a one-day custom range;
     dates only for a custom period."""
@@ -668,7 +742,13 @@ def erp_period(period: str, from_date: str | None, to_date: str | None) -> dict:
 def get_lead(name: str) -> dict:
     """The lead, its timeline, its quotations and the stages it may move to."""
     require_leads()
-    detail = call("get_lead", name=name) or {}
+    detail = (
+        read_or_copy(
+            lambda: call("get_lead", name=name),
+            lambda: lead_mirror_read.lead_copy(frappe.session.user, name),
+        )
+        or {}
+    )
     lead = detail.get("lead", {})
     user = frappe.session.user
     if user not in (lead.get("lead_owner"), lead.get("created_by")) and is_bd():
@@ -731,7 +811,8 @@ def set_lead_department_active(name: str, active: int | str = 1) -> dict:
 def change_department(method: str, **params) -> dict:
     """A department write on the ERP site; the signed-in person's cached reads go, as the
     departments (and what they may see) changed, and everyone's cached pickers, which say
-    who heads a department (`is_bd`): a new head gets the managers' screens straight away."""
+    who heads a department (`is_bd`): a new head gets the managers' screens straight away.
+    """
     saved = call_if_deployed(
         method,
         post=True,
@@ -989,7 +1070,8 @@ def add_lead_number(
 ) -> dict:
     """Adds a contact number to the lead: {numbers}. The ERP site refuses a number another
     lead has (docs/leads.md, "One lead per number"). `make_primary` makes it the main
-    number; the old one stays, marked Old. `on_call` records it as added during a call."""
+    number; the old one stays, marked Old. `on_call` records it as added during a call.
+    """
     require_leads()
     if not (number or "").strip():
         frappe.throw(_("Type the number first."))
@@ -1161,6 +1243,62 @@ def click_to_call(name: str, number: str | None = None) -> dict:
 
 
 @frappe.whitelist()
+def get_call_status(reference_id: str) -> dict:
+    """Where the signed-in person's click-to-call is, for the call box: `state` is
+    calling, ringing, ringing_lead, on_call or ended (the ERP site answers only the person
+    who placed the call)."""
+    require_leads()
+    return (
+        call(
+            "get_call_status",
+            api=TELEPHONY,
+            reference_id=(reference_id or "").strip(),
+        )
+        or {}
+    )
+
+
+@frappe.whitelist(methods=["POST"])
+def refresh_call(reference_id: str) -> dict:
+    """The call box's last try when it can't see a call any more: the ERP site looks the
+    signed-in person's own recent calls up at the provider and stores the missing ones.
+    `{stored}`; `{stored: 0}` while the ERP site's TBO Smart is older than this."""
+    require_leads()
+    return call_if_deployed(
+        "refresh_call",
+        post=True,
+        api=TELEPHONY,
+        reference_id=(reference_id or "").strip(),
+    ) or {"stored": 0}
+
+
+@frappe.whitelist(methods=["POST"])
+def end_call(reference_id: str) -> dict:
+    """End call in the call box: the ERP site asks the provider to drop the signed-in
+    person's own click-to-call (CallerDesk only). `{ok}`; a refusal says to hang up on the
+    phone."""
+    require_leads()
+    return (
+        call(
+            "end_call",
+            post=True,
+            api=TELEPHONY,
+            reference_id=(reference_id or "").strip(),
+        )
+        or {}
+    )
+
+
+@frappe.whitelist()
+def get_incoming_call() -> dict:
+    """{enabled, call}: the call coming in to the signed-in person now, for the incoming
+    notice; `enabled` false means they aren't set up for calling and the page stops asking.
+    """
+    require_leads()
+    return call("get_incoming_call", api=TELEPHONY) or {}
+
+
+@frappe.whitelist()
 def call_recording(call: str) -> None:
     """A call's recording, streamed from the ERP site, which plays it only to people
     who may read the lead."""
@@ -1233,6 +1371,64 @@ def lead_photo(lead: str, file: str, thumb: int | str = 0) -> None:
     frappe.local.response.filecontent = content
     frappe.local.response.content_type = content_type
     frappe.local.response.display_content_as = "inline"
+    frappe.local.response.type = "download"
+
+
+# --- files (docs/leads.md) ----------------------------------------------------------
+
+
+@frappe.whitelist()
+def get_lead_files(lead: str) -> dict:
+    """{available, files}: the lead's files newest first. `available` is false while the
+    ERP site's TBO Smart is older than lead files, so the card stays out."""
+    require_leads()
+    files = call_if_deployed("get_lead_files", lead=lead)
+    if files is None:
+        return {"available": False, "files": []}
+    return {"available": True, "files": files}
+
+
+@frappe.whitelist(methods=["POST"])
+def upload_lead_file(lead: str, filename: str, content: str) -> dict:
+    """A file on the lead as the signed-in person (`content` base64; the ERP site checks its
+    type, that it is at most 10 MB and that the lead has room)."""
+    require_leads()
+    if not content or len(content) > MAX_PHOTO_BASE64:
+        frappe.throw(_("Choose a file of at most 10 MB."))
+    return (
+        call(
+            "upload_lead_file",
+            post=True,
+            lead=lead,
+            filename=(filename or "").strip()[:140],
+            content=content,
+        )
+        or {}
+    )
+
+
+@frappe.whitelist(methods=["POST"])
+def delete_lead_file(lead: str, file: str) -> dict:
+    require_leads()
+    return call("delete_lead_file", post=True, lead=lead, file=file) or {}
+
+
+@frappe.whitelist()
+def lead_file(lead: str, file: str, filename: str | None = None) -> None:
+    """A lead file's bytes, streamed from the ERP site, which shows it only to people who may
+    read the lead. PDFs and pictures open in the browser; anything else is saved, as plain
+    bytes. `filename` is only the name the browser saves it as."""
+    require_leads()
+    content, content_type = download("get_lead_file", lead=lead, file=file)
+    inline = content_type in FILE_INLINE_TYPES
+    frappe.local.response.filename = (
+        re.sub(r'[\\/:*?"<>|\x00-\x1f]', "", filename or "").strip()[:140] or file
+    )
+    frappe.local.response.filecontent = content
+    frappe.local.response.content_type = (
+        content_type if inline else "application/octet-stream"
+    )
+    frappe.local.response.display_content_as = "inline" if inline else "attachment"
     frappe.local.response.type = "download"
 
 

@@ -206,6 +206,7 @@ import {
   assignedByName,
   createdByName,
   categoryOptions,
+  descriptionText,
   formatEstimate,
   isAiDrafted,
   isClosed,
@@ -438,14 +439,14 @@ const errorMessage = computed(() =>
 
 function fillForm(t: Record<string, any>) {
   form.task_name = t.subject || "";
-  form.description = t.description || "";
+  form.description = descriptionText(t.description);
   form.phase = t.phase || "";
   form.category = t.category || "";
   form.priority = t.priority || "Medium";
   form.estimated_hours = t.estimated_hours || 0;
   form.assigned_to = t.assigned_to || "";
   initialAssignee.value = t.assigned_to || "";
-  aiText.value = t.ai_description ? t.description || "" : null;
+  aiText.value = t.ai_description ? form.description : null;
 }
 
 watch(

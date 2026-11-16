@@ -3,7 +3,7 @@
   <button
     v-if="mine.length"
     type="button"
-    class="flex min-h-[44px] w-full min-w-0 items-center gap-2.5 rounded-xl border border-outline-gray-2 bg-surface-base px-3 py-1.5 text-left text-sm transition-colors hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight sm:min-h-9"
+    class="flex min-h-[44px] w-full min-w-0 items-center gap-2.5 rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-2.5 text-left text-[13px] transition-colors hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight sm:min-h-9"
     :aria-label="__('Open your tasks. {0}', summary)"
     :title="summary"
     @click="emit('open')"
@@ -58,6 +58,7 @@ import { computed } from "vue";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideClipboardList from "~icons/lucide/clipboard-list";
+import { copyLine } from "../constants";
 import { type ContentTasksData, dueText } from "../contentTasks";
 
 const props = defineProps<{ data?: ContentTasksData | null }>();
@@ -94,7 +95,7 @@ const next = computed(() => {
     .filter((t) => t.stage === "todo" || t.stage === "in_progress")
     .sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999"))[0];
   if (!task) return "";
-  const title = props.data?.posts[task.post]?.title || task.subject;
+  const title = copyLine(props.data?.posts[task.post]?.title) || task.subject;
   const due = dueText(task.due).text;
   return due
     ? __("next: {0} · {1}, {2}", __(task.role_label), title, due)

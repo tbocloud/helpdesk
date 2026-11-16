@@ -123,7 +123,7 @@ export function currentPosition(): Promise<{
   });
 }
 
-function readBase64(blob: Blob): Promise<string> {
+export function readBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result).split(",", 2)[1] || "");

@@ -10,6 +10,7 @@ from frappe.utils import add_days, formatdate, getdate, now, now_datetime, nowda
 from helpdesk.automation import acting_user
 from helpdesk.tasky.time_sessions import pause_other_timers, record_session
 from helpdesk.utils import join_malayalam_signs
+from helpdesk.work_calendar import due_on_working_day
 from helpdesk.work_hours import in_work_window
 
 WAITING_ON_TASK = "Waiting on Task"
@@ -29,6 +30,7 @@ class Task(Document):
         self.validate_dependency()
         self.track_hold()
         self.route_completion_to_review()
+        self.move_due_off_day_off()
         self.track_slip()
         self.track_reopen()
         self.guard_quality_rating()
@@ -43,6 +45,7 @@ class Task(Document):
     def on_update(self):
         self.hand_back_ticket_when_completed()
         self.record_hold_change()
+        self.record_day_off_move()
         self.record_slip()
         self.request_review()
         self.unblock_dependents()
@@ -343,6 +346,31 @@ class Task(Document):
         self.status = PENDING_REVIEW
         self.flags.review_requested = True
 
+    def move_due_off_day_off(self):
+        """A task is never due on a day off (owner, 2026-11-15): a due date on a holiday, a
+        weekly off or a Saturday off moves to the next working day, or for a content task to
+        the working day before (it is due before its post goes live). Whoever set it is told.
+        Runs before track_slip, so a moved date is no slip of its own."""
+        if not self.exp_end_date or self.status in (*DONE, "Template"):
+            return
+        if not self.is_new() and not self.has_value_changed("exp_end_date"):
+            return
+        moved = due_on_working_day(
+            self.exp_end_date, content=bool(self.get("content_post"))
+        )
+        if not moved:
+            return
+        self.exp_end_date = moved["due"]
+        self.flags.due_moved = moved
+        frappe.msgprint(
+            _("{0} is {1}, so the task is due {2}.").format(
+                formatdate(moved["was"], "EEE d MMM"),
+                moved["reason"],
+                formatdate(moved["due"], "EEE d MMM"),
+            ),
+            alert=True,
+        )
+
     def track_slip(self):
         """Count due dates moved later; days added by a hold resume aren't a slip."""
         before = self.get_doc_before_save()
@@ -388,6 +416,23 @@ class Task(Document):
         self.rated_by = frappe.session.user if rating else None
         self.rated_on = nowdate() if rating else None
         self.flags.quality_rated = True
+
+    def record_day_off_move(self):
+        """Why the due date isn't the one picked, in the task's activity, for everyone who
+        opens it later (move_due_off_day_off moved it; also when a job set the date)."""
+        moved = self.flags.due_moved
+        if not moved:
+            return
+        self.add_comment(
+            "Info",
+            frappe.utils.escape_html(
+                _("Due date moved off {0} ({1}) to {2}.").format(
+                    formatdate(moved["was"], "EEE d MMM"),
+                    moved["reason"],
+                    formatdate(moved["due"], "EEE d MMM"),
+                )
+            ),
+        )
 
     def record_slip(self):
         from helpdesk.work_reminders import notify_users

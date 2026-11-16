@@ -372,6 +372,27 @@ class TestCallPlans(FrappeTestCase):
         api.assign_leads("GrowthX", "shahana@tbo.example", count=5, district=" ")
         self.assertNotIn("district", self.calls("assign_leads")[-1][1])
 
+    def test_each_slot_can_be_split_by_district(self):
+        split = {
+            "Morning": [{"district": "Ernakulam", "calls": 50}],
+            "Afternoon": [
+                {"district": "Idukki", "calls": 20},
+                {"district": "", "calls": 10},
+            ],
+        }
+        api.save_call_plan(
+            "GrowthX",
+            ["shahana@tbo.example"],
+            "PhoebiX",
+            slot_districts=frappe.as_json(split),
+        )
+        ((_post, params),) = self.calls("save_call_plan")
+        self.assertEqual(params["slot_districts"], split)
+        self.assertNotIn("district", params)
+        # no split: nothing is sent for it, so an older ERP site is not asked
+        api.save_call_plan("GrowthX", ["shahana@tbo.example"], sizes={"Morning": 40})
+        self.assertNotIn("slot_districts", self.calls("save_call_plan")[-1][1])
+
     def test_a_plan_needs_people(self):
         self.assertRaises(
             frappe.ValidationError, api.save_call_plan, "GrowthX", "[]", "PhoebiX"

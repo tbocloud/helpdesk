@@ -2,14 +2,14 @@
   <Dialog
     v-model:open="open"
     :title="__('History: {0}', project?.project_name ?? '')"
-    size="lg"
+    size="md"
   >
     <div class="flex max-h-[60vh] flex-col overflow-y-auto">
       <div v-if="history.loading && !history.data" :aria-label="__('Loading')">
         <div
           v-for="i in 3"
           :key="i"
-          class="mb-3 h-16 animate-pulse rounded-md bg-surface-gray-2"
+          class="mb-3 h-16 animate-pulse rounded-md bg-surface-gray-3"
         />
       </div>
       <TaskyState

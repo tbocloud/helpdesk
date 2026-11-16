@@ -35,6 +35,7 @@ from helpdesk.test_utils import (
     make_ticket,
     make_timesheet,
     make_work_summary,
+    saved_due,
     send_task_reminder,
     start_task_timer,
 )
@@ -1454,7 +1455,9 @@ class TestHelpAndHandOver(WorkControlCase):
         helper = frappe.get_doc("Task", help_task)
         self.assertEqual(helper.project, self.project)
         self.assertEqual(helper.assignees(), [TEAMMATE[0]])
-        self.assertEqual(str(helper.exp_end_date), str(add_days(nowdate(), 2)))
+        self.assertEqual(
+            getdate(helper.exp_end_date), saved_due(add_days(nowdate(), 2))
+        )
         self.assertTrue(
             any("needs your help" in s for s in self.notified(TEAMMATE, help_task))
         )

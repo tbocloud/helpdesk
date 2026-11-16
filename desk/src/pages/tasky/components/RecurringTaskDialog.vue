@@ -245,7 +245,7 @@
       </section>
 
       <section
-        class="flex flex-col gap-2 rounded-lg border border-outline-gray-2 bg-surface-gray-1 p-3"
+        class="flex flex-col gap-2 rounded-xl border border-outline-gray-2 bg-surface-gray-1 p-3"
         :aria-labelledby="`${formId}-preview`"
         aria-live="polite"
       >

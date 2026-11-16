@@ -291,6 +291,13 @@ dedupe: one per person and project, unread again only if the rule changes. The s
   L2, with an icon): board cards, checklist rows, My Tasks rows, the task details, work rows
   (My Work, Overview lists, Home), the Tickets list (next to the subject) and the ticket's SLA
   panel ("Follow-up").
+- **My Work → Needs your attention** (`NeedsAttention.vue`, `get_my_follow_ups`,
+  `follow_ups.attention_for`): the list behind the sidebar card's count, for the person
+  themselves (not when a manager looks at someone else's work). The 10 most pressing first
+  (severity, then level, then the longest wait), each with why it is there, its escalation and
+  who has it; **Show all** loads the rest. Nothing is shown when nothing waits. Before
+  2026-11-15 the card said "294 items are waiting on you, Review now" and My Work listed none
+  of them.
 - **Overview → Follow-ups** (`FollowUpControl.vue`, System Managers and Agent Managers,
   `get_follow_up_overview`), across all projects and tickets (the page's filters don't apply,
   and it says so): counts of escalated (L2+), breached and overdue items, the
@@ -310,7 +317,7 @@ dedupe: one per person and project, unread again only if the rule changes. The s
   `HD Ticket.custom_escalation_level`, `custom_escalated_on`, `custom_customer_followed_up_on`
   (custom fields in `setup/install.py`); `HD Notification.dedupe_key`.
 - UI: `FollowUpSettings.vue`, `EscalationBadge.vue`, `FollowUpStrip.vue`, `followUps.ts`,
-  `pages/work/components/FollowUpControl.vue` and `FollowUpList.vue`.
+  `pages/work/components/FollowUpControl.vue`, `NeedsAttention.vue` and `FollowUpList.vue`.
 - Tests: `helpdesk/tests/test_follow_ups.py`, `helpdesk/tests/test_stale_leads.py` (lead rule),
   `helpdesk/tests/test_project_status.py` (project status rule).
 

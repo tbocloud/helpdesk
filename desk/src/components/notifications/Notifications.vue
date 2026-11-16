@@ -11,9 +11,9 @@
     }"
   >
     <div
-      class="sticky top-0 z-10 flex items-center justify-between border-b bg-surface-base px-5 py-2.5"
+      class="sticky top-0 z-10 flex items-center justify-between border-b border-outline-gray-2 bg-surface-base px-5 py-3"
     >
-      <span class="text-lg-medium">Notifications</span>
+      <span class="text-base font-semibold text-ink-gray-9">Notifications</span>
       <div>
         <Button
           theme="blue"
@@ -36,12 +36,15 @@
         </Button>
       </div>
     </div>
-    <div class="divide-y text-base" v-if="notificationStore.data.length">
+    <div
+      class="divide-y divide-outline-gray-1 text-base"
+      v-if="notificationStore.data.length"
+    >
       <component
         :is="isOutside(n) ? 'a' : RouterLink"
         v-for="n in notificationStore.data"
         :key="n.name"
-        class="flex cursor-pointer items-start gap-3.5 px-5 py-2.5 hover:bg-surface-gray-2"
+        class="flex cursor-pointer items-start gap-3.5 px-4 py-3 hover:bg-surface-gray-1"
         v-bind="linkProps(n)"
         @click="
           () => {

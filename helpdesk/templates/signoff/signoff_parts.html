@@ -1,0 +1,105 @@
+{#- What both sign-off documents share (TBO's Sign-off requirements, Sign-off
+document): imported with context, so they read `doc` and `ctx`. -#} {% macro
+header() -%}
+<h1>{{ ctx.heading|e }}</h1>
+{%- endmacro %} {% macro customer() -%}
+<h2>{{ _("Customer") }}</h2>
+<table class="facts">
+  <tr>
+    <th>{{ _("Customer") }}</th>
+    <td>{{ ctx.customer_name|e }}</td>
+  </tr>
+  <tr>
+    <th>{{ _("Address") }}</th>
+    <td>
+      {{ (ctx.address or _("No address on file"))|e|replace("\n", "<br />"|safe)
+      }}
+    </td>
+  </tr>
+  <tr>
+    <th>{{ _("Contact person") }}</th>
+    <td>{{ ctx.contact_name|e }}</td>
+  </tr>
+  <tr>
+    <th>{{ _("Designation") }}</th>
+    <td>{{ (ctx.contact_designation or "-")|e }}</td>
+  </tr>
+  <tr>
+    <th>{{ _("Email") }}</th>
+    <td>{{ ctx.contact_email|e }}</td>
+  </tr>
+</table>
+{%- endmacro %} {% macro fact(label, value) -%} {% if value %}
+<tr>
+  <th>{{ label }}</th>
+  <td>{{ value|e }}</td>
+</tr>
+{% endif %} {%- endmacro %} {% macro questions() -%} {% for section, rows in
+ctx.questions.items() %}
+<h2>{{ section|e }}</h2>
+<table class="list">
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td class="num">{{ loop.index }}</td>
+      <td>
+        {{ row.question|e }} {% if row.customer_comment %}
+        <div class="comment">
+          {{ _("Comment") }}: {{ row.customer_comment|e }}
+        </div>
+        {% endif %}
+      </td>
+      <td class="answer">
+        {{ ctx.answers.get(row.response, _(row.response))|e }}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endfor %} {%- endmacro %} {% macro declaration_and_signatures() -%}
+<h2>{{ _("Declaration") }}</h2>
+<p>{{ ctx.declaration|e }}</p>
+
+<table class="signatures">
+  <tr>
+    <td>
+      <div class="sig-head">{{ _("For the customer") }}</div>
+      <table class="facts">
+        <tr>
+          <th>{{ _("Name") }}</th>
+          <td>{{ (doc.signer_name if ctx.signed else "")|e }}</td>
+        </tr>
+        <tr>
+          <th>{{ _("Designation") }}</th>
+          <td>{{ (doc.signer_designation if ctx.signed else "")|e }}</td>
+        </tr>
+        <tr>
+          <th>{{ _("Date") }}</th>
+          <td>{{ ctx.signed_on|e }}</td>
+        </tr>
+        <tr>
+          <th>{{ _("Acceptance") }}</th>
+          <td>{{ ctx.acceptance|e }}</td>
+        </tr>
+      </table>
+    </td>
+    <td>
+      <div class="sig-head">{{ _("For {0}").format(ctx.brand.name)|e }}</div>
+      <table class="facts">
+        <tr>
+          <th>{{ _("Name") }}</th>
+          <td>{{ ctx.tbo_name|e }}</td>
+        </tr>
+        <tr>
+          <th>{{ _("Designation") }}</th>
+          <td>{{ ctx.tbo_designation|e }}</td>
+        </tr>
+        <tr>
+          <th>{{ _("Date") }}</th>
+          <td>{{ ctx.date|e }}</td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+{%- endmacro %}

@@ -3,7 +3,7 @@
   <div class="flex flex-col gap-5">
     <section class="panel" :aria-labelledby="ids.calling" :aria-busy="loading">
       <header class="panel-head">
-        <h2 :id="ids.calling" class="text-base-medium text-ink-gray-9">
+        <h2 :id="ids.calling" class="text-base font-semibold text-ink-gray-9">
           {{ __("Calling performance") }}
         </h2>
         <span class="text-xs text-ink-gray-6">{{
@@ -14,7 +14,7 @@
       <div
         v-if="!analysis"
         role="alert"
-        class="flex flex-wrap items-center gap-3 px-4 py-4"
+        class="flex flex-wrap items-center gap-3 px-4 py-3"
       >
         <LucideCircleAlert
           class="size-4 shrink-0 text-danger"
@@ -32,7 +32,7 @@
       </div>
       <p
         v-else-if="!calling.length"
-        class="px-4 py-4 text-p-sm text-ink-gray-6"
+        class="px-4 py-3 text-p-sm text-ink-gray-6"
       >
         {{
           __(
@@ -46,7 +46,7 @@
             <tr
               class="bg-surface-gray-1 text-left text-xs font-medium text-ink-gray-6"
             >
-              <th scope="col" class="px-4 py-2 font-medium">
+              <th scope="col" class="px-5 py-2 font-medium">
                 {{ __("Person") }}
               </th>
               <th
@@ -68,7 +68,7 @@
             >
               <th
                 scope="row"
-                class="max-w-[12rem] truncate px-4 py-2 text-left font-normal text-ink-gray-9"
+                class="max-w-[12rem] truncate px-5 py-2 text-left font-normal text-ink-gray-9"
               >
                 {{ row.full_name }}
               </th>
@@ -93,7 +93,7 @@
           </tbody>
         </table>
         <p
-          class="border-t border-outline-gray-1 px-4 py-2 text-xs text-ink-gray-6"
+          class="border-t border-outline-gray-1 px-5 py-2 text-xs text-ink-gray-6"
         >
           {{
             __(
@@ -111,14 +111,14 @@
       :aria-busy="loading"
     >
       <header class="panel-head">
-        <h2 :id="ids.quality" class="text-base-medium text-ink-gray-9">
+        <h2 :id="ids.quality" class="text-base font-semibold text-ink-gray-9">
           {{ __("Lead quality") }}
         </h2>
         <span class="text-xs text-ink-gray-6">{{
           __("Leads that came in during this period")
         }}</span>
       </header>
-      <div class="flex flex-col gap-3 px-4 pt-3">
+      <div class="flex flex-col gap-3 px-5 pt-3">
         <div class="overflow-x-auto">
           <TabButtons
             :model-value="group"
@@ -131,7 +131,7 @@
         <p v-if="verdict" class="text-p-sm text-ink-gray-8">{{ verdict }}</p>
       </div>
 
-      <p v-if="!rows.length" class="px-4 py-4 text-p-sm text-ink-gray-6">
+      <p v-if="!rows.length" class="px-4 py-3 text-p-sm text-ink-gray-6">
         {{ __("No leads came in during this period.") }}
       </p>
       <div v-else class="mt-3 overflow-x-auto">
@@ -140,7 +140,7 @@
             <tr
               class="bg-surface-gray-1 text-left text-xs font-medium text-ink-gray-6"
             >
-              <th scope="col" class="px-4 py-2 font-medium">
+              <th scope="col" class="px-5 py-2 font-medium">
                 {{ groupLabel }}
               </th>
               <th
@@ -162,7 +162,7 @@
             >
               <th
                 scope="row"
-                class="max-w-[14rem] px-4 py-2 text-left font-normal"
+                class="max-w-[14rem] px-5 py-2 text-left font-normal"
               >
                 <span
                   class="inline-block max-w-[10rem] truncate align-middle"
@@ -195,7 +195,7 @@
           </tbody>
         </table>
         <p
-          class="border-t border-outline-gray-1 px-4 py-2 text-xs text-ink-gray-6"
+          class="border-t border-outline-gray-1 px-5 py-2 text-xs text-ink-gray-6"
         >
           {{
             __(
@@ -406,6 +406,6 @@ const verdict = computed(() => {
   @apply min-w-0 overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base;
 }
 .panel-head {
-  @apply flex flex-wrap items-baseline justify-between gap-2 border-b border-outline-gray-1 px-4 py-3;
+  @apply flex flex-wrap items-baseline justify-between gap-2 border-b border-outline-gray-2 px-4 py-3;
 }
 </style>

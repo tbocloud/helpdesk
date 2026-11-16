@@ -1,6 +1,7 @@
 import type { Tone } from "@/components/tone";
 import { __ } from "@/translation";
 import { dayjs, dayjsLocal } from "frappe-ui";
+import { overdueCutoff } from "@/composables/workDays";
 import type { Component } from "vue";
 import LucideCircle from "~icons/lucide/circle";
 import LucideCircleCheck from "~icons/lucide/circle-check";
@@ -96,6 +97,7 @@ export const PROJECT_TYPES = [
   "Mobile App",
   "Website",
   "Content Calendar",
+  "Digital Marketing",
   "Support",
   "Other",
 ];
@@ -185,7 +187,8 @@ export function holdByLabel(task: {
 
 // Due dates are date-only, so a task is overdue from the day after it's due, or as soon
 // as it has been worked longer than its estimate, whatever its due date and with none
-// (server: is_task_overdue).
+// (server: is_task_overdue). A due date on a day off counts as due the next working day
+// (overdueCutoff).
 // A task on hold is never overdue: its due date moves out when it resumes.
 export function isOverdue(
   task: {
@@ -198,7 +201,8 @@ export function isOverdue(
   now = dayjs()
 ) {
   if (isClosed(task) || isOnHold(task)) return false;
-  if (task.due_date && dayjs(task.due_date).isBefore(now, "day")) return true;
+  if (task.due_date && dayjs(task.due_date).isBefore(overdueCutoff(now), "day"))
+    return true;
   return isOverEstimate(task, now);
 }
 
@@ -256,17 +260,6 @@ export function shortDate(date?: string | null) {
   return date ? dayjs(date).format("D MMM") : "—";
 }
 
-export function initials(name?: string | null) {
-  if (!name) return "";
-  return name
-    .split(/[\s@._-]+/)
-    .filter(Boolean)
-    .map((part) => part[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-}
-
 export const PENDING_REVIEW = "Pending Review";
 
 export function isPendingReview(task: { status?: string }) {
@@ -311,6 +304,24 @@ export function isAiDrafted(description: string, aiText: string | null) {
   return (
     aiText !== null && !!aiText.trim() && description.trim() === aiText.trim()
   );
+}
+
+/**
+ * A task description for the plain-text box. Tasks from sign-off, routines and the ERP desk
+ * store HTML; the box would show its tags, so keep only the text and its paragraph breaks.
+ */
+export function descriptionText(description?: string | null) {
+  if (!description || !/<[a-z][^>]*>/i.test(description))
+    return description || "";
+  const doc = new DOMParser().parseFromString(description, "text/html");
+  doc.querySelectorAll("br").forEach((el) => el.replaceWith("\n"));
+  doc
+    .querySelectorAll("p, div, li, blockquote, h1, h2, h3, h4, h5, h6, tr")
+    .forEach((el) => el.append("\n"));
+  return (doc.body.textContent || "")
+    .replace(/[ \t\u00a0]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 // A refused project reads like an outage otherwise, so say who can open it

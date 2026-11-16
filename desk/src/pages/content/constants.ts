@@ -56,7 +56,8 @@ export type ClientApproval = "awaiting" | "approved";
 // Head Review is entered only from the client's approval). Earlier stages and
 // Cancelled say nothing yet.
 export function clientApproval(status: string): ClientApproval | null {
-  if (["Client Review", "Changes Requested"].includes(status)) return "awaiting";
+  if (["Client Review", "Changes Requested"].includes(status))
+    return "awaiting";
   if (["Head Review", "Approved", "Scheduled", "Published"].includes(status))
     return "approved";
   return null;
@@ -178,9 +179,10 @@ export function textToHtml(text: string) {
     .join("");
 }
 
-// The copy is one line (a Data field) shown in a wrapping box: pasted line breaks become spaces
-export function oneLine(text: string) {
-  return text.replace(/\s*[\r\n]+\s*/g, " ");
+// The copy holds one point per line: Enter starts the next point, and pasted blank
+// lines, Windows line ends and spaces around a break are dropped so the points line up
+export function copyPoints(text: string) {
+  return text.replace(/[^\S\n]*(\r\n?|\n)\s*/g, "\n");
 }
 
 // Malayalam copied from a PDF splits a vowel sign off its letter ("പ ോയി" for "പോയി");
@@ -197,13 +199,24 @@ export function joinMalayalamSigns(text: string) {
     .replace(MALAYALAM_SPLIT_PLURAL, "-\u0D41$1");
 }
 
+// The copy on one line, its points joined by " · ", for lists, titles and toasts
+export function copyLine(title?: string) {
+  return (title || "")
+    .split("\n")
+    .map((point) => point.trim())
+    .filter(Boolean)
+    .join(" · ");
+}
+
 // What a post is called: its copy, else its post type, then its ID, until the copy is written
 export function copyOf(post: {
   title?: string;
   format?: string;
   name?: string;
 }) {
-  return post.title || post.format || post.name || __("Untitled post");
+  return (
+    copyLine(post.title) || post.format || post.name || __("Untitled post")
+  );
 }
 
 // Every platform a post goes out on; older posts only have their channel

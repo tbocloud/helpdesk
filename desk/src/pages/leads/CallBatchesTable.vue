@@ -6,8 +6,10 @@
     class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
     :aria-busy="report.loading"
   >
-    <div class="flex items-baseline justify-between gap-3 px-4 pt-4">
-      <h2 :id="headingId" class="text-base-medium text-ink-gray-9">
+    <div
+      class="flex items-baseline justify-between gap-3 border-b border-outline-gray-2 px-4 py-3"
+    >
+      <h2 :id="headingId" class="text-base font-semibold text-ink-gray-9">
         {{ __("Call batches") }}
       </h2>
       <p class="font-mono text-p-xs tabular-nums text-ink-gray-6">
@@ -21,7 +23,7 @@
       </p>
     </div>
     <div
-      class="grid-row hidden border-b border-outline-gray-1 bg-surface-gray-1 px-4 py-2 text-xs text-ink-gray-6 md:grid"
+      class="grid-row hidden h-11 border-b border-outline-gray-2 bg-surface-gray-1 px-5 text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6 md:grid"
       aria-hidden="true"
     >
       <span>{{ __("Salesperson") }}</span>
@@ -34,12 +36,16 @@
       <li
         v-for="p in people"
         :key="`${p.user}-${p.department}`"
-        class="grid-row px-4 py-3"
+        class="grid-row px-4 py-3.5 hover:bg-surface-gray-1 md:px-4"
       >
         <span
-          class="col-span-3 truncate text-sm-medium text-ink-gray-9 md:col-span-1"
-          >{{ p.user_name }}</span
+          class="col-span-3 flex min-w-0 items-center gap-2.5 md:col-span-1"
         >
+          <PersonAvatar :name="p.user_name" size="md" />
+          <span class="truncate text-[13px] font-semibold text-ink-gray-9">{{
+            p.user_name
+          }}</span>
+        </span>
         <span class="col-span-3 text-p-sm text-ink-gray-7 md:col-span-1">{{
           batchText(p)
         }}</span>
@@ -75,6 +81,7 @@
 </template>
 
 <script setup lang="ts">
+import PersonAvatar from "@/components/PersonAvatar.vue";
 import { __ } from "@/translation";
 import { createResource } from "frappe-ui";
 import { computed, useId, watch } from "vue";

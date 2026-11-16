@@ -2,173 +2,212 @@
   <div class="flex h-full flex-col">
     <LayoutHeader>
       <template #left-header>
-        <router-link
-          :to="{ name: 'Leads' }"
+        <!-- back to where they came from: the list, its tab, filters and page -->
+        <a
+          :href="fallbackHref"
           class="inline-flex items-center gap-1.5 rounded text-lg-medium text-ink-gray-7 hover:text-ink-gray-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
-          :aria-label="__('Back to leads')"
+          :aria-label="__('Back')"
+          @click="goBack"
         >
           <LucideChevronLeft class="size-4 shrink-0" aria-hidden="true" />
-          {{ __("Leads") }}
-        </router-link>
+          {{ __("Back") }}
+        </a>
       </template>
     </LayoutHeader>
 
-    <!-- who this is, what to do about it, and where it stands -->
-    <header
-      v-if="lead"
-      class="border-b border-outline-gray-2 bg-surface-base"
-      :aria-label="__('Lead')"
-    >
-      <div
-        class="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-4 md:px-6"
-      >
-        <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <div class="min-w-0 flex-1 basis-64">
-            <p class="truncate text-xs text-ink-gray-6">
-              <span class="font-mono tabular-nums">{{ leadId }}</span>
-              <template v-if="departmentLabel(lead)">
-                · {{ departmentLabel(lead) }}
-              </template>
-              <template v-if="lead.product"> · {{ lead.product }}</template>
-            </p>
-            <h1
-              class="mt-0.5 truncate text-xl font-semibold text-ink-gray-9"
-              :title="lead.lead_name || leadId"
-            >
-              {{ lead.lead_name || leadId }}
-            </h1>
-          </div>
-          <TaskyBadge
-            v-if="temperature"
-            :tone="temperature === 'Hot' ? 'warning' : 'neutral'"
-            :icon="temperature === 'Hot' ? LucideFlame : undefined"
-            :label="temperature"
-          />
-          <div class="flex flex-wrap items-center gap-2">
-            <Button
-              v-if="whatsappLink"
-              :label="__('WhatsApp')"
-              :link="whatsappLink"
-              target="_blank"
-            >
-              <template #prefix>
-                <LucideMessageCircle class="size-4" aria-hidden="true" />
-              </template>
-            </Button>
-            <!-- for a call made outside MyOperator; only once the ERP site can log it -->
-            <Button
-              v-if="options?.can_log_call"
-              :label="__('Log call')"
-              @click="showLogCall = true"
-            >
-              <template #prefix>
-                <LucidePhoneForwarded class="size-4" aria-hidden="true" />
-              </template>
-            </Button>
-            <Button :label="__('Edit')" @click="showEdit = true">
-              <template #prefix>
-                <LucidePencil class="size-4" aria-hidden="true" />
-              </template>
-            </Button>
-            <Button
-              v-if="canCall"
-              variant="solid"
-              :label="__('Call')"
-              :loading="clickToCall.loading"
-              :tooltip="__('MyOperator rings your phone, then the lead')"
-              @click="callWithMyOperator"
-            >
-              <template #prefix>
-                <LucidePhone class="size-4" aria-hidden="true" />
-              </template>
-            </Button>
-          </div>
-        </div>
-
-        <!-- the main path as steps, the side stages in Move to; a step or stage this lead
-             may move to opens the Move stage dialog with it picked -->
-        <template v-if="stagePath.steps.length">
-          <!-- a phone has no room for the steps: the stage, and the dialog to move it -->
-          <Button
-            class="self-start sm:hidden"
-            :disabled="!stageChoices.length"
-            @click="openStageDialog()"
-          >
-            {{ __("Stage: {0}", stageLabel(options, lead.tbo_stage)) }}
-            <template #suffix>
-              <LucideChevronDown class="size-4" aria-hidden="true" />
-            </template>
-          </Button>
-          <div class="hidden flex-wrap items-center gap-x-3 gap-y-2 sm:flex">
-            <!-- at full width, so Move to wraps before the steps scroll; padded so the
-                 focus ring isn't clipped where they do -->
-            <ol
-              class="-m-1 flex min-w-0 flex-auto gap-1 overflow-x-auto p-1"
-              :aria-label="__('Stage')"
-            >
-              <li
-                v-for="step in stagePath.steps"
-                :key="step.key"
-                class="flex-1"
+    <div class="relative flex-1 overflow-auto">
+      <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
+        <LeadCopyNotice
+          v-if="data?.from_copy"
+          :copied-at="data.copied_at"
+          :loading="detail.loading"
+          @retry="detail.reload()"
+        />
+        <!-- who this is, what to do about it, and where it stands -->
+        <header
+          v-if="lead"
+          class="flex flex-col gap-4 rounded-xl border border-outline-gray-2 bg-surface-base p-4"
+          :aria-label="__('Lead')"
+        >
+          <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <div class="min-w-0 flex-1 basis-64">
+              <p class="truncate text-[12px] text-ink-gray-6">
+                <span class="font-mono tabular-nums">{{ leadId }}</span>
+                <template v-if="departmentLabel(lead)">
+                  · {{ departmentLabel(lead) }}
+                </template>
+                <template v-if="lead.product"> · {{ lead.product }}</template>
+              </p>
+              <h1
+                class="mt-1 truncate text-[24px] font-bold leading-tight tracking-[-0.01em] text-ink-gray-9"
+                :title="lead.lead_name || leadId"
               >
-                <button
-                  type="button"
-                  class="inline-flex h-9 w-full items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
-                  :class="step.class"
-                  :aria-disabled="!step.target || undefined"
-                  :aria-current="step.current ? 'step' : undefined"
-                  :title="step.title"
-                  @click="step.target && openStageDialog(step.target)"
-                >
-                  <LucideCheck
-                    v-if="step.done"
-                    class="size-4 shrink-0"
-                    aria-hidden="true"
-                  />
-                  {{ step.label }}
-                  <span v-if="step.done" class="sr-only">{{
-                    __("(done)")
-                  }}</span>
-                </button>
-              </li>
-            </ol>
-            <p
-              v-if="stagePath.side"
-              class="flex items-center gap-1.5 text-sm text-ink-gray-6"
-            >
-              {{ __("Now") }}
-              <TaskyBadge
-                :label="stageLabel(options, stagePath.side)"
-                :tone="stageTone(options, stagePath.side)"
-                :icon="stageIcon(stagePath.side)"
-              />
-            </p>
-            <Dropdown :options="sideMenu" align="end">
+                {{ lead.lead_name || leadId }}
+              </h1>
+            </div>
+            <TaskyBadge
+              v-if="temperature"
+              :tone="temperature === 'Hot' ? 'warning' : 'neutral'"
+              :icon="temperature === 'Hot' ? LucideFlame : undefined"
+              :label="temperature"
+            />
+            <div class="flex flex-wrap items-center gap-2">
               <Button
-                :label="__('Move to…')"
-                :disabled="!sideMenu.length"
-                :title="sideMenu.length ? '' : __('No other stage from here')"
+                v-if="whatsappLink"
+                size="md"
+                :label="__('WhatsApp')"
+                :link="whatsappLink"
+                target="_blank"
               >
-                <template #suffix>
-                  <LucideChevronDown class="size-4" aria-hidden="true" />
+                <template #prefix>
+                  <LucideMessageCircle class="size-4" aria-hidden="true" />
                 </template>
               </Button>
-            </Dropdown>
+              <!-- for a call made outside MyOperator; only once the ERP site can log it -->
+              <Button
+                v-if="options?.can_log_call && !data?.from_copy"
+                size="md"
+                :label="__('Log call')"
+                @click="showLogCall = true"
+              >
+                <template #prefix>
+                  <LucidePhoneForwarded class="size-4" aria-hidden="true" />
+                </template>
+              </Button>
+              <Button
+                v-if="!data?.from_copy"
+                size="md"
+                :label="__('Edit')"
+                @click="showEdit = true"
+              >
+                <template #prefix>
+                  <LucidePencil class="size-4" aria-hidden="true" />
+                </template>
+              </Button>
+              <!-- Call dials the main number at once; with more numbers, the arrow
+                   beside it picks another -->
+              <div v-if="canCall" class="flex items-center gap-px">
+                <Button
+                  variant="solid"
+                  size="md"
+                  :label="__('Call')"
+                  :loading="placing?.lead === leadId"
+                  :tooltip="__('Rings your phone first, then the lead')"
+                  :class="callChoices.length ? 'rounded-r-none' : ''"
+                  @click="callWithMyOperator()"
+                >
+                  <template #prefix>
+                    <LucidePhone class="size-4" aria-hidden="true" />
+                  </template>
+                </Button>
+                <Dropdown v-if="callChoices.length" :options="callChoices">
+                  <Button
+                    variant="solid"
+                    size="md"
+                    class="rounded-l-none"
+                    :aria-label="__('Call another number')"
+                    :disabled="placing?.lead === leadId"
+                  >
+                    <LucideChevronDown class="size-4" aria-hidden="true" />
+                  </Button>
+                </Dropdown>
+              </div>
+            </div>
           </div>
-        </template>
-        <Button
-          v-else-if="stageChoices.length"
-          class="self-start"
-          :label="__('Move stage')"
-          @click="openStageDialog()"
-        />
-      </div>
-    </header>
 
-    <div class="flex-1 overflow-auto">
-      <div class="mx-auto w-full max-w-6xl px-4 py-5 md:px-6">
+          <!-- the main path as steps, the side stages in Move to; a step or stage this lead
+             may move to opens the Move stage dialog with it picked -->
+          <template v-if="stagePath.steps.length">
+            <!-- a phone has no room for the steps: the stage, and the dialog to move it -->
+            <Button
+              class="self-start sm:hidden"
+              :disabled="!stageChoices.length"
+              @click="openStageDialog()"
+            >
+              {{ __("Stage: {0}", stageLabel(options, lead.tbo_stage)) }}
+              <template #suffix>
+                <LucideChevronDown class="size-4" aria-hidden="true" />
+              </template>
+            </Button>
+            <div class="hidden flex-wrap items-center gap-x-3 gap-y-2 sm:flex">
+              <!-- at full width, so Move to wraps before the steps scroll; padded so the
+                 focus ring isn't clipped where they do -->
+              <ol
+                class="-m-1 flex min-w-0 flex-auto gap-1 overflow-x-auto p-1"
+                :aria-label="__('Stage')"
+              >
+                <li
+                  v-for="step in stagePath.steps"
+                  :key="step.key"
+                  class="flex-1"
+                >
+                  <button
+                    type="button"
+                    class="inline-flex h-10 w-full items-center justify-center gap-1.5 whitespace-nowrap rounded-[10px] px-3 text-[13px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+                    :class="step.class"
+                    :aria-disabled="!step.target || undefined"
+                    :aria-current="step.current ? 'step' : undefined"
+                    :title="step.title"
+                    @click="step.target && openStageDialog(step.target)"
+                  >
+                    <LucideCheck
+                      v-if="step.done"
+                      class="size-4 shrink-0"
+                      aria-hidden="true"
+                    />
+                    {{ step.label }}
+                    <span v-if="step.done" class="sr-only">{{
+                      __("(done)")
+                    }}</span>
+                  </button>
+                </li>
+              </ol>
+              <p
+                v-if="stagePath.side"
+                class="flex items-center gap-1.5 text-sm text-ink-gray-6"
+              >
+                {{ __("Now") }}
+                <span
+                  class="inline-flex h-[26px] items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-xs font-semibold"
+                  :class="stagePillClass(options, stagePath.side)"
+                >
+                  <component
+                    :is="stageIcon(stagePath.side)"
+                    v-if="stageIcon(stagePath.side)"
+                    class="size-3.5"
+                    aria-hidden="true"
+                  />
+                  <i
+                    v-else
+                    class="size-1.5 rounded-full bg-current"
+                    aria-hidden="true"
+                  />
+                  {{ stageLabel(options, stagePath.side) }}
+                </span>
+              </p>
+              <Dropdown :options="sideMenu" align="end">
+                <Button
+                  :label="__('Move to…')"
+                  :disabled="!sideMenu.length"
+                  :title="sideMenu.length ? '' : __('No other stage from here')"
+                >
+                  <template #suffix>
+                    <LucideChevronDown class="size-4" aria-hidden="true" />
+                  </template>
+                </Button>
+              </Dropdown>
+            </div>
+          </template>
+          <Button
+            v-else-if="stageChoices.length"
+            class="self-start"
+            :label="__('Move stage')"
+            @click="openStageDialog()"
+          />
+        </header>
         <TaskyState
           v-if="detail.error && !data"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
           error
           :icon="LucideCircleAlert"
           :title="__('Couldn\'t load the lead')"
@@ -177,37 +216,34 @@
           "
         >
           <Button :label="__('Try again')" @click="detail.reload()" />
-          <Button :label="__('Back to leads')" :route="{ name: 'Leads' }" />
+          <Button :label="__('Back')" @click="goBack()" />
         </TaskyState>
 
         <div
           v-else-if="!data"
-          class="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_24rem]"
+          class="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_24rem]"
           aria-busy="true"
           :aria-label="__('Loading')"
         >
-          <div
-            class="h-80 animate-pulse rounded-xl border border-outline-gray-2 bg-surface-gray-1"
-          />
-          <div
-            class="h-80 animate-pulse rounded-xl border border-outline-gray-2 bg-surface-gray-1"
-          />
+          <div class="h-80 animate-pulse rounded-xl bg-surface-gray-3" />
+          <div class="h-80 animate-pulse rounded-xl bg-surface-gray-3" />
         </div>
 
         <div
           v-else
-          class="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_24rem]"
+          class="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_24rem]"
         >
           <LeadDocuments
             class="lg:col-span-2"
             :lead-id="leadId"
             :chain="data.documents"
             :can-write="!!lead?.can_write"
+            @changed="detail.reload()"
           />
 
           <!-- the card column comes first on a phone: the numbers are what a call needs -->
           <aside
-            class="flex min-w-0 flex-col gap-4 lg:order-2"
+            class="flex min-w-0 flex-col gap-5 lg:order-2"
             :aria-label="__('Lead details')"
           >
             <LeadDuplicates
@@ -219,7 +255,7 @@
               class="rounded-xl border border-outline-gray-2 bg-surface-base p-4"
               :aria-label="__('Next step')"
             >
-              <h2 class="mb-2 text-base-medium text-ink-gray-9">
+              <h2 class="mb-2 text-base font-semibold text-ink-gray-9">
                 {{ __("Next step") }}
               </h2>
               <p
@@ -256,6 +292,7 @@
                 :can-write="!!lead.can_write"
                 :can-call="!!lead.can_call"
                 :can-remove="!!lead.can_remove_numbers"
+                :batch-item="batchItem"
                 @changed="detail.reload()"
               />
             </section>
@@ -264,7 +301,7 @@
               :aria-label="__('Details')"
             >
               <div class="mb-3 flex flex-wrap items-center gap-2">
-                <h2 class="text-base-medium text-ink-gray-9">
+                <h2 class="text-base font-semibold text-ink-gray-9">
                   {{ __("Details") }}
                 </h2>
                 <TaskyBadge
@@ -306,6 +343,11 @@
               />
               <LeadPhotos :lead-id="leadId" :can-write="!!lead.can_write" />
             </template>
+            <LeadAttachments
+              v-if="lead"
+              :lead-id="leadId"
+              :can-write="!!lead.can_write"
+            />
             <LeadWhyCall :prospect="lead?.prospect" />
             <LeadQuotations :quotations="data.quotations || []" />
             <LeadProposals
@@ -316,10 +358,11 @@
                 )
               "
               :can-write="!!lead?.can_write"
+              :blocked="data.documents?.blocked"
             />
           </aside>
 
-          <div class="flex min-w-0 flex-col gap-4 lg:order-1">
+          <div class="flex min-w-0 flex-col gap-5 lg:order-1">
             <LeadWhatsApp
               v-if="lead?.whatsapp && lead.whatsapp_box"
               :lead-id="leadId"
@@ -337,11 +380,11 @@
               @changed="detail.reload()"
             />
             <section
-              class="min-w-0 rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-4 sm:px-5"
+              class="min-w-0 rounded-xl border border-outline-gray-2 bg-surface-base p-4"
               :aria-label="__('Timeline')"
             >
               <div class="mb-3 flex items-baseline gap-2">
-                <h2 class="text-base-medium text-ink-gray-9">
+                <h2 class="text-base font-semibold text-ink-gray-9">
                   {{ __("Activity") }}
                 </h2>
                 <span class="text-sm text-ink-gray-6">{{
@@ -526,6 +569,7 @@
 </template>
 
 <script setup lang="ts">
+import { useGoBack } from "@/composables/goBack";
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import { INK } from "@/components/tone";
@@ -541,8 +585,8 @@ import {
   FormControl,
   toast,
 } from "frappe-ui";
-import { computed, ref, useId, watch, type Component } from "vue";
-import { useRouter } from "vue-router";
+import { computed, nextTick, ref, useId, watch, type Component } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import LucideArrowRight from "~icons/lucide/arrow-right";
 import LucideBot from "~icons/lucide/bot";
 import LucideCalendar from "~icons/lucide/calendar";
@@ -562,9 +606,11 @@ import LucidePhoneIncoming from "~icons/lucide/phone-incoming";
 import LucidePhoneMissed from "~icons/lucide/phone-missed";
 import LucidePhoneOutgoing from "~icons/lucide/phone-outgoing";
 import LucidePencil from "~icons/lucide/pencil";
+import LeadAttachments from "./LeadAttachments.vue";
 import LeadAISuggests from "./LeadAISuggests.vue";
 import LeadNumbers from "./LeadNumbers.vue";
 import LeadCallEntry from "./LeadCallEntry.vue";
+import LeadCopyNotice from "./LeadCopyNotice.vue";
 import LucideScrollText from "~icons/lucide/scroll-text";
 import LeadFormDialog from "./LeadFormDialog.vue";
 import LeadPhotos from "./LeadPhotos.vue";
@@ -586,17 +632,20 @@ import {
   stageIcon,
   stageLabel,
   isUsable,
+  stagePillClass,
   stageTone,
   STAGE_PATH,
   unsavedNote,
-  useClickToCall,
   type LeadDetail,
+  type LeadNumber,
   type LeadOptions,
   type LeadStage,
   type LeadTimelineEntry,
 } from "./leads";
-import { startCall } from "./pendingCalls";
+import { box, leadTouched, placeCall, placing } from "./callBox";
+import { queueChanged, startCall } from "./pendingCalls";
 
+const { goBack, fallbackHref } = useGoBack({ name: "Leads" });
 const props = defineProps<{ leadId: string }>();
 
 const TIMELINE_ICONS: Record<LeadTimelineEntry["kind"], Component> = {
@@ -635,6 +684,20 @@ function timelineIcon(entry: LeadTimelineEntry): Component {
 }
 
 const router = useRouter();
+const route = useRoute();
+
+/** Opened from Today's calls: the call there it belongs to, so its result counts in the
+ * batch. Once a result is recorded it is done, and a later call here is an ordinary one. */
+const batchItem = computed(() =>
+  typeof route.query.item === "string" ? route.query.item : null
+);
+watch(queueChanged, () => {
+  if (batchItem.value) router.replace({ query: {} });
+});
+// the call box learned something about this lead (a call over, a number added, a result)
+watch(leadTouched, () => {
+  if (box.call?.lead === props.leadId) detail.reload();
+});
 
 /** After a merge the lead that was kept is the one to see (the merged one is gone). */
 function merged(keep: string) {
@@ -665,24 +728,56 @@ watch(
 const data = computed(() => detail.data as LeadDetail | undefined);
 const lead = computed(() => data.value?.lead);
 
-const clickToCall = useClickToCall();
+const leadName = computed(() => lead.value?.lead_name || props.leadId);
 
-/** A call placed from this lead waits for its result: the sheet asks how it went. */
-function remember(via: "phone" | "myoperator") {
-  startCall({
+// the call box's "Listen on the lead" opens the lead at that call (#call-<name>)
+watch(
+  () => [data.value, route.hash] as const,
+  async ([loaded, hash]) => {
+    if (!loaded || !hash.startsWith("#call-")) return;
+    await nextTick();
+    document.getElementById(hash.slice(1))?.scrollIntoView({ block: "center" });
+  },
+  { immediate: true }
+);
+const leadPhone = computed(
+  () => lead.value?.mobile_no || lead.value?.phone || ""
+);
+
+/** The call box rings the person's phone, then the lead (`number`: null is the main one). */
+function callWithMyOperator(number: LeadNumber | null = null) {
+  placeCall({
     lead: props.leadId,
-    lead_name: lead.value?.lead_name || props.leadId,
-    phone: lead.value?.mobile_no || lead.value?.phone || "",
-    number: lead.value?.mobile_no || null,
-    via,
+    lead_name: leadName.value,
+    company: lead.value?.company_name,
+    phone: number?.number || leadPhone.value,
+    number: number?.number ?? null,
+    numbers: lead.value?.numbers,
+    // opened from Today's calls: the result counts in that batch
+    item: batchItem.value,
+    product: lead.value?.product,
   });
 }
-function callWithMyOperator() {
-  clickToCall.submit({ name: props.leadId });
-  remember("myoperator");
-}
+/** With several usable numbers, a menu to call one of them; one number dials at once. */
+const callChoices = computed(() => {
+  const usable = (lead.value?.numbers ?? []).filter(isUsable);
+  if (usable.length < 2) return [];
+  return usable.map((n) => ({
+    label: [n.number, n.label, n.person].filter(Boolean).join(" · "),
+    onClick: () => callWithMyOperator(n),
+  }));
+});
+
+/** A call from the phone's own dialler waits for its result: the sheet asks how it went. */
 function phoneCalled() {
-  remember("phone");
+  startCall({
+    lead: props.leadId,
+    lead_name: leadName.value,
+    phone: leadPhone.value,
+    number: lead.value?.mobile_no || null,
+    item: batchItem.value,
+    via: "phone",
+  });
 }
 const canCall = computed(
   () =>

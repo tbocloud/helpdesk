@@ -2,7 +2,7 @@
   <!-- the title's button stretches over the card, so a click anywhere opens the task;
        the buttons in the footer sit above it -->
   <article
-    class="relative flex min-w-0 flex-col gap-2 rounded-xl border border-outline-gray-2 bg-surface-base p-3 shadow-sm transition-colors hover:border-outline-gray-3"
+    class="relative flex min-w-0 flex-col gap-2 rounded-xl border border-outline-gray-2 bg-surface-base p-4 transition-colors hover:border-outline-gray-3"
     :aria-labelledby="titleId"
   >
     <div class="flex min-w-0 items-center gap-2">
@@ -216,7 +216,7 @@ import LucidePanelRight from "~icons/lucide/panel-right";
 import LucidePause from "~icons/lucide/pause";
 import LucideClock from "~icons/lucide/clock";
 import LucideTimer from "~icons/lucide/timer";
-import { platformsOf, ROLE_TONES } from "../constants";
+import { copyLine, platformsOf, ROLE_TONES } from "../constants";
 import {
   type ContentTask,
   dueText,
@@ -246,7 +246,7 @@ const emit = defineEmits<{
 const userStore = useUserStore();
 const titleId = useId();
 
-const title = computed(() => props.post?.title || props.task.subject);
+const title = computed(() => copyLine(props.post?.title) || props.task.subject);
 const platforms = computed(() => (props.post ? platformsOf(props.post) : []));
 const missed = computed(() => !!props.post?.is_missed);
 const goLive = computed(() =>

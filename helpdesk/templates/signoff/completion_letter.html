@@ -24,8 +24,8 @@
       <th>{{ _("Module") }}</th>
       <th>{{ _("Training date") }}</th>
       <th>{{ _("Trainer") }}</th>
-      <th>{{ _("Signed by") }}</th>
-      <th>{{ _("Signed on") }}</th>
+      <th>{{ _("Signed off by") }}</th>
+      <th>{{ _("Signed off on") }}</th>
     </tr>
   </thead>
   <tbody>
@@ -33,9 +33,7 @@
     <tr>
       <td>
         {{ s.module_title|e }}
-        <div class="comment mono">
-          {{ s.name|e }} · {{ (s.audit_ref or "")[:16]|e }}
-        </div>
+        <div class="comment mono">{{ s.name|e }}</div>
       </td>
       <td>{{ (s.training_date or "-")|e }}</td>
       <td>{{ (s.trainer_name or "-")|e }}</td>

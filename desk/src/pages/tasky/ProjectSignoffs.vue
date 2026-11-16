@@ -3,20 +3,23 @@
     <ProjectNav :project-id="projectId">
       <template #actions>
         <Button
-          variant="ghost"
+          size="md"
           :label="__('Refresh')"
           :loading="signoffs.loading && !!signoffs.data"
           @click="signoffs.reload()"
         >
-          <template #icon><LucideRefreshCw class="size-4" /></template>
+          <template #icon
+            ><LucideRefreshCw class="size-[18px]" aria-hidden="true"
+          /></template>
         </Button>
       </template>
     </ProjectNav>
 
-    <div class="flex-1 overflow-auto">
-      <div class="mx-auto w-full max-w-5xl px-4 py-5 md:px-6">
+    <div class="relative flex-1 overflow-auto">
+      <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
         <TaskyState
           v-if="signoffs.error && !signoffs.data"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
           error
           :icon="LucideCircleAlert"
           :title="__('Couldn\'t load the sign-offs')"
@@ -26,7 +29,7 @@
         </TaskyState>
 
         <template v-else>
-          <div class="mb-4 flex flex-wrap items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2">
             <h2 class="text-lg-semibold text-ink-gray-9">
               {{ __("Sign-offs") }}
             </h2>
@@ -56,28 +59,30 @@
           <!-- roll-up: every sign-off, training and UAT -->
           <div
             v-if="!data || data.signoffs.length"
-            class="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3"
+            class="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4"
           >
             <StatTile
-              compact
-              :label="__('Signed')"
+              :label="__('Signed off')"
               :value="
                 data
                   ? __(
                       '{0} of {1}',
                       String(signedCount),
-                      String(data.signoffs.length)
+                      String(counted.length)
                     )
                   : ''
               "
               :icon="LucideCircleCheck"
               :icon-tone="allSigned ? 'success' : 'neutral'"
-              :meter="data ? (signedCount / data.signoffs.length) * 100 : null"
+              :meter="
+                data && counted.length
+                  ? (signedCount / counted.length) * 100
+                  : null
+              "
               :tone="allSigned ? 'success' : 'neutral'"
               :loading="!data"
             />
             <StatTile
-              compact
               :label="__('Needs clarification')"
               :value="followUpCount"
               :sub="
@@ -90,10 +95,9 @@
               :loading="!data"
             />
             <StatTile
-              compact
               :label="__('With the customer')"
               :value="withCustomerCount"
-              :sub="__('Sent and not signed yet')"
+              :sub="__('Sent and not signed off yet')"
               :icon="LucideSend"
               :loading="!data"
             />
@@ -102,12 +106,12 @@
           <!-- what holds up each sign-off not signed yet, in words -->
           <section
             v-if="waiting.length"
-            class="mb-4 rounded-lg border border-outline-gray-2 bg-surface-base"
+            class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
             :aria-labelledby="waitingHeading"
           >
             <h3
               :id="waitingHeading"
-              class="border-b border-outline-gray-1 px-4 py-2 text-sm font-medium text-ink-gray-8"
+              class="border-b border-outline-gray-2 px-4 py-3 text-base font-semibold text-ink-gray-9"
             >
               {{ __("Waiting on") }}
             </h3>
@@ -122,7 +126,7 @@
                     name: 'TaskySignoff',
                     params: { projectId, signoffId: w.name },
                   }"
-                  class="flex min-h-[44px] flex-wrap items-center gap-x-2 gap-y-0.5 px-4 py-2 text-sm hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-highlight"
+                  class="flex min-h-[44px] flex-wrap items-center gap-x-2 gap-y-0.5 px-5 py-3 text-[13px] hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-highlight"
                 >
                   <component
                     :is="w.onUs ? LucideCircleHelp : LucideClock"
@@ -139,14 +143,14 @@
 
           <div
             v-if="data?.completion_letter"
-            class="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-outline-gray-2 bg-surface-base px-4 py-3"
+            class="flex flex-wrap items-center gap-3 rounded-xl border border-outline-gray-2 bg-surface-base p-4"
           >
             <LucideBadgeCheck
               class="size-5 shrink-0 text-success"
               aria-hidden="true"
             />
             <div class="min-w-0 flex-1">
-              <p class="text-base-medium text-ink-gray-9">
+              <p class="text-base font-semibold text-ink-gray-9">
                 {{ __("All training signed off") }}
               </p>
               <p class="text-p-sm text-ink-gray-6">
@@ -161,7 +165,7 @@
               :href="data.completion_letter.file_url"
               target="_blank"
               rel="noopener"
-              class="inline-flex h-8 items-center gap-1.5 rounded-md border border-outline-gray-2 bg-surface-base px-3 text-sm font-medium text-ink-gray-8 hover:bg-surface-gray-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+              class="inline-flex h-10 items-center gap-1.5 rounded-[10px] border border-outline-gray-3 bg-surface-base px-3.5 text-[13px] font-medium text-ink-gray-8 hover:bg-surface-gray-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
             >
               <LucideDownload class="size-4" aria-hidden="true" />
               {{ __("Completion letter") }}
@@ -178,28 +182,29 @@
             <div
               v-for="i in 3"
               :key="i"
-              class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-4 last:border-b-0"
+              class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-3 last:border-b-0"
             >
               <div class="flex flex-1 flex-col gap-2">
                 <div
-                  class="h-3.5 w-1/3 animate-pulse rounded bg-surface-gray-2"
+                  class="h-3.5 w-1/3 animate-pulse rounded bg-surface-gray-3"
                 />
                 <div
-                  class="h-3 w-1/2 animate-pulse rounded bg-surface-gray-2"
+                  class="h-3 w-1/2 animate-pulse rounded bg-surface-gray-3"
                 />
               </div>
-              <div class="h-2 w-24 animate-pulse rounded bg-surface-gray-2" />
+              <div class="h-2 w-24 animate-pulse rounded bg-surface-gray-3" />
             </div>
           </div>
 
           <TaskyState
             v-else-if="!data.signoffs.length"
+            class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
             :icon="LucideClipboardCheck"
             :title="__('No sign-offs yet')"
             :message="
               data.can_create
                 ? __(
-                    'After each training, send the customer a checklist for that module. They confirm each item, ask about anything unclear, and sign off.'
+                    'Send the customer a sign-off for each stage: a module\'s training, UAT, go-live. They reply to accept it, and you mark it signed off.'
                   )
                 : __(
                     'Sign-offs for this project\'s trainings show up here once the project lead or manager creates them.'
@@ -218,110 +223,136 @@
             </Button>
           </TaskyState>
 
-          <ul
-            v-else
-            class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
-            role="list"
-            :aria-label="__('Sign-offs')"
-          >
-            <li
-              v-for="s in data.signoffs"
-              :key="s.name"
-              class="border-b border-outline-gray-1 last:border-b-0"
+          <template v-else>
+            <div class="max-w-full overflow-x-auto">
+              <ViewTabs
+                :model-value="statusFilter"
+                :aria-label="__('Filter sign-offs by status')"
+                :aria-controls="listId"
+                :options="
+                  STATUS_TABS.map((t) => ({
+                    label: t === 'All' ? __('All') : __(t),
+                    value: t,
+                    count: countFor(t),
+                  }))
+                "
+                @update:model-value="(v: string) => (statusFilter = v)"
+              />
+            </div>
+
+            <div
+              :id="listId"
+              class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
             >
-              <router-link
-                :to="{
-                  name: 'TaskySignoff',
-                  params: { projectId, signoffId: s.name },
-                }"
-                class="flex flex-col gap-2 px-4 py-3 transition-colors hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-outline-gray-4 md:flex-row md:items-center md:gap-4"
+              <!-- the columns of TBO's Sign-off requirements; on a phone each row stacks -->
+              <div
+                class="hidden h-11 items-center border-b border-outline-gray-2 bg-surface-gray-1 px-5 text-left text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6 md:grid md:grid-cols-[minmax(0,1.6fr)_minmax(0,1.2fr)_8.5rem_6.5rem_6.5rem] md:gap-4"
+                aria-hidden="true"
               >
-                <div class="flex min-w-0 flex-1 flex-col gap-1">
-                  <div class="flex min-w-0 flex-wrap items-center gap-2">
-                    <span class="truncate text-base-medium text-ink-gray-9">{{
-                      s.module_title
-                    }}</span>
-                    <TaskyBadge
-                      v-if="s.signoff_type === 'UAT'"
-                      :label="__('UAT')"
-                      :icon="LucideListChecks"
-                    />
-                    <TaskyBadge
-                      :label="__(signoffStatusMeta(s.customer_status).label)"
-                      :tone="signoffStatusMeta(s.customer_status).tone"
-                      :icon="signoffStatusMeta(s.customer_status).icon"
-                    />
-                  </div>
-                  <div
-                    class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-gray-6"
-                  >
-                    <span>{{ s.signatory_name }}</span>
-                    <template v-if="s.trainer_name">
-                      <span aria-hidden="true">·</span>
-                      <span>{{ __("Trainer: {0}", s.trainer_name) }}</span>
-                    </template>
-                    <template v-if="s.training_date">
-                      <span aria-hidden="true">·</span>
-                      <span class="tabular-nums">{{
-                        dateFormat(s.training_date, "D MMM YYYY")
-                      }}</span>
-                    </template>
-                  </div>
-                </div>
-                <div
-                  class="flex shrink-0 items-center gap-3 md:w-64 md:justify-end"
+                <span>{{ __("Sign-off · template") }}</span>
+                <span>{{ __("Recipient") }}</span>
+                <span>{{ __("Status") }}</span>
+                <span>{{ __("Sent on") }}</span>
+                <span>{{ __("Signed off on") }}</span>
+              </div>
+              <p
+                v-if="!shown.length"
+                class="px-5 py-6 text-center text-p-sm text-ink-gray-6"
+              >
+                {{
+                  __("No sign-offs are {0}.", __(statusFilter).toLowerCase())
+                }}
+              </p>
+              <ul v-else role="list" :aria-label="__('Sign-offs')">
+                <li
+                  v-for="s in shown"
+                  :key="s.name"
+                  class="border-b border-outline-gray-1 last:border-b-0"
                 >
-                  <span
-                    v-if="s.follow_up"
-                    class="inline-flex items-center gap-1 text-xs font-medium text-warning"
+                  <router-link
+                    :to="{
+                      name: 'TaskySignoff',
+                      params: { projectId, signoffId: s.name },
+                    }"
+                    class="flex flex-col gap-1.5 px-5 py-3 transition-colors hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-highlight md:grid md:grid-cols-[minmax(0,1.6fr)_minmax(0,1.2fr)_8.5rem_6.5rem_6.5rem] md:items-center md:gap-4"
                   >
-                    <LucideCircleHelp class="size-3.5" aria-hidden="true" />
-                    {{
-                      s.signoff_type === "UAT"
-                        ? s.follow_up === 1
-                          ? __("1 open issue")
-                          : __("{0} open issues", String(s.follow_up))
-                        : s.follow_up === 1
-                        ? __("1 to clarify")
-                        : __("{0} to clarify", String(s.follow_up))
-                    }}
-                  </span>
-                  <span class="flex items-center gap-2">
+                    <div class="flex min-w-0 flex-col gap-0.5">
+                      <div class="flex min-w-0 items-center gap-2">
+                        <span
+                          class="truncate text-[13px] font-semibold text-ink-gray-9"
+                          >{{ s.module_title || s.template || s.name }}</span
+                        >
+                        <TaskyBadge
+                          v-if="s.signoff_type === 'UAT'"
+                          :label="__('UAT')"
+                          :icon="LucideListChecks"
+                        />
+                      </div>
+                      <span class="truncate text-xs text-ink-gray-6">
+                        {{ s.template || __("No template") }}
+                        <template v-if="s.follow_up">
+                          ·
+                          <span class="font-medium text-warning">{{
+                            s.signoff_type === "UAT"
+                              ? s.follow_up === 1
+                                ? __("1 open issue")
+                                : __("{0} open issues", String(s.follow_up))
+                              : s.follow_up === 1
+                              ? __("1 to clarify")
+                              : __("{0} to clarify", String(s.follow_up))
+                          }}</span>
+                        </template>
+                      </span>
+                    </div>
                     <span
-                      class="block h-1.5 w-20 overflow-hidden rounded-full"
-                      :class="
-                        TRACK[s.status === 'Signed' ? 'success' : 'neutral']
-                      "
-                      aria-hidden="true"
+                      class="flex min-w-0 items-center gap-2.5 text-[13px] text-ink-gray-8"
                     >
-                      <span
-                        class="block h-full rounded-full"
-                        :class="
-                          FILL[s.status === 'Signed' ? 'success' : 'neutral']
-                        "
-                        :style="{
-                          width: `${s.total ? (s.done / s.total) * 100 : 0}%`,
-                        }"
+                      <PersonAvatar
+                        v-if="s.signatory_name"
+                        :name="s.signatory_name"
+                        size="md"
+                      />
+                      <span class="min-w-0 truncate">
+                        {{ s.signatory_name || "—" }}
+                        <span
+                          v-if="s.signatory_email"
+                          class="block truncate font-mono text-xs text-ink-gray-6"
+                          >{{ s.signatory_email }}</span
+                        >
+                      </span>
+                    </span>
+                    <span>
+                      <TaskyBadge
+                        :label="__(signoffStatusMeta(s.customer_status).label)"
+                        :tone="signoffStatusMeta(s.customer_status).tone"
+                        :icon="signoffStatusMeta(s.customer_status).icon"
                       />
                     </span>
-                    <span
-                      class="font-mono text-xs tabular-nums text-ink-gray-7"
-                    >
+                    <span class="text-xs tabular-nums text-ink-gray-7">
+                      <span class="text-ink-gray-5 md:hidden"
+                        >{{ __("Sent on") }}:
+                      </span>
                       {{
-                        s.signoff_type === "UAT"
-                          ? __(
-                              "{0}/{1} passed",
-                              String(s.done),
-                              String(s.total)
-                            )
-                          : __("{0}/{1} done", String(s.done), String(s.total))
+                        s.link_sent_on
+                          ? dateFormat(s.link_sent_on, "D MMM YYYY")
+                          : "—"
                       }}
                     </span>
-                  </span>
-                </div>
-              </router-link>
-            </li>
-          </ul>
+                    <span class="text-xs tabular-nums text-ink-gray-7">
+                      <span class="text-ink-gray-5 md:hidden"
+                        >{{ __("Signed off on") }}:
+                      </span>
+                      {{
+                        s.status === "Signed Off" && s.signed_on
+                          ? dateFormat(s.signed_on, "D MMM YYYY")
+                          : "—"
+                      }}
+                    </span>
+                  </router-link>
+                </li>
+              </ul>
+            </div>
+          </template>
         </template>
       </div>
     </div>
@@ -337,10 +368,11 @@
 </template>
 
 <script setup lang="ts">
+import PersonAvatar from "@/components/PersonAvatar.vue";
 import StatTile from "@/components/StatTile.vue";
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import TaskyState from "@/components/TaskyState.vue";
-import { FILL, TRACK } from "@/components/tone";
+import ViewTabs from "@/components/ViewTabs.vue";
 import { __ } from "@/translation";
 import { dateFormat } from "@/utils";
 import { Button, createResource } from "frappe-ui";
@@ -359,12 +391,13 @@ import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideSend from "~icons/lucide/send";
 import ProjectNav from "./components/ProjectNav.vue";
 import SignoffFormDialog from "./components/SignoffFormDialog.vue";
-import { signoffStatusMeta } from "./signoffMeta";
+import { SIGNOFF_STATUSES, signoffStatusMeta } from "./signoffMeta";
 import { loadErrorMessage } from "./taskMeta";
 
 interface SignoffRow {
   name: string;
   module_title: string;
+  template?: string | null;
   /** Training, or UAT (the client's acceptance tests from the SRS) */
   signoff_type: "Training" | "UAT";
   status: string;
@@ -373,6 +406,9 @@ interface SignoffRow {
   training_date?: string | null;
   trainer_name?: string | null;
   signatory_name?: string | null;
+  signatory_email?: string | null;
+  link_sent_on?: string | null;
+  signed_on?: string | null;
   total: number;
   done: number;
   follow_up: number;
@@ -415,57 +451,65 @@ const hasUat = computed(
   () => !!data.value?.signoffs.some((s) => s.signoff_type === "UAT")
 );
 const waitingHeading = useId();
+const listId = useId();
+// a cancelled sign-off no longer counts
+const counted = computed(() =>
+  (data.value?.signoffs ?? []).filter((s) => s.status !== "Cancelled")
+);
 const signedCount = computed(
-  () => data.value?.signoffs.filter((s) => s.status === "Signed").length ?? 0
+  () => counted.value.filter((s) => s.status === "Signed Off").length
 );
 const allSigned = computed(
-  () =>
-    !!data.value?.signoffs.length &&
-    signedCount.value === data.value.signoffs.length
+  () => !!counted.value.length && signedCount.value === counted.value.length
 );
 
-/** What a sign-off not signed yet waits for, and whether that is on us. */
+const STATUS_TABS = ["All", ...SIGNOFF_STATUSES];
+const statusFilter = ref("All");
+function countFor(status: string) {
+  const rows = data.value?.signoffs ?? [];
+  return status === "All"
+    ? rows.length
+    : rows.filter((s) => s.status === status).length;
+}
+const shown = computed(() =>
+  (data.value?.signoffs ?? []).filter(
+    (s) => statusFilter.value === "All" || s.status === statusFilter.value
+  )
+);
+
+/** What a sign-off not signed off yet waits for, and whether that is on us. */
 function waitingFor(s: SignoffRow): { reason: string; onUs: boolean } {
   const who = s.signatory_name || __("the customer");
-  switch (s.customer_status) {
-    case "Draft":
-      return { reason: __("Not sent yet"), onUs: true };
-    case "Reopened":
-      return { reason: __("Reopened: send it again"), onUs: true };
-    case "Needs clarification":
-      return {
-        reason:
-          s.signoff_type === "UAT"
-            ? __("{0} open issues for our team", String(s.follow_up))
-            : __("{0} to clarify for our team", String(s.follow_up)),
-        onUs: true,
-      };
-    case "Viewed":
-      return {
-        reason: __("With {0}: opened, nothing answered yet", who),
-        onUs: false,
-      };
-    case "In progress":
-      return {
-        reason: __(
-          "With {0}: {1} of {2} answered",
-          who,
-          String(s.done),
-          String(s.total)
-        ),
-        onUs: false,
-      };
-    case "Ready to sign":
-      return { reason: __("Ready for {0} to sign", who), onUs: false };
-    default:
-      return { reason: __("With {0}: not opened yet", who), onUs: false };
-  }
+  if (s.status === "Draft") return { reason: __("Not sent yet"), onUs: true };
+  if (s.status === "Changes Requested")
+    return {
+      reason: __("{0} asked for changes: edit it and send it again", who),
+      onUs: true,
+    };
+  if (s.follow_up)
+    return {
+      reason:
+        s.signoff_type === "UAT"
+          ? __("{0} open issues for our team", String(s.follow_up))
+          : __("{0} to clarify for our team", String(s.follow_up)),
+      onUs: true,
+    };
+  if (s.customer_status === "Viewed")
+    return {
+      reason: __("With {0}: opened, waiting for their reply", who),
+      onUs: false,
+    };
+  return { reason: __("With {0}: waiting for their reply", who), onUs: false };
 }
 // what is on us first, then what waits for the customer
 const waiting = computed(() =>
-  (data.value?.signoffs ?? [])
-    .filter((s) => s.status !== "Signed")
-    .map((s) => ({ name: s.name, title: s.module_title, ...waitingFor(s) }))
+  counted.value
+    .filter((s) => s.status !== "Signed Off")
+    .map((s) => ({
+      name: s.name,
+      title: s.module_title || s.template || s.name,
+      ...waitingFor(s),
+    }))
     .sort((a, b) => Number(b.onUs) - Number(a.onUs))
 );
 // items, not sign-offs: each one is a clarification someone has to give
@@ -473,9 +517,7 @@ const followUpCount = computed(
   () => data.value?.signoffs.reduce((sum, s) => sum + s.follow_up, 0) ?? 0
 );
 const withCustomerCount = computed(
-  () =>
-    data.value?.signoffs.filter((s) => !["Draft", "Signed"].includes(s.status))
-      .length ?? 0
+  () => data.value?.signoffs.filter((s) => s.status === "Sent").length ?? 0
 );
 
 function openSignoff(name: string) {

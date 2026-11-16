@@ -2,6 +2,7 @@
 // call is dismissed with a reason (helpdesk.api.pending_calls, docs/leads.md).
 import { __ } from "@/translation";
 import { call, createResource } from "frappe-ui";
+import type { CallOutcome } from "./callBatches";
 import { computed, ref } from "vue";
 
 export interface PendingCall {
@@ -28,10 +29,6 @@ export const DISMISS_REASONS = [
   { value: "Tapped by mistake", label: __("Tapped by mistake") },
 ];
 
-/** MyOperator rings the person's phone; the page stays open, so the sheet comes up on its own
- * after this long, when the call is likely over. */
-const MYOPERATOR_ASK_AFTER_MS = 45_000;
-
 const list = createResource({
   url: "helpdesk.api.pending_calls.get_pending_calls",
 });
@@ -48,7 +45,6 @@ export const askFor = ref("");
 export const queueChanged = ref(0);
 // a call placed from the phone's dialler: the page loses focus, and the sheet opens on return
 let awaitingReturn = "";
-let timer: ReturnType<typeof setTimeout> | undefined;
 
 export function loadPendingCalls() {
   return list.reload();
@@ -77,14 +73,8 @@ export function startCall(placed: {
     .then((answer: PendingAnswer) => setPendingCalls(answer))
     // a reminder only: a failure must never stop the call
     .catch(() => {});
-  if (placed.via === "phone") {
-    awaitingReturn = placed.lead;
-  } else {
-    clearTimeout(timer);
-    timer = setTimeout(() => {
-      askFor.value = placed.lead;
-    }, MYOPERATOR_ASK_AFTER_MS);
-  }
+  // MyOperator rings the person's phone: the call box says when it is over
+  if (placed.via === "phone") awaitingReturn = placed.lead;
 }
 
 /** The person is back on the page: ask about the call they left to make. */
@@ -102,6 +92,33 @@ export function dismissCall(lead: string, reason: string) {
   }).then((answer: PendingAnswer) => setPendingCalls(answer));
 }
 
+/** The ERP site records the answer on the call in Today's calls, or logs it on the lead;
+ * either way the call stops waiting. */
+export function answerCall(
+  pending: PendingCall,
+  value: { outcome: CallOutcome; note: string; callback_at: string | null }
+) {
+  const request = pending.item
+    ? call("helpdesk.api.call_batches.record_call_outcome", {
+        batch_item: pending.item,
+        lead: pending.lead,
+        outcome: value.outcome,
+        note: value.note || null,
+        callback_at: value.callback_at,
+        number: pending.number,
+      })
+    : call("helpdesk.api.leads.log_call", {
+        lead: pending.lead,
+        outcome: value.outcome,
+        note: value.note,
+        callback_at: value.callback_at,
+        number: pending.number,
+      });
+  return request.then(() => {
+    if (pending.item) queueChanged.value++;
+  });
+}
+
 /** The call back times the sheet offers, as the ERP site takes them. */
 export function callBackIn(hours: number) {
   return erpTime(new Date(Date.now() + hours * 3_600_000));
@@ -114,7 +131,8 @@ export function callBackTomorrow() {
   return erpTime(day);
 }
 
-function erpTime(date: Date) {
+/** A date as the ERP site takes it: local time, to the minute. */
+export function erpTime(date: Date) {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
     date.getDate()

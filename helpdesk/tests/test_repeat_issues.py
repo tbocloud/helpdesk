@@ -278,6 +278,7 @@ class TestRepeatIssues(FrappeTestCase):
             period="week",
             cluster=cluster_id,
             project=project,
+            estimated_hours=2,
         )
 
     def test_ai_titles_with_the_number_guard(self):
