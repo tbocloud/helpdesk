@@ -3,6 +3,7 @@ signed-in person (docs/leads.md). Thin proxies to `tbo_smart.api.hub_leads`; the
 site decides what each person may see and do, and the API key never leaves the hub."""
 
 import json
+import re
 
 import frappe
 from frappe import _
@@ -80,8 +81,11 @@ TELEPHONY = "tbo_smart.api.telephony"
 AUDIO_TYPES = ("audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/ogg")
 # what a lead photo may be handed back as: the ERP site only stores these
 PHOTO_TYPES = ("image/jpeg", "image/png", "image/webp")
-# a photo is at most 10 MB on the ERP site; as base64 a third more
+# a photo or a file is at most 10 MB on the ERP site; as base64 a third more
 MAX_PHOTO_BASE64 = 14 * 1024 * 1024
+# what a lead's file may open as in the browser; anything else is only saved, so a file
+# attached on the ERP desk (HTML, SVG) never runs as this site's page
+FILE_INLINE_TYPES = (*PHOTO_TYPES, "application/pdf")
 PHOTO_METHOD = "helpdesk.api.leads.lead_photo"
 PHOTO_CACHE = "private, max-age=3600"
 MAX_PAGE = 100
@@ -145,7 +149,8 @@ def clear_cached_reads() -> None:
 def get_options(fresh: int | str = 0) -> dict:
     """Stages, sources, segments, owners, territories and industries for the pickers,
     and whether the ERP site has the Daily report and can log a call made outside
-    MyOperator (`has_daily_report`, `can_log_call`: both came with the same TBO Smart)."""
+    MyOperator (`has_daily_report`, `can_log_call`: both came with the same TBO Smart).
+    """
     require_leads()
     options = read_options(fresh)
     deployed = report_deployed()
@@ -806,7 +811,8 @@ def set_lead_department_active(name: str, active: int | str = 1) -> dict:
 def change_department(method: str, **params) -> dict:
     """A department write on the ERP site; the signed-in person's cached reads go, as the
     departments (and what they may see) changed, and everyone's cached pickers, which say
-    who heads a department (`is_bd`): a new head gets the managers' screens straight away."""
+    who heads a department (`is_bd`): a new head gets the managers' screens straight away.
+    """
     saved = call_if_deployed(
         method,
         post=True,
@@ -1064,7 +1070,8 @@ def add_lead_number(
 ) -> dict:
     """Adds a contact number to the lead: {numbers}. The ERP site refuses a number another
     lead has (docs/leads.md, "One lead per number"). `make_primary` makes it the main
-    number; the old one stays, marked Old. `on_call` records it as added during a call."""
+    number; the old one stays, marked Old. `on_call` records it as added during a call.
+    """
     require_leads()
     if not (number or "").strip():
         frappe.throw(_("Type the number first."))
@@ -1285,7 +1292,8 @@ def end_call(reference_id: str) -> dict:
 @frappe.whitelist()
 def get_incoming_call() -> dict:
     """{enabled, call}: the call coming in to the signed-in person now, for the incoming
-    notice; `enabled` false means they aren't set up for calling and the page stops asking."""
+    notice; `enabled` false means they aren't set up for calling and the page stops asking.
+    """
     require_leads()
     return call("get_incoming_call", api=TELEPHONY) or {}
 
@@ -1363,6 +1371,64 @@ def lead_photo(lead: str, file: str, thumb: int | str = 0) -> None:
     frappe.local.response.filecontent = content
     frappe.local.response.content_type = content_type
     frappe.local.response.display_content_as = "inline"
+    frappe.local.response.type = "download"
+
+
+# --- files (docs/leads.md) ----------------------------------------------------------
+
+
+@frappe.whitelist()
+def get_lead_files(lead: str) -> dict:
+    """{available, files}: the lead's files newest first. `available` is false while the
+    ERP site's TBO Smart is older than lead files, so the card stays out."""
+    require_leads()
+    files = call_if_deployed("get_lead_files", lead=lead)
+    if files is None:
+        return {"available": False, "files": []}
+    return {"available": True, "files": files}
+
+
+@frappe.whitelist(methods=["POST"])
+def upload_lead_file(lead: str, filename: str, content: str) -> dict:
+    """A file on the lead as the signed-in person (`content` base64; the ERP site checks its
+    type, that it is at most 10 MB and that the lead has room)."""
+    require_leads()
+    if not content or len(content) > MAX_PHOTO_BASE64:
+        frappe.throw(_("Choose a file of at most 10 MB."))
+    return (
+        call(
+            "upload_lead_file",
+            post=True,
+            lead=lead,
+            filename=(filename or "").strip()[:140],
+            content=content,
+        )
+        or {}
+    )
+
+
+@frappe.whitelist(methods=["POST"])
+def delete_lead_file(lead: str, file: str) -> dict:
+    require_leads()
+    return call("delete_lead_file", post=True, lead=lead, file=file) or {}
+
+
+@frappe.whitelist()
+def lead_file(lead: str, file: str, filename: str | None = None) -> None:
+    """A lead file's bytes, streamed from the ERP site, which shows it only to people who may
+    read the lead. PDFs and pictures open in the browser; anything else is saved, as plain
+    bytes. `filename` is only the name the browser saves it as."""
+    require_leads()
+    content, content_type = download("get_lead_file", lead=lead, file=file)
+    inline = content_type in FILE_INLINE_TYPES
+    frappe.local.response.filename = (
+        re.sub(r'[\\/:*?"<>|\x00-\x1f]', "", filename or "").strip()[:140] or file
+    )
+    frappe.local.response.filecontent = content
+    frappe.local.response.content_type = (
+        content_type if inline else "application/octet-stream"
+    )
+    frappe.local.response.display_content_as = "inline" if inline else "attachment"
     frappe.local.response.type = "download"
 
 
