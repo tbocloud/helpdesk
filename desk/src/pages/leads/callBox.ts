@@ -82,7 +82,7 @@ export const RECORD_AFTER_MS = 45_000;
 const RECORDING_POLL_MS = 4000;
 const RECORDING_POLLS = 8;
 const RECENT_CALLS = 3;
-/** after End call, the provider needs a moment before its call list has the call */
+/** once a call is over, the provider needs a moment before its call list has the call */
 const END_LOOKUP_MS = 6000;
 
 export const box = reactive({
@@ -328,6 +328,13 @@ function apply(status: CallStatus) {
       // the result is asked for in the box: bring it back if it was tucked away
       box.minimised = false;
       loadLead(true);
+      // the ERP site saw the call end before the provider's report came: fetch the report
+      if (!status.call) {
+        const mine = session;
+        setTimeout(() => {
+          if (mine === session) findLostCall(mine);
+        }, END_LOOKUP_MS);
+      }
     }
     if (box.answered && box.recording === "pending") watchRecording(session, 0);
     return;
