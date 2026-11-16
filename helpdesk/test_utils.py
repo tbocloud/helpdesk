@@ -3303,6 +3303,15 @@ def make_email_account(email_id: str, **kwargs):
     ).insert(ignore_permissions=True)
 
 
+def give_email_account(user: str, account: str):
+    """Lets `user` send from the Email Account `account` (a row in their User Emails)."""
+    doc = frappe.get_doc("User", user)
+    if not any(row.email_account == account for row in doc.user_emails):
+        doc.append("user_emails", {"email_account": account})
+        doc.save(ignore_permissions=True)
+    return doc
+
+
 def make_pull_request(task: str, number: int, state: str = "Open", **kwargs):
     """Creates an HD Pull Request linking a GitHub PR (no real GitHub call) to `task`."""
     return frappe.get_doc(

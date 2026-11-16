@@ -592,6 +592,7 @@
               class="lg:sticky lg:top-4 lg:max-h-[calc(100vh-8rem)]"
               :mail="{
                 subject: s.email_subject || '',
+                from: s.sender_email,
                 toName: s.signatory_name,
                 toEmail: s.signatory_email,
                 cc: splitEmails(s.cc_emails || ''),
@@ -924,6 +925,8 @@ interface SignoffDetail extends SignoffSource {
   signatory_name: string;
   signatory_email: string;
   signatory_designation?: string | null;
+  /** the From account's address; empty: the sender's own */
+  sender_email?: string | null;
   link_open: boolean;
   link_sent_on?: string | null;
   reminder_sent_on?: string | null;

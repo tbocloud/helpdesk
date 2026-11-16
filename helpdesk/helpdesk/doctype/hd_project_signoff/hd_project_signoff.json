@@ -28,6 +28,7 @@
 		"customer_address",
 		"address_display",
 		"mail_section",
+		"sender_email_account",
 		"cc_emails",
 		"email_subject",
 		"email_body",
@@ -266,6 +267,13 @@
 			"fieldname": "mail_section",
 			"fieldtype": "Section Break",
 			"label": "Mail"
+		},
+		{
+			"fieldname": "sender_email_account",
+			"fieldtype": "Link",
+			"label": "From",
+			"options": "Email Account",
+			"description": "The outgoing account the sign-off's mails go from, with the sender's name. Empty: the sender's own address."
 		},
 		{
 			"fieldname": "cc_emails",
@@ -715,7 +723,7 @@
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-11-14 10:00:00.000000",
+	"modified": "2026-11-16 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Project Signoff",
