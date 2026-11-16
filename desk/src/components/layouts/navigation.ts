@@ -6,6 +6,7 @@ import LucideBookOpen from "~icons/lucide/book-open";
 import LucideBriefcase from "~icons/lucide/briefcase";
 import LucideCalendarClock from "~icons/lucide/calendar-clock";
 import LucideCalendarDays from "~icons/lucide/calendar-days";
+import LucideCalendarRange from "~icons/lucide/calendar-range";
 import LucideCamera from "~icons/lucide/camera";
 import LucideChartColumn from "~icons/lucide/chart-column";
 import LucideChartPie from "~icons/lucide/chart-pie";
@@ -24,12 +25,14 @@ import LucideListTodo from "~icons/lucide/list-todo";
 import LucideMessagesSquare from "~icons/lucide/messages-square";
 import LucideNewspaper from "~icons/lucide/newspaper";
 import LucidePhoneCall from "~icons/lucide/phone-call";
+import LucideShapes from "~icons/lucide/shapes";
 import LucideSquareKanban from "~icons/lucide/square-kanban";
 import LucideTicket from "~icons/lucide/ticket";
 import LucideTrophy from "~icons/lucide/trophy";
 import LucideUsers from "~icons/lucide/users";
 import LucideUserRoundCog from "~icons/lucide/user-round-cog";
 import LucideActivity from "~icons/lucide/activity";
+import LucideVideo from "~icons/lucide/video";
 
 /** A page in the sidebar. The flags are the role rules; see `isNavItemVisible`. */
 export interface NavItem {
@@ -226,6 +229,30 @@ export const agentNavAreas: NavArea[] = [
             icon: LucideActivity,
             to: "Adoption",
             adoptionOnly: true,
+          },
+        ],
+      },
+    ],
+  },
+  // internal meetings with the team, and the meetings from tickets and tasks
+  {
+    id: "meetings",
+    label: __("Meetings"),
+    icon: LucideVideo,
+    groups: [
+      {
+        items: [
+          {
+            id: "meeting-calendar",
+            label: __("Meeting calendar"),
+            icon: LucideCalendarRange,
+            to: "MeetingCalendar",
+          },
+          {
+            id: "meeting-types",
+            label: __("Meeting types"),
+            icon: LucideShapes,
+            to: "MeetingTypes",
           },
         ],
       },

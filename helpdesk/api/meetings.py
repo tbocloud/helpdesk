@@ -9,8 +9,12 @@ from frappe.utils import add_to_date, cint, get_datetime, now_datetime
 from helpdesk import teams_meetings
 from helpdesk.helpdesk.doctype.hd_meeting.hd_meeting import (
     CANCELLED,
+    MAX_DURATION,
+    MEETING_GAP,
+    MIN_DURATION,
     REFERENCE_DOCTYPES,
     SCHEDULED,
+    people_in_meetings,
 )
 from helpdesk.utils import agent_only, is_chat_placeholder_email
 from helpdesk.work_reminders import _assignees
@@ -20,8 +24,6 @@ MAX_SUGGESTIONS = 10
 # addresses that can never receive an invitation (RFC 2606 test names, chat stand-ins)
 UNDELIVERABLE_DOMAINS = ("example.com", "example.org", "example.net", "localhost")
 UNDELIVERABLE_SUFFIXES = (".test", ".invalid", ".localhost")
-MIN_DURATION = 5
-MAX_DURATION = 8 * 60
 
 
 @frappe.whitelist()
@@ -61,7 +63,7 @@ def get_meetings(reference_doctype: str, reference_name: str | int) -> dict:
         row["attendee_count"] = len(replies)
         row["accepted"] = replies.count("Accepted")
         row["declined"] = replies.count("Declined")
-        row["can_cancel"] = row.status == SCHEDULED and _can_change(row)
+        row["can_cancel"] = row.status == SCHEDULED and can_change_meeting(row)
     return {
         "enabled": teams_meetings.is_enabled(),
         "upcoming": upcoming,
@@ -189,10 +191,12 @@ def _create_meeting(
 @frappe.whitelist(methods=["POST"])
 @agent_only
 def cancel_meeting(meeting: str, reason: str | None = None) -> dict:
-    """Cancels in Outlook (attendees are told) and marks the meeting cancelled."""
+    """Cancels in Outlook (attendees are told) and marks the meeting cancelled.
+    The reason is required: everyone invited reads it."""
     doc = frappe.get_doc("HD Meeting", meeting)
-    _reference(doc.reference_doctype, doc.reference_name)
-    if not _can_change(doc):
+    if doc.reference_doctype:
+        _reference(doc.reference_doctype, doc.reference_name)
+    if not can_change_meeting(doc):
         frappe.throw(
             _(
                 "Only the person who scheduled it or an Agent Manager can cancel this meeting."
@@ -200,16 +204,189 @@ def cancel_meeting(meeting: str, reason: str | None = None) -> dict:
             frappe.PermissionError,
         )
     reason = (reason or "").strip()
+    if not reason:
+        frappe.throw(_("Write why the meeting is cancelled."))
     try:
         doc.cancel_in_teams(reason)
     except teams_meetings.GraphError as e:
         frappe.throw(str(e), title=_("Meeting not cancelled"))
     doc.save(ignore_permissions=True)
-    doc.note_on_reference(
-        _("Teams meeting on {0} cancelled: {1}").format(doc.when_label(), doc.subject)
-        + (f" ({reason})" if reason else "")
-    )
+    because = f" ({reason})" if reason else ""
+    if doc.reference_doctype:
+        doc.note_on_reference(
+            _("Teams meeting on {0} cancelled: {1}").format(
+                doc.when_label(), doc.subject
+            )
+            + because
+        )
+    else:
+        me = frappe.session.user
+        doc.notify_staff(
+            _("Meeting on {0} cancelled: {1}").format(doc.when_label(), doc.subject)
+            + because,
+            skip_user=me,
+            deliver=False,
+        )
+        doc.email_attendees(
+            _("Meeting cancelled: {0} on {1}").format(doc.subject, doc.when_label()),
+            _("{0} cancelled this meeting.").format(frappe.utils.get_fullname(me)),
+            skip_user=me,
+        )
     return {"name": doc.name, "status": CANCELLED}
+
+
+@frappe.whitelist()
+@agent_only
+def get_meeting_people(
+    starts_on: str, ends_on: str, meeting: str | None = None
+) -> list[dict]:
+    """The active employees to invite to a meeting at this time; `busy` is the meeting
+    one is already in then (they can't be added). `meeting` is one being changed."""
+    start, end = _meeting_times(starts_on, ends_on)
+    busy = people_in_meetings(start, end, exclude=meeting)
+    return [
+        {**person, "busy": busy.get((person.email or "").lower())}
+        for person in _active_employees()
+    ]
+
+
+@frappe.whitelist(methods=["POST"])
+@agent_only
+def schedule_team_meeting(
+    subject: str,
+    starts_on: str,
+    ends_on: str,
+    attendees: str | list,
+    meeting_type: str | None = None,
+    agenda: str | None = None,
+    teams_link: int | str = 0,
+) -> dict:
+    """An internal meeting, about no ticket or task, with active employees who are
+    free then. Everyone invited is notified; with `teams_link` Outlook also sends the
+    invitations with a Teams link."""
+    start, end = _meeting_times(starts_on, ends_on)
+    if start < add_to_date(now_datetime(), minutes=-5):
+        frappe.throw(_("Pick a time in the future."))
+    subject = (subject or "").strip()
+    if not subject:
+        frappe.throw(_("Write what the meeting is for."))
+    if meeting_type and frappe.db.get_value(
+        "HD Meeting Type", meeting_type, "disabled"
+    ) in (None, 1):
+        frappe.throw(_("Pick a meeting type that is in use."))
+    people = _invited_employees(attendees, start, end)
+    teams = bool(cint(teams_link))
+    if teams and not teams_meetings.is_enabled():
+        frappe.throw(
+            _(
+                "Teams meetings are not set up. Ask an admin to fill in HD Meeting Settings."
+            )
+        )
+
+    me = frappe.session.user
+    meeting = frappe.get_doc(
+        {
+            "doctype": "HD Meeting",
+            "subject": subject,
+            "meeting_type": meeting_type or None,
+            "starts_on": start,
+            "ends_on": end,
+            "organizer": teams_meetings.organizer_mailbox()
+            if teams
+            else frappe.db.get_value("User", me, "email"),
+            "scheduled_by": me,
+            "agenda": (agenda or "").strip(),
+            "attendees": [{"email": p.email, "full_name": p.full_name} for p in people],
+        }
+    )
+    meeting.insert(ignore_permissions=True)
+    if teams:
+        try:
+            meeting.schedule_in_teams()
+        except teams_meetings.GraphError as e:
+            frappe.throw(str(e), title=_("Meeting not created"))
+        meeting.save(ignore_permissions=True)
+    invited = _("{0} invited you to a meeting on {1}: {2}").format(
+        frappe.utils.get_fullname(me), meeting.when_label(), meeting.subject
+    )
+    meeting.notify_staff(invited, skip_user=me, deliver=False)
+    meeting.email_attendees(
+        _("Meeting invitation: {0} on {1}").format(
+            meeting.subject, meeting.when_label()
+        ),
+        invited,
+    )
+    return {"name": meeting.name, "join_url": meeting.join_url}
+
+
+def _meeting_times(starts_on: str, ends_on: str):
+    start, end = get_datetime(starts_on), get_datetime(ends_on)
+    if not start or not end:
+        frappe.throw(_("Pick when the meeting starts and ends."))
+    minutes = (end - start).total_seconds() / 60
+    if minutes <= 0:
+        frappe.throw(_("The meeting must end after it starts."))
+    if not MIN_DURATION <= minutes <= MAX_DURATION:
+        frappe.throw(
+            _("A meeting is {0} to {1} minutes long.").format(
+                MIN_DURATION, MAX_DURATION
+            )
+        )
+    return start, end
+
+
+def _active_employees(users: list[str] | None = None) -> list[dict]:
+    """Employees who can be invited: an active HD Agent with an enabled account."""
+    agent = frappe.qb.DocType("HD Agent")
+    account = frappe.qb.DocType("User")
+    query = (
+        frappe.qb.from_(agent)
+        .join(account)
+        .on(account.name == agent.user)
+        .select(
+            agent.user,
+            agent.agent_name.as_("full_name"),
+            account.email,
+            account.user_image.as_("image"),
+        )
+        .where((agent.is_active == 1) & (account.enabled == 1))
+        .orderby(agent.agent_name)
+    )
+    if users is not None:
+        query = query.where(agent.user.isin(users or [""]))
+    return query.run(as_dict=True)
+
+
+def _invited_employees(attendees, start, end) -> list[dict]:
+    """The people to invite: each an active employee who is free at that time,
+    with MEETING_GAP minutes clear of their other meetings."""
+    users = attendees if isinstance(attendees, list) else json.loads(attendees or "[]")
+    users = list(dict.fromkeys(u for u in users if u))
+    if not users:
+        frappe.throw(_("Add at least one person."))
+    people = _active_employees(users)
+    missing = set(users) - {p.user for p in people}
+    if missing:
+        frappe.throw(
+            _("Only active employees can be invited: {0}").format(
+                ", ".join(sorted(missing))
+            )
+        )
+    busy = people_in_meetings(start, end)
+    clashing = [p for p in people if (p.email or "").lower() in busy]
+    if clashing:
+        frappe.throw(
+            _(
+                "In another meeting at that time, or within {0} minutes of it: {1}"
+            ).format(
+                MEETING_GAP,
+                ", ".join(
+                    f"{p.full_name} ({busy[p.email.lower()].subject})" for p in clashing
+                )
+            ),
+            title=_("Someone is busy"),
+        )
+    return people
 
 
 @frappe.whitelist(methods=["POST"])
@@ -239,7 +416,7 @@ def _reference(doctype: str, name):
     return doc
 
 
-def _can_change(meeting) -> bool:
+def can_change_meeting(meeting) -> bool:
     user = frappe.session.user
     return meeting.scheduled_by == user or bool(
         {"Agent Manager", "System Manager"} & set(frappe.get_roles(user))
