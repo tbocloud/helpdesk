@@ -16,6 +16,7 @@ from helpdesk.test_utils import (
     make_ticket,
     make_work_summary,
     run_as_user,
+    working_day_ago,
 )
 
 CUSTOMER = "Blue Lagoon Hospitality"
@@ -60,7 +61,7 @@ class WorkSummaryCase(FrappeTestCase):
 
 class TestStats(WorkSummaryCase):
     def test_overdue_excludes_held_tasks(self):
-        make_task(self.project, "Fix stock valuation", add_days(nowdate(), -2))
+        make_task(self.project, "Fix stock valuation", working_day_ago(2))
         held = make_task(self.project, "Import opening stock", add_days(nowdate(), -3))
         frappe.db.set_value(
             "Task",
@@ -177,9 +178,7 @@ class TestStats(WorkSummaryCase):
 
 class TestSummaryText(WorkSummaryCase):
     def test_plain_summary_when_ai_is_unavailable(self):
-        make_task(
-            self.project, "Fix <b>GST</b> report & print", add_days(nowdate(), -1)
-        )
+        make_task(self.project, "Fix <b>GST</b> report & print", working_day_ago(1))
         stats = work_summary.collect_customer_stats(CUSTOMER, self.start, self.end)
 
         with patch.object(

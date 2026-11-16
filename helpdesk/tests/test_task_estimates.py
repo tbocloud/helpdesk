@@ -15,6 +15,7 @@ from helpdesk.test_utils import (
     make_tasky_user,
     make_ticket,
     run_as_user,
+    saved_due,
     set_work_settings,
 )
 
@@ -162,7 +163,7 @@ class TestEstimates(EstimateCase):
             task = self.add_task(due_date=due)
         self.assertFalse(ai.called)
         self.assertEqual(
-            str(frappe.db.get_value("Task", task, "exp_end_date")), str(getdate(due))
+            getdate(frappe.db.get_value("Task", task, "exp_end_date")), saved_due(due)
         )
 
     def test_turned_off_means_no_estimate(self):
@@ -212,8 +213,8 @@ class TestExistingTasks(EstimateCase):
             task_estimates.add_working_days(nowdate(), 2),
         )
         self.assertEqual(
-            str(frappe.db.get_value("Task", dated.name, "exp_end_date")),
-            str(getdate(add_days(nowdate(), 9))),
+            getdate(frappe.db.get_value("Task", dated.name, "exp_end_date")),
+            saved_due(add_days(nowdate(), 9)),
         )
         with self.assertRaises(frappe.PermissionError):
             run_as_user(
