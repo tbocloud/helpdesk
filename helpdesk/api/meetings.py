@@ -382,7 +382,7 @@ def _invited_employees(attendees, start, end) -> list[dict]:
                 MEETING_GAP,
                 ", ".join(
                     f"{p.full_name} ({busy[p.email.lower()].subject})" for p in clashing
-                )
+                ),
             ),
             title=_("Someone is busy"),
         )
