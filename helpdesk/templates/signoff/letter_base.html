@@ -1,3 +1,7 @@
+{#- a sign-off document passes everything in `ctx` (its print format); the
+completion letter passes brand and title themselves -#} {%- if ctx is defined
+and ctx -%}{%- set brand = ctx.brand -%}{%- set title = ctx.title -%}{%- endif
+-%}
 <!DOCTYPE html>
 <html>
   <head>
@@ -24,6 +28,16 @@
       }
       .letterhead td {
         vertical-align: middle;
+      }
+      .letterhead-html {
+        margin-bottom: 8px;
+      }
+      .letterhead-html img {
+        max-width: 100%;
+      }
+      table.list.grid td,
+      table.list.grid th {
+        font-size: 10.5px;
       }
       .letterhead img {
         max-height: 36px;
@@ -101,14 +115,27 @@
         color: #5d6472;
         margin-top: 2px;
       }
-      .signature {
+      /* the customer's and our signature, side by side */
+      table.signatures {
+        width: 100%;
         margin-top: 22px;
-        padding: 12px 14px;
-        border: 1px solid #c9cdd6;
+        border-collapse: separate;
+        border-spacing: 10px 0;
         page-break-inside: avoid;
       }
-      .signature p {
-        margin: 0 0 6px;
+      table.signatures > tbody > tr > td,
+      table.signatures > tr > td {
+        width: 50%;
+        vertical-align: top;
+        padding: 10px 12px;
+        border: 1px solid #c9cdd6;
+      }
+      table.signatures table.facts {
+        margin: 0;
+      }
+      .sig-head {
+        font-weight: 600;
+        margin-bottom: 6px;
       }
       .mono {
         font-family: "SF Mono", Menlo, Consolas, monospace;
@@ -123,10 +150,14 @@
     </style>
   </head>
   <body>
+    {% if brand.letter_head %}
+    <!-- the site's default Letter Head, as Frappe prints it -->
+    <div class="letterhead-html">{{ brand.letter_head }}</div>
+    {% endif %}
     <table class="letterhead">
       <tr>
         <td>
-          {% if brand.logo %}<img
+          {% if brand.letter_head %}{% elif brand.logo %}<img
             src="{{ brand.logo }}"
             alt="{{ brand.name|e }}"
           />{% else %}<span class="brand">{{ brand.name|e }}</span>{% endif %}

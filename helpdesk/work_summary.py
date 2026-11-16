@@ -26,6 +26,7 @@ from frappe.utils import (
 from helpdesk.ai_engine import call_haiku
 from helpdesk.api.ticket_ai import html_to_text, truncate
 from helpdesk.tasky.api import hold_by_name, hold_by_names
+from helpdesk.work_calendar import overdue_cutoff
 from helpdesk.work_reminders import get_project_managers, notify_users
 
 PERIOD_DAYS = 7
@@ -295,7 +296,12 @@ def task_stats(tasks, projects, start, end, today) -> dict:
     still_open = [t for t in tasks if t.status not in CLOSED_TASK_STATUSES]
     # a held task's due date moves when it resumes, so it isn't counted as overdue
     active = [t for t in still_open if t.status != ON_HOLD]
-    overdue = [t for t in active if t.exp_end_date and getdate(t.exp_end_date) < today]
+    # a due date on a day off is due the next working day
+    overdue = [
+        t
+        for t in active
+        if t.exp_end_date and getdate(t.exp_end_date) < overdue_cutoff(today)
+    ]
     due_soon = [
         t
         for t in active

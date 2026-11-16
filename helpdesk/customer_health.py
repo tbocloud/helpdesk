@@ -68,14 +68,9 @@ WORK_RISK_OVERDUE = 3
 BURN_MIN, BURN_MARGIN = 50, 20
 
 SLA_FAILED = "Failed"
-OPEN_SIGNOFF_STATUSES = (
-    "Sent",
-    "In progress",
-    "Needs clarification",
-    "Ready to sign",
-    "Reopened",
-)
-NEEDS_CLARIFICATION = "Needs clarification"
+# with the customer, or back with us after they asked for changes
+OPEN_SIGNOFF_STATUSES = ("Sent", "Changes Requested")
+NOT_CLEAR = "Not clear"
 ESCALATED = "Escalated"
 
 CACHE_KEY = "helpdesk:customer_health"
@@ -292,13 +287,13 @@ def signoff_facts() -> dict[str, dict]:
         .on(
             (Item.parent == Signoff.name)
             & (Item.parenttype == "HD Project Signoff")
-            & (Item.response == ESCALATED)
+            & Item.response.isin([NOT_CLEAR, ESCALATED])
         )
         .select(
             Signoff.customer,
             Signoff.project,
-            Signoff.status,
-            Count(Item.name).as_("escalated"),
+            Count(Item.name).as_("follow_up"),
+            Sum(Case().when(Item.response == ESCALATED, 1).else_(0)).as_("escalated"),
         )
         .where(Signoff.customer.notnull() & (Signoff.customer != ""))
         .where(Signoff.status.isin(OPEN_SIGNOFF_STATUSES))
@@ -317,11 +312,10 @@ def signoff_facts() -> dict[str, dict]:
             },
         )
         row["in_progress"] += 1
-        row["needs_clarification"] += r.status == NEEDS_CLARIFICATION
-        row["escalated"] += r.escalated
-        if (r.status == NEEDS_CLARIFICATION or r.escalated) and r.project not in row[
-            "projects"
-        ]:
+        # an item the customer marked Not clear or Escalated is waiting on us
+        row["needs_clarification"] += bool(r.follow_up)
+        row["escalated"] += int(r.escalated or 0)
+        if r.follow_up and r.project not in row["projects"]:
             row["projects"].append(r.project)
     return facts
 

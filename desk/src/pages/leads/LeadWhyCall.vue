@@ -5,11 +5,11 @@
     :aria-label="__('Why call')"
   >
     <h2
-      class="border-b border-outline-gray-1 px-4 py-3 text-base-medium text-ink-gray-9"
+      class="border-b border-outline-gray-2 px-4 py-3 text-base-medium text-ink-gray-9"
     >
       {{ __("Why call") }}
     </h2>
-    <div class="flex flex-col gap-3 px-4 py-4">
+    <div class="flex flex-col gap-3 px-4 py-3">
       <p v-if="prospect.why_call" class="text-p-base text-ink-gray-8">
         {{ prospect.why_call }}
       </p>

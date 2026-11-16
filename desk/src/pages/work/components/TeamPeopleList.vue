@@ -19,6 +19,7 @@
 
     <TaskyState
       v-if="!people.length"
+      class="py-10"
       :icon="LucideUsers"
       :title="__('No one in this department yet')"
       :message="
@@ -30,7 +31,7 @@
 
     <template v-else>
       <div
-        class="hidden gap-3 border-b border-outline-gray-2 bg-surface-gray-1 px-4 py-2 text-xs text-ink-gray-5 lg:grid"
+        class="hidden h-11 items-center gap-3 border-b border-outline-gray-2 bg-surface-gray-1 px-5 text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6 lg:grid"
         :class="grid"
         aria-hidden="true"
       >

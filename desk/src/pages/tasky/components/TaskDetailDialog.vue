@@ -81,7 +81,13 @@
             <dt class="text-xs text-ink-gray-5">{{ row.label }}</dt>
             <dd
               class="mt-1 flex items-center gap-1.5 text-ink-gray-8"
-              :class="row.numeric ? 'tabular-nums' : ''"
+              :class="
+                row.mono
+                  ? 'select-all font-mono tabular-nums'
+                  : row.numeric
+                  ? 'tabular-nums'
+                  : ''
+              "
             >
               <component
                 :is="row.icon"
@@ -429,6 +435,8 @@ const detailRows = computed(() => {
   const d = detail.value;
   if (!d) return [];
   return [
+    // the number people quote in chat and standups
+    { label: __("Task number"), value: d.name, mono: true },
     {
       label: __("Status"),
       value: statusMeta(d.status).label,

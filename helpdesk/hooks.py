@@ -295,6 +295,8 @@ doc_events = {
             "helpdesk.chatwoot_bridge.on_communication_insert",
             "helpdesk.copilot.customer.on_communication_insert",
             "helpdesk.copilot.conversation.on_communication_insert",
+            # a customer's reply to a sign-off's mail (docs/project-signoff.md)
+            "helpdesk.helpdesk.doctype.hd_project_signoff.hd_project_signoff.on_communication_insert",
         ],
     },
     # customer health (helpdesk/customer_health.py) is cached for 10 minutes; a

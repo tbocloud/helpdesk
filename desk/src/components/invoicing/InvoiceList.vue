@@ -19,15 +19,16 @@
         :key="i"
         class="flex items-center gap-4 border-b border-outline-gray-1 px-4 py-3.5 last:border-b-0"
       >
-        <span class="h-3.5 w-1/4 animate-pulse rounded bg-surface-gray-2" />
+        <span class="h-3.5 w-1/4 animate-pulse rounded bg-surface-gray-3" />
         <span
-          class="ml-auto h-3.5 w-1/5 animate-pulse rounded bg-surface-gray-2"
+          class="ml-auto h-3.5 w-1/5 animate-pulse rounded bg-surface-gray-3"
         />
       </div>
     </div>
 
     <TaskyState
       v-else-if="list.error && !list.data"
+      class="py-10"
       :icon="LucideCircleAlert"
       :title="__('Couldn\'t load the invoices')"
       :message="

@@ -1,26 +1,33 @@
 <template>
   <div class="flex flex-col">
-    <LayoutHeader>
-      <template #left-header>
-        <div class="text-lg-medium text-ink-gray-9">
-          {{ __("Knowledge base") }}
-        </div>
-      </template>
+    <LayoutHeader
+      :title="__('Knowledge base')"
+      :subtitle="
+        __('Write, sort and publish the guides customers and agents read.')
+      "
+    >
       <template #right-header>
         <Dropdown :options="headerOptions">
-          <Button :label="__('New')" variant="solid">
+          <Button :label="__('New')" variant="solid" size="md">
             <template #prefix>
-              <LucidePlus class="h-4 w-4" />
+              <LucidePlus class="size-[18px]" aria-hidden="true" />
             </template>
           </Button>
         </Dropdown>
       </template>
     </LayoutHeader>
-    <ListViewBuilder
-      ref="listViewRef"
-      :options="options"
-      @row-click="(row) => $router.push(`kb/articles/${row}`)"
-    />
+    <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
+      <!-- relative: the list's loading overlay is placed against the card -->
+      <div
+        class="relative flex min-w-0 flex-col overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base pt-2"
+      >
+        <ListViewBuilder
+          ref="listViewRef"
+          :options="options"
+          @row-click="(row) => $router.push(`kb/articles/${row}`)"
+        />
+      </div>
+    </div>
     <CategoryModal
       :edit="editTitle"
       v-model="showCategoryModal"

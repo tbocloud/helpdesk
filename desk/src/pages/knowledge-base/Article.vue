@@ -17,6 +17,7 @@
             :label="
               article.data?.status === 'Draft' ? __('Publish') : __('Unpublish')
             "
+            size="md"
             :iconLeft="article.data?.status !== 'Published' && 'lucide-globe'"
             @click="toggleStatus()"
           />
@@ -24,43 +25,53 @@
       </template>
     </LayoutHeader>
 
-    <TaskyState
+    <div
       v-if="article.error && !article.data"
-      :icon="LucideFileX"
-      :title="__('This article isn\'t available')"
-      :message="
-        errorText(
-          article.error,
-          __('It may have been unpublished or moved. Try the knowledge base.')
-        )
-      "
-      error
+      class="flex w-full flex-col px-4 pb-10 pt-5 md:px-8"
     >
-      <Button :label="__('Retry')" @click="article.reload()" />
-      <Button
-        :label="__('Knowledge base')"
-        @click="
-          $router.push({
-            name: isCustomerPortal
-              ? 'CustomerKnowledgeBase'
-              : 'AgentKnowledgeBase',
-          })
-        "
-      />
-    </TaskyState>
+      <div
+        class="mx-auto w-full max-w-4xl rounded-xl border border-outline-gray-2 bg-surface-base"
+      >
+        <TaskyState
+          class="py-10"
+          :icon="LucideFileX"
+          :title="__('This article isn\'t available')"
+          :message="
+            errorText(
+              article.error,
+              __(
+                'It may have been unpublished or moved. Try the knowledge base.'
+              )
+            )
+          "
+          error
+        >
+          <Button :label="__('Retry')" @click="article.reload()" />
+          <Button
+            :label="__('Knowledge base')"
+            @click="
+              $router.push({
+                name: isCustomerPortal
+                  ? 'CustomerKnowledgeBase'
+                  : 'AgentKnowledgeBase',
+              })
+            "
+          />
+        </TaskyState>
+      </div>
+    </div>
     <!-- reading: the text at ~70 characters a line, contents beside it on wide screens -->
     <div
       v-else-if="!article.loading && article.data"
-      class="mx-auto grid w-full gap-8 px-4 py-4 md:px-5"
+      class="mx-auto grid w-full gap-4 px-4 pb-8 pt-4 md:px-8"
       :class="
-        showToc ? 'max-w-5xl lg:grid-cols-[minmax(0,1fr)_14rem]' : 'max-w-3xl'
+        showToc ? 'max-w-6xl lg:grid-cols-[minmax(0,1fr)_14rem]' : 'max-w-4xl'
       "
     >
-      <div class="flex min-w-0 flex-col gap-6">
-        <!-- article Info -->
+      <div class="flex min-w-0 flex-col gap-5">
+        <!-- the article on a white card, read or edited in place -->
         <div
-          class="flex flex-col gap-3 w-full"
-          :class="editable ? 'border rounded-lg overflow-hidden p-4' : 'py-4'"
+          class="flex w-full flex-col gap-3 overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base p-4 md:p-6"
         >
           <!-- Top Element -->
           <div class="flex flex-col gap-3">
@@ -113,7 +124,7 @@
                 </div>
                 <div
                   v-if="!editable && !isCustomerPortal && !isMobileView"
-                  class="text-p-sm text-ink-gray-4 items-center"
+                  class="text-p-sm text-ink-gray-6 items-center"
                 >
                   <span>{{ views }} views</span>
                 </div>
@@ -183,6 +194,7 @@
 
                     <Button
                       :label="__('Save')"
+                      size="md"
                       @click="handleSave"
                       variant="solid"
                     />
@@ -222,7 +234,7 @@
               <Avatar
                 :image="article.data.author.image"
                 :label="article.data.author.name"
-                size="lg"
+                size="md"
               />
               <div class="flex flex-col justify-start gap-1">
                 <p
@@ -244,7 +256,7 @@
 
                   <span
                     v-if="!editable && !isCustomerPortal && isMobileView"
-                    class="text-p-xs text-ink-gray-4 items-center"
+                    class="text-p-xs text-ink-gray-6 items-center"
                     >{{ views }} views</span
                   >
                 </div>
@@ -287,8 +299,10 @@
         class="hidden lg:block"
         :aria-label="__('On this page')"
       >
-        <div class="sticky top-4 flex flex-col gap-2 py-4">
-          <h2 class="text-sm font-medium text-ink-gray-8">
+        <div class="sticky top-4 flex flex-col gap-2 py-5">
+          <h2
+            class="text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6"
+          >
             {{ __("On this page") }}
           </h2>
           <ol class="flex flex-col border-l border-outline-gray-2">
@@ -317,15 +331,19 @@
     <!-- Loading State: the layout is known, so a skeleton -->
     <div
       v-if="article.loading && !article.data"
-      class="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-8 md:px-5"
+      class="flex w-full flex-col px-4 pb-10 pt-5 md:px-8"
       aria-busy="true"
       :aria-label="__('Loading article')"
     >
-      <div class="h-8 w-3/4 animate-pulse rounded bg-surface-gray-2" />
-      <div class="h-4 w-1/3 animate-pulse rounded bg-surface-gray-2" />
-      <div class="mt-4 h-4 w-full animate-pulse rounded bg-surface-gray-2" />
-      <div class="h-4 w-full animate-pulse rounded bg-surface-gray-2" />
-      <div class="h-4 w-5/6 animate-pulse rounded bg-surface-gray-2" />
+      <div
+        class="mx-auto flex w-full max-w-4xl flex-col gap-4 rounded-xl border border-outline-gray-2 bg-surface-base p-4 md:p-6"
+      >
+        <div class="h-8 w-3/4 animate-pulse rounded bg-surface-gray-3" />
+        <div class="h-4 w-1/3 animate-pulse rounded bg-surface-gray-3" />
+        <div class="mt-4 h-4 w-full animate-pulse rounded bg-surface-gray-3" />
+        <div class="h-4 w-full animate-pulse rounded bg-surface-gray-3" />
+        <div class="h-4 w-5/6 animate-pulse rounded bg-surface-gray-3" />
+      </div>
     </div>
     <MoveToCategoryModal
       v-model="moveToModal"

@@ -105,3 +105,30 @@ index 8363502..07f4551 100644
      },
  
      onKeyDown(props: SuggestionKeyDownProps): boolean {
+diff --git a/node_modules/frappe-ui/src/components/Button/Button.vue b/node_modules/frappe-ui/src/components/Button/Button.vue
+index 0000000..0000000 100644
+--- a/node_modules/frappe-ui/src/components/Button/Button.vue
++++ b/node_modules/frappe-ui/src/components/Button/Button.vue
+@@ -285,7 +285,8 @@
+         ...rootProps,
+         ...restAttrs,
+         class: [attrClass, buttonClasses.value],
+-        'aria-label': props.label,
++        // helpdesk patch: an icon-only button keeps the aria-label it was given
++        'aria-label': props.label || restAttrs['aria-label'],
+         'aria-busy': props.loading || undefined,
+         ref: rootRef,
+       }
+diff --git a/node_modules/frappe-ui/src/components/Dropdown/Dropdown.vue b/node_modules/frappe-ui/src/components/Dropdown/Dropdown.vue
+index 0000000..0000000 100644
+--- a/node_modules/frappe-ui/src/components/Dropdown/Dropdown.vue
++++ b/node_modules/frappe-ui/src/components/Dropdown/Dropdown.vue
+@@ -1,5 +1,7 @@
+ <template>
+-  <DropdownMenuRoot v-model:open="openModel" v-slot="{ open }">
++  <!-- helpdesk patch: not modal, so a click elsewhere while a menu is open (Start, another
++       menu) still lands instead of only closing it, and the page isn't hidden from readers -->
++  <DropdownMenuRoot v-model:open="openModel" :modal="false" v-slot="{ open }">
+     <DropdownMenuTrigger as-child @pointerdown="markPointerDown">
+       <slot
+         v-if="$slots.trigger"

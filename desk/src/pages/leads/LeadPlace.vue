@@ -4,9 +4,9 @@
     :aria-label="__('Place')"
   >
     <div
-      class="flex items-center gap-2 border-b border-outline-gray-1 px-4 py-3"
+      class="flex items-center gap-2 border-b border-outline-gray-2 px-4 py-3"
     >
-      <h2 class="text-base-medium text-ink-gray-9">{{ __("Place") }}</h2>
+      <h2 class="text-base font-semibold text-ink-gray-9">{{ __("Place") }}</h2>
       <Button
         v-if="canWrite && filled"
         class="ml-auto"
@@ -21,7 +21,7 @@
       </Button>
     </div>
 
-    <div v-if="!filled" class="flex flex-col items-start gap-3 px-4 py-4">
+    <div v-if="!filled" class="flex flex-col items-start gap-3 px-4 py-3">
       <p class="text-p-sm text-ink-gray-6">
         {{
           canWrite
@@ -38,7 +38,7 @@
       </Button>
     </div>
 
-    <div v-else class="flex flex-col gap-3 px-4 py-4">
+    <div v-else class="flex flex-col gap-3 px-4 py-3">
       <p
         v-if="place.location_note"
         class="whitespace-pre-line break-words text-base text-ink-gray-8"

@@ -316,6 +316,16 @@ const portalRoutes = [
     props: true,
   },
   {
+    // a new sign-off prepared in full (Edit in full page, docs/project-signoff.md)
+    path: "/projects/:projectId/signoff/new",
+    name: "TaskySignoffNew",
+    component: () => import("@/pages/tasky/SignoffEditor.vue"),
+    props: (route) => ({
+      projectId: route.params.projectId,
+      uat: route.query.uat === "1",
+    }),
+  },
+  {
     path: "/projects/:projectId/signoff/:signoffId",
     name: "TaskySignoff",
     component: () => import("@/pages/tasky/ProjectSignoff.vue"),

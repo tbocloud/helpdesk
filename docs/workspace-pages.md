@@ -1020,12 +1020,43 @@ One rule everywhere, on the server (`is_task_overdue` in `helpdesk/api/work.py`)
 browser (`isOverdue()` / `isOverEstimate()` in `taskMeta.ts`). A task that isn't Completed,
 Cancelled or On Hold is overdue when:
 
-- its due date (`exp_end_date`) has passed, or
+- its due date (`exp_end_date`) has passed, counting a due date on a day off as due on the
+  next working day (see "Due dates and days off" below), or
 - **it has been worked longer than its estimate**, whatever its due date and with none
   (owner's request, 2026-11-03): the timer's banked time plus its running stretch
   (`custom_timer_elapsed` + now − `custom_timer_start`) exceeds `custom_estimated_hours`. E.g. a
   30 min task (see [Estimate](#estimate)) moved to In progress at 10:00 and still open at 10:31
   is overdue, even if it's due next week. Until 2026-11-03 this counted only on the due date.
+
+#### Due dates and days off
+
+A task is never due on a day off, and never goes overdue over one (owner's request,
+2026-11-15). A day off is a day on the hub's holiday list (the default SLA's, which also holds
+the holidays synced from the CRM site), the weekly off or a Saturday off (HD Work Settings);
+`helpdesk/work_calendar.py`, "days off and task due dates", is the one place that decides.
+
+- **Saved:** a due date on a day off moves to the next working day when the task is saved
+  (`Task.move_due_off_day_off`), whatever set it: New task, Reschedule, Request help, a task
+  from a ticket or a repeat issue, a recurring task, an AI estimate or the end of a hold. Whoever
+  saved it gets a toast: *Sun 10 Jan is a weekly off, so the task is due Tue 12 Jan.*, and the
+  task's activity keeps a note for whoever opens it later, also when a job moved the date
+  (`Task.record_day_off_move`): *Due date moved off Sun 10 Jan (a weekly off) to Tue 12 Jan.* It runs
+  before `track_slip`, so the move is no slip of its own. A **content task** is due before its
+  post goes live, so it moves back to the working day before instead; when that day has passed
+  already it keeps its date.
+- **Before saving:** every due-date picker shows where the date will go, under the field
+  (`DueDateNote.vue`, asking `helpdesk.api.work_days.check_due_date`): New task, Reschedule,
+  Request help, Create task from a ticket, a repeat issue's task and a content role's due date.
+- **Overdue:** a task is overdue when its due date is before the **overdue cutoff**
+  (`work_calendar.overdue_cutoff`): today, moved back over the days off right before it. On a
+  Monday after a Sunday off the cutoff is Sunday, so a task due that Sunday (saved before this
+  rule, or a holiday added after its date was set) counts as due Monday and isn't overdue until
+  Tuesday. A plain date, so queries use it too: `is_task_overdue`, the Scoreboard's
+  `overdue_tasks`, team insights, the weekly summary, the competition's on-time check and a
+  content post's lateness. The browser asks for it once a day
+  (`helpdesk.api.work_days.get_overdue_cutoff`, `overdueCutoff()` in
+  `composables/workDays.ts`), so `isOverdue()` and the Calendar agree with the server; until it
+  arrives they count from today. The "at risk" reasons use the next working day the same way.
 
 The hours clock is the board timer, so it starts when the task moves to In progress (not when it
 was created or assigned), stops while the timer is paused, and counts work-day hours only (the

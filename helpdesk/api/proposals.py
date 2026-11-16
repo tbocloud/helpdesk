@@ -96,10 +96,15 @@ DOCUMENT_TYPES = ("Quotation", "Work Order", "BRD", "SRS", "Implementation Plan"
 
 
 @frappe.whitelist(methods=["POST"])
-def create_document(source: str, document_type: str) -> dict:
-    """The next client document, made on the ERP site from the accepted `source`
-    (a project agreement from a proposal, or from a quotation while the proposal
-    isn't the quotation; a BRD from a signed agreement …)."""
+def create_document(
+    source: str | None = None,
+    document_type: str | None = None,
+    lead: str | None = None,
+) -> dict:
+    """A step's client document, made on the ERP site from the accepted `source`
+    before it (a project agreement from a proposal, or from a quotation while the
+    proposal isn't the quotation; a BRD from a signed agreement …), or from the `lead`
+    when no document before it is accepted (after skipped steps, or out of order)."""
     require_leads()
     if document_type not in DOCUMENT_TYPES:
         frappe.throw(
@@ -107,15 +112,70 @@ def create_document(source: str, document_type: str) -> dict:
                 "Pick a quotation, a project agreement, a BRD, an SRS or an implementation plan."
             )
         )
+    source, lead = cstr(source).strip(), cstr(lead).strip()
+    if not (source or lead):
+        frappe.throw(_("Say which lead the document is for."))
+    where = {"source": source} if source else {"lead": lead}
     result = (
-        proposals(
-            "create_document", post=True, source=source, document_type=document_type
-        )
+        proposals("create_document", post=True, document_type=document_type, **where)
         or {}
     )
     if result.get("proposal"):
         clean_letter_head(result["proposal"])
     return result
+
+
+# --- a flexible chain: skip a step, bring one back ------------------------------
+
+STEP_STATUSES = ("Skipped", "Not used")
+MAX_SKIP_REASON = 500
+
+
+@frappe.whitelist(methods=["POST"])
+def skip_steps(
+    lead: str, document_types: list | str, reason: str, status: str = "Skipped"
+) -> dict:
+    """Mark the lead's steps Skipped (this client doesn't need them) or Not used (the
+    chain started after them), with a short reason. The ERP site checks who may (the
+    lead's owner, a head of its department or a manager) and what may be skipped.
+    Returns the chain."""
+    require_leads()
+    try:
+        picked = as_json_value(document_types, list)
+    except ValueError:
+        frappe.throw(_("Send the steps as a list."))
+    steps = [cstr(step).strip() for step in picked]
+    steps = [step for step in steps if step]
+    reason = cstr(reason).strip()
+    if not steps:
+        frappe.throw(_("Pick a step to skip."))
+    if not reason:
+        frappe.throw(_("Say why in a few words."))
+    if len(reason) > MAX_SKIP_REASON:
+        frappe.throw(_("Keep the reason under {0} characters.").format(MAX_SKIP_REASON))
+    if status not in STEP_STATUSES:
+        frappe.throw(_("A step is skipped or not used."))
+    chain = proposals(
+        "skip_steps",
+        post=True,
+        lead=lead,
+        document_types=frappe.as_json(steps, indent=None),
+        reason=reason,
+        status=status,
+    )
+    clear_cached_reads()
+    return chain
+
+
+@frappe.whitelist(methods=["POST"])
+def bring_back_step(lead: str, document_type: str) -> dict:
+    """A skipped or not-used step wanted again. Returns the chain."""
+    require_leads()
+    chain = proposals(
+        "bring_back_step", post=True, lead=lead, document_type=document_type
+    )
+    clear_cached_reads()
+    return chain
 
 
 # --- a BRD's questionnaire for the client --------------------------------------
@@ -274,6 +334,50 @@ def create_project_from_proposal(proposal: str) -> dict:
         proposal=code,
         url=project_url(project),
     )
+    return {"project": project, "chain": chain}
+
+
+@frappe.whitelist(methods=["POST"])
+def create_project_from_lead(lead: str) -> dict:
+    """The hub project straight from the lead, once: when no plan (or strategy proposal)
+    makes it (the steps before it skipped, or a repeat client starting at the project).
+    Named "<client> - <lead type>", with the client when an HD Customer has its name. The
+    ERP site keeps it on the lead's Project step, after checking the person may make it
+    now, and the chain moves on. A second call finds the project already made."""
+    from helpdesk.api.leads import get_lead
+
+    require_leads()
+    data = get_lead(lead) or {}
+    info = data.get("lead") or {}
+    client = info.get("company_name") or info.get("lead_name") or lead
+    existing = frappe.db.get_value(
+        "Project",
+        {
+            "custom_crm_lead": lead,
+            "custom_crm_plan": ("is", "not set"),
+            "custom_crm_proposal": ("is", "not set"),
+        },
+        "name",
+    )
+    project, created = ensure_project(
+        existing,
+        {"custom_crm_lead": lead},
+        project_name=f"{client} - {info.get('tbo_lead_type') or _('Project')}",
+        customer=frappe.db.exists("HD Customer", client) or None,
+    )
+    try:
+        chain = proposals(
+            "link_project",
+            post=True,
+            lead=lead,
+            project=project,
+            url=project_url(project),
+        )
+    except Exception:
+        if created:
+            # the ERP site refused it (not the person's to make, or not now): no stray project
+            frappe.delete_doc("Project", project, ignore_permissions=True, force=True)
+        raise
     return {"project": project, "chain": chain}
 
 

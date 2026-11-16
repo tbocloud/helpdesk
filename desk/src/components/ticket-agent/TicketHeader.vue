@@ -1,7 +1,7 @@
 <template>
   <LayoutHeader>
     <template #left-header>
-      <div class="flex flex-col truncate">
+      <div class="flex min-w-0 flex-col truncate">
         <Breadcrumbs :items="breadcrumbs" class="breadcrumbs -ml-0.5">
           <template #prefix="{ item }">
             <Icon
@@ -15,26 +15,29 @@
       </div>
     </template>
     <template #right-header>
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2.5">
         <MultipleAvatar
           :avatars="JSON.stringify(viewers)"
           size="md"
           :hide-name="true"
         />
-        <!-- Navigation -->
-        <TicketNavigation :key="ticket?.name" />
-        <!-- Custom Actions -->
-        <div v-if="normalActions.length" class="flex gap-2">
-          <Button v-for="action in normalActions" v-bind="action">
+        <!-- Previous / next ticket; below xl the breadcrumb needs the room (Shift+< and
+             Shift+> still work) -->
+        <div class="hidden xl:block">
+          <TicketNavigation :key="ticket?.name" />
+        </div>
+        <!-- Custom Actions: inline only where the header has room, else in More -->
+        <div v-if="roomyHeader && normalActions.length" class="flex gap-2">
+          <Button v-for="action in normalActions" size="md" v-bind="action">
             <template v-if="action.icon" #prefix>
               <FeatherIcon :name="action.icon" class="h-4 w-4" />
             </template>
           </Button>
         </div>
-        <div v-if="groupedWithLabelActions.length">
+        <div v-if="roomyHeader && groupedWithLabelActions.length">
           <div v-for="g in groupedWithLabelActions" :key="g.label">
             <Dropdown v-slot="{ open }" :options="g.action">
-              <Button :label="g.label">
+              <Button size="md" :label="g.label">
                 <template #suffix>
                   <FeatherIcon
                     :name="open ? 'chevron-up' : 'chevron-down'"
@@ -50,6 +53,7 @@
           <template #default="{ open }">
             <Button
               ref="statusRef"
+              size="md"
               :label="ticket.doc.status"
               :aria-label="__('Status: {0}. Change status', ticket.doc.status)"
               aria-keyshortcuts="s"
@@ -67,14 +71,18 @@
             </Button>
           </template>
         </Dropdown>
-        <!-- the side panel is a sheet below lg -->
+        <!-- the side panel is a sheet below lg. There Details, Merge and Reply show
+             only their icons (the label stays as the accessible name), so the header
+             fits beside the subject -->
         <Button
           class="lg:hidden"
-          :label="__('Details')"
+          size="md"
+          :aria-label="__('Details')"
+          :tooltip="__('Details')"
           :aria-expanded="detailsOpen"
           @click="emit('toggle-details')"
         >
-          <template #prefix>
+          <template #icon>
             <LucidePanelRight class="size-4" aria-hidden="true" />
           </template>
         </Button>
@@ -84,15 +92,18 @@
         </div>
         <Button
           v-if="showMergeOption"
+          size="md"
           :label="__('Merge')"
           @click="showMergeModal = true"
         >
           <template #prefix>
             <LucideMerge class="size-4" aria-hidden="true" />
           </template>
+          <span class="hidden lg:inline">{{ __("Merge") }}</span>
         </Button>
         <Button
           :variant="canResolve ? 'subtle' : 'solid'"
+          size="md"
           :label="__('Reply')"
           aria-keyshortcuts="r"
           @click="openReplyBox()"
@@ -100,11 +111,13 @@
           <template #prefix>
             <LucideReply class="size-4" aria-hidden="true" />
           </template>
+          <span class="hidden lg:inline">{{ __("Reply") }}</span>
         </Button>
         <!-- Primary action: the ticket is done -->
         <Button
           v-if="canResolve"
           variant="solid"
+          size="md"
           :label="resolveStatus.label_agent"
           @click="setStatus(resolveStatus.label_agent)"
         >
@@ -116,6 +129,7 @@
         <Dropdown :options="groupedActions" placement="right">
           <Button
             icon="lucide-more-horizontal"
+            size="md"
             :aria-label="__('More actions')"
           />
         </Dropdown>
@@ -179,6 +193,7 @@ import {
   watchEffect,
 } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { useMediaQuery } from "@vueuse/core";
 import LucideChevronDown from "~icons/lucide/chevron-down";
 import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideListPlus from "~icons/lucide/list-plus";
@@ -432,9 +447,25 @@ const groupedWithLabelActions = computed(() => {
   return _actions;
 });
 
+// The site's own buttons (form scripts) beside the core ones are wider than the
+// header below 2xl with the nav panel open, so there they join More.
+const roomyHeader = useMediaQuery("(min-width: 1536px)");
 const groupedActions = computed(() => {
   let _actions = [];
   _actions = _actions.concat(defaultActions.value);
+  if (!roomyHeader.value) {
+    if (normalActions.value.length) {
+      _actions.push({
+        group: "custom",
+        hideLabel: true,
+        items: normalActions.value,
+      });
+    }
+    // each labelled action is already a menu group of its own items
+    for (const g of groupedWithLabelActions.value) {
+      _actions.push(...g.action);
+    }
+  }
   _actions = _actions.concat(
     actions.value.filter((action) => action.group && !action.buttonLabel)
   );

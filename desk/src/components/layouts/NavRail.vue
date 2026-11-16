@@ -1,7 +1,7 @@
 <template>
   <nav
     :aria-label="__('Areas')"
-    class="flex h-full w-14 shrink-0 flex-col items-center gap-1 bg-[color:var(--surface-rail)] py-3"
+    class="flex h-full w-16 shrink-0 flex-col items-center gap-1.5 bg-[color:var(--surface-rail)] py-[18px]"
   >
     <RailButton
       v-if="!mobile"
@@ -26,7 +26,7 @@
       aria-hidden="true"
     />
 
-    <ul class="flex flex-col items-center gap-1">
+    <ul class="flex flex-col items-center gap-1.5">
       <li v-for="area in areas" :key="area.id">
         <RailButton
           :label="area.label"
@@ -41,7 +41,7 @@
       </li>
     </ul>
 
-    <div class="mt-auto flex flex-col items-center gap-1">
+    <div class="mt-auto flex flex-col items-center gap-1.5">
       <!-- the staff assistant's panel (Phase 6): the same chat as the TBO Copilot bot in Teams -->
       <RailButton
         v-if="!mobile && !isCustomerPortal"
@@ -81,7 +81,7 @@
             <Avatar
               :image="authStore.userImage"
               :label="authStore.userName"
-              size="lg"
+              size="md"
             />
           </button>
         </template>

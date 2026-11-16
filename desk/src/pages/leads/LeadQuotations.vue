@@ -5,18 +5,18 @@
     :aria-label="__('Quotations')"
   >
     <h2
-      class="border-b border-outline-gray-1 px-4 py-3 text-base-medium text-ink-gray-9"
+      class="border-b border-outline-gray-2 px-4 py-3 text-base-medium text-ink-gray-9"
     >
       {{ __("Quotations") }}
     </h2>
-    <p v-if="!quotations.length" class="px-4 py-4 text-p-sm text-ink-gray-6">
+    <p v-if="!quotations.length" class="px-4 py-3 text-p-sm text-ink-gray-6">
       {{ __("No quotations for this lead on the ERP site yet.") }}
     </p>
     <ul v-else role="list">
       <li
         v-for="q in quotations"
         :key="q.name"
-        class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-outline-gray-1 px-4 py-3 last:border-b-0"
+        class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-outline-gray-2 px-4 py-3 last:border-b-0"
       >
         <div class="flex min-w-0 flex-1 flex-col gap-0.5">
           <!-- staff only: the internal ERPNext Quotation, opened on the ERP site's desk -->

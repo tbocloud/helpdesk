@@ -3,10 +3,11 @@ import { defineStore } from "pinia";
 import { useStorage } from "@vueuse/core";
 import { useAuthStore } from "@/stores/auth";
 
-// The rail is 3.5rem and the panel 15rem; the Notifications panel anchors
-// against their sum.
+// The rail is 3.5rem and the panel 15rem open or 3.5rem folded to icons; the
+// Notifications panel anchors against their sum.
 const RAIL_WIDTH = 3.5;
 const PANEL_WIDTH = 15;
+const FOLDED_PANEL_WIDTH = 3.5;
 
 export const useSidebarStore = defineStore("sidebar", () => {
   // Per person, so two people on one browser keep their own menu. The panel opens
@@ -16,9 +17,11 @@ export const useSidebarStore = defineStore("sidebar", () => {
   // The keys follow the signed-in person: the user loads after the store is made.
   const auth = useAuthStore();
   const who = computed(() => auth.userId || "guest");
+  // Until the person chooses, the panel starts folded below lg: on a tablet its 15rem
+  // would leave the page too narrow to use.
   const isPanelOpen = useStorage(
     computed(() => `nav_panel_open:${who.value}`),
-    true
+    window.matchMedia("(min-width: 1024px)").matches
   );
   // folded-open items (a tree of saved views); only a click folds one shut
   const openTrees = useStorage<Record<string, boolean>>(
@@ -29,7 +32,10 @@ export const useSidebarStore = defineStore("sidebar", () => {
   const selectedAreaId = ref<string | null>(null);
 
   const width = computed(
-    () => `${RAIL_WIDTH + (isPanelOpen.value ? PANEL_WIDTH : 0)}rem`
+    () =>
+      `${
+        RAIL_WIDTH + (isPanelOpen.value ? PANEL_WIDTH : FOLDED_PANEL_WIDTH)
+      }rem`
   );
 
   // trees open until their person closes them

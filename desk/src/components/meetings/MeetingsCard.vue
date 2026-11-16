@@ -1,7 +1,7 @@
 <template>
   <section
     v-if="visible"
-    :class="flush ? '' : 'px-5 py-4'"
+    :class="flush ? '' : 'px-4 py-3'"
     :aria-labelledby="headingId"
   >
     <div class="mb-2.5 flex items-center justify-between gap-2">
@@ -45,7 +45,7 @@
       <li
         v-for="m in data.upcoming"
         :key="m.name"
-        class="rounded-md border border-outline-gray-2 p-2.5"
+        class="rounded-xl border border-outline-gray-2 p-3"
       >
         <p class="font-mono text-xs tabular-nums text-ink-gray-6">
           {{ when(m) }}

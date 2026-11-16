@@ -2,35 +2,48 @@
   <!-- one row of numbers, all from what get_home already sends -->
   <section
     :aria-label="__('Your numbers today')"
-    class="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-outline-gray-2 bg-outline-gray-2 sm:grid-cols-4"
+    class="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4"
   >
-    <div
+    <StatTile
       v-for="cell in cells"
       :key="cell.key"
-      class="bg-surface-base px-4 py-4"
+      :label="cell.label"
+      :value="cell.value"
+      :icon="ICONS[cell.key]"
+      :icon-tone="
+        cell.alert ? 'danger' : cell.key === 'due_today' ? 'warning' : 'brand'
+      "
     >
-      <p class="text-p-sm text-ink-gray-6">{{ cell.label }}</p>
-      <p
-        class="mt-1.5 font-mono text-2xl font-medium tabular-nums text-ink-gray-9"
-      >
-        {{ cell.value }}
-      </p>
-      <p
-        class="mt-0.5 text-p-xs"
-        :class="cell.alert ? 'text-danger' : 'text-ink-gray-5'"
+      <span
+        class="text-[12px] tabular-nums"
+        :class="cell.alert ? 'text-danger' : 'text-ink-gray-6'"
       >
         {{ cell.hint }}
-      </p>
-    </div>
+      </span>
+    </StatTile>
   </section>
 </template>
 
 <script setup lang="ts">
+import StatTile from "@/components/StatTile.vue";
 import { __ } from "@/translation";
-import { computed } from "vue";
+import { computed, type Component } from "vue";
+import LucideCalendarClock from "~icons/lucide/calendar-clock";
+import LucideFolderKanban from "~icons/lucide/folder-kanban";
+import LucideListTodo from "~icons/lucide/list-todo";
+import LucideMessageSquareReply from "~icons/lucide/message-square-reply";
+import LucideTicket from "~icons/lucide/ticket";
 import type { Company, YourDay } from "../homeMeta";
 
 const props = defineProps<{ day: YourDay; company: Company | null }>();
+
+const ICONS: Record<string, Component> = {
+  open: LucideListTodo,
+  due_today: LucideCalendarClock,
+  replies: LucideMessageSquareReply,
+  tickets: LucideTicket,
+  projects: LucideFolderKanban,
+};
 
 interface Cell {
   key: string;

@@ -11,6 +11,7 @@
   >
     <TaskyState
       v-if="!projects.length"
+      class="py-10"
       :icon="LucideFolderKanban"
       :title="__('No shared projects here')"
       :message="
@@ -23,7 +24,7 @@
       <li
         v-for="p in projects"
         :key="p.project"
-        class="flex flex-col gap-3 border-b border-outline-gray-1 px-4 py-3.5 last:border-b-0 lg:grid lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1.7fr)] lg:items-start lg:gap-6"
+        class="flex flex-col gap-3 border-b border-outline-gray-1 px-4 py-3 last:border-b-0 lg:grid lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1.7fr)] lg:items-start lg:gap-6"
         :class="highlight === p.project ? 'bg-surface-gray-1' : ''"
       >
         <!-- project -->

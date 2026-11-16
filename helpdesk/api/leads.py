@@ -16,11 +16,12 @@ from frappe.utils import (
     today,
 )
 
-from helpdesk import whatsapp_outreach
+from helpdesk import lead_mirror_read, whatsapp_outreach
 from helpdesk.api import pending_calls
 from helpdesk.content_team import is_sales_bd_role, only_sales_team
 from helpdesk.integrations.crm.leads import (
     LeadsError,
+    LeadsNotDeployedError,
     LeadsUnavailableError,
     call,
     call_if_deployed,
@@ -29,8 +30,20 @@ from helpdesk.integrations.crm.leads import (
 )
 
 VIEWS = ("all", "mine", "call_today", "follow_up", "called")
+# what the hub's copy of the leads can answer while the ERP site is away (docs/lead-mirror.md)
+COPY_VIEWS = ("all", "mine")
+COPY_PARAMS = {
+    "view",
+    "mine",
+    "search",
+    "start",
+    "page_length",
+    *lead_mirror_read.FILTER_COLUMNS,
+}
 # when a lead's earliest open follow-up is due: the Follow-up view's cards
 DUE_BUCKETS = ("overdue", "today", "tomorrow", "week", "later")
+# the tabs with a Follow-up due date filter
+DUE_DAYS_VIEWS = ("follow_up", "mine")
 PERIODS = ("today", "yesterday", "week", "month", "quarter", "custom")
 # a day is a custom range of that one day on the ERP site, which an older TBO Smart reads too
 DAYS_AGO = {"today": 0, "yesterday": 1}
@@ -177,11 +190,15 @@ def list_leads(
     # the page sends null while the Created by filter is off
     created_by_me: bool | int | str | None = None,
     due: str | None = None,
+    due_from: str | None = None,
+    due_to: str | None = None,
 ) -> dict:
     """A page of leads. `view` called lists the leads called at least once, last called first
     (`from_date` and `to_date` without a `metric` keep those last called in those days);
     `created_by_me` keeps the leads the person created, whoever owns them now. `due` (Follow-up only) keeps the leads whose earliest open
-    follow-up is overdue, today, tomorrow, in the week after (`week`) or `later`. `industry`, `state`, `district`, `org_size`, `product`, `last_call_result`
+    follow-up is overdue, today, tomorrow, in the week after (`week`) or `later`. `due_from` and
+    `due_to` (Follow-up and Mine only; either may be left out) keep the leads whose earliest open
+    follow-up falls in those days, earliest first; on Follow-up they take the place of `due`. `industry`, `state`, `district`, `org_size`, `product`, `last_call_result`
     (the outcome of the lead's last call) and `last_reply_class` (how its last email reply
     was sorted) each take one value or a list (any of them); a
     list goes to the ERP site as JSON. `metric` with its period keeps the leads one number of the
@@ -192,6 +209,8 @@ def list_leads(
         frappe.throw(_("Pick All, Mine, Call today, Follow-up or Called."))
     if due and due not in DUE_BUCKETS:
         frappe.throw(_("Pick when the follow-ups are due."))
+    # only the tabs that show the dates, read before a BD's All becomes Mine
+    due_days = follow_up_days(due_from, due_to) if view in DUE_DAYS_VIEWS else {}
     mine = False
     if is_bd():
         # another BD may be calling the same lead: every list of a BD is the leads they own or
@@ -215,8 +234,7 @@ def list_leads(
             "from_date": from_date or None,
             "to_date": to_date or None,
         }
-    result = call(
-        "list_leads",
+    params = dict(
         search=(search or "").strip() or None,
         stage=stage or None,
         owner=owner or None,
@@ -238,12 +256,50 @@ def list_leads(
         view=view,
         mine=1 if mine else None,
         created_by_me=1 if cint(created_by_me) else None,
-        **({"due": due} if due and view == "follow_up" else {}),
+        **({"due": due} if due and view == "follow_up" and not due_days else {}),
+        **due_days,
         # cint: a malformed number is 0, never a server error
         start=max(cint(start), 0),
         page_length=min(max(cint(page_length) or 20, 1), MAX_PAGE),
     )
+    result = read_or_copy(
+        lambda: call("list_leads", **params), lambda: list_from_copy(params)
+    )
     return result or {"rows": [], "total": 0}
+
+
+def read_or_copy(read, copy):
+    """`read` from the ERP site; when it can't be used right now and the hub's copy of the
+    leads is ready, `copy` instead (docs/lead-mirror.md, phase 2a). The ERP's error stands
+    when the copy has no answer either (`copy` returns None)."""
+    try:
+        return read()
+    except LeadsUnavailableError as error:
+        if isinstance(error, LeadsNotDeployedError) or not lead_mirror_read.ready():
+            raise
+        answer = copy()
+        if answer is None:
+            raise
+        # frappe.throw queued the ERP's error for a toast; the page says it its own way
+        frappe.clear_last_message()
+        return answer
+
+
+def list_from_copy(params: dict) -> dict | None:
+    """The Leads list from the hub's copy: All and Mine, with the search and the filters the
+    copy has columns for. None for anything else (a tab or filter only the ERP can work out),
+    so the person is told the ERP is away instead of shown a wrong list."""
+    asked = {key for key, value in params.items() if value not in (None, "")}
+    if params["view"] not in COPY_VIEWS or asked - COPY_PARAMS:
+        return None
+    return lead_mirror_read.list_copy(
+        frappe.session.user,
+        search=params["search"],
+        mine=params["view"] == "mine" or bool(params["mine"]),
+        start=params["start"],
+        page_length=params["page_length"],
+        **{key: params.get(key) for key in lead_mirror_read.FILTER_COLUMNS},
+    )
 
 
 @frappe.whitelist()
@@ -650,6 +706,19 @@ def check_period(
         frappe.throw(_("Pick both dates for your own period."))
 
 
+def follow_up_days(due_from: str | None, due_to: str | None) -> dict:
+    """The follow-up days as the ERP site takes them, only the sides given (an older ERP site
+    without them still answers while the filter is off)."""
+    days = {
+        key: str(getdate(value))
+        for key, value in (("due_from", due_from), ("due_to", due_to))
+        if value
+    }
+    if len(days) == 2 and days["due_to"] < days["due_from"]:
+        frappe.throw(_("The follow-up end date is before the start date."))
+    return days
+
+
 def erp_period(period: str, from_date: str | None, to_date: str | None) -> dict:
     """The period as the ERP site takes it: today and yesterday as a one-day custom range;
     dates only for a custom period."""
@@ -668,7 +737,13 @@ def erp_period(period: str, from_date: str | None, to_date: str | None) -> dict:
 def get_lead(name: str) -> dict:
     """The lead, its timeline, its quotations and the stages it may move to."""
     require_leads()
-    detail = call("get_lead", name=name) or {}
+    detail = (
+        read_or_copy(
+            lambda: call("get_lead", name=name),
+            lambda: lead_mirror_read.lead_copy(frappe.session.user, name),
+        )
+        or {}
+    )
     lead = detail.get("lead", {})
     user = frappe.session.user
     if user not in (lead.get("lead_owner"), lead.get("created_by")) and is_bd():
@@ -1158,6 +1233,44 @@ def click_to_call(name: str, number: str | None = None) -> dict:
         )
         or {}
     )
+
+
+@frappe.whitelist()
+def get_call_status(reference_id: str) -> dict:
+    """Where the signed-in person's click-to-call is, for the call box: `state` is
+    calling, ringing, ringing_lead, on_call or ended (the ERP site answers only the person
+    who placed the call)."""
+    require_leads()
+    return (
+        call(
+            "get_call_status",
+            api=TELEPHONY,
+            reference_id=(reference_id or "").strip(),
+        )
+        or {}
+    )
+
+
+@frappe.whitelist(methods=["POST"])
+def refresh_call(reference_id: str) -> dict:
+    """The call box's last try when it can't see a call any more: the ERP site looks the
+    signed-in person's own recent calls up at the provider and stores the missing ones.
+    `{stored}`; `{stored: 0}` while the ERP site's TBO Smart is older than this."""
+    require_leads()
+    return call_if_deployed(
+        "refresh_call",
+        post=True,
+        api=TELEPHONY,
+        reference_id=(reference_id or "").strip(),
+    ) or {"stored": 0}
+
+
+@frappe.whitelist()
+def get_incoming_call() -> dict:
+    """{enabled, call}: the call coming in to the signed-in person now, for the incoming
+    notice; `enabled` false means they aren't set up for calling and the page stops asking."""
+    require_leads()
+    return call("get_incoming_call", api=TELEPHONY) or {}
 
 
 @frappe.whitelist()

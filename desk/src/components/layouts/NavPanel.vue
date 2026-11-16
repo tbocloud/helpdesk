@@ -3,21 +3,17 @@
     id="nav-panel"
     :aria-label="__('Menu')"
     class="flex h-full shrink-0 flex-col border-e border-outline-gray-2 bg-surface-sidebar"
-    :class="mobile ? 'min-w-0 flex-1' : 'w-60'"
+    :class="mobile ? 'min-w-0 flex-1' : 'w-[248px]'"
   >
-    <div class="flex shrink-0 flex-col gap-2 px-3 pt-3">
+    <div class="flex shrink-0 flex-col gap-1 px-4 pt-5">
       <!-- who this workspace is; the account menu lives on the rail's avatar -->
-      <div
-        class="flex items-center gap-2 rounded-xl border border-outline-gray-2 bg-surface-base px-2 py-1.5"
-      >
-        <BrandLogo class="!size-8 !rounded-[8px] !font-bold" />
-        <div class="flex min-w-0 flex-1 flex-col gap-0.5">
-          <div
-            class="truncate text-base font-semibold leading-tight text-ink-gray-9"
-          >
+      <div class="flex items-center gap-3 px-2 pb-4 pt-1">
+        <BrandLogo class="!size-10 !rounded-xl !text-[14px] !font-bold" />
+        <div class="flex min-w-0 flex-1 flex-col">
+          <div class="truncate text-[14px] font-bold text-ink-gray-9">
             {{ config.brandName }}
           </div>
-          <div class="truncate text-xs leading-tight text-ink-gray-6">
+          <div class="truncate text-[12px] text-ink-gray-6">
             {{ subLine }}
           </div>
         </div>
@@ -26,18 +22,18 @@
       <button
         v-if="showSearch"
         type="button"
-        class="flex h-9 w-full items-center gap-2.5 rounded-xl border border-outline-gray-2 bg-surface-base px-3 text-start transition-colors hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+        class="mb-1 flex h-10 w-full items-center gap-2.5 rounded-[10px] border border-outline-gray-2 bg-surface-gray-1 px-3 text-start transition-colors hover:bg-surface-gray-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
         @click="emit('search')"
       >
         <LucideSearch
-          class="size-3.5 shrink-0 text-ink-gray-6"
+          class="size-4 shrink-0 text-ink-gray-6"
           aria-hidden="true"
         />
-        <span class="flex-1 truncate text-base text-ink-gray-6">
+        <span class="flex-1 truncate text-[13px] text-ink-gray-6">
           {{ __("Search") }}
         </span>
         <kbd
-          class="flex items-center gap-0.5 rounded-[4px] bg-surface-gray-2 px-1.5 py-0.5 text-2xs text-ink-gray-6"
+          class="flex items-center gap-0.5 rounded-md border border-outline-gray-3 bg-surface-base px-1.5 py-px text-xs text-ink-gray-6"
         >
           <component
             :is="device.modifierIcon"
@@ -53,7 +49,7 @@
     <h2
       v-if="area"
       :id="`nav-area-${area.id}`"
-      class="shrink-0 px-5 pb-1 pt-3 text-sm font-semibold text-ink-gray-9"
+      class="shrink-0 px-7 pb-1 pt-3 text-[14px] font-bold text-ink-gray-9"
     >
       {{ area.label }}
     </h2>
@@ -61,16 +57,16 @@
     <nav
       v-if="area"
       :aria-labelledby="`nav-area-${area.id}`"
-      class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-2"
+      class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-2"
     >
       <section
         v-for="(group, index) in area.groups"
         :key="index"
-        class="mt-3 first:mt-0"
+        class="mt-[18px] first:mt-1"
       >
         <h3
           v-if="group.label"
-          class="mb-1 px-2 text-2xs font-semibold uppercase tracking-wider text-ink-gray-5"
+          class="mb-1.5 px-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-gray-6"
         >
           {{ group.label }}
         </h3>
@@ -89,16 +85,13 @@
               >
                 <component
                   :is="item.icon"
-                  class="size-4 shrink-0"
-                  :class="
-                    isActive(item.id) ? 'text-brand-ink' : 'text-ink-gray-6'
-                  "
+                  class="size-[18px] shrink-0"
                   aria-hidden="true"
                 />
                 <span class="flex-1 truncate">{{ item.label }}</span>
                 <span
                   v-if="badge(item.countKey)"
-                  class="font-mono text-xs tabular-nums text-ink-gray-6"
+                  class="rounded-full bg-brand px-2 py-0.5 text-xs font-semibold tabular-nums text-brand-on"
                   :aria-label="__('{0} waiting', String(badge(item.countKey)))"
                 >
                   {{ badge(item.countKey) > 99 ? "99+" : badge(item.countKey) }}
@@ -122,7 +115,7 @@
             >
               <component
                 :is="tree.icon"
-                class="size-4 shrink-0 text-ink-gray-6"
+                class="size-[18px] shrink-0"
                 aria-hidden="true"
               />
               <span class="flex-1 truncate">{{ tree.label }}</span>
@@ -189,7 +182,7 @@
       </section>
     </nav>
 
-    <div class="flex shrink-0 flex-col gap-1.5 px-3 pb-3 pt-2">
+    <div class="flex shrink-0 flex-col gap-2 px-4 pb-4 pt-2">
       <FollowUpStrip v-if="showFollowUps" :summary="followUps" compact />
       <slot name="footer" />
       <slot name="footer-items" />
@@ -232,11 +225,12 @@ const config = useConfigStore();
 const sidebarStore = useSidebarStore();
 
 const rowClass = [
-  "flex items-center gap-2.5 rounded-lg px-2 text-base transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight",
+  "flex items-center gap-3 rounded-[10px] px-3 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight",
   props.mobile ? "min-h-11" : "min-h-9",
 ].join(" ");
 const activeClass = "bg-brand-soft font-semibold text-brand-ink";
-const idleClass = "text-ink-gray-8 hover:bg-surface-gray-2";
+const idleClass =
+  "text-ink-gray-7 hover:bg-surface-gray-3 hover:text-ink-gray-9";
 
 const isActive = (id: string) => props.activeId === id;
 const badge = (key?: string): number =>

@@ -3,12 +3,14 @@
     <ProjectNav ref="nav" :project-id="projectId">
       <template #actions>
         <Button
-          variant="ghost"
+          size="md"
           :label="__('Refresh')"
           :loading="files.loading && !!files.data"
           @click="files.reload()"
         >
-          <template #icon><LucideRefreshCw class="size-4" /></template>
+          <template #icon
+            ><LucideRefreshCw class="size-[18px]" aria-hidden="true"
+          /></template>
         </Button>
       </template>
     </ProjectNav>
@@ -35,10 +37,11 @@
         </span>
       </div>
 
-      <div class="mx-auto w-full max-w-5xl px-4 py-5 md:px-6">
+      <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
         <p class="sr-only" aria-live="polite">{{ announcement }}</p>
         <TaskyState
           v-if="files.error && (!files.data || stale)"
+          class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
           error
           :icon="LucideCircleAlert"
           :title="
@@ -57,7 +60,7 @@
         </TaskyState>
 
         <template v-else>
-          <div class="mb-4 flex flex-wrap items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2">
             <nav
               v-if="folderId && !forMe"
               :aria-label="__('Breadcrumb')"
@@ -159,7 +162,7 @@
           <!-- the open folder: what it's for and who it's for -->
           <div
             v-if="currentFolder && !stale"
-            class="-mt-2 mb-4 flex flex-col gap-1.5"
+            class="-mt-3 flex flex-col gap-1.5"
           >
             <div
               v-if="supersededVia(currentFolder)"
@@ -193,7 +196,7 @@
           <!-- superseded versions are hidden by default, so the current set is clear -->
           <p
             v-if="files.data && !stale && (hiddenCount || showSuperseded)"
-            class="mb-3 flex flex-wrap items-center gap-x-1.5 text-xs text-ink-gray-6"
+            class="-mt-2 flex flex-wrap items-center gap-x-1.5 text-xs text-ink-gray-6"
           >
             <LucideArchive class="size-3.5" aria-hidden="true" />
             <span v-if="showSuperseded">
@@ -225,15 +228,15 @@
             <div
               v-for="i in 3"
               :key="i"
-              class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-3.5 last:border-b-0"
+              class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-3 last:border-b-0"
             >
-              <div class="size-8 animate-pulse rounded-md bg-surface-gray-2" />
+              <div class="size-8 animate-pulse rounded-md bg-surface-gray-3" />
               <div class="flex flex-1 flex-col gap-2">
                 <div
-                  class="h-3.5 w-2/5 animate-pulse rounded bg-surface-gray-2"
+                  class="h-3.5 w-2/5 animate-pulse rounded bg-surface-gray-3"
                 />
                 <div
-                  class="h-3 w-1/4 animate-pulse rounded bg-surface-gray-2"
+                  class="h-3 w-1/4 animate-pulse rounded bg-surface-gray-3"
                 />
               </div>
             </div>
@@ -243,7 +246,7 @@
             <!-- the folders in this one (or at the top level) -->
             <ul
               v-if="!forMe && subfolders.length"
-              class="mb-4 overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
+              class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
               role="list"
               :aria-label="__('Folders')"
             >
@@ -368,6 +371,7 @@
                 !files.data.files.length &&
                 (forMe || !subfolders.length)
               "
+              class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
               :icon="LucideArchive"
               :title="__('Only superseded versions here')"
               :message="
@@ -384,6 +388,7 @@
 
             <TaskyState
               v-else-if="forMe && !files.data.files.length"
+              class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
               :icon="LucideUserCheck"
               :title="__('Nothing is marked for you')"
               :message="
@@ -399,6 +404,7 @@
               v-else-if="
                 currentFolder && !files.data.files.length && !subfolders.length
               "
+              class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
               :icon="LucideFolderOpen"
               :title="__('This folder is empty')"
               :message="
@@ -425,6 +431,7 @@
               v-else-if="
                 !currentFolder && !files.data.files.length && !subfolders.length
               "
+              class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
               :icon="LucidePaperclip"
               :title="__('No files yet')"
               :message="
@@ -673,7 +680,7 @@
       :open="!!editingFor"
       :title="__('Who is it for?')"
       :message="editingFor?.label"
-      size="lg"
+      size="md"
       @update:open="(v: boolean) => !v && (editingFor = null)"
     >
       <FileForPicker

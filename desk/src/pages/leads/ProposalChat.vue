@@ -6,9 +6,9 @@
     :aria-labelledby="titleId"
   >
     <div
-      class="flex items-center gap-2 border-b border-outline-gray-1 px-4 py-3"
+      class="flex items-center gap-2 border-b border-outline-gray-2 px-4 py-3"
     >
-      <h2 :id="titleId" class="text-base-medium text-ink-gray-9">
+      <h2 :id="titleId" class="text-base font-semibold text-ink-gray-9">
         {{ __("Proposal assistant") }}
       </h2>
       <span class="text-p-sm tabular-nums text-ink-gray-5">
@@ -30,7 +30,7 @@
 
     <ol
       ref="logEl"
-      class="flex min-h-[16rem] flex-1 flex-col gap-3 overflow-y-auto px-4 py-4"
+      class="flex min-h-[16rem] flex-1 flex-col gap-3 overflow-y-auto px-4 py-3"
       role="log"
       aria-live="polite"
       :aria-label="__('Conversation')"
@@ -55,7 +55,7 @@
       </li>
     </ol>
 
-    <div class="flex flex-col gap-3 border-t border-outline-gray-1 p-4">
+    <div class="flex flex-col gap-3 border-t border-outline-gray-2 p-5">
       <template v-if="current">
         <div
           v-if="chips.length"

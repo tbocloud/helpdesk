@@ -1,88 +1,91 @@
 <template>
-  <LayoutHeader>
-    <template #left-header>
-      <Breadcrumbs
-        :items="[
-          { label: __('Notifications'), route: { name: 'Notifications' } },
-        ]"
-      />
-    </template>
+  <LayoutHeader
+    :title="__('Notifications')"
+    :subtitle="__('Mentions, assignments and replies on your tickets.')"
+  >
     <template #right-header>
       <Tooltip :text="__('Mark all as read')">
         <div>
           <Button
+            size="md"
             :label="__('Mark all as read')"
             @click="() => notificationStore.clear.submit()"
           >
             <template #prefix>
-              <LucideCheckCheck class="h-4 w-4" />
+              <LucideCheckCheck class="size-[18px]" />
             </template>
           </Button>
         </div>
       </Tooltip>
     </template>
   </LayoutHeader>
-  <div v-if="notificationStore.data.length" class="divide-y text-base">
-    <component
-      :is="isOutside(n) ? 'a' : RouterLink"
-      v-for="n in notificationStore.data"
-      :key="n.name"
-      class="flex cursor-pointer items-start gap-3.5 px-5 py-2.5 hover:bg-surface-gray-2"
-      v-bind="linkProps(n)"
-      @click="
-        () => {
-          notificationStore.read(n);
-        }
-      "
+  <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
+    <div
+      v-if="notificationStore.data.length"
+      class="divide-y divide-outline-gray-1 overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base text-base"
     >
-      <NotificationIcon :notification="n" />
-      <div>
-        <div
-          v-if="isTextOnly(n)"
-          class="mb-2 whitespace-pre-line leading-5 text-ink-gray-8"
-        >
-          {{ n.message }}
-        </div>
-        <div v-else class="mb-2 leading-5">
-          <span class="space-x-1 rtl:space-x-reverse text-ink-gray-7">
-            <span class="font-medium text-ink-gray-9">{{ n.user_from }}</span>
-            <span v-if="n.notification_type === 'Mention'">{{
-              __("mentioned you in ticket")
-            }}</span>
-            <span v-if="n.notification_type === 'Assignment'">{{
-              __("assigned you a ticket")
-            }}</span>
-            <span v-if="n.notification_type === 'Reaction'">{{
-              __("has reopened the ticket")
-            }}</span>
-            <span class="font-medium text-ink-gray-9">{{
-              n.reference_ticket
-            }}</span>
-          </span>
-        </div>
-        <div class="flex items-center gap-2">
-          <div class="text-sm text-ink-gray-5">
-            {{ dayjs.tz(n.creation).fromNow() }}
-          </div>
+      <component
+        :is="isOutside(n) ? 'a' : RouterLink"
+        v-for="n in notificationStore.data"
+        :key="n.name"
+        class="flex cursor-pointer items-start gap-3.5 px-4 py-3 hover:bg-surface-gray-1"
+        v-bind="linkProps(n)"
+        @click="
+          () => {
+            notificationStore.read(n);
+          }
+        "
+      >
+        <NotificationIcon :notification="n" />
+        <div>
           <div
-            v-if="!n.read"
-            class="h-1.5 w-1.5 rounded-full bg-surface-blue-5"
-          />
+            v-if="isTextOnly(n)"
+            class="mb-2 whitespace-pre-line leading-5 text-ink-gray-8"
+          >
+            {{ n.message }}
+          </div>
+          <div v-else class="mb-2 leading-5">
+            <span class="space-x-1 rtl:space-x-reverse text-ink-gray-7">
+              <span class="font-medium text-ink-gray-9">{{ n.user_from }}</span>
+              <span v-if="n.notification_type === 'Mention'">{{
+                __("mentioned you in ticket")
+              }}</span>
+              <span v-if="n.notification_type === 'Assignment'">{{
+                __("assigned you a ticket")
+              }}</span>
+              <span v-if="n.notification_type === 'Reaction'">{{
+                __("has reopened the ticket")
+              }}</span>
+              <span class="font-medium text-ink-gray-9">{{
+                n.reference_ticket
+              }}</span>
+            </span>
+          </div>
+          <div class="flex items-center gap-2">
+            <div class="text-sm text-ink-gray-5">
+              {{ dayjs.tz(n.creation).fromNow() }}
+            </div>
+            <div
+              v-if="!n.read"
+              class="h-1.5 w-1.5 rounded-full bg-surface-blue-5"
+            />
+          </div>
         </div>
-      </div>
-    </component>
-  </div>
-  <div v-else class="flex flex-1 flex-col items-center gap-2">
-    <LucideBell class="h-20 w-20 text-ink-gray-2" />
-    <div class="text-lg-medium text-ink-gray-4">
-      {{ __("No new notifications") }}
+      </component>
     </div>
+    <TaskyState
+      v-else
+      class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
+      :icon="LucideBell"
+      :title="__('No new notifications')"
+    />
   </div>
 </template>
 <script setup lang="ts">
 import { RouterLink } from "vue-router";
-import { Breadcrumbs, dayjs, Tooltip } from "frappe-ui";
+import { dayjs, Tooltip } from "frappe-ui";
 import LayoutHeader from "@/components/LayoutHeader.vue";
+import TaskyState from "@/components/TaskyState.vue";
 import { isTextOnly, useNotificationStore } from "@/stores/notification";
 import { ref } from "vue";
 import { onClickOutside } from "@vueuse/core";

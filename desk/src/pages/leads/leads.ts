@@ -371,6 +371,8 @@ export interface LeadTimelineEntry {
   call?: string;
   /** talk time in seconds */
   duration?: number;
+  /** a call's recording: saved, pending (still being downloaded) or none; absent from an older TBO Smart */
+  recording_state?: "saved" | "pending" | "none";
   /** a call's, or for a WhatsApp message: what the lead wrote (incoming) or we sent */
   direction?: "incoming" | "outgoing" | null;
   status?: "answered" | "missed" | "voicemail" | null;
@@ -495,6 +497,9 @@ export interface LeadDetail {
   documents?: DocumentChain | null;
   /** stage names, or stages, this lead may move to */
   allowed_stages: (string | LeadStage)[];
+  /** the ERP site is away: the hub's saved copy, read only, as of `copied_at` */
+  from_copy?: boolean;
+  copied_at?: string;
 }
 
 /** Fetched once per session and shared by the list, the dialog and the lead. */
@@ -632,26 +637,47 @@ export const leadDepartments = createResource({
   url: "helpdesk.api.leads.get_lead_departments",
 });
 
-/** Asks MyOperator to ring the signed-in person's phone, then the lead. */
-export function useClickToCall() {
-  return createResource({
-    url: "helpdesk.api.leads.click_to_call",
-    method: "POST",
-    onSuccess(data: { message?: string }) {
-      toast.success(data?.message || __("MyOperator is calling your phone…"));
-    },
-    onError(e: unknown) {
-      toast.error(
-        errorText(e, __("Couldn't place the call. Try again in a minute."))
-      );
-    },
-  });
-}
-
 /** 125 → "2:05" */
 export function callLength(seconds?: number | null) {
   const total = Math.max(0, Math.round(seconds || 0));
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+}
+
+/** A call's recording, streamed by the hub from the ERP site (which checks the person may read the lead). */
+export function recordingUrl(call: string) {
+  return `/api/method/helpdesk.api.leads.call_recording?call=${encodeURIComponent(
+    call
+  )}`;
+}
+
+/** What a call on the timeline says in plain words: "Outgoing call · Answered · 0:02". Only an
+ * explicit missed status is a missed call; an unknown one stays neutral. */
+export function callMeta(entry: LeadTimelineEntry) {
+  const incoming = entry.direction === "incoming";
+  const missed = entry.status === "missed";
+  const voicemail = entry.status === "voicemail";
+  const kind = !entry.direction
+    ? __("Call")
+    : incoming
+    ? __("Incoming call")
+    : __("Outgoing call");
+  const status = missed
+    ? incoming
+      ? __("Missed")
+      : __("Not answered")
+    : voicemail
+    ? __("Voicemail")
+    : entry.status === "answered"
+    ? __("Answered")
+    : "";
+  const talk = !missed && !voicemail && entry.duration;
+  return {
+    kind,
+    status,
+    missed,
+    voicemail,
+    duration: talk ? callLength(entry.duration) : "",
+  };
 }
 
 export function stageLabel(options: LeadOptions | undefined, stage?: string) {
@@ -709,6 +735,55 @@ export const STAGE_PATH: { stages: string[]; label?: string }[] = [
   { stages: ["Negotiation"] },
   { stages: ["Closed – Won"] },
 ];
+
+// full class strings, so Tailwind finds them
+const STAGE_PILL: Record<string, string> = {
+  new: "bg-info-soft text-info",
+  contacted: "bg-warning-soft text-warning",
+  meeting: "bg-success-soft text-success",
+  proposal: "bg-violet-soft text-violet",
+  won: "bg-success-soft text-success",
+  lost: "bg-surface-gray-3 text-ink-gray-7",
+  warning: "bg-warning-soft text-warning",
+  danger: "bg-danger-soft text-danger",
+  neutral: "bg-surface-gray-3 text-ink-gray-7",
+};
+
+/** The stage pill's colours, from the Leads redesign (ui-guidelines §8): blue for a new
+ * lead, amber once contacted, green through the meetings and for won, violet once a
+ * proposal is out, gray for lost; a call stage keeps its own tone. Always with the
+ * stage's name beside it. */
+export function stagePillClass(
+  options: LeadOptions | undefined,
+  stage?: string
+) {
+  const found = options?.stages.find((s) => s.name === stage);
+  const type = (found?.type || "").toLowerCase();
+  if (type === "won") return STAGE_PILL.won;
+  if (type === "lost") return STAGE_PILL.lost;
+  if (stage && stage in CALL_STAGES)
+    return STAGE_PILL[stageTone(options, stage)];
+  const step = STAGE_PATH.findIndex((p) => p.stages.includes(stage || ""));
+  if (step === 0) return STAGE_PILL.new;
+  if (step === 1) return STAGE_PILL.contacted;
+  if (step === 2) return STAGE_PILL.meeting;
+  if (step === 3 || step === 4) return STAGE_PILL.proposal;
+  if (step === 5) return STAGE_PILL.won;
+  return STAGE_PILL.neutral;
+}
+
+/** A lead score's band, as the redesign draws it: hot from 70, warm from 40, else cold. */
+export function scoreBand(score: number) {
+  if (score >= 70)
+    return { label: __("Hot"), fill: "bg-hot-fill", ink: "text-hot" };
+  if (score >= 40)
+    return { label: __("Warm"), fill: "bg-warm-fill", ink: "text-warning" };
+  return {
+    label: __("Cold"),
+    fill: "bg-surface-gray-6",
+    ink: "text-ink-gray-6",
+  };
+}
 
 /** "5m", "3h", "2d": how long ago, compactly, for a chip. */
 export function shortAgo(when?: string | null) {

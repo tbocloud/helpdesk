@@ -1,7 +1,7 @@
 <template>
   <!-- the reminder stays on every Leads screen until each call has a result -->
   <div
-    v-if="pendingCalls.length && !showSheet"
+    v-if="pendingCalls.length && !showSheet && !box.open"
     class="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
   >
     <div
@@ -52,19 +52,20 @@
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
 import { useDocumentVisibility, useWindowFocus } from "@vueuse/core";
-import { Button, call as post, toast } from "frappe-ui";
+import { Button, toast } from "frappe-ui";
 import { computed, onMounted, ref, watch } from "vue";
 import LucidePhoneCall from "~icons/lucide/phone-call";
 import type { CallOutcome } from "./callBatches";
 import AddNumberDialog from "./AddNumberDialog.vue";
 import CallResultSheet from "./CallResultSheet.vue";
+import { box } from "./callBox";
 import {
   askFor,
+  answerCall,
   cameBack,
   dismissCall,
   loadPendingCalls,
   pendingCalls,
-  queueChanged,
   type PendingCall,
 } from "./pendingCalls";
 
@@ -105,33 +106,14 @@ watch(askFor, (lead) => {
   });
 });
 
-/** The ERP site records it as the person's answer on the call in Today's calls, or logs it on
- * the lead; either way the call stops waiting. */
 function answer(
   pending: PendingCall,
   value: { outcome: CallOutcome; note: string; callback_at: string | null }
 ) {
   saving.value = true;
-  const request = pending.item
-    ? post("helpdesk.api.call_batches.record_call_outcome", {
-        batch_item: pending.item,
-        lead: pending.lead,
-        outcome: value.outcome,
-        note: value.note || null,
-        callback_at: value.callback_at,
-        number: pending.number,
-      })
-    : post("helpdesk.api.leads.log_call", {
-        lead: pending.lead,
-        outcome: value.outcome,
-        note: value.note,
-        callback_at: value.callback_at,
-        number: pending.number,
-      });
-  request
+  answerCall(pending, value)
     .then(() => {
       toast.success(__("Saved"));
-      if (pending.item) queueChanged.value++;
       return next();
     })
     .catch((e: unknown) =>

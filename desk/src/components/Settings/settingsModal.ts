@@ -192,8 +192,8 @@ export const tabs = computed(() => {
           label: __("Sign-off templates"),
           icon: markRaw(LucideClipboardCheck),
           component: markRaw(SignoffTemplates),
-          // project managers, which includes admins (tasky is_project_manager)
-          condition: () => auth.isProjectManager,
+          // System Managers only (TBO's Sign-off requirements, Roles)
+          condition: () => auth.isAdmin,
         },
         {
           label: __("Tasks"),

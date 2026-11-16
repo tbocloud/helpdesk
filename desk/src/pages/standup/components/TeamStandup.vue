@@ -1,6 +1,7 @@
 <template>
   <TaskyState
     v-if="resource.error && !data"
+    class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
     :icon="LucideCircleAlert"
     :title="__('Couldn\'t load the team\'s stand-up')"
     :message="
@@ -11,26 +12,27 @@
     <Button :label="__('Retry')" @click="resource.reload()" />
   </TaskyState>
 
-  <div v-else-if="!data" class="flex flex-col gap-4" aria-busy="true">
+  <div v-else-if="!data" class="flex flex-col gap-5" aria-busy="true">
     <div
       v-for="i in 3"
       :key="i"
-      class="h-36 animate-pulse rounded-xl border border-outline-gray-2 bg-surface-gray-1"
+      class="h-36 animate-pulse rounded-xl bg-surface-gray-3"
     />
   </div>
 
-  <div v-else class="flex flex-col gap-4" :aria-busy="resource.loading">
+  <div v-else class="flex flex-col gap-5" :aria-busy="resource.loading">
     <div class="flex flex-wrap items-end justify-between gap-3">
       <FormControl
         v-if="data.teams.length > 1"
         :model-value="data.team"
         type="select"
+        size="md"
         class="w-full sm:w-64"
         :label="__('Team')"
         :options="data.teams.map((t) => ({ label: teamLabel(t), value: t }))"
         @update:model-value="emit('team', $event)"
       />
-      <h2 v-else class="text-base-semibold text-ink-gray-9">
+      <h2 v-else class="text-base font-semibold text-ink-gray-9">
         {{ teamLabel(data.team) }}
       </h2>
       <p
@@ -75,6 +77,7 @@
 
     <TaskyState
       v-if="!data.people.length"
+      class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
       :icon="LucideMessagesSquare"
       :title="__('No stand-ups for this day')"
       :message="__('Drafts open on working days for everyone with work.')"
@@ -110,6 +113,7 @@
             <p
               class="flex flex-wrap items-center gap-2 text-p-sm text-ink-gray-7"
             >
+              <PersonAvatar :name="blocker.full_name" size="md" />
               <span class="text-base-medium text-ink-gray-9">{{
                 blocker.full_name
               }}</span>
@@ -184,6 +188,7 @@
             :key="person.user"
             class="flex items-center gap-3 border-b border-outline-gray-1 px-4 py-2 last:border-b-0"
           >
+            <PersonAvatar :name="person.full_name" size="md" />
             <span class="min-w-0 flex-1 truncate text-base text-ink-gray-9">
               {{ person.full_name }}
             </span>
@@ -210,6 +215,7 @@
             class="flex flex-col gap-2 border-b border-outline-gray-1 px-4 py-3 last:border-b-0"
           >
             <div class="flex flex-wrap items-center gap-2">
+              <PersonAvatar :name="person.full_name" size="md" />
               <span class="text-base-medium text-ink-gray-9">{{
                 person.full_name
               }}</span>
@@ -295,6 +301,7 @@
 </template>
 
 <script setup lang="ts">
+import PersonAvatar from "@/components/PersonAvatar.vue";
 import SectionCard from "@/components/SectionCard.vue";
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import TaskyState from "@/components/TaskyState.vue";

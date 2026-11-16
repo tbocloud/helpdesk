@@ -1,13 +1,13 @@
 <template>
   <article
-    class="flex min-w-0 flex-col rounded-lg border border-outline-gray-2 bg-surface-base transition-colors hover:border-outline-gray-3"
+    class="flex min-w-0 flex-col rounded-xl border border-outline-gray-2 bg-surface-base transition-colors hover:border-outline-gray-3"
     :aria-labelledby="headingId"
   >
-    <div class="flex flex-1 flex-col gap-4 p-4">
+    <div class="flex flex-1 flex-col gap-4 p-5">
       <!-- Name, then who it's for -->
       <header class="flex items-start justify-between gap-3">
         <div class="min-w-0">
-          <h3 :id="headingId" class="text-base-semibold text-ink-gray-9">
+          <h3 :id="headingId" class="text-base font-semibold text-ink-gray-9">
             <RouterLink
               :to="{
                 name: 'TaskyProject',
@@ -41,8 +41,15 @@
       <!-- Lead and dates -->
       <dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm">
         <dt class="text-ink-gray-5">{{ __("Lead") }}</dt>
-        <dd class="truncate text-ink-gray-8">
-          {{ project.project_lead_name || project.project_lead || __("None") }}
+        <dd class="flex min-w-0 items-center gap-2 text-ink-gray-8">
+          <PersonAvatar
+            v-if="project.project_lead_name || project.project_lead"
+            :name="project.project_lead_name || project.project_lead"
+            size="xs"
+          />
+          <span class="truncate">{{
+            project.project_lead_name || project.project_lead || __("None")
+          }}</span>
         </dd>
         <dt class="text-ink-gray-5">{{ __("Dates") }}</dt>
         <dd class="flex min-w-0 flex-wrap items-center gap-x-2 tabular-nums">
@@ -173,7 +180,7 @@
 
     <!-- Actions: navigation on the left, changes on the right -->
     <footer
-      class="flex items-center gap-1 border-t border-outline-gray-2 px-2 py-1.5"
+      class="flex items-center gap-1 border-t border-outline-gray-1 px-3 py-2"
     >
       <Button
         variant="ghost"
@@ -247,6 +254,7 @@
 </template>
 
 <script setup lang="ts">
+import PersonAvatar from "@/components/PersonAvatar.vue";
 import { FILL, TRACK, type Tone } from "@/components/tone";
 import { __ } from "@/translation";
 import { Button, Dropdown, dayjs } from "frappe-ui";

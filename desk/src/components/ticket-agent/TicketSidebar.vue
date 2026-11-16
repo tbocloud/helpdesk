@@ -7,7 +7,7 @@
     @click="open = false"
   />
   <Resizer
-    class="h-full flex-col border-l border-outline-gray-1 bg-surface-base max-lg:fixed max-lg:inset-y-0 max-lg:right-0 max-lg:z-30 max-lg:!w-[min(24rem,100vw)] max-lg:shadow-xl"
+    class="h-full flex-col overflow-hidden bg-surface-base max-lg:border-l max-lg:border-outline-gray-1 lg:rounded-xl lg:border lg:border-outline-gray-2 max-lg:fixed max-lg:inset-y-0 max-lg:right-0 max-lg:z-30 max-lg:!w-[min(24rem,100vw)] max-lg:shadow-xl"
     :class="open ? 'flex' : 'hidden lg:flex'"
     side="right"
   >

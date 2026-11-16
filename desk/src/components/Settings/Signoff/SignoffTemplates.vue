@@ -75,6 +75,7 @@ interface TemplateRow {
   question_count: number;
   signoff_type?: "Training" | "UAT";
   project_type?: string | null;
+  stage?: string | null;
 }
 
 /** null: the list; "": a new template; a name: that template. */
@@ -87,14 +88,20 @@ const templates = createResource({
 });
 
 function subtitle(t: TemplateRow) {
-  // a UAT's tests come from the SRS: its question count says nothing
+  // a UAT's tests come from the SRS; questions are optional (accepted by reply)
   const count =
     t.signoff_type === "UAT"
       ? __("Tests from the SRS")
+      : !t.question_count
+      ? null
       : t.question_count === 1
       ? __("1 question")
       : __("{0} questions", String(t.question_count));
-  return [t.module, t.project_type ? __(t.project_type) : null, count]
+  return [
+    t.stage ? __(t.stage) : t.module,
+    t.project_type ? __(t.project_type) : null,
+    count,
+  ]
     .filter(Boolean)
     .join(" · ");
 }

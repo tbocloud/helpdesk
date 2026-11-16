@@ -1,7 +1,5 @@
 <template>
-  <div
-    class="flex h-full flex-col overflow-y-hidden max-w-screen-xl mx-auto w-full"
-  >
+  <div class="flex h-full w-full flex-col overflow-y-hidden">
     <LayoutHeader>
       <template #left-header>
         <Breadcrumbs :items="breadcrumbs" class="-ml-[2px]" />
@@ -27,50 +25,63 @@
     </TaskyState>
     <div
       v-else-if="!contact.doc"
-      class="flex items-center gap-3 px-5 pt-5"
+      class="px-4 pb-10 pt-5 md:px-8"
       :aria-label="__('Loading')"
     >
-      <span class="size-[52px] animate-pulse rounded-full bg-surface-gray-2" />
-      <div class="flex flex-col gap-2">
-        <span class="h-5 w-48 animate-pulse rounded bg-surface-gray-2" />
-        <span class="h-3.5 w-64 animate-pulse rounded bg-surface-gray-2" />
+      <div
+        class="flex items-center gap-3 rounded-xl border border-outline-gray-2 bg-surface-base p-4"
+      >
+        <span
+          class="size-[52px] animate-pulse rounded-full bg-surface-gray-3"
+        />
+        <div class="flex flex-col gap-2">
+          <span class="h-5 w-48 animate-pulse rounded bg-surface-gray-3" />
+          <span class="h-3.5 w-64 animate-pulse rounded bg-surface-gray-3" />
+        </div>
       </div>
     </div>
-    <div v-else class="flex min-h-0 flex-1 flex-col gap-4">
-      <!-- ContactInfo -->
-      <PageInfo
-        :avatar="{
-          label: `${contact.doc.full_name}`.trim(),
-          image: contact.doc.image ?? undefined,
-          shape: 'circle',
-        }"
-        :doc-info="contactInfo"
-        :badge="invitationBadge"
-      >
-        <template #actions>
-          <template v-if="hasPermission()">
-            <Button variant="subtle" @click="showEditDialog = true">
-              <template #prefix>
-                <LucideSquarePen class="size-4" aria-hidden="true" />
+    <div
+      v-else
+      class="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-contain"
+    >
+      <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
+        <div
+          class="rounded-xl border border-outline-gray-2 bg-surface-base pb-5"
+        >
+          <!-- ContactInfo -->
+          <PageInfo
+            :avatar="{
+              label: `${contact.doc.full_name}`.trim(),
+              image: contact.doc.image ?? undefined,
+              shape: 'circle',
+            }"
+            :doc-info="contactInfo"
+            :badge="invitationBadge"
+          >
+            <template #actions>
+              <template v-if="hasPermission()">
+                <Button variant="subtle" @click="showEditDialog = true">
+                  <template #prefix>
+                    <LucideSquarePen class="size-4" aria-hidden="true" />
+                  </template>
+                  {{ __("Edit") }}
+                </Button>
+                <Dropdown :options="dropdownActions" placement="right">
+                  <Button variant="subtle" :aria-label="__('More actions')">
+                    <template #icon>
+                      <LucideEllipsis class="size-4" aria-hidden="true" />
+                    </template>
+                  </Button>
+                </Dropdown>
               </template>
-              {{ __("Edit") }}
-            </Button>
-            <Dropdown :options="dropdownActions" placement="right">
-              <Button variant="subtle" :aria-label="__('More actions')">
-                <template #icon>
-                  <LucideEllipsis class="size-4" aria-hidden="true" />
-                </template>
-              </Button>
-            </Dropdown>
-          </template>
-        </template>
-      </PageInfo>
-      <div class="flex flex-1 flex-col overflow-y-auto overscroll-y-contain">
+            </template>
+          </PageInfo>
+        </div>
         <TicketStats dt="Contact" :dn="id" />
         <Tabs
           v-model="activeTab"
           :tabs="tabs"
-          class="tabs-sticky-header [&_[role='tablist']]:!bg-surface-base"
+          class="tabs-sticky-header rounded-xl border border-outline-gray-2 bg-surface-base [&_[role='tablist']]:rounded-t-2xl [&_[role='tablist']]:!bg-surface-base"
         >
           <template #tab-item="{ tab, selected }: any">
             <button

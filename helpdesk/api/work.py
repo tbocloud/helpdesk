@@ -38,7 +38,7 @@ from helpdesk.tasky.permissions import (
     is_tasky_admin,
 )
 from helpdesk.utils import agent_only, aggregate, assigned_to_filter
-from helpdesk.work_calendar import on_leave
+from helpdesk.work_calendar import next_working_day, on_leave, overdue_cutoff
 
 KEY_TICKET_PRIORITIES = ("Urgent", "High")
 OPEN_TASK_FILTER = ("not in", ["Completed", "Cancelled", "Template"])
@@ -199,10 +199,11 @@ def is_task_overdue(task, deadline, today) -> bool:
     """Past its due date, or worked longer than its estimate (not while in review),
     whatever the due date and with none (owner's request, 2026-11-03: a 30 min task is overdue once its timer passes
     30 min). The due date moves out by the days on hold, so a paused task is never late.
+    A due date on a day off counts as due on the next working day (overdue_cutoff).
     """
     if task.status in (ON_HOLD, "Completed", "Cancelled"):
         return False
-    if deadline and deadline < today:
+    if deadline and getdate(deadline) < overdue_cutoff(today):
         return True
     # in review the assignee can't act, so running past the estimate is not their lateness
     return task.status != PENDING_REVIEW and _over_estimate(task)
@@ -226,6 +227,9 @@ def _over_estimate(task) -> bool:
 
 
 def _task_risks(task, deadline, today, waiting_on: str | None) -> list[str]:
+    # a due date on a day off is due the next working day
+    if deadline and deadline < today:
+        deadline = next_working_day(deadline)
     if task.status in (ON_HOLD, "Pending Review") or not deadline or deadline < today:
         return []
     days_left = (deadline - today).days

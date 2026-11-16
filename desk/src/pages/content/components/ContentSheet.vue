@@ -1,27 +1,29 @@
 <template>
   <div
-    class="overflow-x-auto rounded-lg border border-outline-gray-2 bg-surface-base"
+    class="overflow-x-auto rounded-xl border border-outline-gray-2 bg-surface-base"
   >
-    <table class="w-full min-w-[900px] text-left text-sm">
-      <thead class="bg-surface-gray-1 text-xs text-ink-gray-5">
-        <tr>
-          <th scope="col" class="px-3 py-2 font-medium">{{ __("Date") }}</th>
-          <th scope="col" class="px-3 py-2 font-medium">
+    <table class="w-full min-w-[900px] text-left text-[13px]">
+      <thead>
+        <tr
+          class="h-11 border-b border-outline-gray-2 bg-surface-gray-1 text-left text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6"
+        >
+          <th scope="col" class="pl-4 pr-3 md:pl-4">{{ __("Date") }}</th>
+          <th scope="col" class="px-3">
             {{ __("Copy") }}
           </th>
-          <th v-if="!filtersCustomer" scope="col" class="px-3 py-2 font-medium">
+          <th v-if="!filtersCustomer" scope="col" class="px-3">
             {{ __("Customer") }}
           </th>
-          <th scope="col" class="px-3 py-2 font-medium">
+          <th scope="col" class="px-3">
             {{ __("Platform") }}
           </th>
-          <th scope="col" class="px-3 py-2 font-medium">{{ __("Type") }}</th>
-          <th scope="col" class="px-3 py-2 font-medium">{{ __("Status") }}</th>
+          <th scope="col" class="px-3">{{ __("Type") }}</th>
+          <th scope="col" class="px-3">{{ __("Status") }}</th>
           <th
             v-for="role in TEAM_ROLES"
             :key="role.field"
             scope="col"
-            class="px-3 py-2 font-medium"
+            class="px-3 last:pr-4 md:last:pr-5"
           >
             {{ __(role.label) }}
           </th>
@@ -31,7 +33,7 @@
         <tr v-if="!rows.length">
           <td
             :colspan="filtersCustomer ? 8 : 9"
-            class="px-3 py-10 text-center text-p-sm text-ink-gray-5"
+            class="px-4 py-14 text-center text-p-sm text-ink-gray-6"
           >
             {{
               loading
@@ -48,15 +50,15 @@
           v-for="post in rows"
           :id="post.name === startRow ? 'sheet-from-today' : undefined"
           :key="post.name"
-          class="scroll-mt-2 cursor-pointer border-t border-outline-gray-1 hover:bg-surface-gray-1 focus-within:bg-surface-gray-1"
+          class="scroll-mt-2 cursor-pointer border-b border-outline-gray-1 last:border-b-0 hover:bg-surface-gray-1 focus-within:bg-surface-gray-1"
           @click="emit('open', post.name)"
         >
           <td
-            class="whitespace-nowrap px-3 py-2 font-mono text-xs tabular-nums text-ink-gray-7"
+            class="whitespace-nowrap py-3 pl-4 pr-3 font-mono text-xs tabular-nums text-ink-gray-7 md:pl-4"
           >
             {{ dayjs(post.publish_on).format("ddd DD MMM, h:mm A") }}
           </td>
-          <td class="max-w-[18rem] px-3 py-2">
+          <td class="max-w-[18rem] px-3 py-3">
             <button
               type="button"
               class="block max-w-full truncate text-left text-ink-gray-9 hover:underline"
@@ -73,15 +75,15 @@
           </td>
           <td
             v-if="!filtersCustomer"
-            class="max-w-[12rem] truncate px-3 py-2 text-ink-gray-7"
+            class="max-w-[12rem] truncate px-3 py-3 text-ink-gray-7"
           >
             {{ post.customer }}
           </td>
-          <td class="px-3 py-2 text-ink-gray-7">
+          <td class="px-3 py-3 text-ink-gray-7">
             {{ platformsOf(post).join(", ") }}
           </td>
-          <td class="px-3 py-2 text-ink-gray-7">{{ post.format }}</td>
-          <td class="px-3 py-2">
+          <td class="px-3 py-3 text-ink-gray-7">{{ post.format }}</td>
+          <td class="px-3 py-3">
             <div class="flex flex-wrap items-center gap-1">
               <StatusPill :post="post" /><ClientApprovalChip
                 :status="post.status"
@@ -91,20 +93,22 @@
           <td
             v-for="role in TEAM_ROLES"
             :key="role.field"
-            class="max-w-[12rem] px-3 py-2 text-xs text-ink-gray-7"
+            class="max-w-[12rem] px-3 py-3 text-xs text-ink-gray-7 last:pr-4 md:last:pr-5"
             :title="namesOf(post, role.field).join(', ')"
           >
             <span
               v-if="!namesOf(post, role.field).length"
-              class="text-ink-gray-4"
+              class="text-ink-gray-5"
               >—</span
             >
             <span
               v-for="name in namesOf(post, role.field)"
               :key="name"
-              class="block truncate"
-              >{{ name }}</span
+              class="flex min-w-0 items-center gap-1.5 py-0.5"
             >
+              <PersonAvatar :name="name" size="xs" />
+              <span class="truncate">{{ name }}</span>
+            </span>
           </td>
         </tr>
       </tbody>
@@ -113,6 +117,7 @@
 </template>
 
 <script setup lang="ts">
+import PersonAvatar from "@/components/PersonAvatar.vue";
 import { __ } from "@/translation";
 import { createResource, dayjs } from "frappe-ui";
 import { computed, nextTick, watch } from "vue";
