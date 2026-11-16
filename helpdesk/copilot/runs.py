@@ -521,22 +521,19 @@ def _expire_fix_leases():
 
 
 def tell_people(run, subject: str):
-    """A reminder (and the chat channel) for the Agent Managers: Copilot needs a person here."""
+    """A reminder (and the chat channel): Copilot needs a person here. Phase 22: the customer's
+    project coordinators working today, else the Copilot approvers (settings, never a job role);
+    with nothing set at all, the Agent Managers as before, so it never goes nowhere."""
+    from helpdesk.copilot import approvals, people
     from helpdesk.work_reminders import notify_users
 
-    managers = frappe.get_all(
-        "Has Role",
-        filters={"role": "Agent Manager", "parenttype": "User"},
-        pluck="parent",
+    notify_users(
+        people.need_a_person(run.customer) or approvals.managers(),
+        "HD Ticket",
+        run.ticket,
+        subject,
+        escalate=True,
     )
-    enabled = (
-        frappe.get_all(
-            "User", filters={"name": ["in", managers], "enabled": 1}, pluck="name"
-        )
-        if managers
-        else []
-    )
-    notify_users(enabled, "HD Ticket", run.ticket, subject, escalate=True)
 
 
 def send_stage(run, stage: str, context: dict | None = None) -> bool:

@@ -131,6 +131,11 @@ scheduler_events = {
         "30 6 * * *": [
             "helpdesk.ticket_assignment.daily",
         ],
+        # 06:45, after that: tickets whose coordinators have not chosen who takes them yet are
+        # asked again (Phase 22, copilot/people.py)
+        "45 6 * * *": [
+            "helpdesk.copilot.people.ask_again",
+        ],
         # hourly at :40: disable people TBO removed from Microsoft (off by default;
         # docs/tbo-smart-api.md, "Offboarding")
         "40 * * * *": [
@@ -282,6 +287,8 @@ doc_events = {
         "after_insert": [
             "helpdesk.triage.auto_triage_ticket",
             "helpdesk.copilot.runs.on_ticket_insert",
+            # the project coordinators hear of every new ticket (Phase 22, copilot/people.py)
+            "helpdesk.copilot.people.on_ticket_insert",
         ],
         "on_update": [
             "helpdesk.chatwoot_bridge.on_ticket_update",

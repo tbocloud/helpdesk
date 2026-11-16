@@ -303,6 +303,10 @@ class TestCopilotDeveloper(TicketAssignmentCase):
 
 class TestWhoWritesInTheChat(TicketAssignmentCase):
     def test_the_assignee_the_coordinator_and_admins_write_others_read(self):
+        # Phase 22: the coordinators who write are the ones set on the customer, not a project role
+        customer = frappe.get_doc("HD Customer", CUSTOMER)
+        customer.set("custom_copilot_coordinators", [{"user": COORDINATOR[0]}])
+        customer.save(ignore_permissions=True)
         ticket = self.ticket(customer=CUSTOMER)
 
         self.assertTrue(thread.may_write(OWNER[0], ticket))

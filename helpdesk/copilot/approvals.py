@@ -17,8 +17,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_to_date, get_datetime, getdate, now_datetime
 
-from helpdesk import ticket_assignment
-from helpdesk.copilot import runs
+from helpdesk.copilot import people, runs
 from helpdesk.copilot import settings as copilot_settings
 
 APPROVAL = "HDS Copilot Approval"
@@ -95,8 +94,15 @@ def may_decide(approval, user: str) -> str | None:
         return _(
             "This fix changes a sensitive area; only a senior approver may approve it."
         )
-    if user not in approvers() and user not in seniors() and user not in _managers():
-        return _("Only the Copilot approvers and the Agent Managers may decide fixes.")
+    if (
+        user not in approvers()
+        and user not in seniors()
+        and user not in _managers()
+        and user not in people.may_approve(run.customer, run.ticket)
+    ):
+        return _(
+            "Only the customer's Copilot people, the Copilot approvers and the Agent Managers may decide fixes."
+        )
     return None
 
 
@@ -106,12 +112,14 @@ def pick_approver(
     exclude: set[str] | None = None,
     copilot_only: bool = False,
 ) -> str | None:
-    """The customer's developer when they may; else the least loaded approver; else nobody."""
+    """The customer's person for this fix (Phase 22: the coordinator's choice, the fix approver,
+    the first or second developer, else a project coordinator, all from settings) when they may;
+    else the least loaded approver; else nobody. A sensitive fix takes a senior."""
     excluded = (set() if copilot_only else authors(run)) | (exclude or set())
     allowed = seniors() if sensitive else list(dict.fromkeys(approvers() + seniors()))
-    developer = ticket_assignment.developer_of(run.customer)
-    if developer and developer in allowed and developer not in excluded:
-        return developer
+    person = people.for_ticket(run.customer, run.ticket, fix=True)["user"]
+    if person and person not in excluded and (not sensitive or person in seniors()):
+        return person
     candidates = [user for user in allowed if user not in excluded]
     if not candidates:
         return None
@@ -236,6 +244,16 @@ def open_approval(
     announce(
         doc, _("A Copilot fix waits for your approval on ticket {0}").format(run.ticket)
     )
+    if doc.sensitive:
+        people.alert_risk(
+            _(
+                "A Copilot fix in a sensitive area waits for approval on ticket {0}"
+            ).format(run.ticket),
+            [_("A senior approver decides it.")],
+            ticket=run.ticket,
+            customer=run.customer,
+            skip=(approver,),
+        )
     from helpdesk.copilot import assistant
 
     # whoever asked for the fix from a chat hears it is ready; the approver has its card already
@@ -334,6 +352,15 @@ def open_change_set_approval(run, change_set):
         _("A Copilot correction waits for your approval on ticket {0}").format(
             run.ticket
         ),
+    )
+    people.alert_risk(
+        _("A data or settings correction waits for approval on ticket {0}").format(
+            run.ticket
+        ),
+        [_("{0} records on the customer's site.").format(len(ready))],
+        ticket=run.ticket,
+        customer=run.customer,
+        skip=(approver,),
     )
     from helpdesk.copilot import thread
 

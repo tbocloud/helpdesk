@@ -321,6 +321,16 @@ def request_deploy(run, when: str, user: str, auto: bool = False):
     from helpdesk.copilot import thread
 
     thread.on_deploy(run, "now" if now else "tonight", at)
+    if now and not auto:
+        from helpdesk.copilot import people
+
+        people.alert_risk(
+            _("Deploy Now on ticket {0}, outside the night window").format(run.ticket),
+            [_("Asked by {0}.").format(frappe.utils.get_fullname(user))],
+            ticket=run.ticket,
+            customer=run.customer,
+            skip=(user,),
+        )
     runs.publish_run(run)
     return doc
 

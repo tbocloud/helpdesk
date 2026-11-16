@@ -76,13 +76,23 @@ def open_request(kind: str, digest: str, user: str):
     return frappe.get_doc(ACTION, name) if name else None
 
 
-def pick_approver(risk: str, exclude: set[str] | None = None) -> str | None:
-    """A senior for a senior action, else the least loaded approver; never the requester."""
-    allowed = (
+def deciders(risk: str) -> list[str]:
+    """Who may approve an action of this risk. Phase 22: the infrastructure people when any are
+    set (a senior action: the seniors among them); else the Copilot approvers, as before."""
+    from helpdesk.copilot import people
+
+    if people.infra_people():
+        return people.infra_seniors() if risk == "senior" else people.infra_people()
+    return (
         approvals.seniors()
         if risk == "senior"
         else list(dict.fromkeys(approvals.approvers() + approvals.seniors()))
     )
+
+
+def pick_approver(risk: str, exclude: set[str] | None = None) -> str | None:
+    """A senior for a senior action, else the least loaded approver; never the requester."""
+    allowed = deciders(risk)
     candidates = [user for user in allowed if user not in (exclude or set())]
     if not candidates:
         return None
@@ -146,6 +156,16 @@ def request(
         doc,
         _("{0} asks to run: {1}").format(frappe.utils.get_fullname(user), doc.title),
     )
+    if risk == "senior":
+        from helpdesk.copilot import people
+
+        people.alert_risk(
+            _("A senior {0} action waits for approval: {1}").format(kind, doc.title),
+            [_("Asked by {0}.").format(frappe.utils.get_fullname(user))],
+            ticket=ticket,
+            link=frappe.utils.get_url(f"/app/hds-action-approval/{doc.name}"),
+            skip=(approver,),
+        )
     return doc
 
 
@@ -154,8 +174,19 @@ def request(
 
 def may_decide(approval, user: str) -> str | None:
     """Why `user` may not decide `approval`, or None when they may."""
+    from helpdesk.copilot import people
+
     if user == approval.requested_by:
         return _("You asked for this action, so someone else must approve it.")
+    if people.infra_people():
+        # Phase 22: the infrastructure people set in HDS Copilot Settings decide
+        if approval.risk == "senior" and user not in people.infra_seniors():
+            return _(
+                "This action is a heavy one; only a senior among the infrastructure people may approve it."
+            )
+        if user not in people.infra_people():
+            return _("Only the infrastructure people may decide actions.")
+        return None
     if approval.risk == "senior" and user not in approvals.seniors():
         return _("This action is a heavy one; only a senior approver may approve it.")
     if (
@@ -422,9 +453,14 @@ def announce(
 ):
     """The approver (or, with none, the Agent Managers) gets the card with its buttons: in Teams
     when the bot can reach them, else in the TBO Support panel plus the usual chat message or email."""
+    from helpdesk.copilot import people as copilot_people
     from helpdesk.work_reminders import helpdesk_path, new_notification, notify_users
 
-    people = [approval.assigned_to] if approval.assigned_to else approvals.managers()
+    people = (
+        [approval.assigned_to]
+        if approval.assigned_to
+        else (copilot_people.infra_people() or approvals.managers())
+    )
     people = list(dict.fromkeys(people + (also or [])))
     doctype, name = (
         ("HD Ticket", approval.ticket) if approval.ticket else (ACTION, approval.name)

@@ -1488,6 +1488,10 @@ def press(
 
 
 def _press(user: str, channel: str, chat, verb: str, data: dict, inputs: dict) -> dict:
+    from helpdesk.copilot import people
+
+    if verb in people.VERBS:  # a project coordinator's Assign to or Keep (Phase 22)
+        return people.press(user, channel, verb, data, inputs)
     if verb in ("release_approve", "release_now", "release_reject"):
         from helpdesk.copilot import releases
 
@@ -2067,12 +2071,13 @@ def diagnosis_card(run) -> dict:
     )
 
 
-def send(user: str, reply: dict, **links) -> str | None:
-    """Sends a card to a person: by the Teams bot when it can reach them, else into their panel chat.
-    Returns the channel used."""
+def send(user: str, reply: dict, channel: str | None = None, **links) -> str | None:
+    """Sends a card to a person: by the Teams bot when it can reach them, else into their panel chat
+    (`channel="Web"`: the panel only). Returns the channel used."""
     from helpdesk.copilot import teams
 
-    channel = "Teams" if teams.reachable(user) else "Web"
+    if channel != "Web":
+        channel = "Teams" if teams.reachable(user) else "Web"
     chat = chat_for(user, channel)
     message = record(chat, "Out", reply.get("title") or "", reply, **links)
     if channel == "Teams":

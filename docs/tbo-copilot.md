@@ -709,3 +709,59 @@ What changed so a few people can use TBO Copilot for a week (TASK-2026-00024; th
 - **Version:** the package's version comes from **Teams app version**; raise it before uploading an update.
 - **Listing:** it links the privacy and terms pages; the description and the command list mention "report a problem".
 - **Admin steps:** in **Setting up the bot**, step 5. Upload the package, then Setup policies → Global (Org-wide default) → Installed apps → add **TBO Copilot**, and Permission policies → allow it. Installation reaches everyone within a day, and the bot can then message people first.
+
+## People (Phase 22: `copilot/people.py`)
+
+**Every person Copilot goes to comes from settings.** The code names nobody and picks nobody by a job role, so TBO changes the people without a deploy.
+
+| Where | Setting | Used for |
+|---|---|---|
+| **Each customer** (HD Customer → Copilot People) | **First Developer** | Fix approvals, Copilot's news, new work, the digest |
+| | **Second Developer** | The same while the first is on leave, Unavailable or not an active agent |
+| | **Fix Approver** (optional) | Approves this customer's fixes; empty: the first or second developer |
+| | **Project Coordinators** (table) | Every new ticket; the choice when both developers are away; "Talk to a person"; risk alerts |
+| **Every customer** (HDS Copilot Settings → People) | **Project Coordinators** (table) | Customers with none of their own |
+| | **New Tickets to the Coordinators** | Teams and TBO Support (default), TBO Support only, or Off |
+| | **Risk Alerts Go To** (table) | Every risk alert, for every customer |
+| | **Also Tell the Project Coordinators** (on) | Risk alerts also go to the customer's coordinators |
+| | **Infrastructure People** (table, Senior tick) | Press, AWS and repair approvals; the watcher's tickets and quiet alerts |
+| | **Approvers** (Fix Approval) | Where nobody else is set |
+
+A customer's own setting wins over the common one. An empty First or Second Developer is the customer's Ticket Owner (else Copilot's older Assigned Developer) or Backup Ticket Owner, also set on the customer. **Who Copilot Goes To Today**, on the settings page, shows each customer's people, who Copilot would go to now and why, and every empty place. The Phase 22 patch copied each customer's Ticket Owner and Backup Ticket Owner into the first and second developer once; after that they are set on their own.
+
+**The chain** (`for_ticket`): the person a coordinator chose for the ticket, then for a fix the fix approver, then the first developer, then the second. Working today is TBO Support's rule (`ticket_assignment.working_today`: active agent, not on approved leave, not Unavailable); someone set here who is not an agent at all counts while their account is enabled and they are not on leave. With neither developer working, the work goes to the customer's project coordinators (else the common ones), the least busy first. The ticket's chat says each time why it went where it did.
+
+**Fix approvals.** `approvals.pick_approver` takes the chain's person when they may approve: not the fix's author, and a senior approver for a sensitive fix. The customer's people (first, second, fix approver, chosen person, coordinators) may decide that customer's fixes even when they are not in Approvers.
+
+**Every new ticket** (`on_ticket_insert`, then `tell_coordinators` in the background) reaches the project coordinators working today, in Teams and in TBO Support. The card shows:
+- the ticket's number, customer, subject, priority, and how it came in;
+- who has it and who Copilot goes to, with why;
+- **Assign to:** active agents working today, least busy first, with their open tickets;
+- **Assign**, and **Keep** when someone already has it.
+
+The coordinator who raised the ticket is not told. A customer with no Copilot people set (no coordinators anywhere, no developer) is left alone.
+
+**When both developers are away** the same card asks the coordinators to choose, even with New Tickets set to Off; the ticket's chat says they were asked. Until one chooses, Copilot's approvals for the ticket go to a coordinator, and the card comes again at 06:45 each morning (`ask_again`, after the leave moves at 06:30); a ticket whose developer is back stops waiting.
+
+**Assign** (`press`, `choose`):
+- The ticket goes to the chosen person, and its open Copilot task too.
+- A fix waiting for approval moves to them when they may decide it; else it stays, and the card says why.
+- `custom_copilot_person` on the ticket makes them Copilot's person for it, and the ticket's chat says "Assigned to X by project coordinator Y".
+- The first choice stands: a card pressed after someone chose answers with that choice.
+- Only the customer's project coordinators (its own, else the common ones) and the Approvers may choose.
+
+**Talk to a person** (`thread.on_hand_over`): the customer's coordinator working today joins the ticket (the developer stays) and is told in Teams and TBO Support with what the customer wrote. With nothing set anywhere (no coordinators, no Approvers), it and "Copilot needs a person" (`runs.tell_people`) still reach the Agent Managers as before, so a request never goes nowhere; the settings page warns. Who writes in a ticket's chat (`thread.may_write`) also follows the coordinators set here.
+
+**Risk alerts** (`alert_risk`, queued) go to Risk Alerts Go To and, with the tick on, the customer's coordinators. They are for information only: who approves does not change, and the approver is not told twice. They are sent for:
+- a fix in a sensitive area;
+- a data or settings correction;
+- a senior Press or AWS action;
+- Deploy Now pressed by a person;
+- a fix Copilot gave up on.
+
+**Infrastructure People**:
+- With anyone listed, they alone decide Press, AWS and repair actions (`actions.deciders`), a senior action by a Senior among them.
+- The watcher's tickets go to them (`repairs.devops_engineers`), and so do its quiet alerts (`monitor.watch_heartbeats`).
+- With nobody listed, these work as before (the Approvers; the internal project's DevOps Engineers; the Agent Managers).
+
+**Cards** carry a list input (`{"type": "choice", "choices": [[title, value]]}`): Teams draws it as `Input.ChoiceSet`, the panel as a select, and the picked value arrives as the input `person` (`teams.CARD_INPUTS`).

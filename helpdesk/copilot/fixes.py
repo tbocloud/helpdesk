@@ -24,7 +24,6 @@ import frappe
 from frappe import _
 from frappe.utils import escape_html, flt, formatdate, now_datetime
 
-from helpdesk import ticket_assignment
 from helpdesk.copilot import approvals, github, risk, runs
 from helpdesk.copilot import settings as copilot_settings
 from helpdesk.copilot.github import GitHubError
@@ -105,7 +104,9 @@ def create_fix_task(
             ),
             NoProject,
         )
-    developer = ticket_assignment.developer_of(ticket.customer)
+    from helpdesk.copilot import people
+
+    developer = people.developer(ticket.customer, ticket.name)
     assignee = developer if developer and _is_project_member(project, developer) else ""
     with customer.as_automation_user():
         result = create_task_from_ticket(
@@ -647,6 +648,14 @@ def fix_failed(run, reason: str, actor: str = runs.WORKER):
     )
     runs.add_event(run, "fix_failed", {"reason": reason}, actor)
     text = _("Copilot could not fix it: {0}").format(reason)
+    from helpdesk.copilot import people
+
+    people.alert_risk(
+        _("Copilot could not fix ticket {0}").format(run.ticket),
+        [reason],
+        ticket=run.ticket,
+        customer=run.customer,
+    )
     if run.task:
         frappe.get_doc("Task", run.task).add_comment("Comment", escape_html(text))
         notify_users(

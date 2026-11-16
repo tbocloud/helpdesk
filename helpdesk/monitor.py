@@ -329,9 +329,18 @@ def last_seen(source: str):
 
 
 def watch_heartbeats(now=None):
-    """Every 5 minutes: a monitor that has gone quiet is reported to the Agent Managers, once an
+    """Every 5 minutes: a monitor that has gone quiet is reported to the infrastructure people
+    (HDS Copilot Settings; else the Agent Managers), once an
     hour while it lasts, and once more when it is back. A monitor never heard from is not missed."""
+    from helpdesk.copilot import people
     from helpdesk.copilot.pilot import _once, _tell_managers
+
+    def tell(subject, doctype):
+        # Phase 22: the infrastructure people set in HDS Copilot Settings, else the Agent Managers
+        if people.infra_people():
+            people.tell_infra(subject, doctype)
+        else:
+            _tell_managers(subject, doctype)
 
     now = now or now_datetime()
     quiet_minutes = settings()["quiet_minutes"]
@@ -343,7 +352,7 @@ def watch_heartbeats(now=None):
         if last_heartbeat(source):
             if _read(told_key):
                 frappe.cache.delete_value(told_key)
-                _tell_managers(
+                tell(
                     _(
                         "The {0} is back: its heartbeat reached TBO Support again."
                     ).format(source),
@@ -354,7 +363,7 @@ def watch_heartbeats(now=None):
             continue
         frappe.cache.set_value(told_key, str(now), expires_in_sec=7 * 86400)
         if _once(QUIET_ONCE_KEY.format(source=source), 3600):
-            _tell_managers(
+            tell(
                 _(
                     "The {0} has been quiet since {1}: no heartbeat for {2} minutes. Nobody is watching the servers until it is back."
                 ).format(

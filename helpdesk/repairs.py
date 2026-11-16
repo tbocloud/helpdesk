@@ -80,9 +80,13 @@ def policy() -> dict:
 
 
 def devops_engineers() -> list[str]:
-    """The enabled DevOps Engineers of the internal project."""
+    """Who takes infrastructure work. Phase 22: the infrastructure people in HDS Copilot Settings;
+    with none set, the enabled DevOps Engineers of the internal project, as before."""
+    from helpdesk.copilot import people as copilot_people
     from helpdesk.ticket_assignment import project_members
 
+    if copilot_people.infra_people():
+        return copilot_people.infra_people()
     project = monitor.settings()["internal_project"]
     people = project_members([project], [DEVOPS_ROLE]) if project else []
     return [u for u in people if frappe.db.get_value("User", u, "enabled")]

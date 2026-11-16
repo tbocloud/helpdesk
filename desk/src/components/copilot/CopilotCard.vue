@@ -22,15 +22,34 @@
       </template>
     </dl>
     <template v-if="card.actions?.length">
-      <textarea
-        v-for="field in card.inputs || []"
-        :key="field.id"
-        v-model="values[field.id]"
-        :placeholder="field.label"
-        :aria-label="field.label"
-        rows="2"
-        class="mt-2 w-full rounded border-outline-gray-2 bg-surface-white text-sm"
-      />
+      <template v-for="field in card.inputs || []" :key="field.id">
+        <!-- a list to pick from, e.g. Assign to (Phase 22) -->
+        <label v-if="field.type === 'choice'" class="mt-2 block text-sm">
+          <span class="text-ink-gray-5">{{ field.label }}</span>
+          <select
+            v-model="values[field.id]"
+            :aria-label="field.label"
+            class="mt-1 w-full rounded border-outline-gray-2 bg-surface-white text-sm"
+          >
+            <option value="" disabled>{{ __("Choose…") }}</option>
+            <option
+              v-for="[title, value] in field.choices || []"
+              :key="value"
+              :value="value"
+            >
+              {{ title }}
+            </option>
+          </select>
+        </label>
+        <textarea
+          v-else
+          v-model="values[field.id]"
+          :placeholder="field.label"
+          :aria-label="field.label"
+          rows="2"
+          class="mt-2 w-full rounded border-outline-gray-2 bg-surface-white text-sm"
+        />
+      </template>
     </template>
     <p v-if="status" class="mt-1.5 text-sm text-ink-gray-5">{{ status }}</p>
     <div
@@ -78,7 +97,12 @@ export type CopilotCardData = {
   facts?: [string, string][];
   links?: [string, string][];
   actions?: CopilotAction[];
-  inputs?: { id: string; label: string }[];
+  inputs?: {
+    id: string;
+    label: string;
+    type?: "text" | "choice";
+    choices?: [string, string][];
+  }[];
   tone?: string;
 };
 
@@ -92,7 +116,14 @@ const emit = defineEmits<{
   press: [action: CopilotAction, inputs: Record<string, string>];
 }>();
 
-const values = reactive<Record<string, string>>({});
+const values = reactive<Record<string, string>>(
+  // a list starts on its "Choose…" line
+  Object.fromEntries(
+    (props.card.inputs || [])
+      .filter((field) => field.type === "choice")
+      .map((field) => [field.id, ""])
+  )
+);
 
 const toneClass = computed(() => {
   if (props.card.tone === "good") return "border-outline-green-2 bg-surface-green-1";

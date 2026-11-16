@@ -21,6 +21,16 @@
 		"approval_reminder_hours",
 		"approval_escalate_hours",
 		"hold_label",
+		"people_section",
+		"project_coordinators",
+		"new_ticket_notice",
+		"column_break_people",
+		"risk_alert_people",
+		"risk_alert_coordinators",
+		"infrastructure_section",
+		"infrastructure_people",
+		"people_overview_section",
+		"people_overview",
 		"fixes_section",
 		"copilot_writes_fixes",
 		"max_fix_attempts",
@@ -203,6 +213,68 @@
 			"fieldname": "hold_label",
 			"fieldtype": "Data",
 			"label": "Hold Label"
+		},
+		{
+			"description": "Who Copilot goes to. Nobody is named in the code: each customer's own people are set on the customer (Copilot People), and these are for every customer. A customer's own setting wins; where nobody is set anywhere, the Approvers above stand in.",
+			"fieldname": "people_section",
+			"fieldtype": "Section Break",
+			"label": "People"
+		},
+		{
+			"description": "For customers with no project coordinator of their own: they hear of every new ticket, choose who takes a ticket when both developers are away, and take \"Talk to a person\"",
+			"fieldname": "project_coordinators",
+			"fieldtype": "Table",
+			"label": "Project Coordinators",
+			"options": "HDS Copilot Person"
+		},
+		{
+			"default": "Teams and TBO Support",
+			"description": "Every new ticket is told to the customer's project coordinators (else those above), with Assign to",
+			"fieldname": "new_ticket_notice",
+			"fieldtype": "Select",
+			"label": "New Tickets to the Coordinators",
+			"options": "Teams and TBO Support\nTBO Support only\nOff"
+		},
+		{
+			"fieldname": "column_break_people",
+			"fieldtype": "Column Break"
+		},
+		{
+			"description": "Told in Teams and TBO Support of risky work for every customer: a fix in a sensitive area, a data or settings correction, a senior Press or AWS action, Deploy Now, a fix Copilot could not make pass. For information: who approves does not change",
+			"fieldname": "risk_alert_people",
+			"fieldtype": "Table",
+			"label": "Risk Alerts Go To",
+			"options": "HDS Copilot Person"
+		},
+		{
+			"default": "1",
+			"description": "Risk alerts also go to the customer's project coordinators (else those on the left)",
+			"fieldname": "risk_alert_coordinators",
+			"fieldtype": "Check",
+			"label": "Also Tell the Project Coordinators"
+		},
+		{
+			"fieldname": "infrastructure_section",
+			"fieldtype": "Section Break",
+			"label": "Infrastructure People"
+		},
+		{
+			"description": "Approve Press, AWS and watcher repair actions (a senior action needs a Senior), and get the watcher's tickets and alerts. Empty: the Approvers above",
+			"fieldname": "infrastructure_people",
+			"fieldtype": "Table",
+			"label": "Infrastructure People",
+			"options": "HDS Copilot Approver"
+		},
+		{
+			"collapsible": 1,
+			"fieldname": "people_overview_section",
+			"fieldtype": "Section Break",
+			"label": "Who Copilot Goes To Today"
+		},
+		{
+			"fieldname": "people_overview",
+			"fieldtype": "HTML",
+			"label": "Who Copilot Goes To Today"
 		},
 		{
 			"fieldname": "fixes_section",
@@ -699,7 +771,7 @@
 	],
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-11-13 15:00:00.000000",
+	"modified": "2026-11-16 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Copilot Settings",

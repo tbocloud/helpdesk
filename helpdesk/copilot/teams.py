@@ -673,7 +673,8 @@ def handle_activity(activity: dict) -> dict | None:
             return invoke_answer(unknown_card(activity))
         action = (activity.get("value") or {}).get("action") or {}
         data = dict(action.get("data") or {})
-        inputs = {"reason": data.pop("reason", "")}
+        # what the person typed or picked on the card arrives inside the button's data
+        inputs = {key: data.pop(key, "") for key in CARD_INPUTS}
         result = assistant.press(user, "Teams", action.get("verb") or "", data, inputs)
         pressed = activity.get("replyToId")
         if pressed and result.get("card"):
@@ -795,6 +796,8 @@ def invoke_answer(reply: dict | None) -> dict:
 
 
 TONES = {"good": "Good", "warning": "Warning", "default": "Default"}
+# the inputs cards may carry: a reason, a person picked in Assign to
+CARD_INPUTS = ("reason", "person")
 STYLES = {"positive": "positive", "destructive": "destructive"}
 
 
@@ -824,6 +827,22 @@ def adaptive(reply: dict) -> dict:
             }
         )
     for field in reply.get("inputs") or []:
+        if (
+            field.get("type") == "choice"
+        ):  # a list to pick from, e.g. Assign to (Phase 22)
+            body.append(
+                {
+                    "type": "Input.ChoiceSet",
+                    "id": field["id"],
+                    "label": field.get("label"),
+                    "style": "compact",
+                    "choices": [
+                        {"title": str(title), "value": str(value)}
+                        for title, value in field.get("choices") or []
+                    ],
+                }
+            )
+            continue
         body.append(
             {
                 "type": "Input.Text",

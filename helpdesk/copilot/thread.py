@@ -335,8 +335,11 @@ def may_write(user: str, ticket: str) -> bool:
 
     if is_tasky_admin(user) or user in assignees(ticket):
         return True
+    from helpdesk.copilot import people as copilot_people
+
     customer = frappe.db.get_value("HD Ticket", str(ticket), "customer")
-    return user in ticket_assignment.coordinators(customer)
+    # Phase 22: the project coordinators set for the customer (else the common ones)
+    return user in copilot_people.of_customer(customer)["coordinators"]
 
 
 def people(ticket: str) -> list[dict]:
@@ -345,9 +348,11 @@ def people(ticket: str) -> list[dict]:
     customer = frappe.db.get_value("HD Ticket", str(ticket), "customer")
     found = [(user, "developer") for user in assignees(ticket)]
     taken = {user for user, _role in found}
+    from helpdesk.copilot import people as copilot_people
+
     found += [
         (user, "coordinator")
-        for user in ticket_assignment.coordinators(customer)
+        for user in copilot_people.of_customer(customer)["coordinators"]
         if user not in taken
     ]
     return [
@@ -1331,15 +1336,41 @@ def on_correction_ready(approval, run, records: int):
 
 
 def on_hand_over(ticket: str, line: str = ""):
-    """The customer asked for a person in the chat: the people on the ticket (else the Agent
-    Managers) are told at once; Copilot keeps quiet to the customer until a person replies."""
+    """The customer asked for a person in the chat. Phase 22: the customer's project coordinator
+    working today joins the ticket (the developer stays on it), and the coordinators and the people
+    on the ticket are told at once, in Teams and TBO Support. Copilot keeps quiet to the customer
+    until a person replies."""
     from helpdesk.copilot import approvals
+    from helpdesk.copilot import people as copilot_people
+    from helpdesk.work_reminders import notify_users
 
     if not ticket:
         return None
-    people = on_ticket(ticket) or [
-        m for m in approvals._managers() if assistant.is_agent(m)
+    customer = frappe.db.get_value("HD Ticket", str(ticket), "customer")
+    coordinators = copilot_people.coordinators_today(customer)
+    lead = ticket_assignment.least_busy(coordinators)
+    if lead:
+        why = _("The customer asked to talk to a person")
+        copilot_people.add_to_ticket(str(ticket), lead, why)
+        ticket_assignment.chat_line(
+            str(ticket),
+            _(
+                "{0} asked to talk to a person; project coordinator {1} joined the ticket."
+            ).format(_("The customer"), get_fullname(lead)),
+        )
+    # nothing set at all: the Agent Managers, as before Phase 22, so the request never goes nowhere
+    people = list(dict.fromkeys(on_ticket(ticket) + coordinators)) or [
+        m
+        for m in (copilot_people.need_a_person(customer) or approvals._managers())
+        if assistant.is_agent(m)
     ]
+    notify_users(
+        coordinators,
+        "HD Ticket",
+        str(ticket),
+        _("The customer asked to talk to a person on ticket {0}").format(ticket),
+        once=False,
+    )
     return post(
         ticket,
         _card(
