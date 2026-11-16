@@ -1,12 +1,25 @@
 <template>
   <div class="flex h-full flex-col">
     <LayoutHeader
-      :title="__('Calendar')"
+      :title="meetingsOnly ? __('Meeting calendar') : __('Calendar')"
       :subtitle="
-        __('Meetings, due tasks, holidays and leave, by day, week or month.')
+        meetingsOnly
+          ? __(
+              'Team meetings by day, week or month. Pick a day to schedule one.'
+            )
+          : __(
+              'Meetings, due tasks, holidays and leave, by day, week or month.'
+            )
       "
     >
       <template #right-header>
+        <Button
+          v-if="meetingsOnly"
+          variant="solid"
+          :label="__('Schedule meeting')"
+          :icon-left="LucidePlus"
+          @click="scheduleOn()"
+        />
         <Button
           size="md"
           :loading="loading"
@@ -40,7 +53,7 @@
           :aria-label="__('Legend')"
         >
           <li
-            v-for="item in LEGEND"
+            v-for="item in legend"
             :key="item.kind"
             class="flex items-center gap-1.5"
           >
@@ -201,129 +214,286 @@
         </div>
       </section>
 
-      <div
-        v-else
-        class="work-calendar min-h-0 flex-1 rounded-xl border border-outline-gray-2 bg-surface-base p-4"
-      >
-        <Calendar
-          :events="events"
-          :config="calendarConfig"
-          @range-change="onRangeChange"
+      <div v-else class="flex min-h-0 flex-1 gap-4">
+        <div
+          class="work-calendar min-h-0 min-w-0 flex-1 rounded-xl border border-outline-gray-2 bg-surface-base p-4"
         >
-          <template
-            #header="{
-              currentMonthYear,
-              enabledModes,
-              activeView,
-              decrement,
-              increment,
-              updateActiveView,
-              setCalendarDate,
-              onMonthYearChange,
-              selectedMonthDate,
-            }"
+          <!-- the calendar reads its config once: a new one for each page -->
+          <Calendar
+            :key="meetingsOnly ? 'meetings' : 'work'"
+            :events="events"
+            :config="calendarConfig"
+            :on-cell-click="meetingsOnly ? onCellClick : undefined"
+            @range-change="onRangeChange"
           >
-            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <!-- the month is also the date picker: jump to any month or day -->
-              <h2>
-                <DatePicker
-                  :model-value="selectedMonthDate"
-                  :clearable="false"
-                  @update:model-value="onMonthYearChange"
-                >
-                  <template #target="{ togglePopover }">
-                    <Button
-                      variant="ghost"
-                      class="text-lg font-semibold tabular-nums text-ink-gray-9"
-                      :label="currentMonthYear"
-                      :aria-label="
-                        __('{0}, pick a date', [String(currentMonthYear)])
-                      "
-                      @click="togglePopover"
-                    >
-                      <template #suffix>
-                        <LucideChevronDown
-                          class="size-4 text-ink-gray-5"
-                          aria-hidden="true"
-                        />
-                      </template>
-                    </Button>
-                  </template>
-                </DatePicker>
-              </h2>
-              <div class="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  :aria-label="__('Previous')"
-                  @click="decrement"
-                >
-                  <template #icon>
-                    <LucideChevronLeft class="size-4" aria-hidden="true" />
-                  </template>
-                </Button>
-                <Button
-                  variant="ghost"
-                  :label="__('Today')"
-                  @click="setCalendarDate()"
-                />
-                <Button
-                  variant="ghost"
-                  :aria-label="__('Next')"
-                  @click="increment"
-                >
-                  <template #icon>
-                    <LucideChevronRight class="size-4" aria-hidden="true" />
-                  </template>
-                </Button>
-                <TabButtons
-                  class="ml-2"
-                  :buttons="
-                    enabledModes.map((mode) => ({
-                      label: __(mode.label),
-                      value: mode.value,
-                    }))
-                  "
-                  :model-value="activeView"
-                  @update:model-value="updateActiveView"
-                />
-              </div>
-            </div>
-          </template>
-          <template #event-popover-content="{ calendarEvent, close }">
-            <div class="flex w-72 flex-col gap-2 p-3 text-sm">
-              <p class="text-base-medium text-ink-gray-9">
-                {{ detail(calendarEvent).title }}
-              </p>
-              <p class="font-mono text-xs tabular-nums text-ink-gray-6">
-                {{ detail(calendarEvent).when }}
-              </p>
-              <p
-                v-if="detail(calendarEvent).context"
-                class="text-p-xs text-ink-gray-6"
+            <template
+              #header="{
+                currentMonthYear,
+                enabledModes,
+                activeView,
+                decrement,
+                increment,
+                updateActiveView,
+                setCalendarDate,
+                onMonthYearChange,
+                selectedMonthDate,
+              }"
+            >
+              <div
+                class="mb-3 flex flex-wrap items-center justify-between gap-2"
               >
-                {{ detail(calendarEvent).context }}
-              </p>
-              <div class="mt-1 flex flex-wrap gap-2">
-                <Button
-                  v-if="detail(calendarEvent).joinUrl"
-                  size="sm"
-                  variant="solid"
-                  :label="__('Join')"
-                  :icon-left="LucideVideo"
-                  :link="detail(calendarEvent).joinUrl"
-                />
-                <Button
-                  v-if="detail(calendarEvent).route"
-                  size="sm"
-                  :label="detail(calendarEvent).openLabel"
-                  @click="open(detail(calendarEvent).route, close)"
-                />
+                <!-- the month is also the date picker: jump to any month or day -->
+                <h2>
+                  <DatePicker
+                    :model-value="selectedMonthDate"
+                    :clearable="false"
+                    @update:model-value="onMonthYearChange"
+                  >
+                    <template #target="{ togglePopover }">
+                      <Button
+                        variant="ghost"
+                        class="text-lg font-semibold tabular-nums text-ink-gray-9"
+                        :label="currentMonthYear"
+                        :aria-label="
+                          __('{0}, pick a date', [String(currentMonthYear)])
+                        "
+                        @click="togglePopover"
+                      >
+                        <template #suffix>
+                          <LucideChevronDown
+                            class="size-4 text-ink-gray-5"
+                            aria-hidden="true"
+                          />
+                        </template>
+                      </Button>
+                    </template>
+                  </DatePicker>
+                </h2>
+                <div class="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    :aria-label="__('Previous')"
+                    @click="decrement"
+                  >
+                    <template #icon>
+                      <LucideChevronLeft class="size-4" aria-hidden="true" />
+                    </template>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    :label="__('Today')"
+                    @click="setCalendarDate()"
+                  />
+                  <Button
+                    variant="ghost"
+                    :aria-label="__('Next')"
+                    @click="increment"
+                  >
+                    <template #icon>
+                      <LucideChevronRight class="size-4" aria-hidden="true" />
+                    </template>
+                  </Button>
+                  <TabButtons
+                    class="ml-2"
+                    :buttons="
+                      enabledModes.map((mode) => ({
+                        label: __(mode.label),
+                        value: mode.value,
+                      }))
+                    "
+                    :model-value="activeView"
+                    @update:model-value="updateActiveView"
+                  />
+                </div>
               </div>
+            </template>
+            <template #event-popover-content="{ calendarEvent, close }">
+              <div class="flex w-72 flex-col gap-2 p-3 text-sm">
+                <p class="text-base-medium text-ink-gray-9">
+                  {{ detail(calendarEvent).title }}
+                </p>
+                <p class="font-mono text-xs tabular-nums text-ink-gray-6">
+                  {{ detail(calendarEvent).when }}
+                </p>
+                <p
+                  v-if="detail(calendarEvent).context"
+                  class="text-p-xs text-ink-gray-6"
+                >
+                  {{ detail(calendarEvent).context }}
+                </p>
+                <template v-if="calendarEvent.kind === 'meeting'">
+                  <p
+                    v-if="calendarEvent.record.attendees?.length"
+                    class="text-p-xs text-ink-gray-7"
+                  >
+                    <span class="text-ink-gray-5">{{ __("People:") }}</span>
+                    {{ calendarEvent.record.attendees.join(", ") }}
+                  </p>
+                  <p
+                    v-if="calendarEvent.record.agenda"
+                    class="whitespace-pre-line text-p-xs text-ink-gray-7"
+                  >
+                    {{ calendarEvent.record.agenda }}
+                  </p>
+                </template>
+                <div class="mt-1 flex flex-wrap gap-2">
+                  <Button
+                    v-if="detail(calendarEvent).joinUrl"
+                    size="sm"
+                    variant="solid"
+                    :label="__('Join')"
+                    :icon-left="LucideVideo"
+                    :link="detail(calendarEvent).joinUrl"
+                  />
+                  <Button
+                    v-if="detail(calendarEvent).route"
+                    size="sm"
+                    :label="detail(calendarEvent).openLabel"
+                    @click="open(detail(calendarEvent).route, close)"
+                  />
+                  <Button
+                    v-if="
+                      calendarEvent.kind === 'meeting' &&
+                      calendarEvent.record.can_cancel
+                    "
+                    size="sm"
+                    variant="ghost"
+                    theme="red"
+                    :label="__('Cancel meeting')"
+                    @click="askCancel(calendarEvent.record, close)"
+                  />
+                </div>
+              </div>
+            </template>
+          </Calendar>
+        </div>
+
+        <!-- Meetings calendar: the meetings ahead, readable without opening each one -->
+        <aside
+          v-if="meetingsOnly"
+          class="hidden w-80 shrink-0 flex-col overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base lg:flex"
+          :aria-labelledby="upcomingId"
+        >
+          <div
+            class="flex items-baseline justify-between gap-2 border-b border-outline-gray-1 px-4 py-3"
+          >
+            <h2 :id="upcomingId" class="text-base-medium text-ink-gray-9">
+              {{ __("Upcoming meetings") }}
+            </h2>
+            <span class="font-mono text-xs tabular-nums text-ink-gray-5">
+              {{ upcoming.count }}
+            </span>
+          </div>
+          <div class="min-h-0 flex-1 overflow-y-auto">
+            <div
+              v-if="!upcoming.count"
+              class="flex flex-col items-center gap-3 px-4 py-8 text-center"
+            >
+              <LucideCalendarCheck
+                class="size-6 text-ink-gray-4"
+                aria-hidden="true"
+              />
+              <p class="text-p-sm text-ink-gray-6">
+                {{ __("No meetings ahead in the days shown.") }}
+              </p>
+              <Button
+                size="sm"
+                :label="__('Schedule meeting')"
+                :icon-left="LucidePlus"
+                @click="scheduleOn()"
+              />
             </div>
-          </template>
-        </Calendar>
+            <section
+              v-for="day in upcoming.days"
+              :key="day.date"
+              :aria-labelledby="`upcoming-${day.date}`"
+            >
+              <h3
+                :id="`upcoming-${day.date}`"
+                class="sticky top-0 flex items-center gap-2 bg-surface-gray-1 px-4 py-1.5 text-xs text-ink-gray-6"
+              >
+                {{ day.label }}
+                <span
+                  v-if="day.isToday"
+                  class="rounded px-1.5 text-2xs text-ink-gray-8 ring-1 ring-inset ring-highlight"
+                >
+                  {{ __("Today") }}
+                </span>
+              </h3>
+              <ul role="list">
+                <li
+                  v-for="m in day.meetings"
+                  :key="m.name"
+                  class="flex flex-col gap-1 border-b border-outline-gray-1 px-4 py-3 last:border-b-0"
+                >
+                  <p class="flex items-center gap-2 text-xs">
+                    <span class="font-mono tabular-nums text-ink-gray-7">
+                      {{ dayjs(m.starts_on).format("HH:mm") }}–{{
+                        dayjs(m.ends_on).format("HH:mm")
+                      }}
+                    </span>
+                    <span
+                      v-if="isNow(m)"
+                      class="rounded bg-brand-soft px-1.5 text-2xs text-brand-ink"
+                    >
+                      {{ __("Now") }}
+                    </span>
+                  </p>
+                  <p class="text-base text-ink-gray-9">{{ m.subject }}</p>
+                  <p
+                    v-if="detail({ kind: 'meeting', record: m }).context"
+                    class="text-p-xs text-ink-gray-6"
+                  >
+                    {{ detail({ kind: "meeting", record: m }).context }}
+                  </p>
+                  <p
+                    v-if="m.attendees?.length"
+                    class="flex items-start gap-1.5 text-p-xs text-ink-gray-6"
+                    :title="m.attendees.join(', ')"
+                  >
+                    <LucideUsers
+                      class="mt-0.5 size-3.5 shrink-0 text-ink-gray-5"
+                      aria-hidden="true"
+                    />
+                    {{ peopleLabel(m.attendees) }}
+                  </p>
+                  <div
+                    v-if="m.join_url || m.can_cancel"
+                    class="mt-1 flex flex-wrap gap-2"
+                  >
+                    <Button
+                      v-if="m.join_url"
+                      size="sm"
+                      :variant="isNow(m) ? 'solid' : 'subtle'"
+                      :label="__('Join')"
+                      :icon-left="LucideVideo"
+                      :link="m.join_url"
+                    />
+                    <Button
+                      v-if="m.can_cancel"
+                      size="sm"
+                      variant="ghost"
+                      theme="red"
+                      :label="__('Cancel meeting')"
+                      @click="cancelling = m"
+                    />
+                  </div>
+                </li>
+              </ul>
+            </section>
+          </div>
+        </aside>
       </div>
     </div>
+
+    <TeamMeetingDialog
+      v-if="meetingsOnly"
+      v-model:open="showSchedule"
+      :date="clicked.date"
+      :time="clicked.time"
+      @scheduled="load"
+    />
+    <CancelMeetingDialog v-model:meeting="cancelling" @cancelled="load" />
   </div>
 </template>
 
@@ -334,6 +504,8 @@ import ViewTabs from "@/components/ViewTabs.vue";
 import { useScreenSize } from "@/composables/screen";
 import { overdueCutoff } from "@/composables/workDays";
 import TaskyState from "@/components/TaskyState.vue";
+import CancelMeetingDialog from "@/components/meetings/CancelMeetingDialog.vue";
+import TeamMeetingDialog from "@/components/meetings/TeamMeetingDialog.vue";
 import { __ } from "@/translation";
 import {
   Button,
@@ -343,8 +515,9 @@ import {
   TabButtons,
   call,
   dayjs,
+  toast,
 } from "frappe-ui";
-import { computed, ref, watch, type Component } from "vue";
+import { computed, ref, useId, watch, type Component } from "vue";
 import { RouterLink, useRouter, type RouteLocationRaw } from "vue-router";
 import LucideCalendarCheck from "~icons/lucide/calendar-check";
 import LucideCalendarOff from "~icons/lucide/calendar-off";
@@ -354,8 +527,10 @@ import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleDot from "~icons/lucide/circle-dot";
 import LucideFlag from "~icons/lucide/flag";
+import LucidePlus from "~icons/lucide/plus";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideTreePalm from "~icons/lucide/tree-palm";
+import LucideUsers from "~icons/lucide/users";
 import LucideVideo from "~icons/lucide/video";
 
 interface MeetingEvent {
@@ -364,9 +539,14 @@ interface MeetingEvent {
   starts_on: string;
   ends_on: string;
   join_url: string | null;
-  reference_doctype: "HD Ticket" | "Task";
-  reference_name: string;
+  /** empty for an internal meeting, about no ticket or task */
+  reference_doctype: "HD Ticket" | "Task" | null;
+  reference_name: string | null;
   customer: string | null;
+  meeting_type: string | null;
+  agenda: string | null;
+  attendees: string[];
+  can_cancel: boolean;
 }
 
 interface TaskEvent {
@@ -466,7 +646,7 @@ const KINDS: Record<Kind, { color: string; icon: Component }> = {
 };
 
 const LEGEND: { kind: Kind; label: string }[] = [
-  { kind: "meeting", label: __("Teams meeting") },
+  { kind: "meeting", label: __("Meeting") },
   { kind: "task", label: __("Task due") },
   { kind: "key", label: __("Key task or milestone") },
   { kind: "overdue", label: __("Overdue task") },
@@ -483,16 +663,32 @@ function iconTone(kind: Kind) {
     : "text-ink-gray-5";
 }
 
-const calendarConfig = {
+const props = defineProps<{
+  /** the Meetings calendar: meetings, holidays and leave; a click on a day schedules */
+  meetingsOnly?: boolean;
+}>();
+
+// the Meetings calendar has taller hours, so a half-hour meeting shows its
+// purpose and time instead of a cut-off title
+const MEETING_HOUR_HEIGHT = 96;
+const calendarConfig = computed(() => ({
   defaultMode: "Week",
   isEditMode: false,
   enableShortcuts: false,
   timeFormat: "24h",
   scrollToHour: 8,
+  ...(props.meetingsOnly ? { hourHeight: MEETING_HOUR_HEIGHT } : {}),
   eventIcons: Object.fromEntries(
     Object.entries(KINDS).map(([kind, { icon }]) => [kind, icon])
   ),
-};
+}));
+
+const TASK_KINDS: Kind[] = ["task", "key", "overdue"];
+const legend = computed(() =>
+  props.meetingsOnly
+    ? LEGEND.filter((item) => !TASK_KINDS.includes(item.kind))
+    : LEGEND
+);
 
 const router = useRouter();
 const { isMobileView } = useScreenSize();
@@ -522,6 +718,7 @@ async function load() {
       start: range.value.start,
       end: range.value.end,
       team: scope.value === "team" ? 1 : 0,
+      meetings_only: props.meetingsOnly ? 1 : 0,
     });
     if (request === latestRequest) {
       calendarData.value = result;
@@ -536,7 +733,8 @@ async function load() {
 
 // the desktop calendar reports its range as soon as it mounts, which loads it
 if (isMobileView.value) load();
-watch(scope, load);
+// Calendar and Meeting calendar share this page, so moving between them reloads
+watch([scope, () => props.meetingsOnly], load);
 
 const data = computed(() => calendarData.value);
 
@@ -633,7 +831,9 @@ function timeLabel(event: typeof events.value[number]) {
 }
 
 const emptyText = computed(() =>
-  scope.value === "team"
+  props.meetingsOnly
+    ? __("No meetings in this range. Click a day to schedule one.")
+    : scope.value === "team"
     ? __("No team meetings or open tasks due in this range.")
     : __("No meetings or open tasks of yours due in this range.")
 );
@@ -777,9 +977,12 @@ function detail(event: Record<string, any>) {
         m.ends_on
       ).format("HH:mm")}`,
       context: [
+        m.meeting_type,
         isTicket
           ? __("Ticket #{0}", m.reference_name)
-          : __("Task {0}", m.reference_name),
+          : m.reference_name
+          ? __("Task {0}", m.reference_name)
+          : null,
         m.customer,
       ]
         .filter(Boolean)
@@ -808,6 +1011,73 @@ function open(route: RouteLocationRaw | null, close: () => void) {
   if (!route) return;
   close();
   router.push(route);
+}
+
+// --- scheduling and cancelling (Meetings calendar) ---
+
+const showSchedule = ref(false);
+const clicked = ref<{ date?: string; time?: string }>({});
+
+function scheduleOn(date?: string, time?: string) {
+  clicked.value = { date, time };
+  showSchedule.value = true;
+}
+
+function onCellClick(cell: { date: Date | string; time?: string }) {
+  const day = dayjs(cell.date);
+  if (day.isBefore(dayjs(), "day")) {
+    toast.info(__("Pick today or a later day to schedule a meeting."));
+    return;
+  }
+  scheduleOn(day.format("YYYY-MM-DD"), cell.time || undefined);
+}
+
+const cancelling = ref<MeetingEvent | null>(null);
+
+// --- upcoming meetings (Meetings calendar side panel) ---
+
+const upcomingId = `upcoming-${useId()}`;
+const MAX_NAMES = 3;
+
+const upcoming = computed(() => {
+  const now = dayjs();
+  const today = now.format("YYYY-MM-DD");
+  const ahead = (data.value?.meetings ?? [])
+    .filter((m) => dayjs(m.ends_on).isAfter(now))
+    .sort((a, b) => a.starts_on.localeCompare(b.starts_on));
+  const days = new Map<string, MeetingEvent[]>();
+  for (const m of ahead) {
+    const date = dayjs(m.starts_on).format("YYYY-MM-DD");
+    if (!days.has(date)) days.set(date, []);
+    days.get(date)!.push(m);
+  }
+  return {
+    count: ahead.length,
+    days: [...days.entries()].map(([date, meetings]) => ({
+      date,
+      isToday: date === today,
+      label: dayjs(date).format("dddd D MMM"),
+      meetings,
+    })),
+  };
+});
+
+function isNow(m: MeetingEvent) {
+  const now = dayjs();
+  return !now.isBefore(m.starts_on) && now.isBefore(m.ends_on);
+}
+
+function peopleLabel(names: string[]) {
+  if (names.length <= MAX_NAMES) return names.join(", ");
+  return __("{0} and {1} more", [
+    names.slice(0, MAX_NAMES).join(", "),
+    String(names.length - MAX_NAMES),
+  ]);
+}
+
+function askCancel(meeting: MeetingEvent, close: () => void) {
+  close();
+  cancelling.value = meeting;
 }
 </script>
 

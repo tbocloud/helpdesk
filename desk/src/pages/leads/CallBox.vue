@@ -140,9 +140,10 @@
         }}</span>
       </div>
 
-      <!-- the call is on the phone: End call when the provider can drop it, else only
-           the phone can -->
-      <div v-if="onPhone && box.canEnd" class="flex flex-col gap-1.5">
+      <!-- the call is on the phone. The provider can drop it only once the person has
+           picked up their own phone, so End call shows from then on; before that only
+           the phone can stop its own ringing -->
+      <div v-if="onPhone && canEndNow" class="flex flex-col gap-1.5">
         <Button
           class="!h-12 w-full"
           variant="solid"
@@ -156,21 +157,21 @@
           </template>
         </Button>
         <p class="text-p-sm text-ink-gray-6">
-          {{
-            pickedUp
-              ? __("You can also hang up on your phone.")
-              : __(
-                  "Works once you have picked up your phone. Before that, decline the call on your phone."
-                )
-          }}
+          {{ __("You can also hang up on your phone.") }}
         </p>
       </div>
       <p
         v-else-if="onPhone"
-        class="flex items-center gap-2 rounded-lg bg-surface-gray-2 px-3 py-3 text-base-medium text-ink-gray-9"
+        class="flex items-start gap-2 rounded-lg bg-surface-gray-2 px-3 py-3 text-base-medium text-ink-gray-9"
       >
-        <LucidePhone class="size-5 shrink-0" aria-hidden="true" />
-        {{ __("To end the call, hang up on your phone.") }}
+        <LucidePhone class="mt-0.5 size-5 shrink-0" aria-hidden="true" />
+        {{
+          box.canEnd
+            ? __(
+                "Your phone is ringing. Pick it up to connect the call, or decline it on your phone to cancel."
+              )
+            : __("To end the call, hang up on your phone.")
+        }}
       </p>
 
       <!-- the controls row: what the person can do about the call itself -->
@@ -428,9 +429,13 @@ const canStopWaiting = computed(
 const canAskResult = computed(
   () => tooLong.value && !box.resultAsked && !box.recorded
 );
-/** the person has answered their own phone: from here the provider can end the call */
-const pickedUp = computed(
-  () => box.phase === "ringing_lead" || box.phase === "on_call"
+/** End call shows once the person has answered their own phone (from then on the provider
+ * can end the call), and also after a long wait without any news of the call, in case the
+ * box never hears that they picked up */
+const canEndNow = computed(
+  () =>
+    box.canEnd &&
+    (box.phase === "ringing_lead" || box.phase === "on_call" || tooLong.value)
 );
 /** the call is on and only the phone can end it */
 const onPhone = computed(

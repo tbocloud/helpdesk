@@ -412,6 +412,18 @@ const portalRoutes = [
     name: "WorkCalendar",
     component: () => import("@/pages/work/WorkCalendar.vue"),
   },
+  // the same calendar with meetings only: a click on a day schedules one
+  {
+    path: "/meetings",
+    name: "MeetingCalendar",
+    component: () => import("@/pages/work/WorkCalendar.vue"),
+    props: { meetingsOnly: true },
+  },
+  {
+    path: "/meetings/types",
+    name: "MeetingTypes",
+    component: () => import("@/pages/meetings/MeetingTypes.vue"),
+  },
   {
     path: "/customer-report",
     name: "CustomerReport",

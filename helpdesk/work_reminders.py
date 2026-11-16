@@ -34,11 +34,13 @@ def notify_users(
     notification_type: str = "Reminder",
     user_from: str | None = None,
     once: bool = True,
+    deliver: bool = True,
 ):
     """Reminder in the helpdesk notification panel, plus an email or chat message
     (see HDNotification); `escalate` also posts it to the team's chat channel.
     `link` replaces the usual page, e.g. a pull request on GitHub. Another
-    `notification_type` (e.g. Task Completed) stays in the panel only.
+    `notification_type` (e.g. Task Completed) stays in the panel only, as does
+    one with `deliver=False` (the caller emails it its own way).
 
     Sent once per person, document and subject, so a daily run doesn't repeat itself;
     `once=False` sends it again, for events that can happen more than once.
@@ -75,6 +77,7 @@ def notify_users(
             link,
             notification_type=notification_type,
             user_from=user_from,
+            deliver=deliver,
         )
 
 
@@ -144,6 +147,9 @@ def helpdesk_path(doctype: str, name: str) -> str:
     if doctype == "Task":
         # My Work opens the task's details (?task=), for anyone who may read it
         return f"/my-work?{urlencode({'task': name})}"
+    if doctype == "HD Meeting":
+        # an internal meeting (one about a ticket or task opens that instead)
+        return "/meetings"
     return "/my-work"
 
 
