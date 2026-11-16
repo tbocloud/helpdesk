@@ -418,20 +418,30 @@ batches, and the page opens on it for Sales Employees. It **replaces Call today*
 places for one job. People without batches keep Call today. Managers who are not members see
 neither; they have the batch table on the Daily report.
 
-**The screen (2026-11-14: one list; the call is made on the lead's page).** A header with the
-title, the **Calling for** switch (`CallingFor.vue`, a button that opens the same picker) and a red
-*N overdue* pill. Then the batch card (slot, time left, progress bar, called, contacted, call backs,
-the product it calls for, the day's total) with **Get next batch** on its right, or why it has to
-wait. Under them, **Today by slot** (`slots` from `get_my_calls`; left out by an older TBO
-Smart): one row per slot of the day, its later batches counted with it
-(*Morning* and *Morning +2*): *36 of 50 called · 25 contacted*, out of the plan's calls for the
-slot (or what was handed, when more), a thin progress bar, and where the called leads stand now
-in plain words, for example *20 Contacted · 8 Not Responding · 3 Wrong Number · 5 Small
-Business · 14 not called yet* (and *N of the plan not handed out yet* when the batch came out
-smaller than the plan). A slot of the plan not handed out yet is there too: *Afternoon 0 of 50
-called*, *50 planned, not handed out yet* (none on a day off). Stages a call sets carry their icon. The department shows next to the
-slot only when the day has more than one. Then the queue, full width: pending calls first, then the overdue ones (red pill), each row
-with its number, name, place, main number and reason. **A row opens the lead's page**
+**The screen (2026-11-16: the mockup redesign; the call is made on the lead's page).** A header
+with the title, the **Calling for** switch (`CallingFor.vue`, a button that opens the same picker),
+a red *N overdue* pill and **Get next batch** on the right (or why it has to wait). Then the **Now**
+card: the running slot, its time left as a pill (info, warning under 15 minutes), the product it
+calls for, a large *18 of 50 called*, a brand progress bar and *32 still to call in this slot*;
+beside it three `StatTile`s: *Contacted* and *Call backs* for this slot, and *All of today*
+(`68 / 100`, *called · 30 contacted*) on the brand tint. Without a batch the card says when the
+next one starts and keeps only the day's tile. Under it, **Today by slot** (`slots` from
+`get_my_calls`; left out by an older TBO Smart): a two-column grid of slot cards, its later batches
+counted with it (*Morning* and *Morning +2*). Each card has a gray time-of-day icon (sunrise,
+sun, sunset, moon, else a clock), the slot and its department, a status badge (*Done* success,
+*In progress* info for the running slot, *Not started* gray, *Not finished* red for a slot handed
+out, not running and not all called), *50 / 50 called* with *22 contacted*, out of the plan's
+calls (or what was handed, when more), a stacked bar of where the called leads stand now, and a
+legend of pills with a coloured dot, the count and the stage: *11 Contacted · 19 Not Responding ·
+2 Not Interested · 9 Wrong Number · 9 Small Business · 32 Not called yet* (and *N not handed out
+yet* when the batch came out smaller than the plan). The call stages keep a fixed colour
+(Contacted green, Not Responding amber, Not Interested red, Wrong Number violet); any other stage
+takes the next colour in page order, so a stage looks the same in every card, and the legend
+always names it. A slot not handed out yet shows a dashed *50 planned, not handed out yet* box
+instead of the bar (none on a day off). Then **Up next to call** with its count, full width: pending calls first, then the overdue ones
+(red pill), each row with its number, name, place, main number and reason (info pill; warning
+when it comes back at a set time). A watcher sees the next 5 with *Showing the next 5 of 32* and
+**Show all 32**; the caller sees the whole queue. **A row opens the lead's page**
 (`/leads/<lead>?item=<batch item>`), where the person calls (the Call button or a number in the
 Numbers list) and the result sheet asks how it went. There is no call panel on Today's calls any
 more: the lead page already shows the numbers, WhatsApp, the why-call note and the timeline, so one
@@ -717,7 +727,10 @@ Manager listed as a viewer only watches that department. The sidebar shows Assig
 viewer even when they are a BD (`is_viewer` in `get_options`' departments).
 
 **A person's Today's calls, read-only.** On Assign leads, each person's **Today** count
-(`12/50`) opens `MemberCalls.vue` (`/leads/assign/calls/<user>`): their Today's calls as they see
+(`12/50`) opens `MemberCalls.vue` (`/leads/assign/calls/<user>`). Its header has the breadcrumb,
+the person's avatar, *Name's calls today*, pills for their departments (read from the loaded
+calls), *Live · updates by itself* and *View only*, the line "This is exactly what Name sees in
+Today's calls." and a **Back to Assign leads** button. Below: their Today's calls as they see
 it (`TodaysCalls.vue` with `member`, reading `get_member_calls`), the batch, time left, counts,
 the calls waiting, coming back later and overdue, without the Call button, the answer buttons,
 Get next batch or the calling-for switch, and the lead name is not a link. Below it, **Called
