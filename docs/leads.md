@@ -311,7 +311,10 @@ timer.
 What it says, in order: *Calling your phone…* → *Pick up your phone* → *Ringing <lead>* →
 *On call* (the timer runs in the header) → *Call ended · 2m 10s* or *Not answered*; a refusal
 shows CallerDesk's reason with **Try again**. In every state up to *On call* the box has a red
-**End call** button (CallerDesk), with "You can also hang up on your phone." under it; with
+**End call** button (CallerDesk). CallerDesk can end a call only once the person has picked up
+their own phone, so until then the line under the button says "Works once you have picked up
+your phone. Before that, decline the call on your phone.", and after it "You can also hang up on
+your phone."; with
 MyOperator the line reads **To end the call, hang up on your phone.**
 
 **The result is recorded in the box.** When the call ends (or **Stop waiting**, or **Record the
