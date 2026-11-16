@@ -1175,6 +1175,10 @@ class HDTicket(Document):
 
         if recipients:
             recipients = strip_chat_placeholders(recipients)
+        if not (recipients or cc or bcc):
+            # nobody to email (e.g. an estimate sent without "to"): Frappe v15 sent nothing here,
+            # and v16's sendmail refuses a communication without recipients
+            return
 
         message = self.parse_content(message)
 
