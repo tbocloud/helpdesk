@@ -2,16 +2,22 @@
   <div>
     <div class="flex items-center justify-between gap-3 pb-4">
       <h2 class="text-lg-semibold text-ink-gray-9">{{ __("Contacts") }}</h2>
-      <Button
-        v-if="hasPermission()"
-        :label="__('Invite contact')"
-        variant="subtle"
-        @click="showInviteContact = true"
-      >
-        <template #prefix>
-          <LucidePlus class="size-4" aria-hidden="true" />
-        </template>
-      </Button>
+      <div v-if="hasPermission()" class="flex flex-wrap items-center gap-2">
+        <Button
+          :label="__('Invite to portal')"
+          variant="ghost"
+          @click="showInviteContact = true"
+        />
+        <Button
+          :label="__('Add contact')"
+          variant="subtle"
+          @click="showAddContact = true"
+        >
+          <template #prefix>
+            <LucidePlus class="size-4" aria-hidden="true" />
+          </template>
+        </Button>
+      </div>
     </div>
     <div
       v-if="customer.getContacts?.loading && !customer.getContacts?.data"
@@ -40,15 +46,15 @@
       :message="
         hasPermission()
           ? __(
-              'Invite the people who raise tickets for this customer. They get portal access once they accept.'
+              'Add the people you mail and who sign off for this customer. Invite them to the portal when they need to raise tickets.'
             )
           : __('Nobody has been added to this customer yet.')
       "
     >
       <Button
         v-if="hasPermission()"
-        :label="__('Invite contact')"
-        @click="showInviteContact = true"
+        :label="__('Add contact')"
+        @click="showAddContact = true"
       />
     </TaskyState>
     <div v-else class="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -60,6 +66,7 @@
       />
     </div>
   </div>
+  <AddContactDialog v-model="showAddContact" />
   <InviteContactDialog
     v-model="showInviteContact"
     :excluded-emails="existingContacts"
@@ -77,11 +84,13 @@ import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucidePlus from "~icons/lucide/plus";
 import LucideUserX from "~icons/lucide/user-x";
 import { agents } from "../Settings/agents";
+import AddContactDialog from "./AddContactDialog.vue";
 import ContactCard from "./ContactCard.vue";
 import InviteContactDialog from "./InviteContactDialog.vue";
 
 const customer = inject(CustomerResourceSymbol)!;
 
+const showAddContact = ref(false);
 const showInviteContact = ref(false);
 
 const existingContacts = computed(() => {

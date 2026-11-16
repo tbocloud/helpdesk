@@ -133,8 +133,11 @@ Item answers: **Pending**, **Done**, **Not clear**, **Escalated**.
    - **Customer**: the customer's name (read-only), its address (read-only, the primary one
      first, **Change** when it has several; "No address on file. Add address", and sending is
      still allowed), who signs (To: a contact of the customer with an email, shown with
-     designation and email; the existing "no contacts with an email yet" warning and its link;
-     the customer's primary contact is picked when it has an email), and CC (the project lead
+     designation and email; "no contacts with an email yet" when it has none; the customer's
+     primary contact is picked when it has an email; **Add someone by email** types a name,
+     email and optional designation, adds them as a contact of the customer, without portal
+     access or an invite, and picks them; an email that is already a contact just picks that
+     contact), and CC (the project lead
      and you; the customer's other contacts are offered; any valid address).
    - **Mail content**: subject and body filled in from the template ([Mail](#mail)), and
      **Attach sign-off document (PDF)**, on by default.
@@ -252,8 +255,9 @@ lists, link) and CC, kept on the sign-off (`email_subject`, `email_body`, `cc_em
   Always CC with the new one's.
 - **The link** goes where `{{ sign_off_link }}` is, else at the end, with how the one-time code
   works, when the sign-off has questions; without questions no link goes.
-- **To** is only the signatory: to send to someone else, add them as a contact of the customer
-  first. **CC** starts as the project lead and the person sending, plus the template's Always CC.
+- **To** is only the signatory, always a contact of the customer (the signing, the document and
+  the questions page read their name and designation from it): someone else is added as a
+  contact first, from the form's **Add someone by email** or the customer's **Add contact**. **CC** starts as the project lead and the person sending, plus the template's Always CC.
 - A user that isn't an email address (Administrator) is left out of the CC of the signed record
   and of the completion letter's recipients (`mail_addresses`): one bad address and Frappe drops
   the whole mail.
@@ -462,6 +466,10 @@ page) with the requirements' mail; a mail a site changed is left alone.
 - `get_signoff_form(project, lead?)` → `{project_name, project_type, customer, customer_name,
   addresses (primary first, with how each reads), contacts (with designation, is_primary),
   default_contact, default_cc, templates, team, can_send, can_create_uat, placeholder_labels}`.
+- `add_signoff_contact(project, full_name, email, designation?, lead?)` → the new contact, as
+  `get_signoff_form` lists contacts. Who may create the sign-off (`_project_for(…, manage=True)`)
+  may add who signs; it goes through `HD Customer.add_contact_by_email` (reuses a Contact with
+  that email, no User, no invite; an email already a contact of the customer is refused).
 - `preview_signoff_mail(project, signoff_type, template?, signatory_contact?, module_title?,
   training_date?, trainer?, lead?, customer_address?)` → `{subject, body, cc, missing}`.
 - `preview_new_signoff_document(project, values, lead?)` (POST) and
