@@ -1988,7 +1988,7 @@ def _new_work(user: str, channel: str, message, action: dict) -> dict:
     ticket.insert()
     for name in action.get("files") or []:
         source = frappe.get_doc("File", name)
-        frappe.get_doc(
+        copy = frappe.get_doc(
             {
                 "doctype": "File",
                 "file_name": source.file_name,
@@ -1997,7 +1997,15 @@ def _new_work(user: str, channel: str, message, action: dict) -> dict:
                 "attached_to_doctype": "HD Ticket",
                 "attached_to_name": ticket.name,
             }
-        ).insert(ignore_permissions=True)
+        )
+        # Frappe lets only someone who may read an existing private file attach it again, and the
+        # chat it came from is no agent's to read: the person who uploaded it attaches it
+        user = frappe.session.user
+        frappe.set_user(source.owner or user)  # the file's own uploader - nosemgrep
+        try:
+            copy.insert(ignore_permissions=True)
+        finally:
+            frappe.set_user(user)  # back to whoever confirmed the new work - nosemgrep
     run = runs.start_run(ticket.name, actor=runs.AGENT)
     return {
         "text": _("Ticket {0} raised; Copilot is investigating.").format(ticket.name),
