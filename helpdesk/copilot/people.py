@@ -247,6 +247,27 @@ def for_ticket(
     }
 
 
+def fix_chain(customer: str | None, ticket: str | None = None) -> list[str]:
+    """Everyone who may take a fix's approval today, in order: the coordinator's choice, the
+    fix approver, the first developer, the second developer, then the project coordinators
+    (least busy first). The caller skips whoever may not decide this fix (its author; a
+    non-senior for a sensitive fix) and takes the next."""
+    people = of_customer(customer)
+    ordered = [
+        chosen(ticket),
+        people["fix_approver"],
+        people["first"],
+        people["second"],
+    ]
+    found = working([u for u in ordered if u])
+    coordinators = coordinators_today(customer)
+    load = ticket_assignment.open_load(coordinators) if coordinators else {}
+    found += sorted(
+        (u for u in coordinators if u not in found), key=lambda u: (load.get(u, 0), u)
+    )
+    return found
+
+
 def developer(customer: str | None, ticket: str | None = None) -> str | None:
     """The developer who takes the customer's work today (chosen, first or second), or None."""
     found = for_ticket(customer, ticket)

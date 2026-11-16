@@ -361,6 +361,42 @@ class TestCopilotPeople(FrappeTestCase):
             approvals.pick_approver(self.fake_run(), sensitive=False), FIRST[0]
         )
 
+    def test_first_developer_first_then_the_second(self):
+        self.assertEqual(
+            approvals.pick_approver(self.fake_run(), sensitive=False), FIRST[0]
+        )
+        # the first wrote the fix (nobody approves their own): the second developer, not the approvers list
+        self.assertEqual(
+            approvals.pick_approver(
+                self.fake_run(), sensitive=False, exclude={FIRST[0]}
+            ),
+            SECOND[0],
+        )
+        # both wrote it: the project coordinator
+        self.assertEqual(
+            approvals.pick_approver(
+                self.fake_run(), sensitive=False, exclude={FIRST[0], SECOND[0]}
+            ),
+            COORD[0],
+        )
+        # the first is on leave: the second
+        make_hd_leave(FIRST[0], nowdate(), nowdate())
+        self.assertEqual(
+            approvals.pick_approver(self.fake_run(), sensitive=False), SECOND[0]
+        )
+
+    def test_the_fix_approver_comes_before_the_developers(self):
+        self.customer(
+            CUSTOMER,
+            first=FIRST[0],
+            second=SECOND[0],
+            fixer=FIXER[0],
+            coordinators=[COORD[0]],
+        )
+        self.assertEqual(
+            approvals.pick_approver(self.fake_run(), sensitive=False), FIXER[0]
+        )
+
     def test_a_sensitive_fix_still_needs_a_senior(self):
         self.assertEqual(
             approvals.pick_approver(self.fake_run(), sensitive=True), APPROVER[0]

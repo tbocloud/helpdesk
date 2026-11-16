@@ -112,14 +112,15 @@ def pick_approver(
     exclude: set[str] | None = None,
     copilot_only: bool = False,
 ) -> str | None:
-    """The customer's person for this fix (Phase 22: the coordinator's choice, the fix approver,
-    the first or second developer, else a project coordinator, all from settings) when they may;
-    else the least loaded approver; else nobody. A sensitive fix takes a senior."""
+    """The customer's people for this fix, in order (Phase 22, all from settings): the
+    coordinator's choice, the fix approver, the first developer, the second developer, then a
+    project coordinator; the first who may decide it (not its author; a senior for a sensitive
+    fix) gets it. Else the least loaded approver; else nobody."""
     excluded = (set() if copilot_only else authors(run)) | (exclude or set())
     allowed = seniors() if sensitive else list(dict.fromkeys(approvers() + seniors()))
-    person = people.for_ticket(run.customer, run.ticket, fix=True)["user"]
-    if person and person not in excluded and (not sensitive or person in seniors()):
-        return person
+    for person in people.fix_chain(run.customer, run.ticket):
+        if person not in excluded and (not sensitive or person in seniors()):
+            return person
     candidates = [user for user in allowed if user not in excluded]
     if not candidates:
         return None
