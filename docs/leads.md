@@ -310,8 +310,9 @@ timer.
 
 What it says, in order: *Calling your phone…* → *Pick up your phone* → *Ringing <lead>* →
 *On call* (the timer runs in the header) → *Call ended · 2m 10s* or *Not answered*; a refusal
-shows CallerDesk's reason with **Try again**. In every state up to *On call* a visible line says
-**To end the call, hang up on your phone.**
+shows CallerDesk's reason with **Try again**. In every state up to *On call* the box has a red
+**End call** button (CallerDesk), with "You can also hang up on your phone." under it; with
+MyOperator the line reads **To end the call, hang up on your phone.**
 
 **The result is recorded in the box.** When the call ends (or **Stop waiting**, or **Record the
 result** after 45 seconds without live updates) the box shows the six answers (*Contacted*, *Not
@@ -347,15 +348,17 @@ call ending) then *Call ended*; after 45 seconds it already offers **Record the 
 after 3 minutes without any sign of the call it stops asking and says *Can't see this call any
 more*. MyOperator calls only ever go from *Calling your phone…* to *Call ended*.
 
-**Ending a call.** CallerDesk's documented API has **no hang-up call** (its Postman collection,
-read 2026-11-14, only reports a `hangup_cause`), so the box does not fake an *End call*, *Mute* or
-*Hold* button (Frappe CRM's Exotel popup, a provider that also rings the agent's phone first, has
-none either). **Stop waiting** (from *Calling your phone…* on, not while the call is being placed)
-is for a phone that never rang or a call dialled by mistake: it stops the ring sound and the asking
-and asks for the result. A hang-up API is a question for CallerDesk (tbo_smart
-`telephony-callerdesk.md` §1.3). **Browser phone (later):** if CallerDesk gives SIP/WSS
-credentials, a mode with **End call**, **Mute** and **Keypad** goes into the box's controls row (the
-row that holds *Try again*, *Stop waiting* and *Record the result* today); nothing for it ships now.
+**Ending a call.** **End call** asks the ERP site (`helpdesk.api.leads.end_call` → TBO Smart's
+`end_call`, tbo_smart `telephony-callerdesk.md` §4.2) to have CallerDesk drop the call; CallerDesk
+support gave the command on 2026-11-16. The box shows it only when the ERP site says the provider
+can (`can_end` in `click_to_call`'s answer). The call's report then closes the box as for any call;
+six seconds after a successful End call the box also looks for the call once, in case the report is
+slow. A refusal ("no call in progress", CallerDesk unreachable) is a toast that says to hang up on
+the phone. There is still no *Mute* or *Hold*: the audio is on the person's phone, not in the
+browser. **Stop waiting** (from *Calling your phone…* on, not while the call is being placed) is
+for a phone that never rang or a call dialled by mistake: it stops the ring sound and the asking
+and asks for the result; it does not end a call. **Browser phone:** CallerDesk can give SIP/WSS
+logins, but their calling needs a VPN and they recommend their softphone, so it is not planned.
 
 **Recordings.** The ended box, once the report is in and the call was answered, says **Recording
 is being saved…** and then **Recording saved.** with **Listen on the lead**, which opens the lead

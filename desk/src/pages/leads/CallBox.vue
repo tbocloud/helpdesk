@@ -140,9 +140,27 @@
         }}</span>
       </div>
 
-      <!-- no hang-up button: the call is on the phone, and only the phone can end it -->
+      <!-- the call is on the phone: End call when the provider can drop it, else only
+           the phone can -->
+      <div v-if="onPhone && box.canEnd" class="flex flex-col gap-1.5">
+        <Button
+          class="!h-12 w-full"
+          variant="solid"
+          theme="red"
+          :label="__('End call')"
+          :loading="box.ending"
+          @click="endCall()"
+        >
+          <template #prefix>
+            <LucidePhoneOff class="size-5" aria-hidden="true" />
+          </template>
+        </Button>
+        <p class="text-p-sm text-ink-gray-6">
+          {{ __("You can also hang up on your phone.") }}
+        </p>
+      </div>
       <p
-        v-if="onPhone"
+        v-else-if="onPhone"
         class="flex items-center gap-2 rounded-lg bg-surface-gray-2 px-3 py-3 text-base-medium text-ink-gray-9"
       >
         <LucidePhone class="size-5 shrink-0" aria-hidden="true" />
@@ -351,6 +369,7 @@ import {
   isWaiting,
   loadLead,
   minimise,
+  endCall,
   notConnected,
   placeCall,
   RECORD_AFTER_MS,

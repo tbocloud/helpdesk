@@ -69,6 +69,17 @@ class TestLeadCalls(FrappeTestCase):
         )
         self.assertEqual(self.crm.lead_paths, [f"{TELEPHONY}.refresh_call"])
 
+    def test_end_call_goes_to_the_erp_site_as_the_signed_in_person(self):
+        self.crm.lead_answers["end_call"] = {"ok": True}
+        frappe.set_user(BDE)
+        self.assertEqual(leads_api.end_call(" 57305000 "), {"ok": True})
+        ((method, post, params),) = self.crm.lead_calls
+        self.assertEqual(
+            (method, post, params["acting_user"], params["reference_id"]),
+            ("end_call", True, BDE, "57305000"),
+        )
+        self.assertEqual(self.crm.lead_paths, [f"{TELEPHONY}.end_call"])
+
     def test_another_persons_call_status_is_refused_here_too(self):
         self.crm.lead_error = CRMError("no", 403, "PermissionError", "Not yours")
         frappe.set_user(BDE)
