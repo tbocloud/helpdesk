@@ -376,7 +376,11 @@ the lead; a recording that can't be played (a file error or zero length) says *R
 telephony log, not these calls). If the box loses the call, it asks the ERP site once to look the
 call up at CallerDesk (`helpdesk.api.leads.refresh_call`, TBO Smart's `refresh_call`); a call
 found ends the wait with its result, and TBO Smart also reconciles every 10 minutes
-(`telephony-callerdesk.md` §3.2).
+(`telephony-callerdesk.md` §3.2). With CallerDesk the ERP site also tells the box a call is
+over before the report comes (the call has left CallerDesk's calls in progress, or the person
+never picked up their phone for 75 seconds; `telephony-callerdesk.md` §4.2): the box stops
+ringing, asks for the result, and looks the report up once, 6 seconds later, for the talk time
+and the recording.
 
 **Sound.** A soft ring-back tone loops while the box says *Calling your phone…*, *Pick up your
 phone* or *Ringing <lead>*, and stops the moment the call is picked, ended or refused. It is made
