@@ -4,7 +4,11 @@ import { errorText } from "@/utils";
 import { useDebounceFn } from "@vueuse/core";
 import { call, createResource, toast } from "frappe-ui";
 import { computed, reactive, ref, watch } from "vue";
-import { unfilledPlaceholders, type SignoffQuestion } from "./signoffMeta";
+import {
+  fillsPlaceholders,
+  unfilledPlaceholders,
+  type SignoffQuestion,
+} from "./signoffMeta";
 
 /** A stage's detail: a plain value, or (a table) its rows. */
 export type DetailValue = string | number | null | Record<string, unknown>[];
@@ -602,8 +606,9 @@ export function useSignoffForm(opts: {
     };
   }
 
-  /** A draft's kept mail that is still exactly what its choices fill in was never written by
-   * hand: it goes on following them (a date set later fills in, a new signatory is greeted). */
+  /** A draft's kept mail that is still what its choices fill in was never written by hand: it
+   * goes on following them (a date set later fills in, a new signatory is greeted). One saved
+   * before a detail was given still has that placeholder where the fill now has the value. */
   async function followIfUntouched() {
     try {
       const mail: Mail = await call(
@@ -611,10 +616,14 @@ export function useSignoffForm(opts: {
         mailParams()
       );
       if (
-        mail.subject.trim() === form.subject.trim() &&
-        mailWords(mail.body) === mailWords(form.body)
-      )
+        fillsPlaceholders(form.subject.trim(), mail.subject.trim()) &&
+        fillsPlaceholders(mailWords(form.body), mailWords(mail.body))
+      ) {
+        form.subject = mail.subject;
+        form.body = mail.body;
+        baseline.value = { subject: mail.subject, body: mail.body };
         autoFill.value = true;
+      }
     } catch {
       // the draft keeps its mail; Reapply template is there
     }
