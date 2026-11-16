@@ -50,8 +50,12 @@
     />
 
     <template v-else>
-      <!-- title, what they call for now (a department with one thing to call has no switch), and what is overdue -->
-      <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+      <!-- title, what they call for now (a department with one thing to call has no switch),
+           what is overdue, and the next batch -->
+      <div
+        v-if="!readOnly || shown.overdue.length"
+        class="flex flex-wrap items-center gap-x-4 gap-y-2"
+      >
         <h2 v-if="!readOnly" class="text-xl font-semibold text-ink-gray-9">
           {{ __("Today's calls") }}
         </h2>
@@ -63,11 +67,41 @@
         />
         <TaskyBadge
           v-if="shown.overdue.length"
-          class="sm:ml-auto"
           tone="danger"
           :icon="LucideAlarmClock"
           :label="__('{0} overdue', String(shown.overdue.length))"
         />
+        <div
+          v-if="!readOnly"
+          class="flex w-full flex-col gap-1.5 sm:ml-auto sm:w-auto sm:max-w-xs sm:items-end"
+        >
+          <Button
+            class="w-full sm:w-auto"
+            size="md"
+            :variant="shown.next_batch?.allowed ? 'solid' : 'subtle'"
+            :label="__('Get next batch')"
+            :disabled="!shown.next_batch?.allowed || nextBatch.loading"
+            :loading="nextBatch.loading"
+            :aria-describedby="
+              !shown.next_batch?.allowed && shown.next_batch?.reason
+                ? ids.reason
+                : undefined
+            "
+            @click="getNext"
+          />
+          <p
+            v-if="!shown.next_batch?.allowed && shown.next_batch?.reason"
+            :id="ids.reason"
+            class="flex items-start gap-1.5 text-p-xs text-ink-gray-6 sm:text-right"
+            aria-live="polite"
+          >
+            <LucideInfo
+              class="mt-0.5 size-3.5 shrink-0 sm:hidden"
+              aria-hidden="true"
+            />
+            {{ shown.next_batch.reason }}
+          </p>
+        </div>
       </div>
 
       <!-- a failed update keeps the last queue, and says so -->
@@ -91,268 +125,286 @@
         <Button :label="__('Try again')" @click="reload" />
       </div>
 
-      <!-- the batch: which slot, how long is left, how far along, and the next one -->
+      <!-- now: the running slot, how long is left, how far along; beside it this slot's
+           results and the whole day -->
       <section
         :aria-labelledby="ids.batch"
-        class="rounded-xl border border-outline-gray-2 bg-surface-base p-4"
+        class="grid gap-4 rounded-xl border border-outline-gray-2 bg-surface-base p-4 md:p-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-stretch"
       >
-        <div class="flex flex-wrap items-start gap-x-6 gap-y-3">
-          <div class="min-w-0 flex-1">
-            <template v-if="shown.batch">
-              <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <h3
-                  :id="ids.batch"
-                  class="text-base font-semibold text-ink-gray-9"
-                >
-                  {{ shown.batch.slot }}
-                </h3>
-                <span
-                  class="inline-flex items-center gap-1.5 font-mono text-sm tabular-nums"
-                  :class="
-                    hurry ? 'font-medium text-warning' : 'text-ink-gray-7'
-                  "
-                  role="timer"
-                >
-                  <component
-                    :is="hurry ? LucideAlarmClock : LucideClock"
-                    class="size-4"
-                    aria-hidden="true"
-                  />
-                  {{ timeLeftText(secondsLeft) }}
-                </span>
-                <span
-                  v-if="shown.batch.campaign_product"
-                  class="inline-flex items-center gap-1.5 text-sm text-ink-gray-7"
-                >
-                  <LucideBox
-                    class="size-4 text-ink-gray-6"
-                    aria-hidden="true"
-                  />
-                  {{ __("Calls for") }}: {{ shown.batch.campaign_product }}
-                </span>
-              </div>
-              <div
-                class="mt-3 h-1.5 max-w-xl overflow-hidden rounded-full"
-                :class="TRACK.neutral"
-                role="progressbar"
-                :aria-valuemin="0"
-                :aria-valuemax="counts.size"
-                :aria-valuenow="counts.called"
-                :aria-label="__('Calls made in this batch')"
+        <div class="flex min-w-0 flex-col justify-center">
+          <template v-if="shown.batch">
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+              <span
+                class="text-xs font-semibold uppercase tracking-[0.06em] text-ink-gray-6"
+                >{{ __("Now") }}</span
               >
-                <div
-                  class="h-full rounded-full transition-[width]"
-                  :class="
-                    counts.called >= counts.size && counts.size
-                      ? FILL.success
-                      : 'bg-brand'
-                  "
-                  :style="{ width: `${progress}%` }"
-                />
-              </div>
-              <p
-                class="mt-2.5 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm text-ink-gray-7"
-              >
-                <span
-                  ><b
-                    class="font-mono font-medium tabular-nums text-ink-gray-9"
-                    >{{ counts.called }}</b
-                  >
-                  {{ __("of {0} called", String(counts.size)) }}</span
-                >
-                <span
-                  ><b
-                    class="font-mono font-medium tabular-nums text-ink-gray-9"
-                    >{{ counts.connected }}</b
-                  >
-                  {{ __("contacted") }}</span
-                >
-                <span
-                  ><b
-                    class="font-mono font-medium tabular-nums text-ink-gray-9"
-                    >{{ counts.scheduled }}</b
-                  >
-                  {{ __("call backs") }}</span
-                >
-                <span
-                  v-if="counts.size && counts.called >= counts.size"
-                  class="inline-flex items-center gap-1 text-success"
-                >
-                  <LucideCircleCheck class="size-4" aria-hidden="true" />
-                  {{ __("All called") }}
-                </span>
-              </p>
-            </template>
-            <template v-else>
-              <h3
-                :id="ids.batch"
-                class="text-base font-semibold text-ink-gray-9"
-              >
-                {{ __("No batch right now") }}
+              <h3 :id="ids.batch" class="text-lg font-semibold text-ink-gray-9">
+                {{ __("{0} slot", shown.batch.slot) }}
               </h3>
-              <p class="mt-1 text-p-sm text-ink-gray-7">
-                {{
-                  readOnly
-                    ? __("They have no batch running now.")
-                    : shown.next_slot
-                    ? __(
-                        "Your next batch, {0}, starts at {1}.",
-                        shown.next_slot.label,
-                        dayjs(shown.next_slot.starts_at).format("h:mm A")
-                      )
-                    : __("There are no more batches today.")
-                }}
-              </p>
-            </template>
-            <p
-              v-if="shown.today && shown.today.size"
-              class="mt-2 font-mono text-p-xs tabular-nums text-ink-gray-6"
+              <span
+                class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 font-mono text-xs font-medium tabular-nums"
+                :class="hurry ? TONE_CLASSES.warning : TONE_CLASSES.info"
+                role="timer"
+              >
+                <component
+                  :is="hurry ? LucideAlarmClock : LucideClock"
+                  class="size-3.5"
+                  aria-hidden="true"
+                />
+                {{ timeLeftText(secondsLeft) }}
+              </span>
+              <span
+                v-if="shown.batch.campaign_product"
+                class="inline-flex items-center gap-1.5 text-sm text-ink-gray-7"
+              >
+                <LucideBox class="size-4 text-ink-gray-6" aria-hidden="true" />
+                {{ __("Calls for") }}: {{ shown.batch.campaign_product }}
+              </span>
+            </div>
+            <p class="mt-3 flex items-baseline gap-2 text-ink-gray-6">
+              <span
+                class="text-5xl font-bold leading-none tracking-[-0.02em] tabular-nums text-ink-gray-9"
+                >{{ counts.called }}</span
+              >
+              <span class="text-lg font-medium">
+                {{ __("of {0} called", String(counts.size)) }}
+              </span>
+            </p>
+            <div
+              class="mt-4 h-2.5 max-w-xl overflow-hidden rounded-full"
+              :class="TRACK.neutral"
+              role="progressbar"
+              :aria-valuemin="0"
+              :aria-valuemax="counts.size"
+              :aria-valuenow="counts.called"
+              :aria-label="__('Calls made in this batch')"
             >
+              <div
+                class="h-full rounded-full transition-[width]"
+                :class="allCalled ? FILL.success : 'bg-brand'"
+                :style="{ width: `${progress}%` }"
+              />
+            </div>
+            <p class="mt-3 text-sm text-ink-gray-7">
+              <span
+                v-if="allCalled"
+                class="inline-flex items-center gap-1 font-medium text-success"
+              >
+                <LucideCircleCheck class="size-4" aria-hidden="true" />
+                {{ __("All called in this slot") }}
+              </span>
+              <template v-else>
+                {{
+                  __(
+                    "{0} still to call in this slot",
+                    String(Math.max(counts.size - counts.called, 0))
+                  )
+                }}
+              </template>
+            </p>
+          </template>
+          <template v-else>
+            <h3 :id="ids.batch" class="text-lg font-semibold text-ink-gray-9">
+              {{ __("No batch right now") }}
+            </h3>
+            <p class="mt-1 text-p-sm text-ink-gray-7">
               {{
-                __(
-                  "Today: {0} of {1} called, {2} contacted",
-                  String(shown.today.called),
-                  String(shown.today.size),
-                  String(shown.today.connected)
-                )
+                readOnly
+                  ? __("They have no batch running now.")
+                  : shown.next_slot
+                  ? __(
+                      "Your next batch, {0}, starts at {1}.",
+                      shown.next_slot.label,
+                      dayjs(shown.next_slot.starts_at).format("h:mm A")
+                    )
+                  : __("There are no more batches today.")
               }}
             </p>
-          </div>
-
-          <!-- the next batch, or why not yet -->
-          <div
-            v-if="!readOnly"
-            class="flex w-full flex-col gap-2 sm:w-auto sm:max-w-xs sm:items-end"
-          >
-            <Button
-              class="w-full sm:w-auto"
-              size="md"
-              :variant="shown.next_batch?.allowed ? 'solid' : 'subtle'"
-              :label="__('Get next batch')"
-              :disabled="!shown.next_batch?.allowed || nextBatch.loading"
-              :loading="nextBatch.loading"
-              :aria-describedby="
-                !shown.next_batch?.allowed && shown.next_batch?.reason
-                  ? ids.reason
-                  : undefined
-              "
-              @click="getNext"
-            />
-            <p
-              v-if="!shown.next_batch?.allowed && shown.next_batch?.reason"
-              :id="ids.reason"
-              class="flex items-start gap-1.5 text-p-xs text-ink-gray-6 sm:text-right"
-              aria-live="polite"
-            >
-              <LucideInfo
-                class="mt-0.5 size-3.5 shrink-0 sm:hidden"
-                aria-hidden="true"
-              />
-              {{ shown.next_batch.reason }}
-            </p>
-          </div>
+          </template>
         </div>
 
-        <!-- the day by slot against the plan, and where the called leads went -->
         <div
-          v-if="slots.length"
-          class="mt-4 border-t border-outline-gray-2 pt-3"
+          v-if="shown.batch || shown.today?.size"
+          class="grid gap-3 sm:grid-cols-3 lg:w-[30rem]"
         >
-          <h4 :id="ids.slots" class="text-sm font-medium text-ink-gray-9">
+          <template v-if="shown.batch">
+            <StatTile
+              :label="__('Contacted')"
+              :value="counts.connected"
+              :sub="__('this slot')"
+              :icon="LucideCircleCheck"
+              icon-tone="success"
+            />
+            <StatTile
+              :label="__('Call backs')"
+              :value="counts.scheduled"
+              :sub="__('this slot')"
+              :icon="LucideCalendarClock"
+              icon-tone="info"
+            />
+          </template>
+          <StatTile
+            v-if="shown.today?.size"
+            :class="shown.batch ? '' : 'sm:col-start-3'"
+            tint="brand"
+            :label="__('All of today')"
+            :value="`${shown.today.called} / ${shown.today.size}`"
+            :sub="__('called · {0} contacted', String(shown.today.connected))"
+            :icon="LucideCalendarDays"
+          />
+        </div>
+      </section>
+
+      <!-- the day by slot against the plan, and where the called leads went -->
+      <section v-if="slots.length" :aria-labelledby="ids.slots">
+        <div
+          class="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1"
+        >
+          <h3 :id="ids.slots" class="text-base font-semibold text-ink-gray-9">
             {{ __("Today by slot") }}
-          </h4>
-          <ul
-            :aria-labelledby="ids.slots"
-            class="mt-1 divide-y divide-outline-gray-1"
+          </h3>
+          <p class="text-sm text-ink-gray-6">
+            {{ __("How every call in each slot ended") }}
+          </p>
+        </div>
+        <ul class="grid gap-4 md:grid-cols-2">
+          <li
+            v-for="slot in slots"
+            :key="`${slot.department}-${slot.slot}`"
+            class="flex flex-col gap-3 rounded-xl border bg-surface-base p-4"
+            :class="
+              slot.current
+                ? 'border-brand-soft-border'
+                : 'border-outline-gray-2'
+            "
+            :aria-current="slot.current ? 'time' : undefined"
           >
-            <li
-              v-for="slot in slots"
-              :key="`${slot.department}-${slot.slot}`"
-              class="py-2.5"
-            >
-              <div
-                class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1"
+            <div class="flex items-start gap-3">
+              <span
+                class="grid size-9 shrink-0 place-items-center rounded-lg bg-surface-gray-2 text-ink-gray-7"
               >
-                <span class="text-sm font-medium text-ink-gray-9">
+                <component
+                  :is="slotIcon(slot.slot)"
+                  class="size-4"
+                  aria-hidden="true"
+                />
+              </span>
+              <span class="flex min-w-0 flex-1 flex-col">
+                <span class="truncate text-base font-semibold text-ink-gray-9">
                   {{ slot.slot }}
-                  <span
-                    v-if="departmentCount > 1"
-                    class="font-normal text-ink-gray-6"
-                    >· {{ slot.department }}</span
-                  >
                 </span>
-                <span class="text-sm text-ink-gray-7">
-                  <b
-                    class="font-mono font-medium tabular-nums text-ink-gray-9"
-                    >{{ slot.called }}</b
-                  >
-                  {{ __("of {0} called", String(slot.of)) }}
-                  ·
-                  <b
-                    class="font-mono font-medium tabular-nums text-ink-gray-9"
-                    >{{ slot.connected }}</b
-                  >
-                  {{ __("contacted") }}
+                <span class="truncate text-sm text-ink-gray-6">
+                  {{ slot.department }}
                 </span>
-              </div>
+              </span>
+              <TaskyBadge
+                :tone="slot.status.tone"
+                :icon="slot.status.icon"
+                :label="slot.status.label"
+              />
+            </div>
+
+            <p class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <span class="text-sm text-ink-gray-6">
+                <b
+                  class="text-2xl font-bold tracking-[-0.02em] tabular-nums text-ink-gray-9"
+                  >{{ slot.called }}</b
+                >
+                / {{ __("{0} called", String(slot.of)) }}
+              </span>
+              <span class="text-sm font-medium text-success">
+                {{ __("{0} contacted", String(slot.connected)) }}
+              </span>
+            </p>
+
+            <!-- nothing handed out yet: only the plan -->
+            <p
+              v-if="!slot.handed && !slot.called"
+              class="flex items-center gap-2.5 rounded-lg border border-dashed border-outline-gray-3 px-4 py-3 text-sm text-ink-gray-7"
+            >
+              <LucideClock
+                class="size-4 shrink-0 text-ink-gray-6"
+                aria-hidden="true"
+              />
+              <span>
+                <b class="font-semibold tabular-nums text-ink-gray-9">{{
+                  __("{0} planned", String(slot.planned))
+                }}</b
+                >, {{ __("not handed out yet") }}
+              </span>
+            </p>
+
+            <template v-else>
               <div
-                class="mt-1.5 h-1 overflow-hidden rounded-full"
+                class="flex h-2.5 gap-0.5 overflow-hidden rounded-full"
                 :class="TRACK.neutral"
-                role="progressbar"
-                :aria-valuemin="0"
-                :aria-valuemax="slot.of"
-                :aria-valuenow="slot.called"
-                :aria-label="__('Calls made in {0}', slot.slot)"
+                role="img"
+                :aria-label="
+                  __(
+                    '{0}: {1} of {2} called',
+                    slot.slot,
+                    String(slot.called),
+                    String(slot.of)
+                  )
+                "
               >
-                <div
-                  class="h-full rounded-full"
-                  :class="slot.called >= slot.of ? FILL.success : 'bg-brand'"
-                  :style="{ width: `${slot.progress}%` }"
+                <span
+                  v-for="row in slot.stages"
+                  :key="row.stage"
+                  class="h-full"
+                  :class="stageFill(row.stage)"
+                  :style="{ width: `${share(row.count, slot.of)}%` }"
                 />
               </div>
               <ul
-                class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-ink-gray-7"
+                class="flex flex-wrap gap-1.5"
                 :aria-label="__('Where the {0} calls went', slot.slot)"
               >
                 <li
                   v-for="row in slot.stages"
                   :key="row.stage"
-                  class="inline-flex items-center gap-1"
+                  class="inline-flex items-center gap-1.5 rounded-full border border-outline-gray-2 bg-surface-gray-1 px-2.5 py-1 text-sm text-ink-gray-7"
                 >
-                  <component
-                    :is="stageIcon(row.stage)"
-                    v-if="stageIcon(row.stage)"
-                    class="size-3.5 text-ink-gray-6"
+                  <span
+                    class="size-2 shrink-0 rounded-full"
+                    :class="stageFill(row.stage)"
                     aria-hidden="true"
                   />
-                  <b
-                    class="font-mono font-medium tabular-nums text-ink-gray-9"
-                    >{{ row.count }}</b
-                  >
+                  <b class="font-semibold tabular-nums text-ink-gray-9">{{
+                    row.count
+                  }}</b>
                   {{ __(row.stage) }}
                 </li>
-                <li v-if="slot.waiting">
-                  <b
-                    class="font-mono font-medium tabular-nums text-ink-gray-9"
-                    >{{ slot.waiting }}</b
-                  >
-                  {{ __("not called yet") }}
+                <li
+                  v-if="slot.waiting"
+                  class="inline-flex items-center gap-1.5 rounded-full border border-outline-gray-2 bg-surface-gray-1 px-2.5 py-1 text-sm text-ink-gray-7"
+                >
+                  <span
+                    class="size-2 shrink-0 rounded-full bg-surface-gray-4"
+                    aria-hidden="true"
+                  />
+                  <b class="font-semibold tabular-nums text-ink-gray-9">{{
+                    slot.waiting
+                  }}</b>
+                  {{ __("Not called yet") }}
                 </li>
-                <li v-if="slot.notHanded">
-                  <b
-                    class="font-mono font-medium tabular-nums text-ink-gray-9"
-                    >{{ slot.notHanded }}</b
-                  >
-                  {{
-                    slot.handed
-                      ? __("of the plan not handed out yet")
-                      : __("planned, not handed out yet")
-                  }}
+                <li
+                  v-if="slot.notHanded"
+                  class="inline-flex items-center gap-1.5 rounded-full border border-dashed border-outline-gray-3 px-2.5 py-1 text-sm text-ink-gray-7"
+                >
+                  <LucideClock
+                    class="size-3.5 shrink-0 text-ink-gray-6"
+                    aria-hidden="true"
+                  />
+                  <b class="font-semibold tabular-nums text-ink-gray-9">{{
+                    slot.notHanded
+                  }}</b>
+                  {{ __("not handed out yet") }}
                 </li>
               </ul>
-            </li>
-          </ul>
-        </div>
+            </template>
+          </li>
+        </ul>
       </section>
 
       <!-- the queue: pending first, then what was missed in its slot (kept, and still
@@ -361,46 +413,64 @@
         :aria-labelledby="ids.pending"
         class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
       >
-        <h3
-          :id="ids.pending"
-          class="flex items-baseline justify-between border-b border-outline-gray-2 px-4 py-3 text-base font-semibold text-ink-gray-9"
+        <div
+          class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-outline-gray-2 px-4 py-3.5"
         >
-          {{ __("To call") }}
-          <span class="font-mono text-sm tabular-nums text-ink-gray-6">{{
-            queue.length
-          }}</span>
-        </h3>
+          <h3
+            :id="ids.pending"
+            class="flex items-center gap-2 text-base font-semibold text-ink-gray-9"
+          >
+            {{ __("Up next to call") }}
+            <span
+              class="rounded-full bg-surface-gray-10 px-2 py-0.5 font-mono text-xs font-semibold tabular-nums text-ink-base"
+              >{{ queue.length }}</span
+            >
+          </h3>
+          <p v-if="queue.length" class="text-sm text-ink-gray-6">
+            {{
+              readOnly
+                ? __("In the order {0} will call them", whose)
+                : __("In the order you'll call them")
+            }}
+          </p>
+        </div>
         <ol v-if="queue.length" role="list">
           <li
-            v-for="(item, i) in queue"
+            v-for="(item, i) in visibleQueue"
             :key="item.item"
             class="border-b border-outline-gray-1 last:border-b-0"
           >
             <router-link
               :to="leadRoute(item)"
-              class="flex min-h-[64px] items-center gap-3 px-4 py-3 transition-colors md:px-4 hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-highlight"
+              class="flex min-h-[64px] items-center gap-3 px-4 py-3 transition-colors hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-highlight"
             >
               <span
-                class="w-6 shrink-0 font-mono text-sm tabular-nums text-ink-gray-6"
+                class="grid size-7 shrink-0 place-items-center rounded-md border border-outline-gray-2 bg-surface-gray-1 font-mono text-xs font-medium tabular-nums text-ink-gray-7"
                 >{{ i + 1 }}</span
               >
-              <PersonAvatar :name="queueName(item)" size="md" neutral />
+              <PersonAvatar :name="queueName(item)" size="lg" neutral />
               <span class="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span
-                  class="truncate text-[13px] font-semibold text-ink-gray-9"
-                  >{{ queueName(item) }}</span
-                >
+                <span class="truncate text-base font-semibold text-ink-gray-9">
+                  {{ queueName(item) }}
+                </span>
                 <span
                   v-if="queuePlace(item)"
-                  class="truncate text-[12px] text-ink-gray-6"
-                  >{{ queuePlace(item) }}</span
+                  class="flex min-w-0 items-center gap-1 text-sm text-ink-gray-6"
                 >
+                  <LucideMapPin class="size-3.5 shrink-0" aria-hidden="true" />
+                  <span class="truncate">{{ queuePlace(item) }}</span>
+                </span>
               </span>
               <span
                 v-if="item.summary.phone"
-                class="hidden shrink-0 font-mono text-sm tabular-nums text-ink-gray-7 md:block"
-                >{{ item.summary.phone }}</span
+                class="hidden shrink-0 items-center gap-1.5 font-mono text-sm font-medium tabular-nums text-ink-gray-8 md:flex"
               >
+                <LucidePhone
+                  class="size-3.5 text-ink-gray-6"
+                  aria-hidden="true"
+                />
+                {{ item.summary.phone }}
+              </span>
               <TaskyBadge
                 v-if="overdueItems.has(item.item)"
                 tone="danger"
@@ -409,7 +479,7 @@
               />
               <TaskyBadge
                 v-else-if="item.reason"
-                :tone="item.retry_at ? 'warning' : 'neutral'"
+                :tone="item.retry_at ? 'warning' : 'info'"
                 :label="item.reason"
               />
               <LucideChevronRight
@@ -443,9 +513,42 @@
             }}
           </p>
         </div>
+        <div
+          v-if="queue.length > visibleQueue.length || showAll"
+          class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t border-outline-gray-2 px-4 py-3.5 text-sm"
+        >
+          <span class="tabular-nums text-ink-gray-6">
+            {{
+              showAll
+                ? __("Showing all {0}", String(queue.length))
+                : __(
+                    "Showing the next {0} of {1}",
+                    String(visibleQueue.length),
+                    String(queue.length)
+                  )
+            }}
+          </span>
+          <button
+            type="button"
+            class="inline-flex items-center gap-1 rounded font-semibold text-brand-ink hover:text-brand-ink-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+            :aria-expanded="showAll"
+            @click="showAll = !showAll"
+          >
+            {{
+              showAll
+                ? __("Show fewer")
+                : __("Show all {0}", String(queue.length))
+            }}
+            <LucideArrowRight
+              v-if="!showAll"
+              class="size-4"
+              aria-hidden="true"
+            />
+          </button>
+        </div>
         <p
           v-if="shown.scheduled.length"
-          class="flex items-center gap-1.5 border-t border-outline-gray-2 px-5 py-3.5 text-p-sm text-ink-gray-7"
+          class="flex items-center gap-1.5 border-t border-outline-gray-2 px-4 py-3.5 text-p-sm text-ink-gray-7"
         >
           <LucideCalendarClock class="size-4 shrink-0" aria-hidden="true" />
           <span class="tabular-nums">
@@ -460,7 +563,7 @@
         </p>
         <p
           v-if="shown.overdue.length"
-          class="border-t border-outline-gray-2 px-5 py-3.5 text-p-sm text-ink-gray-7"
+          class="border-t border-outline-gray-2 px-4 py-3.5 text-p-sm text-ink-gray-7"
         >
           {{
             readOnly
@@ -479,33 +582,25 @@
     <section
       v-if="readOnly && shown?.enabled"
       :aria-labelledby="ids.called"
-      class="flex flex-col gap-3"
+      class="overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
     >
-      <h2
+      <h3
         :id="ids.called"
-        class="flex items-center gap-2 text-base font-semibold text-ink-gray-9"
+        class="flex items-center gap-2 border-b border-outline-gray-2 px-4 py-3.5 text-base font-semibold text-ink-gray-9"
       >
-        <LucidePhoneOutgoing
-          class="size-4 text-ink-gray-6"
-          aria-hidden="true"
-        />
         {{ __("Called today") }}
-        <span class="font-mono tabular-nums text-ink-gray-6">{{
-          shown.called?.length ?? 0
-        }}</span>
-      </h2>
+        <span
+          class="rounded-full bg-surface-gray-2 px-2 py-0.5 font-mono text-xs font-semibold tabular-nums text-ink-gray-7"
+          >{{ shown.called?.length ?? 0 }}</span
+        >
+      </h3>
       <p
         v-if="!shown.called?.length"
-        class="rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-14 text-center text-p-sm text-ink-gray-6"
+        class="px-4 py-14 text-center text-p-sm text-ink-gray-6"
       >
         {{ __("No calls made yet today.") }}
       </p>
-      <ul
-        v-else
-        role="list"
-        class="divide-y divide-outline-gray-1 overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
-        :aria-label="__('Called today')"
-      >
+      <ul v-else role="list" class="divide-y divide-outline-gray-1">
         <li
           v-for="item in shown.called"
           :key="item.item"
@@ -513,7 +608,7 @@
         >
           <span class="min-w-0 flex-1">
             <span
-              class="block truncate text-[13px] font-semibold text-ink-gray-9"
+              class="block truncate text-base font-semibold text-ink-gray-9"
             >
               {{ item.summary.lead_name || item.summary.name || item.lead }}
             </span>
@@ -548,17 +643,20 @@
 
 <script setup lang="ts">
 import PersonAvatar from "@/components/PersonAvatar.vue";
+import StatTile from "@/components/StatTile.vue";
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import TaskyState from "@/components/TaskyState.vue";
-import { FILL, TRACK } from "@/components/tone";
+import { FILL, TONE_CLASSES, TRACK, type Tone } from "@/components/tone";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
 import { useDocumentVisibility, useIntervalFn, useNow } from "@vueuse/core";
 import { Button, dayjs, toast } from "frappe-ui";
-import { computed, ref, useId, watch } from "vue";
+import { computed, ref, useId, watch, type Component } from "vue";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
+import LucideArrowRight from "~icons/lucide/arrow-right";
 import LucideBox from "~icons/lucide/box";
 import LucideCalendarClock from "~icons/lucide/calendar-clock";
+import LucideCalendarDays from "~icons/lucide/calendar-days";
 import LucideCheckCheck from "~icons/lucide/check-check";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
@@ -566,8 +664,13 @@ import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideClock from "~icons/lucide/clock";
 import LucideCloudOff from "~icons/lucide/cloud-off";
 import LucideInfo from "~icons/lucide/info";
+import LucideMapPin from "~icons/lucide/map-pin";
+import LucideMoon from "~icons/lucide/moon";
+import LucidePhone from "~icons/lucide/phone";
 import LucidePhoneOff from "~icons/lucide/phone-off";
-import LucidePhoneOutgoing from "~icons/lucide/phone-outgoing";
+import LucideSun from "~icons/lucide/sun";
+import LucideSunrise from "~icons/lucide/sunrise";
+import LucideSunset from "~icons/lucide/sunset";
 import CallingFor from "./CallingFor.vue";
 import {
   OUTCOME_LOOK,
@@ -580,8 +683,8 @@ import {
   type CallOutcome,
   type MyCalls,
   type QueueCall,
+  type SlotTotals,
 } from "./callBatches";
-import { stageIcon } from "./leads";
 import { queueChanged } from "./pendingCalls";
 
 const ids = {
@@ -597,6 +700,10 @@ const props = defineProps<{
   member?: string;
 }>();
 const readOnly = computed(() => !!props.member);
+// a watcher's page names whose queue it is
+const whose = computed(
+  () => shown.value?.member?.full_name || props.member || ""
+);
 const outcomeLabel = (value: CallOutcome) =>
   OUTCOMES.find((o) => o.value === value)?.label ?? value;
 // under this many seconds left the clock turns to a warning
@@ -624,7 +731,7 @@ myCalls.fetch();
 function reload() {
   myCalls.reload();
 }
-defineExpose({ reload });
+defineExpose({ reload, shown });
 watch(queueChanged, reload);
 
 // calls made another way (MyOperator, the phone's log) count on the ERP site: ask again
@@ -669,17 +776,93 @@ const counts = computed<CallCounts>(
 const slots = computed(() =>
   (shown.value?.slots ?? []).map((slot) => {
     const of = Math.max(slot.planned, slot.handed);
+    const current = isCurrentSlot(slot);
     return {
       ...slot,
       of,
+      current,
       waiting: Math.max(slot.handed - slot.called, 0),
       notHanded: Math.max(slot.planned - slot.handed, 0),
-      progress: of ? Math.min(Math.round((slot.called / of) * 100), 100) : 0,
+      status: slotStatus(slot, of, current),
     };
   })
 );
-const departmentCount = computed(
-  () => new Set(slots.value.map((slot) => slot.department)).size
+
+/** The running batch's slot may carry a suffix ("Morning +2") on the slot's name. */
+function isCurrentSlot(slot: SlotTotals) {
+  const batch = shown.value?.batch;
+  if (!batch || batch.department !== slot.department) return false;
+  return batch.slot === slot.slot || batch.slot.startsWith(`${slot.slot} `);
+}
+
+/** Done once every planned call is made; a slot handed out, not running and not finished
+ * left calls behind, which are overdue. */
+function slotStatus(slot: SlotTotals, of: number, current: boolean) {
+  if (of && slot.called >= of)
+    return {
+      label: __("Done"),
+      tone: "success" as Tone,
+      icon: LucideCircleCheck,
+    };
+  if (current)
+    return {
+      label: __("In progress"),
+      tone: "info" as Tone,
+      icon: LucideClock,
+    };
+  if (!slot.handed && !slot.called)
+    return {
+      label: __("Not started"),
+      tone: "neutral" as Tone,
+      icon: undefined,
+    };
+  return {
+    label: __("Not finished"),
+    tone: "danger" as Tone,
+    icon: LucideAlarmClock,
+  };
+}
+
+// a time-of-day picture for the slot's name; any other name gets a clock
+const SLOT_ICONS: [RegExp, Component][] = [
+  [/morning/i, LucideSunrise],
+  [/noon|afternoon/i, LucideSun],
+  [/evening/i, LucideSunset],
+  [/night/i, LucideMoon],
+];
+const slotIcon = (name: string) =>
+  SLOT_ICONS.find(([pattern]) => pattern.test(name))?.[1] ?? LucideClock;
+
+// where the called leads went: the call stages keep their meaning (contacted green, not
+// interested red); any other stage takes the next colour in page order, so a stage looks
+// the same in every slot. The legend always names it beside the colour.
+const STAGE_FILL: Record<string, string> = {
+  Contacted: "bg-success",
+  "Not Responding": "bg-warm-fill",
+  "Not Interested": "bg-danger",
+  "Wrong Number": "bg-violet",
+};
+const OTHER_FILLS = [
+  "bg-info",
+  "bg-brand",
+  "bg-hot-fill",
+  "bg-person-4",
+  "bg-person-6",
+];
+const otherStages = computed(() => [
+  ...new Set(
+    slots.value
+      .flatMap((slot) => slot.stages.map((row) => row.stage))
+      .filter((stage) => !(stage in STAGE_FILL))
+  ),
+]);
+const stageFill = (stage: string) =>
+  STAGE_FILL[stage] ??
+  OTHER_FILLS[otherStages.value.indexOf(stage) % OTHER_FILLS.length];
+const share = (count: number, of: number) =>
+  of ? Math.min((count / of) * 100, 100) : 0;
+const allCalled = computed(
+  () => !!counts.value.size && counts.value.called >= counts.value.size
 );
 const progress = computed(() =>
   counts.value.size
@@ -690,6 +873,12 @@ const progress = computed(() =>
 // the queue: what is to call now, then what was missed in its slot
 const queue = computed(() =>
   shown.value ? [...shown.value.pending, ...shown.value.overdue] : []
+);
+// a watcher sees the next few; the caller works through the whole queue
+const PREVIEW = 5;
+const showAll = ref(false);
+const visibleQueue = computed(() =>
+  readOnly.value && !showAll.value ? queue.value.slice(0, PREVIEW) : queue.value
 );
 const overdueItems = computed(
   () => new Set((shown.value?.overdue ?? []).map((c) => c.item))
