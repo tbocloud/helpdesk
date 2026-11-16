@@ -39,6 +39,36 @@ class TestHDCustomer(FrappeTestCase):
         self.assertIn(contact["contact"], member_names)
         self.assertFalse(get_invitation(contact["user"]), "No invitation expected")
 
+    def test_create_contact_adds_without_invite(self) -> None:
+        customer = create_customer("Test Customer Created Contact")
+        email = "typed-contact@example.com"
+        contact_name = customer.create_contact("Asha Rao", email, "CFO")
+        contact = frappe.get_doc("Contact", contact_name)
+        self.assertEqual(
+            (contact.first_name, contact.last_name, contact.designation),
+            ("Asha", "Rao", "CFO"),
+        )
+        customer.reload()
+        self.assertIn(contact_name, [row.contact_name for row in customer.contacts])
+        self.assertFalse(get_invitation(email), "Adding a contact sends no invite")
+        with self.assertRaises(frappe.ValidationError):
+            customer.create_contact("Asha Rao", email.upper())
+
+    def test_create_contact_reuses_contact_with_the_email(self) -> None:
+        customer = create_customer("Test Customer Reused Contact")
+        contact = create_contact("Existing", "reused-contact@example.com", user=False)
+        self.assertEqual(
+            customer.create_contact("Someone Else", "reused-contact@example.com"),
+            contact["contact"],
+        )
+
+    def test_create_contact_requires_manager_roles(self) -> None:
+        customer = create_customer("Test Customer Contact Permission")
+        create_user("plain-agent-contact@example.com")
+        frappe.set_user("plain-agent-contact@example.com")
+        with self.assertRaises(frappe.PermissionError):
+            customer.create_contact("Anyone", "anyone-created@example.com")
+
     def test_contact_without_user_gets_invited_not_added(self) -> None:
         customer = create_customer("Test Customer Invite Contact")
         email = "unlinked-contact@example.com"

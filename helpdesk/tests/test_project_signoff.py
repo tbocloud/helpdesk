@@ -174,6 +174,32 @@ class TestProjectSignoff(FrappeTestCase):
         with self.assertRaises(frappe.ValidationError):
             make_signoff(self.project, stranger, TRAINER[0], TEMPLATE)
 
+    def test_who_signs_can_be_typed_by_email_and_becomes_a_contact(self):
+        email = "Finance.Lead@malabar-spices.example"
+        added = run_as_user(
+            TRAINER[0],
+            lambda: api.add_signoff_contact(
+                self.project, "Divya Menon", email, "Finance Lead"
+            ),
+        )
+        self.assertEqual(added["email"], email.lower())
+        self.assertEqual(added["full_name"], "Divya Menon")
+        self.assertEqual(added["designation"], "Finance Lead")
+        contact = frappe.get_doc("Contact", added["contact"])
+        self.assertEqual((contact.first_name, contact.last_name), ("Divya", "Menon"))
+        self.assertFalse(contact.user, "No portal account for a typed signatory")
+        doc = make_signoff(self.project, added["contact"], TRAINER[0], TEMPLATE)
+        self.assertEqual(doc.signatory_email, email.lower())
+
+    def test_only_the_project_team_types_who_signs(self):
+        with self.assertRaises(frappe.PermissionError):
+            run_as_user(
+                OUTSIDER[0],
+                lambda: api.add_signoff_contact(
+                    self.project, "Nobody", "nobody@malabar-spices.example"
+                ),
+            )
+
     # --- link and code ---
 
     def test_link_token_is_stored_hashed_and_replaced_by_a_new_link(self):

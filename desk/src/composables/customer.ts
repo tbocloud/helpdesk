@@ -144,6 +144,7 @@ export function useCustomer(name: string) {
         whitelistedMethods: {
           getContacts: "get_contacts",
           addContacts: "add_contacts",
+          createContact: "create_contact",
           getPendingInvites: "get_pending_invites",
         },
       });
