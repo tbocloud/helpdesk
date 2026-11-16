@@ -116,6 +116,41 @@ class TestLogsWithoutCustomerText(PilotReadyCase):
         self.assertNotIn("Acme", row.arguments + row.result)
         self.assertRegex(row.result, r"^\d+ characters$")
 
+    def test_the_patch_commits_each_batch_and_never_trims_a_row_twice(self):
+        for n in range(3):
+            frappe.get_doc(
+                {
+                    "doctype": "HDS Copilot Call Log",
+                    "user": AGENT,
+                    "kind": "Teams",
+                    "tool": "new_work",
+                    "status": "OK",
+                    "arguments": json.dumps({"ticket": f"004{n}", "text": "Acme"}),
+                    "result": "x" * (100 + n),
+                }
+            ).insert(ignore_permissions=True)
+        with patch.object(trim_copilot_logs, "BATCH", 2), patch.object(
+            frappe.db, "commit"
+        ) as commit:
+            trim_copilot_logs.execute()
+        self.assertGreaterEqual(commit.call_count, 2)  # one per batch, not one for all
+        trimmed = {
+            r.name: r.result
+            for r in frappe.get_all("HDS Copilot Call Log", fields=["name", "result"])
+        }
+        # a run that starts again (e.g. after a failure) goes on after the last batch done
+        trim_copilot_logs.execute()
+        self.assertEqual(
+            trimmed,
+            {
+                r.name: r.result
+                for r in frappe.get_all(
+                    "HDS Copilot Call Log", fields=["name", "result"]
+                )
+            },
+        )
+        self.assertNotIn("14 characters", trimmed.values())  # never the size of a size
+
     def test_a_teams_message_reaches_its_job_by_key_never_as_text(self):
         make_copilot_settings(teams_tenant_id="tenant-pilot-ready")
         activity = {
