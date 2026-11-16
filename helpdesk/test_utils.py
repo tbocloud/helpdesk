@@ -1273,7 +1273,7 @@ def make_member_day(project: str, member: str, lead: str, teammate: str) -> dict
 
     tasks = {
         "overdue": task(
-            "Fix the GST return", member, lead, exp_end_date=add_days(today, -2)
+            "Fix the GST return", member, lead, exp_end_date=working_day_ago(2)
         ),
         "due_today": task("Post the Onam reel", member, lead, exp_end_date=today),
         "key_working": task(
@@ -1301,10 +1301,10 @@ def make_member_day(project: str, member: str, lead: str, teammate: str) -> dict
             "Design the invoice print",
             teammate,
             member,
-            exp_end_date=add_days(today, -1),
+            exp_end_date=working_day_ago(1),
         ),
         "teammate_own": task(
-            "Fix the payroll script", teammate, lead, exp_end_date=add_days(today, -4)
+            "Fix the payroll script", teammate, lead, exp_end_date=working_day_ago(4)
         ),
     }
     start_task_timer(tasks["key_working"], hours_ago=1)
@@ -4280,6 +4280,17 @@ def saved_due(day, content: bool = False):
 
     moved = due_on_working_day(day, content=content)
     return moved["due"] if moved else getdate(day)
+
+
+def working_day_ago(days: int):
+    """The working day closest to `days` days before today, never later than that. A task
+    due on a day off counts as due the next working day, so tests that need an overdue task
+    take this date, not `add_days(nowdate(), -days)`, to pass on any day of the week."""
+    from frappe.utils import add_days, nowdate
+
+    from helpdesk.work_calendar import previous_working_day
+
+    return previous_working_day(add_days(nowdate(), -days))
 
 
 def get_day_off_activity(task: str) -> list[str]:
