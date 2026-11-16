@@ -765,3 +765,26 @@ The coordinator who raised the ticket is not told. A customer with no Copilot pe
 - With nobody listed, these work as before (the Approvers; the internal project's DevOps Engineers; the Agent Managers).
 
 **Cards** carry a list input (`{"type": "choice", "choices": [[title, value]]}`): Teams draws it as `Input.ChoiceSet`, the panel as a select, and the picked value arrives as the input `person` (`teams.CARD_INPUTS`).
+
+## Going live from a task, and deploy notices (Phase 22: `copilot/go_live.py`, `api/copilot_go_live.py`)
+
+**Open in TBO Copilot.** A task's dialog has this action for the people assigned to it. It opens `tbo-copilot://task/<task>?site=<this site>` in the TBO Copilot desktop app, which asks before it opens the task in its project's folders (tbo-copilot `docs/tbo/projects-and-tasks.md`).
+
+**Where a task's change stands** (`task_release`, for the desktop app):
+- A merge into a branch a customer site runs becomes a release (Releases, above).
+- The task's releases, and its Copilot fix deploys, are read with their status: waiting for CI, staging, waiting for approval (and whose), scheduled tonight or now, deploying, live, or failed.
+- With no release yet, it says one comes within ten minutes of the merge.
+- Anyone who may read the task may see this.
+
+**Asking to go live** (`ask_go_live`, POST):
+- Whoever may change the task asks for its release to go live **tonight** or **now**, with an optional note.
+- When the release waits for approval, its approver gets the release's card again plus a notice ("X asks for … to go live now"), and the release keeps the request as a comment.
+- The approver still decides, with the card's buttons. Nobody approves their own change (the release's authors are never its approver).
+- A release not waiting for approval is not asked again; the answer says where it stands.
+
+**Deploy notices** (`alert_deploy`, queued): the people in **HDS Copilot Settings → Deploy Notices Go To** (for example DevOps and a senior; nobody is named in the code) hear in Teams and TBO Support when:
+- **Press starts a deploy** (`deploy._start`): which app and branch, on which bench group, its sites, who approved it, the task or ticket;
+- **it is live** (`deploy.succeed`);
+- **it failed** (`deploy.fail`), with the reason.
+
+These cover every Press deploy: releases, Copilot's own fixes and Deploy Now. With nobody set, nobody is told this way; the usual notices of each flow are unchanged.

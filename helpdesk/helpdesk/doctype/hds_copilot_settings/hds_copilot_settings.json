@@ -27,6 +27,7 @@
 		"column_break_people",
 		"risk_alert_people",
 		"risk_alert_coordinators",
+		"deploy_notice_people",
 		"infrastructure_section",
 		"infrastructure_people",
 		"people_overview_section",
@@ -252,6 +253,13 @@
 			"fieldname": "risk_alert_coordinators",
 			"fieldtype": "Check",
 			"label": "Also Tell the Project Coordinators"
+		},
+		{
+			"description": "Told in Teams and TBO Support when Press starts a deploy, when it goes live, and when it fails: releases, Copilot's fixes and Deploy Now, for every customer (for example DevOps and a senior)",
+			"fieldname": "deploy_notice_people",
+			"fieldtype": "Table",
+			"label": "Deploy Notices Go To",
+			"options": "HDS Copilot Person"
 		},
 		{
 			"fieldname": "infrastructure_section",
@@ -771,7 +779,7 @@
 	],
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-11-16 12:00:00.000000",
+	"modified": "2026-11-17 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Copilot Settings",

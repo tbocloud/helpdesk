@@ -632,6 +632,10 @@ def _start(request):
                 "backups": not skip_backups,
             },
         )
+    from helpdesk.copilot import go_live
+
+    for member in train:  # Phase 22: the deploy notice people hear it started
+        go_live.alert_deploy(member.name, "started", _("Press {0}").format(reference))
 
 
 def _wait(request, reason: str):
@@ -790,9 +794,10 @@ def _press_links(request) -> str:
 
 def fail(request, reason: str):
     """The deploy did not work: the run is escalated with Press's reason, the people told."""
-    from helpdesk.copilot import customer
+    from helpdesk.copilot import customer, go_live
 
     reason = str(reason)[:1000]
+    go_live.alert_deploy(request.name, "failed", reason)
     if not request.run:
         from helpdesk.copilot import releases
 
@@ -847,7 +852,9 @@ def fail(request, reason: str):
 
 def succeed(request, results: list[dict]):
     """The check passed: the run is Resolved and the customer is asked to confirm."""
-    from helpdesk.copilot import customer
+    from helpdesk.copilot import customer, go_live
+
+    go_live.alert_deploy(request.name, "live")
 
     if not request.run:
         from helpdesk.copilot import releases

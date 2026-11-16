@@ -185,6 +185,7 @@ import { computed, ref, watch, type Ref } from "vue";
 import { useIntervalFn } from "@vueuse/core";
 import { useRouter } from "vue-router";
 import LucideArrowRight from "~icons/lucide/arrow-right";
+import LucideBot from "~icons/lucide/bot";
 import LucideCalendarClock from "~icons/lucide/calendar-clock";
 import LucideCheckCheck from "~icons/lucide/check-check";
 import LucideCircleCheck from "~icons/lucide/circle-check";
@@ -495,6 +496,18 @@ const { approve } = useApproveTask(
   { offerRating: false }
 );
 
+// the desktop app takes tbo-copilot:// links; it asks before it does anything with one
+function openInCopilot(task: string) {
+  const site = encodeURIComponent(window.location.origin);
+  window.location.href = `tbo-copilot://task/${encodeURIComponent(task)}?site=${site}`;
+  toast.info(
+    __(
+      "Opening TBO Copilot. Nothing opened? Install it from {0}.",
+      `${window.location.origin}/copilot-desktop`
+    )
+  );
+}
+
 const dialogActions = computed(() => {
   const d = detail.value;
   const actions: Record<string, any>[] = [];
@@ -543,6 +556,13 @@ const dialogActions = computed(() => {
     }
   }
   if (props.mine && open) {
+    // Phase 22: the task in the TBO Copilot desktop app, with the folders linked to it there
+    actions.push({
+      label: __("Open in TBO Copilot"),
+      icon: LucideBot,
+      tooltip: __("Open in TBO Copilot"),
+      onClick: () => openInCopilot(d.name),
+    });
     // done work goes through the Complete dialog, which logs the hours to a timesheet
     if (!isPendingReview(d) && !d.blocked) {
       actions.push({
