@@ -350,10 +350,7 @@ def people_in_meetings(starts_on, ends_on, exclude: str | None = None) -> dict:
     overlapping = (
         (Meeting.status == SCHEDULED)
         & (Meeting.starts_on < add_to_date(get_datetime(ends_on), minutes=MEETING_GAP))
-        & (
-            Meeting.ends_on
-            > add_to_date(get_datetime(starts_on), minutes=-MEETING_GAP)
-        )
+        & (Meeting.ends_on > add_to_date(get_datetime(starts_on), minutes=-MEETING_GAP))
     )
     if exclude:
         overlapping &= Meeting.name != exclude

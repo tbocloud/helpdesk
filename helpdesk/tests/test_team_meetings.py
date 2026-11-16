@@ -142,9 +142,7 @@ class TestScheduling(TeamMeetingCase):
         self.assertEqual(frappe.db.get_value("HD Meeting", name, "status"), "Cancelled")
         self.assertIsNone(self.people()[COLLEAGUE[0]]["busy"])
         cancelled = [
-            m
-            for m in get_reminder_messages(COLLEAGUE[0], name)
-            if "cancelled" in m
+            m for m in get_reminder_messages(COLLEAGUE[0], name) if "cancelled" in m
         ]
         self.assertEqual(len(cancelled), 1)
         self.assertIn("Moved to Friday", cancelled[0])
