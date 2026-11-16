@@ -249,7 +249,11 @@ lists, link) and CC, kept on the sign-off (`email_subject`, `email_body`, `cc_em
   again whenever a field it uses changes, until the mail is changed by hand; then **Reapply template** puts it back after
   asking ("Your changes to the mail are lost"). A fill that arrives after the mail was typed into
   is dropped, so typing is never overwritten. Editing a draft: its kept mail goes on following its
-  choices when it is still exactly what they fill in (a date set later fills in); a draft mail
+  choices when it is still what they fill in (a date set later fills in). A draft saved before a
+  detail was given still has that `{{ placeholder }}` where the fill now has the value; that still
+  counts as untouched (`fillsPlaceholders`), so opening it fills the mail in, and it follows the
+  choices from then on. Without this, such a draft stayed stuck on its placeholders and could not
+  be sent until someone clicked Reapply template. A draft mail
   written by hand stays, and **Reapply template** (shown for it, without asking when nothing was
   typed in the dialog) fills it in again. Switching template replaces the earlier template's
   Always CC with the new one's.
