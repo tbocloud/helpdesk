@@ -156,7 +156,13 @@
           </template>
         </Button>
         <p class="text-p-sm text-ink-gray-6">
-          {{ __("You can also hang up on your phone.") }}
+          {{
+            pickedUp
+              ? __("You can also hang up on your phone.")
+              : __(
+                  "Works once you have picked up your phone. Before that, decline the call on your phone."
+                )
+          }}
         </p>
       </div>
       <p
@@ -421,6 +427,10 @@ const canStopWaiting = computed(
 );
 const canAskResult = computed(
   () => tooLong.value && !box.resultAsked && !box.recorded
+);
+/** the person has answered their own phone: from here the provider can end the call */
+const pickedUp = computed(
+  () => box.phase === "ringing_lead" || box.phase === "on_call"
 );
 /** the call is on and only the phone can end it */
 const onPhone = computed(
