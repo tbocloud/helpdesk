@@ -82,6 +82,8 @@ export const RECORD_AFTER_MS = 45_000;
 const RECORDING_POLL_MS = 4000;
 const RECORDING_POLLS = 8;
 const RECENT_CALLS = 3;
+/** after End call, the provider needs a moment before its call list has the call */
+const END_LOOKUP_MS = 6000;
 
 export const box = reactive({
   open: false,
@@ -109,6 +111,9 @@ export const box = reactive({
   /** the person asked for the result before the call was seen to end */
   resultAsked: false,
   saving: false,
+  /** the provider can drop the call when asked (CallerDesk): the box offers End call */
+  canEnd: false,
+  ending: false,
   /** the next call of Today's calls: undefined while asking, null when there is none */
   next: undefined as NextCall | null | undefined,
 });
@@ -219,6 +224,8 @@ export function placeCall(next: BoxCall, another = false) {
     outcome: "",
     resultAsked: false,
     saving: false,
+    canEnd: false,
+    ending: false,
     next: undefined,
   });
   loadLead();
@@ -226,21 +233,28 @@ export function placeCall(next: BoxCall, another = false) {
     name: next.lead,
     number: next.number,
   })
-    .then((placed: { number?: string; reference_id?: string }) => {
-      if (mine !== session) return;
-      box.phase = "calling";
-      box.number = placed?.number || box.number;
-      box.referenceId = placed?.reference_id || "";
-      startCall({
-        lead: next.lead,
-        lead_name: next.lead_name,
-        phone: next.phone || next.number || "",
-        number: next.number,
-        item: next.item,
-        via: "myoperator",
-      });
-      if (box.referenceId) schedule(0);
-    })
+    .then(
+      (placed: {
+        number?: string;
+        reference_id?: string;
+        can_end?: boolean;
+      }) => {
+        if (mine !== session) return;
+        box.phase = "calling";
+        box.number = placed?.number || box.number;
+        box.referenceId = placed?.reference_id || "";
+        box.canEnd = !!placed?.can_end && !!box.referenceId;
+        startCall({
+          lead: next.lead,
+          lead_name: next.lead_name,
+          phone: next.phone || next.number || "",
+          number: next.number,
+          item: next.item,
+          via: "myoperator",
+        });
+        if (box.referenceId) schedule(0);
+      }
+    )
     .catch((e: unknown) => {
       if (mine !== session) return;
       box.phase = "refused";
@@ -355,6 +369,29 @@ function rank(phase: string) {
 /** "Record the result": the call is over but the box didn't see it end. It keeps asking. */
 export function askResult() {
   box.resultAsked = true;
+}
+
+/** "End call": the provider drops the call. Its report closes the box as any call's does; the
+ * box also looks for it once, in case that report is slow to come. */
+export async function endCall() {
+  if (!box.canEnd || box.ending) return;
+  const mine = session;
+  box.ending = true;
+  try {
+    await call("helpdesk.api.leads.end_call", {
+      reference_id: box.referenceId,
+    });
+    toast.success(__("Ending the call…"));
+    setTimeout(() => {
+      if (mine === session && !isOver(box.phase)) findLostCall(mine);
+    }, END_LOOKUP_MS);
+  } catch (e) {
+    toast.error(
+      errorText(e, __("Couldn't end the call. Hang up on your phone."))
+    );
+  } finally {
+    if (mine === session) box.ending = false;
+  }
 }
 
 /** "Stop waiting": the person never picked up their phone, or dialled by mistake. The box

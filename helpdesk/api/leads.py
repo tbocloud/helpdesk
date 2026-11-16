@@ -1265,6 +1265,23 @@ def refresh_call(reference_id: str) -> dict:
     ) or {"stored": 0}
 
 
+@frappe.whitelist(methods=["POST"])
+def end_call(reference_id: str) -> dict:
+    """End call in the call box: the ERP site asks the provider to drop the signed-in
+    person's own click-to-call (CallerDesk only). `{ok}`; a refusal says to hang up on the
+    phone."""
+    require_leads()
+    return (
+        call(
+            "end_call",
+            post=True,
+            api=TELEPHONY,
+            reference_id=(reference_id or "").strip(),
+        )
+        or {}
+    )
+
+
 @frappe.whitelist()
 def get_incoming_call() -> dict:
     """{enabled, call}: the call coming in to the signed-in person now, for the incoming
