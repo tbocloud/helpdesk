@@ -16,11 +16,17 @@ from frappe.utils import (
 
 from helpdesk import teams_meetings
 from helpdesk.automation import acting_user, credit
-from helpdesk.work_reminders import notify_users
+from helpdesk.chat_notifications import helpdesk_url
+from helpdesk.work_reminders import helpdesk_path, notify_users
 
 REFERENCE_DOCTYPES = ("HD Ticket", "Task")
 SCHEDULED = "Scheduled"
 CANCELLED = "Cancelled"
+TEAMS = "Microsoft Teams"
+MIN_DURATION = 5
+MAX_DURATION = 8 * 60
+# minutes a person needs between the end of one meeting and the start of the next
+MEETING_GAP = 10
 MAX_ATTENDEES = 50
 MAX_SYNCED_MEETINGS = 300
 OUTLOOK_EVENT_GONE = "ErrorItemNotFound"
@@ -42,7 +48,10 @@ class HDMeeting(Document):
         self.set_customer()
 
     def validate_reference(self):
-        if self.reference_doctype not in REFERENCE_DOCTYPES:
+        """A meeting is about a ticket or a task, or is an internal one about neither."""
+        if not self.reference_doctype and not self.reference_name:
+            return
+        if self.reference_doctype not in REFERENCE_DOCTYPES or not self.reference_name:
             frappe.throw(_("Meetings can be scheduled from tickets and tasks only."))
 
     def validate_times(self):
@@ -90,6 +99,7 @@ class HDMeeting(Document):
     def schedule_in_teams(self):
         """Creates the Outlook event with its Teams link; the caller saves."""
         created = teams_meetings.create_event(self)
+        self.provider = TEAMS
         self.external_id = created["external_id"]
         self.join_url = created["join_url"]
 
@@ -182,7 +192,8 @@ class HDMeeting(Document):
         parts = []
         if self.agenda:
             parts.append(escape_html(self.agenda).replace("\n", "<br>"))
-        parts.append(escape_html(self.reference_label()))
+        if self.reference_doctype:
+            parts.append(escape_html(self.reference_label()))
         return "".join(f"<p>{part}</p>" for part in parts)
 
     def reference_label(self) -> str:
@@ -199,7 +210,10 @@ class HDMeeting(Document):
     def note_on_reference(self, text: str):
         """An internal note on the ticket or task, so the team sees the meeting there.
 
-        The Outlook sync runs as a job; its notes are the hub's (helpdesk.automation)."""
+        The Outlook sync runs as a job; its notes are the hub's (helpdesk.automation).
+        An internal meeting has nowhere to note it; its people are notified instead."""
+        if not self.reference_doctype:
+            return
         by = acting_user()
         if self.reference_doctype == "HD Ticket":
             frappe.get_doc(
@@ -231,15 +245,90 @@ class HDMeeting(Document):
 
     def send_reminder(self):
         """Reminds the TBO staff in the meeting; the caller saves."""
-        notify_users(
-            self.staff_users(),
-            self.reference_doctype,
-            self.reference_name,
+        self.notify_staff(
             _("Teams meeting at {0}: {1}. Join: {2}").format(
                 format_datetime(self.starts_on, "HH:mm"), self.subject, self.join_url
-            ),
+            )
         )
         self.reminder_sent = 1
+
+    def notify_staff(
+        self, message: str, skip_user: str | None = None, deliver: bool = True
+    ):
+        """A notification for the TBO staff in the meeting (but `skip_user`), opening
+        its ticket or task, or the Meetings calendar for an internal meeting.
+        `deliver=False` keeps it in the panel: the meeting email tells them instead."""
+        notify_users(
+            [u for u in self.staff_users() if u != skip_user],
+            self.reference_doctype or self.doctype,
+            self.reference_name or self.name,
+            message,
+            deliver=deliver,
+        )
+
+    def email_attendees(self, subject: str, intro: str, skip_user: str | None = None):
+        """Emails everyone invited (but whoever scheduled the meeting and `skip_user`)
+        the meeting's details under `intro`. A Teams meeting is left to Outlook, which
+        sends its own invitation and cancellation."""
+        if self.external_id:
+            return
+        skip = {
+            (frappe.db.get_value("User", user, "email") or "").lower()
+            for user in (self.scheduled_by, skip_user)
+            if user
+        }
+        recipients = [a.email for a in self.attendees if a.email not in skip]
+        if not recipients:
+            return
+        try:
+            frappe.sendmail(
+                recipients=recipients,
+                subject=subject,
+                message=self.email_body(intro),
+                reference_doctype=self.doctype,
+                reference_name=self.name,
+            )
+        except frappe.OutgoingEmailError:
+            # no outgoing email account yet; the in-app notification is still there
+            self.log_error("Meeting email not sent")
+
+    def email_body(self, intro: str) -> str:
+        rows = [
+            (
+                _("When"),
+                "{0} – {1}".format(
+                    format_datetime(self.starts_on, "EEE d MMM yyyy, HH:mm"),
+                    format_datetime(self.ends_on, "HH:mm"),
+                ),
+            ),
+            (_("Type"), self.meeting_type),
+            (_("People"), ", ".join(a.full_name or a.email for a in self.attendees)),
+            (_("Agenda"), self.agenda),
+            (_("Reason"), self.cancel_reason if self.status == CANCELLED else None),
+        ]
+        details = "".join(
+            '<tr><td style="padding:4px 12px 4px 0;color:#6b7280;vertical-align:top">'
+            f"{escape_html(label)}</td>"
+            f'<td style="padding:4px 0">{escape_html(value).replace(chr(10), "<br>")}</td></tr>'
+            for label, value in rows
+            if value
+        )
+        join = (
+            f'<p><a href="{escape_html(self.join_url)}">{escape_html(_("Join the meeting"))}</a></p>'
+            if self.join_url and self.status != CANCELLED
+            else ""
+        )
+        link = helpdesk_url(
+            helpdesk_path(
+                self.reference_doctype or self.doctype,
+                self.reference_name or self.name,
+            )
+        )
+        return (
+            f"<p>{escape_html(intro)}</p>"
+            f"<table>{details}</table>{join}"
+            f'<p><a href="{link}">{escape_html(_("Open in TBO Support"))}</a></p>'
+        )
 
     @staticmethod
     def is_staff(email: str) -> bool:
@@ -247,6 +336,48 @@ class HDMeeting(Document):
         return bool(
             user and frappe.db.exists("HD Agent", {"user": user, "is_active": 1})
         )
+
+
+def people_in_meetings(starts_on, ends_on, exclude: str | None = None) -> dict:
+    """{email: meeting} for everyone already in a scheduled meeting that overlaps
+    `starts_on`–`ends_on` or comes within MEETING_GAP minutes of it: its attendees
+    and whoever scheduled it. People get a break between meetings, so one ending
+    exactly MEETING_GAP minutes before the other starts is the closest that is no
+    clash. `exclude` is a meeting being changed."""
+    Meeting = frappe.qb.DocType("HD Meeting")
+    Attendee = frappe.qb.DocType("HD Meeting Attendee")
+    User = frappe.qb.DocType("User")
+    overlapping = (
+        (Meeting.status == SCHEDULED)
+        & (Meeting.starts_on < add_to_date(get_datetime(ends_on), minutes=MEETING_GAP))
+        & (
+            Meeting.ends_on
+            > add_to_date(get_datetime(starts_on), minutes=-MEETING_GAP)
+        )
+    )
+    if exclude:
+        overlapping &= Meeting.name != exclude
+    meeting_fields = (Meeting.name, Meeting.subject, Meeting.starts_on, Meeting.ends_on)
+    attendees = (
+        frappe.qb.from_(Attendee)
+        .join(Meeting)
+        .on((Attendee.parent == Meeting.name) & (Attendee.parenttype == "HD Meeting"))
+        .select(Attendee.email, *meeting_fields)
+        .where(overlapping)
+    )
+    schedulers = (
+        frappe.qb.from_(Meeting)
+        .join(User)
+        .on(User.name == Meeting.scheduled_by)
+        .select(User.email, *meeting_fields)
+        .where(overlapping)
+    )
+    busy = {}
+    rows = attendees.run(as_dict=True) + schedulers.run(as_dict=True)
+    for row in sorted(rows, key=lambda r: r.starts_on):
+        busy.setdefault((row.pop("email") or "").lower(), row)
+    busy.pop("", None)
+    return busy
 
 
 def send_reminders():

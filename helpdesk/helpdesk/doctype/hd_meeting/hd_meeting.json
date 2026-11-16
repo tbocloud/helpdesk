@@ -5,6 +5,7 @@
 	"engine": "InnoDB",
 	"field_order": [
 		"subject",
+		"meeting_type",
 		"starts_on",
 		"ends_on",
 		"status",
@@ -33,6 +34,13 @@
 			"reqd": 1,
 			"in_list_view": 1,
 			"length": 255
+		},
+		{
+			"fieldname": "meeting_type",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"label": "Meeting Type",
+			"options": "HD Meeting Type"
 		},
 		{
 			"fieldname": "starts_on",
@@ -65,15 +73,13 @@
 			"fieldname": "reference_doctype",
 			"fieldtype": "Link",
 			"label": "Reference Type",
-			"options": "DocType",
-			"reqd": 1
+			"options": "DocType"
 		},
 		{
 			"fieldname": "reference_name",
 			"fieldtype": "Dynamic Link",
 			"label": "Reference",
 			"options": "reference_doctype",
-			"reqd": 1,
 			"search_index": 1
 		},
 		{
@@ -106,8 +112,7 @@
 			"fieldname": "provider",
 			"fieldtype": "Select",
 			"label": "Provider",
-			"options": "Microsoft Teams",
-			"default": "Microsoft Teams",
+			"options": "\nMicrosoft Teams",
 			"read_only": 1
 		},
 		{
@@ -160,7 +165,7 @@
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-10-02 10:00:00.000000",
+	"modified": "2026-11-13 18:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"owner": "Administrator",

@@ -67,6 +67,7 @@
             v-if="m.can_cancel"
             size="sm"
             variant="ghost"
+            theme="red"
             :label="__('Cancel meeting')"
             @click="cancelling = m"
           />
@@ -100,56 +101,17 @@
       @scheduled="onChanged"
     />
 
-    <Dialog
-      :open="!!cancelling"
-      :title="__('Cancel meeting?')"
-      size="md"
-      @update:open="(isOpen: boolean) => !isOpen && (cancelling = null)"
-    >
-      <div class="flex flex-col gap-3">
-        <p class="text-p-sm text-ink-gray-7">
-          {{
-            __(
-              "Outlook tells everyone invited that {0} is cancelled.",
-              cancelling?.subject || ""
-            )
-          }}
-        </p>
-        <Textarea
-          v-model="cancelReason"
-          :label="__('Message to attendees (optional)')"
-          :rows="2"
-        />
-      </div>
-      <template #actions>
-        <div class="flex justify-end gap-2">
-          <Button :label="__('Keep it')" @click="cancelling = null" />
-          <Button
-            variant="solid"
-            theme="red"
-            :label="__('Cancel meeting')"
-            :loading="cancel.loading"
-            @click="confirmCancel"
-          />
-        </div>
-      </template>
-    </Dialog>
+    <CancelMeetingDialog v-model:meeting="cancelling" @cancelled="onChanged" />
   </section>
 </template>
 
 <script setup lang="ts">
 import { __ } from "@/translation";
-import {
-  Button,
-  Dialog,
-  Textarea,
-  createResource,
-  dayjs,
-  toast,
-} from "frappe-ui";
+import { Button, createResource, dayjs } from "frappe-ui";
 import { computed, inject, ref, useId, watch } from "vue";
 import LucidePlus from "~icons/lucide/plus";
 import LucideVideo from "~icons/lucide/video";
+import CancelMeetingDialog from "./CancelMeetingDialog.vue";
 import { meetingsChanged } from "./meetingsBus";
 import ScheduleMeetingDialog from "./ScheduleMeetingDialog.vue";
 
@@ -190,7 +152,6 @@ function openDialog(mode: "now" | "later") {
   showSchedule.value = true;
 }
 const cancelling = ref<MeetingRow | null>(null);
-const cancelReason = ref("");
 
 const meetings = createResource({
   url: "helpdesk.api.meetings.get_meetings",
@@ -242,26 +203,5 @@ function onChanged() {
   meetings.reload();
   // the internal note about the meeting shows in the activity
   refreshTicket();
-}
-
-const cancel = createResource({
-  url: "helpdesk.api.meetings.cancel_meeting",
-  onSuccess() {
-    toast.success(__("Meeting cancelled. Attendees have been told."));
-    cancelling.value = null;
-    cancelReason.value = "";
-    onChanged();
-  },
-  onError(err: any) {
-    toast.error(err?.messages?.[0] || __("Couldn't cancel the meeting."));
-  },
-});
-
-function confirmCancel() {
-  if (!cancelling.value) return;
-  cancel.submit({
-    meeting: cancelling.value.name,
-    reason: cancelReason.value.trim(),
-  });
 }
 </script>

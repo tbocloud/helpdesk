@@ -11,6 +11,7 @@ from frappe import _
 from frappe.utils import add_days, get_datetime, getdate
 
 from helpdesk.api.content_board import user_full_names
+from helpdesk.api.meetings import can_change_meeting
 from helpdesk.api.work import OPEN_TASK_FILTER, can_see_overview
 from helpdesk.helpdesk.doctype.hd_meeting.hd_meeting import SCHEDULED
 from helpdesk.utils import agent_only, assigned_to_filter
@@ -22,8 +23,11 @@ MAX_EVENTS = 500
 
 @frappe.whitelist()
 @agent_only
-def get_calendar(start: str, end: str, team: int | str = 0) -> dict:
-    """Meetings and due tasks between `start` and `end` (dates or datetimes)."""
+def get_calendar(
+    start: str, end: str, team: int | str = 0, meetings_only: int | str = 0
+) -> dict:
+    """Meetings and due tasks between `start` and `end` (dates or datetimes).
+    `meetings_only` leaves the tasks out, for the Meetings calendar."""
     start_day, end_day = getdate(start), getdate(end)
     if end_day < start_day:
         frappe.throw(_("The end of the range is before its start."))
@@ -38,7 +42,9 @@ def get_calendar(start: str, end: str, team: int | str = 0) -> dict:
     user = frappe.session.user
     return {
         "meetings": _meetings(start_day, end_day, None if team else user),
-        "tasks": _tasks(start_day, end_day, None if team else user),
+        "tasks": []
+        if frappe.utils.cint(meetings_only)
+        else _tasks(start_day, end_day, None if team else user),
         "holidays": [
             {**row, "date": str(row["date"])}
             for row in holidays_between(start_day, end_day, weekly_off=False)
@@ -89,6 +95,8 @@ def _meetings(start_day, end_day, user: str | None) -> list[dict]:
             Meeting.reference_name,
             Meeting.customer,
             Meeting.scheduled_by,
+            Meeting.meeting_type,
+            Meeting.agenda,
         )
         .where(Meeting.status == SCHEDULED)
         .where(Meeting.starts_on < add_days(end_day, 1))
@@ -105,14 +113,34 @@ def _meetings(start_day, end_day, user: str | None) -> list[dict]:
             .where(Attendee.email == email.lower())
         )
         query = query.where((Meeting.scheduled_by == user) | Meeting.name.isin(invited))
+    rows = query.run(as_dict=True)
+    people = _attendee_names([row.name for row in rows])
     return [
         {
             **row,
             "starts_on": str(get_datetime(row.starts_on)),
             "ends_on": str(get_datetime(row.ends_on)),
+            "attendees": people.get(row.name, []),
+            "can_cancel": can_change_meeting(row),
         }
-        for row in query.run(as_dict=True)
+        for row in rows
     ]
+
+
+def _attendee_names(meetings: list[str]) -> dict[str, list[str]]:
+    """{meeting: [who is invited]}, by name where known, else by email."""
+    if not meetings:
+        return {}
+    rows = frappe.get_all(
+        "HD Meeting Attendee",
+        filters={"parenttype": "HD Meeting", "parent": ("in", meetings)},
+        fields=["parent", "email", "full_name"],
+        order_by="idx asc",
+    )
+    names: dict[str, list[str]] = {}
+    for row in rows:
+        names.setdefault(row.parent, []).append(row.full_name or row.email)
+    return names
 
 
 def _tasks(start_day, end_day, user: str | None) -> list[dict]:
