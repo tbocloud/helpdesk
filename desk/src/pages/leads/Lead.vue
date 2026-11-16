@@ -343,6 +343,11 @@
               />
               <LeadPhotos :lead-id="leadId" :can-write="!!lead.can_write" />
             </template>
+            <LeadAttachments
+              v-if="lead"
+              :lead-id="leadId"
+              :can-write="!!lead.can_write"
+            />
             <LeadWhyCall :prospect="lead?.prospect" />
             <LeadQuotations :quotations="data.quotations || []" />
             <LeadProposals
@@ -601,6 +606,7 @@ import LucidePhoneIncoming from "~icons/lucide/phone-incoming";
 import LucidePhoneMissed from "~icons/lucide/phone-missed";
 import LucidePhoneOutgoing from "~icons/lucide/phone-outgoing";
 import LucidePencil from "~icons/lucide/pencil";
+import LeadAttachments from "./LeadAttachments.vue";
 import LeadAISuggests from "./LeadAISuggests.vue";
 import LeadNumbers from "./LeadNumbers.vue";
 import LeadCallEntry from "./LeadCallEntry.vue";

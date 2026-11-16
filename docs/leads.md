@@ -251,8 +251,8 @@ refuses a move. A path stage the ERP site doesn't have is left out. On a phone t
 **Stage: Contacted** button that opens the same dialog. Left: the AI suggests and WhatsApp cards
 and the **Activity** timeline with the add-note box. Right (first on a phone): the duplicate
 notice (unchanged: Open and Merge), **Next step** (the follow-up date), **Numbers**
-(`LeadNumbers.vue`, old and wrong numbers struck through), **Details**, then place, photos, why
-call, quotations and proposals.
+(`LeadNumbers.vue`, old and wrong numbers struck through), **Details**, then place, photos,
+attachments, why call, quotations and proposals.
 
 **The list tabs** (All, My leads, Call today, Follow-up, Called): one toolbar row of Search,
 Stage, Owner, Product (and Created by or Last called where they apply), **More filters** (a
@@ -310,8 +310,9 @@ timer.
 
 What it says, in order: *Calling your phone…* → *Pick up your phone* → *Ringing <lead>* →
 *On call* (the timer runs in the header) → *Call ended · 2m 10s* or *Not answered*; a refusal
-shows CallerDesk's reason with **Try again**. In every state up to *On call* a visible line says
-**To end the call, hang up on your phone.**
+shows CallerDesk's reason with **Try again**. In every state up to *On call* the box has a red
+**End call** button (CallerDesk), with "You can also hang up on your phone." under it; with
+MyOperator the line reads **To end the call, hang up on your phone.**
 
 **The result is recorded in the box.** When the call ends (or **Stop waiting**, or **Record the
 result** after 45 seconds without live updates) the box shows the six answers (*Contacted*, *Not
@@ -347,15 +348,17 @@ call ending) then *Call ended*; after 45 seconds it already offers **Record the 
 after 3 minutes without any sign of the call it stops asking and says *Can't see this call any
 more*. MyOperator calls only ever go from *Calling your phone…* to *Call ended*.
 
-**Ending a call.** CallerDesk's documented API has **no hang-up call** (its Postman collection,
-read 2026-11-14, only reports a `hangup_cause`), so the box does not fake an *End call*, *Mute* or
-*Hold* button (Frappe CRM's Exotel popup, a provider that also rings the agent's phone first, has
-none either). **Stop waiting** (from *Calling your phone…* on, not while the call is being placed)
-is for a phone that never rang or a call dialled by mistake: it stops the ring sound and the asking
-and asks for the result. A hang-up API is a question for CallerDesk (tbo_smart
-`telephony-callerdesk.md` §1.3). **Browser phone (later):** if CallerDesk gives SIP/WSS
-credentials, a mode with **End call**, **Mute** and **Keypad** goes into the box's controls row (the
-row that holds *Try again*, *Stop waiting* and *Record the result* today); nothing for it ships now.
+**Ending a call.** **End call** asks the ERP site (`helpdesk.api.leads.end_call` → TBO Smart's
+`end_call`, tbo_smart `telephony-callerdesk.md` §4.2) to have CallerDesk drop the call; CallerDesk
+support gave the command on 2026-11-16. The box shows it only when the ERP site says the provider
+can (`can_end` in `click_to_call`'s answer). The call's report then closes the box as for any call;
+six seconds after a successful End call the box also looks for the call once, in case the report is
+slow. A refusal ("no call in progress", CallerDesk unreachable) is a toast that says to hang up on
+the phone. There is still no *Mute* or *Hold*: the audio is on the person's phone, not in the
+browser. **Stop waiting** (from *Calling your phone…* on, not while the call is being placed) is
+for a phone that never rang or a call dialled by mistake: it stops the ring sound and the asking
+and asks for the result; it does not end a call. **Browser phone:** CallerDesk can give SIP/WSS
+logins, but their calling needs a VPN and they recommend their softphone, so it is not planned.
 
 **Recordings.** The ended box, once the report is in and the call was answered, says **Recording
 is being saved…** and then **Recording saved.** with **Listen on the lead**, which opens the lead
@@ -1096,7 +1099,7 @@ Settings → CRM → **Referral (Lead Bank)** (`ReferralSettings.vue`), under th
 `helpdesk/api/leads.py`, thin typed proxies (writes are POST only): `get_options`,
 `list_leads`, `get_overview_page`, `get_overview`, `get_business_overview`, `get_lead_intake`, `get_proposal_money`, `get_lead`, `get_lead_ai`, `refresh_lead_ai`, `apply_ai_stage`,
 `dismiss_ai_stage`, `draft_lead_message`, `log_message_sent`, `create_lead`, `update_lead`,
-`set_stage`, `add_note`, `get_category_counts`, `add_industry`, `bulk_set_lead_category`, `find_duplicate_leads`, `get_stale_leads`, `get_lead_departments`, `save_lead_department`, `set_lead_department_active`, `add_lead_number`, `update_lead_number`, `remove_lead_number`, `get_merge_preview`, `merge_leads`, `click_to_call`, `refresh_call`, `call_recording`, `get_daily_report`, `log_call`, `get_lead_photos`, `upload_lead_photo`, `delete_lead_photo`, `lead_photo`. Find prospects has its own `helpdesk/api/prospects.py`: `estimate_prospect_run`, `start_prospect_run`, `get_prospect_runs`, `get_prospect_run`; Outreach has `helpdesk/api/outreach.py` (see [Outreach](#outreach)). They check
+`set_stage`, `add_note`, `get_category_counts`, `add_industry`, `bulk_set_lead_category`, `find_duplicate_leads`, `get_stale_leads`, `get_lead_departments`, `save_lead_department`, `set_lead_department_active`, `add_lead_number`, `update_lead_number`, `remove_lead_number`, `get_merge_preview`, `merge_leads`, `click_to_call`, `refresh_call`, `call_recording`, `get_daily_report`, `log_call`, `get_lead_photos`, `upload_lead_photo`, `delete_lead_photo`, `lead_photo`, `get_lead_files`, `upload_lead_file`, `delete_lead_file`, `lead_file`. Find prospects has its own `helpdesk/api/prospects.py`: `estimate_prospect_run`, `start_prospect_run`, `get_prospect_runs`, `get_prospect_run`; Outreach has `helpdesk/api/outreach.py` (see [Outreach](#outreach)). They check
 `can_use_leads`, validate the view and page size, trim notes, and pass `acting_user`. The
 client is `CRMClient.call` in `helpdesk/integrations/crm/client.py`; the call and error
 mapping live in `helpdesk/integrations/crm/leads.py`. The API key and secret never reach the
@@ -1354,6 +1357,25 @@ doesn't show without its fields. The hub can be deployed before TBO Smart.
     `helpdesk.api.leads.lead_photo?lead=&file=&thumb=`, which streams the ERP bytes as the signed-in
     person (only PNG, JPEG or WebP are passed on, `Content-Disposition: inline`) and, through the
     `after_request` hook `cache_lead_photo`, `Cache-Control: private, max-age=3600`.
+- **Attachments** (`LeadAttachments.vue`; needs TBO Smart's hub leads API v1.33,
+  `hub-leads-api.md` §2.34; the card stays out while the ERP site is older: `get_lead_files`
+  answers `available: false` through `call_if_deployed`), under Photos on every lead (it doesn't
+  wait for a place): the requirement sheet, a quotation the client sent, a visiting card.
+  - A list, newest first: an icon by type, the file name (opens it in a new tab), size, who added
+    it and when. Every file on the ERP Lead but its photos is listed, so a file attached on the
+    desk form shows here too.
+  - **Attach** (anyone who can write the lead) takes several files: PDF, Word, Excel, PowerPoint,
+    OpenDocument, CSV, text, PNG/JPEG/WebP or ZIP, at most 10 MB each and 50 per lead. Others are
+    left out by name before anything is sent; the rest upload one at a time (base64, as they are)
+    with a status line per file, a named error for a refused one and a toast when done.
+  - The trash button shows only where `can_delete` is true (who added it, the lead's owner or a
+    manager); it asks in place (*Delete* / *Keep*).
+  - The files are private on the ERP site. The browser opens them through
+    `helpdesk.api.leads.lead_file?lead=&file=&filename=`, which streams the ERP bytes as the
+    signed-in person. Only PDFs and PNG/JPEG/WebP open in the browser (`inline`); anything else,
+    including an HTML or SVG file attached on the desk, is sent as `application/octet-stream`
+    to save (`attachment`), so it never runs as a hub page. `filename` is only the saved name
+    and is cleaned of path and control characters.
 - The pickers' options (`get_options`) are fetched once per session (`leadOptions` in
   `desk/src/pages/leads/leads.ts`).
 - Sidebar: *Leads* in Workspace (teal group), shown when `can_use_leads`.
@@ -1601,6 +1623,10 @@ and the lead page's facts).
 site), an upload passed on with a trimmed caption, an empty or oversize upload kept at the hub,
 the ERP site's refusal reaching the person, delete, the image streamed (and only image types),
 no access without leads, and the private cache header.
+`helpdesk/tests/test_lead_files.py`: the file list (and the card staying out on an older ERP site),
+an upload passed on, an empty or oversize upload kept at the hub, the ERP site's refusal reaching
+the person, delete, no access without leads, PDFs and pictures opened inline and anything else
+(HTML, SVG, Office files) only saved as bytes, and the saved name cleaned.
 `helpdesk/tests/test_stale_leads.py`: wave 1: the duplicate check proxied as the person (and skipped
 quietly on an older ERP site), `allow_duplicate` sent only when confirmed, the quiet leads kept
 per department threshold and cached per person, and the follow-up rule (owner at L0, heads at

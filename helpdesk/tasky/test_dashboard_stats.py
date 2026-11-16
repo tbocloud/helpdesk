@@ -12,6 +12,7 @@ from helpdesk.test_utils import (
     make_project,
     make_task_in_status,
     start_task_timer,
+    working_day_ago,
 )
 
 DASHBOARD = "helpdesk.tasky.api.get_project_dashboard"
@@ -22,7 +23,7 @@ class TestDashboardStatTasks(FrappeTestCase):
         hold_commits(self)
         frappe.set_user("Administrator")
         self.project = make_project("Al Noor Trading LLC - Rollout").name
-        yesterday = add_days(nowdate(), -1)
+        yesterday = working_day_ago(1)
         self.tasks = {
             key: make_task_in_status(self.project, subject, status, **values)
             for key, subject, status, values in [

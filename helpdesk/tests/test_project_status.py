@@ -18,9 +18,11 @@ from helpdesk.test_utils import (
     make_task_in_status,
     make_tasky_user,
     run_as_user,
+    saved_due,
     set_follow_up_settings,
     set_status_report_recipients,
     status_split_answer,
+    working_day_ago,
 )
 
 PM = ("pm.status@status-report.example", "Meera Das")
@@ -163,7 +165,7 @@ class TestWaitingSince(StatusReportCase):
 
 class TestFacts(StatusReportCase):
     def test_tasks_done_total_overdue_and_held_with_reasons(self):
-        yesterday = add_days(nowdate(), -1)
+        yesterday = working_day_ago(1)
         make_task_in_status(self.project, "Done one", "Completed")
         make_task(self.project, "Late one", yesterday)
         make_task(self.project, "Fine one", add_days(nowdate(), 5))
@@ -194,7 +196,7 @@ class TestFacts(StatusReportCase):
         milestone = self.row()["facts"]["next_milestone"]
 
         self.assertEqual(milestone["subject"], "Sooner")
-        self.assertEqual(str(milestone["due"]), add_days(nowdate(), 9))
+        self.assertEqual(milestone["due"], saved_due(add_days(nowdate(), 9)))
 
     def test_days_waiting_on_the_client_come_from_the_update_then_the_held_tasks(self):
         make_held_task(self.project, "Needs data", "Waiting on customer", days_ago=6)
@@ -228,7 +230,7 @@ class TestContradictions(StatusReportCase):
         return [f["code"] for f in self.row(project)["flags"]]
 
     def test_live_or_support_with_overdue_tasks(self):
-        make_task(self.project, "Late", add_days(nowdate(), -2))
+        make_task(self.project, "Late", working_day_ago(2))
         for stage in ("Live", "Support"):
             make_status_update(self.project, stage=stage)
             self.assertEqual(self.codes(), ["live_with_overdue"], stage)
@@ -273,7 +275,7 @@ class TestAttentionOrder(StatusReportCase):
         make_status_update(names["waiting"], days_ago=1, waiting_on="Client")
         make_status_update(names["stale"], days_ago=20)
         make_status_update(names["overdue"], days_ago=1)
-        make_task(names["overdue"], "Late", add_days(nowdate(), -1))
+        make_task(names["overdue"], "Late", working_day_ago(1))
         make_status_update(names["paused"], days_ago=20, stage="On hold")
         wanted = [names[k] for k in ("overdue", "stale", "waiting", "fine", "paused")]
 
@@ -469,7 +471,7 @@ class TestFridayReport(StatusReportCase):
 
     def test_everyone_listed_gets_the_report_with_attention_first(self):
         make_status_update(self.project, days_ago=1, stage="Live")
-        make_task(self.project, "Late", add_days(nowdate(), -1))
+        make_task(self.project, "Late", working_day_ago(1))
         make_status_update(self.other, days_ago=1, waiting_on="Client")
         set_status_report_recipients(PM[0], LEAD[0])
 

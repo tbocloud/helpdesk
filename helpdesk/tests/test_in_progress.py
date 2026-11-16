@@ -27,6 +27,7 @@ from helpdesk.test_utils import (
     make_tasky_user,
     set_content_settings,
     start_task_timer,
+    working_day_ago,
 )
 
 CUSTOMER = "Kuttanad Rice Mills"
@@ -92,7 +93,7 @@ class TestInProgress(FrappeTestCase):
         )
         start_task_timer(self.working, hours_ago=2, estimated_hours=8)
         self.late = make_started_task(
-            self.project, "Migrate opening stock", DEV_B[0], due=add_days(today, -1)
+            self.project, "Migrate opening stock", DEV_B[0], due=working_day_ago(1)
         )
         self.review = make_started_task(
             self.project,
