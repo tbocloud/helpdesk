@@ -254,7 +254,8 @@ def _fix_card(run) -> dict | None:
         # the exact sites Deploy updates, shown before it is pressed
         "deploy_sites": deploy.card_sites(run)[1] if run.state == "Merged" else [],
         "press_backups": not copilot_settings.get_settings().press_skip_backups,
-        "can_undo": fixes.can_undo(run) and deploy.may_deploy(user, run),
+        # the same check as undo_fix: the narrower one, without the customer's people
+        "can_undo": fixes.can_undo(run) and deploy.may_deploy(user),
         "reverts": run.get("reverts"),
         "revert_run": (fixes.revert_run_of(run) or frappe._dict()).get("name"),
         "copilot": {
@@ -269,7 +270,7 @@ def _fix_card(run) -> dict | None:
         "change_set": changes.card(frappe.get_doc(changes.CHANGE_SET, run.change_set))
         if run.get("change_set")
         else None,
-        "can_undo_change": changes.can_undo(run) and deploy.may_deploy(user, run),
+        "can_undo_change": changes.can_undo(run) and deploy.may_deploy(user),
     }
 
 

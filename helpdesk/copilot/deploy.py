@@ -106,8 +106,10 @@ def local_time(moment) -> str:
 
 
 def may_deploy(user: str, run=None) -> bool:
-    """Deploy Tonight: whoever may decide the customer's fixes (Copilot People and its fallbacks,
-    the person a coordinator chose), the Seniors, the Leaders and the Agent Managers."""
+    """Deploy Tonight: the Fix Approvers for every customer, the Seniors, the Leaders and the
+    Agent Managers; and, for a fix someone approved, whoever may decide the customer's fixes
+    (Copilot People and its fallbacks), except the people who wrote it. A fix merged on GitHub
+    without its approval stays with the first group."""
     from helpdesk.copilot import people
 
     allowed = (
@@ -116,9 +118,16 @@ def may_deploy(user: str, run=None) -> bool:
         | set(people.leaders())
         | set(approvals.managers())
     )
-    if run is not None:
-        allowed |= people.may_approve(run.customer, run.ticket)
-    return user in allowed
+    if user in allowed:
+        return True
+    if run is None or not run.get("approval"):
+        return False
+    approval = frappe.get_doc("HDS Copilot Approval", run.approval)
+    if approval.status not in ("Approved", "Merged") or user in approvals.authors(
+        run, approval
+    ):
+        return False
+    return user in people.may_approve(run.customer, run.ticket)
 
 
 def may_deploy_now(user: str) -> bool:
@@ -250,10 +259,18 @@ def request_deploy(run, when: str, user: str, auto: bool = False):
     waiting = open_request(run)
     if waiting:
         # Deploy now on a fix scheduled for tonight: the same deploy moves to now (Phase 23, A19)
+        # the same rules as a new Deploy now: and another customer's site on the bench needs a
+        # Senior (the move skips no check a fresh request makes)
+        others = [
+            site
+            for site in (waiting.other_sites or "").splitlines()
+            if site.strip() and site.strip() != hub_site()
+        ]
         if (
             str(when).strip().lower() == "now"
             and waiting.status == "Scheduled"
             and may_deploy_now(user)
+            and (not others or user in approvals.seniors())
         ):
             waiting.db_set(
                 {"when": "Now", "scheduled_for": now_datetime(), "requested_by": user}

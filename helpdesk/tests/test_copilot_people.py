@@ -462,6 +462,26 @@ class TestCopilotPeople(FrappeTestCase):
             frappe.db.get_value("HD Ticket", ticket, "custom_copilot_waiting")
         )
 
+    def test_someone_added_beside_the_chosen_person_keeps_the_choice(self):
+        with self.sent():
+            ticket = self.ticket()
+            self.press(COORD[0], ticket, person=OTHER[0])
+        people.add_to_ticket(ticket, COORD[0], "The customer asked for a person")
+        self.assertEqual(
+            frappe.db.get_value("HD Ticket", ticket, "custom_copilot_person"), OTHER[0]
+        )
+        # taken away from the chosen person by hand: the choice ends
+        frappe.db.set_value(
+            "ToDo",
+            {"reference_name": ticket, "allocated_to": OTHER[0]},
+            "status",
+            "Cancelled",
+        )
+        make_assignment("HD Ticket", ticket, FIXER[0])
+        self.assertFalse(
+            frappe.db.get_value("HD Ticket", ticket, "custom_copilot_person")
+        )
+
     def test_asked_again_only_people_working_today(self):
         make_hd_leave(FIRST[0], nowdate(), add_days(nowdate(), 1))
         make_hd_leave(SECOND[0], nowdate(), add_days(nowdate(), 1))
@@ -562,6 +582,33 @@ class TestCopilotPeople(FrappeTestCase):
             approvals.pick_approver(self.fake_run(), sensitive=False, exclude=everyone),
             SENIOR[0],
         )
+
+    def test_the_customers_people_deploy_only_an_approved_fix(self):
+        # review of Phase 23: a fix merged on GitHub without its approval stays with the
+        # seniors, the leaders and the managers
+        from helpdesk.copilot import deploy
+
+        approval = frappe.get_doc(
+            {
+                "doctype": "HDS Copilot Approval",
+                "status": "Superseded",
+                "repo": "tbocloud/demo",
+                "number": 1,
+                "head_sha": "a" * 40,
+            }
+        ).insert(ignore_permissions=True, ignore_links=True, ignore_mandatory=True)
+        run = frappe._dict(
+            customer=CUSTOMER,
+            ticket=None,
+            task=None,
+            name="RUN-P23",
+            approval=approval.name,
+        )
+        self.assertFalse(deploy.may_deploy(FIRST[0], run))
+        self.assertTrue(deploy.may_deploy(LEAD[0], run))
+        approval.db_set("status", "Approved")
+        self.assertTrue(deploy.may_deploy(FIRST[0], run))
+        self.assertFalse(deploy.may_deploy(OTHER[0], run))
 
     def test_a_sensitive_fix_still_needs_a_senior(self):
         self.assertEqual(
@@ -695,6 +742,32 @@ class TestCopilotPeople(FrappeTestCase):
                 (people.DEVELOPER, "d@x.example", "Main"),
                 (people.DEVELOPER, "b@x.example", "Fallback 1"),
             ],
+        )
+
+    def test_one_developer_set_keeps_the_owners_in_the_other_place(self):
+        only_second = frappe._dict(
+            ticket_owner="a@x.example",
+            backup_ticket_owner="b@x.example",
+            custom_second_developer="c@x.example",
+        )
+        self.assertEqual(
+            [
+                (r["person"], r["level"])
+                for r in people.rows_from_old_customer(only_second)
+            ],
+            [("a@x.example", "Main"), ("c@x.example", "Fallback 1")],
+        )
+        only_first = frappe._dict(
+            ticket_owner="a@x.example",
+            backup_ticket_owner="b@x.example",
+            custom_first_developer="x@x.example",
+        )
+        self.assertEqual(
+            [
+                (r["person"], r["level"])
+                for r in people.rows_from_old_customer(only_first)
+            ],
+            [("x@x.example", "Main"), ("b@x.example", "Fallback 1")],
         )
 
     # --- the cards and the overview ------------------------------------------------------

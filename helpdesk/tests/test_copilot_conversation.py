@@ -383,6 +383,10 @@ class TestWhatItMaySay(ChatCase):
             "We will refund you 100 SAR.",
             "We guarantee it works.",
             "It will be ready by tomorrow.",
+            "We\u2019ll fix this by Monday.",
+            "You\u2019ll get a full refund.",
+            "I've updated your invoice.",
+            "That will be $500.",
         ):
             self.assertEqual(conversation.safe_text(drop, []), "", drop)
 
@@ -999,6 +1003,31 @@ class TestPhase23Delivery(ChatCase):
             {"reference_name": ticket, "sent_or_received": "Received"},
         )
         self.assertEqual(after, before + 1)
+
+    def test_a_send_that_failed_is_taken_when_sent_again(self):
+        # review of Phase 23: a first try that failed leaves no mark, so the retry is kept
+        ticket = self.raised()
+        message_id = "feed1234beef5678"
+        with patch(
+            "helpdesk.copilot.conversation._customer_said",
+            side_effect=frappe.ValidationError("the hub was busy"),
+        ), self.assertRaises(frappe.ValidationError):
+            self.say("Here is the export.", client_message_id=message_id)
+        self.say("Here is the export.", client_message_id=message_id)
+        received = frappe.get_all(
+            "Communication",
+            filters={"reference_name": ticket, "sent_or_received": "Received"},
+            pluck="content",
+        )
+        self.assertTrue(any("Here is the export." in c for c in received))
+
+    def test_with_the_ai_off_no_button_calls_the_model(self):
+        self.raised()
+        calls = self.ai_calls.call_count
+        make_copilot_settings(enabled=0)
+        self.say(action="recorded")
+        self.say(action="start")
+        self.assertEqual(self.ai_calls.call_count, calls)
 
     def test_a_reply_the_site_missed_is_sent_again(self):
         from helpdesk.copilot import delivery

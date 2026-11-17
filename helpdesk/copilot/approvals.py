@@ -716,7 +716,8 @@ def _move_from_away(approval) -> bool:
     run = frappe.get_doc("HDS Copilot Run", approval.run)
     successor = pick_approver(
         run,
-        bool(approval.sensitive),
+        # an escalated approval stays with the seniors: never back to whoever let it wait
+        bool(approval.sensitive or approval.escalated_at),
         exclude={approval.assigned_to},
         copilot_only=bool(
             (frappe.parse_json(approval.payload or "{}") or {}).get("copilot_only")

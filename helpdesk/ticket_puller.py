@@ -11,6 +11,7 @@ the only place a credential belongs.
 
 import hashlib
 import json
+import time
 from email.utils import parseaddr
 
 import frappe
@@ -646,12 +647,28 @@ def sync_conversations() -> int:
         order_by="modified desc",
         limit=0,
     )
+    synced = 0
+    skip = unreachable_connections()
+    # the customers' answers first (It's fixed, Still broken), every hub_api site, open tickets or
+    # not: a long run below must never keep them waiting (review of Phase 23)
+    for conn_name in _hub_api_connections():
+        if conn_name in skip:
+            continue
+        synced += _pull_client_changes(
+            frappe.get_doc("HDS Support Connection", conn_name)
+        )
+    # every open linked ticket, a few hundred a run within the job's time: each run goes on from
+    # where the last one stopped
+    after = frappe.cache().get_value(SYNC_CURSOR) or 0
+    rows.sort(key=_sync_key)
+    rows = [r for r in rows if _sync_key(r) > after] + [
+        r for r in rows if _sync_key(r) <= after
+    ]
+    deadline = time.monotonic() + SYNC_BUDGET_SECONDS
+    stopped = False
     by_conn = {}
     for r in rows:
         by_conn.setdefault(r.custom_qcs_connection, []).append(r)
-
-    synced = 0
-    skip = unreachable_connections()
     for conn_name, tickets in by_conn.items():
         if conn_name in skip:
             continue
@@ -664,6 +681,10 @@ def sync_conversations() -> int:
             continue
 
         for row in tickets:
+            if time.monotonic() > deadline:
+                frappe.cache().set_value(SYNC_CURSOR, _sync_key(row))
+                stopped = True
+                break
             try:
                 # older tickets kept the state in custom_conv_state
                 state = _load_conv_state(row.custom_sync_state or row.custom_conv_state)
@@ -803,12 +824,21 @@ def sync_conversations() -> int:
                     f"Conversation sync failed for {row.name}",
                     f"hds_conversation_sync_failed:{row.name}",
                 )
-    # every hub_api site, open tickets or not: a customer may reopen a closed ticket
-    for conn_name in _hub_api_connections():
-        synced += _pull_client_changes(
-            frappe.get_doc("HDS Support Connection", conn_name)
-        )
+        if stopped:
+            break
+    if not stopped:
+        frappe.cache().delete_value(SYNC_CURSOR)
     return synced
+
+
+SYNC_CURSOR = "hds_conversation_sync_after"
+SYNC_BUDGET_SECONDS = 180  # the scheduler stops a job after 300
+
+
+def _sync_key(row) -> int:
+    """HD Ticket names are numbers: the order a run goes through them."""
+    name = str(row.name if hasattr(row, "name") else row)
+    return int(name) if name.isdigit() else 0
 
 
 def _hub_api_connections() -> list[str]:

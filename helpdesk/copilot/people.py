@@ -920,7 +920,13 @@ def on_ticket_assigned(doc, method=None):
         ):
             return
         values = {"custom_copilot_waiting": 0}
-        if row.custom_copilot_person and row.custom_copilot_person != doc.allocated_to:
+        # someone added beside the chosen person (a helper, "Talk to a person") keeps the
+        # choice; only a ticket taken away from them ends it (review of Phase 23)
+        if (
+            row.custom_copilot_person
+            and row.custom_copilot_person != doc.allocated_to
+            and row.custom_copilot_person not in _open_assignees(doc.reference_name)
+        ):
             values.update(
                 {
                     "custom_copilot_person": None,
@@ -1282,13 +1288,13 @@ def rows_from_old_customer(row) -> list[dict]:
     """Phase 22's fields on a customer as rows of its Copilot People. The developers are copied
     only when they differ from the ticket owners (an empty Developer follows the owners)."""
     found = []
-    first, second = row.get("custom_first_developer"), row.get(
-        "custom_second_developer"
-    )
     owner = row.get("ticket_owner") or row.get("custom_assigned_developer")
-    if (first and first != owner) or (
-        second and second != row.get("backup_ticket_owner")
-    ):
+    backup = row.get("backup_ticket_owner")
+    # an empty Phase 22 developer was the owner (or the backup): once one differs, both are
+    # copied, or the other would be lost (review of Phase 23)
+    first = row.get("custom_first_developer") or owner
+    second = row.get("custom_second_developer") or backup
+    if (first and first != owner) or (second and second != backup):
         if first:
             found.append({"role": DEVELOPER, "person": first, "level": LEVELS[0]})
         if second and second != first:

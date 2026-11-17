@@ -170,7 +170,10 @@ def chat_on() -> bool:
 
 
 TICKET_STATES = ("Ticket raised", "With a person", "Closed")
+# what a ticket's chat may still do while the AI is switched off
+NO_AI_ACTIONS = ("linked", "fixed", "still_broken", "joined")
 REPEAT_KEY = "copilot:chat-message:{connection}:{id}"
+IN_FLIGHT_SECONDS = 120
 
 
 def _ticket_chat_open(connection: str, payload: dict) -> bool:
@@ -186,7 +189,7 @@ def _ticket_chat_open(connection: str, payload: dict) -> bool:
     return bool(
         row
         and row.connection == connection
-        and (row.ticket or row.state in TICKET_STATES)
+        and row.state in TICKET_STATES + ("Before a person",)
     )
 
 
@@ -209,6 +212,17 @@ def receive(connection: str, payload: dict) -> dict:
     repeat = _repeat(connection, payload)
     if repeat is not None:
         return repeat
+    try:
+        result = _receive(connection, payload, ai)
+    except Exception:
+        # nothing was kept: a retry with the same id is taken as new (review of Phase 23)
+        _forget(connection, payload)
+        raise
+    _remember(connection, payload, result.get("conversation"))
+    return result
+
+
+def _receive(connection: str, payload: dict, ai: bool) -> dict:
     user = payload.get("user") or {}
     email = str(user.get("email") or "").strip().lower()[:140]
     if not frappe.utils.validate_email_address(email):
@@ -227,7 +241,6 @@ def receive(connection: str, payload: dict) -> dict:
     if action == "open_ticket":
         return _reply(_ticket_chat(connection, payload, email, user), None)
     doc = _conversation(connection, payload, email, user)
-    _remember(connection, payload, doc.name)
     _link_client_ticket(connection, doc, payload)
     before = _last_message_name(doc)
     text = str(payload.get("text") or "").strip()[:MAX_TEXT]
@@ -242,8 +255,12 @@ def receive(connection: str, payload: dict) -> dict:
     ]
     if text or files:
         _customer_said(doc, text, files)
-    if not ai and doc.state not in TICKET_STATES + ("Before a person",):
-        pass  # the AI is off: nothing answers but the team
+    if not ai:
+        # the AI is off (the instant stop): only what needs no model goes on; the team answers
+        if action in NO_AI_ACTIONS:
+            _act(doc, action, payload)
+        elif not action and doc.state == "Before a person" and (text or files):
+            _hand_over(doc, "")
     elif action == "start" or (not action and not text and not files):
         _greet(doc, payload.get("context") or {}, user)
     elif action:
@@ -302,8 +319,11 @@ def _repeat(connection: str, payload: dict) -> dict | None:
         return None
     cache = frappe.cache()
     key = cache.make_key(REPEAT_KEY.format(connection=connection, id=client_id))
-    if cache.set(key, "", ex=2 * 24 * 3600, nx=True):  # the site's own key - nosemgrep
-        return None  # the first time
+    # the first time: an in-flight mark, short, so a request that dies never blocks the id
+    if cache.set(
+        key, "", ex=IN_FLIGHT_SECONDS, nx=True
+    ):  # the site's own key - nosemgrep
+        return None
     name = cache.get(key)
     name = name.decode() if isinstance(name, bytes) else name
     if name and frappe.db.exists(CONVERSATION, name):
@@ -317,9 +337,18 @@ def _repeat(connection: str, payload: dict) -> dict | None:
     }
 
 
-def _remember(connection: str, payload: dict, conversation: str):
+def _forget(connection: str, payload: dict):
     client_id = _client_id(payload)
     if client_id:
+        cache = frappe.cache()
+        cache.delete(
+            cache.make_key(REPEAT_KEY.format(connection=connection, id=client_id))
+        )
+
+
+def _remember(connection: str, payload: dict, conversation: str | None):
+    client_id = _client_id(payload)
+    if client_id and conversation:
         cache = frappe.cache()
         cache.set(  # the site's own key (make_key) - nosemgrep
             cache.make_key(REPEAT_KEY.format(connection=connection, id=client_id)),
@@ -753,25 +782,22 @@ PROMISES = re.compile(
     + _WHEN
     + r"\b"
     r"|\b(?:we|i)\s+(?:guarantee|promise|assure)\b"
-    r"|\b(?:i|we)\s+(?:have\s+|'ve\s+)?(?:changed|updated|deleted|corrected|fixed|refunded|credited)\b"
+    r"|\b(?:i|we)(?:\s+have|'ve)?\s+(?:changed|updated|deleted|corrected|fixed|refunded|credited)\b"
+    r"|\byou(?:'ll| will)\s+(?:get|receive|be (?:refunded|credited|compensated))\b"
     r"|\b(?:will be|is|it's)\s+(?:free of charge|at no (?:extra )?cost)\b",
     re.I,
 )
-PRICES = re.compile(
-    r"\b(?:costs?|price[sd]?|fee|charges?|you (?:will )?pay)\b[^.!?]{0,30}"
-    + _MONEY
-    + r"|"
-    + _MONEY
-    + r"[^.!?]{0,20}\b(?:fee|charge|to change|to fix|per (?:month|year|hour|user))\b",
-    re.I,
-)
+# an amount stated as a fact ("That will be $500."): a price the team gives, not Copilot
+MONEY = re.compile(_MONEY, re.I)
 
 
 def promises(sentence: str) -> bool:
-    """A sentence that commits TBO to something or states a price (a question is never a price)."""
-    if PROMISES.search(sentence):
+    """A sentence that commits TBO to something, or states an amount (a question about the
+    customer's own figures is never held back for its amount)."""
+    text = sentence.replace("\u2019", "'").replace("\u2018", "'")
+    if PROMISES.search(text):
         return True
-    return not sentence.rstrip().endswith(("?", "؟")) and bool(PRICES.search(sentence))
+    return not text.rstrip().endswith(("?", "\u061f")) and bool(MONEY.search(text))
 
 
 def cited(answer: dict, articles: list[dict]) -> list[dict]:
@@ -1243,7 +1269,8 @@ def tell(
     return _deliver(doc, message)
 
 
-def _deliver(doc, message) -> bool:
+def _deliver(doc, message, quiet: bool = False) -> bool:
+    """`quiet`: the caller logs a failure once (the five-minute resend)."""
     if doc.channel == "TBO Chat":
         return _deliver_to_tbo_chat(doc, message)
     conn = frappe.get_doc("HDS Support Connection", doc.connection)
@@ -1263,9 +1290,10 @@ def _deliver(doc, message) -> bool:
             },
         )
     except Exception:
-        frappe.log_error(
-            title=f"Copilot chat message not delivered to {doc.connection}"
-        )
+        if not quiet:
+            frappe.log_error(
+                title=f"Copilot chat message not delivered to {doc.connection}"
+            )
         return False
     message.db_set("delivered", 1, update_modified=False)
     return True
