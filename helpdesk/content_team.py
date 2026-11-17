@@ -20,6 +20,10 @@ ERP_EMPLOYEE_ROLE = "ERP Employee"
 # a salesperson: sees the sales screens (Leads, the Scoreboard) and no tasks, projects,
 # tickets or content (docs/departments.md)
 SALES_EMPLOYEE_ROLE = "Sales Employee"
+# sets each month's targets for the presales and sales people (docs/sales-targets.md)
+SALES_HEAD_ROLE = "Sales Head"
+# a presales person: is given targets and sees them on Sales targets
+PRESALES_EXECUTIVE_ROLE = "Presales Executive"
 # what a Sales Employee is never told about: the hub's work, support and content records
 SALES_HIDDEN_DOCTYPES = (
     "Project",
@@ -250,6 +254,8 @@ def ensure_role():
         (DM_EMPLOYEE_ROLE, "/helpdesk/content"),
         (ERP_EMPLOYEE_ROLE, "/helpdesk/content"),
         (SALES_EMPLOYEE_ROLE, "/helpdesk/leads"),
+        (SALES_HEAD_ROLE, "/helpdesk/sales-targets"),
+        (PRESALES_EXECUTIVE_ROLE, "/helpdesk/my-targets"),
     ):
         if frappe.db.exists("Role", role):
             continue

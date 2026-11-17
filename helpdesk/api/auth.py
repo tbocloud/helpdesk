@@ -21,6 +21,11 @@ from helpdesk.divisions import (
 )
 from helpdesk.helpdesk.doctype.hd_customer.hd_customer import can_set_ticket_owner
 from helpdesk.integrations.crm.leads import can_use_lead_bank, can_use_leads
+from helpdesk.sales_targets import (
+    can_assign_targets,
+    has_own_targets,
+    hides_todays_calls,
+)
 from helpdesk.tasky.permissions import is_project_manager as tasky_is_project_manager
 from helpdesk.utils import agent_only, get_agent_name, get_agents_team
 from helpdesk.utils import is_agent as _is_agent
@@ -115,6 +120,12 @@ def get_user():
         and not leads_closed_by_site(current_user),
         # Add a lead and My leads: every active agent while Leads is on (docs/lead-bank.md)
         "can_use_lead_bank": can_use_lead_bank(current_user),
+        # Sales targets: Sales Heads set each month's targets (docs/sales-targets.md)
+        "can_assign_sales_targets": can_assign_targets(current_user),
+        # Sales targets (their own): Presales Executives and Sales Users read theirs
+        "has_sales_targets": has_own_targets(current_user),
+        # Presales Executives don't get Today's calls: no sidebar item, no pill on Leads
+        "hide_todays_calls": hides_todays_calls(current_user),
         # lets the frontend skip call-integration checks when telephony isn't installed
         "telephony_installed": "telephony" in frappe.get_installed_apps(),
         "user_image": user_image,
