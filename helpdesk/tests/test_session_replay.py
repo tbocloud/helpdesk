@@ -509,7 +509,17 @@ class TestStuckTriageAndSyncState(FrappeTestCase):
             frappe.db.get_value("HD Ticket", ticket.name, "custom_sync_state")
         )
         self.assertEqual(len(state["client"]), 12)
+        # since Phase 23 (B4) a comment from the customer's site is the customer's reply: a
+        # received Communication, not an internal note
         self.assertEqual(
-            frappe.db.count("HD Ticket Comment", {"reference_ticket": ticket.name}),
+            frappe.db.count(
+                "Communication",
+                {
+                    "reference_doctype": "HD Ticket",
+                    "reference_name": ticket.name,
+                    "sent_or_received": "Received",
+                    "content": ["like", "%Update %"],
+                },
+            ),
             12,
         )

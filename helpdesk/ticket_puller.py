@@ -629,6 +629,19 @@ def sync_conversations() -> int:
 
     Idempotency: synced record names are tracked in custom_sync_state.
     """
+    synced = 0
+    skip = unreachable_connections()
+    # the customers' answers first (It's fixed, Still broken), every hub_api site, open tickets or
+    # not: a long run below must never keep them waiting (review of Phase 23)
+    for conn_name in _hub_api_connections():
+        if conn_name in skip:
+            continue
+        synced += _pull_client_changes(
+            frappe.get_doc("HDS Support Connection", conn_name)
+        )
+    # read after the answers: a ticket just confirmed is closed and skipped, and every state carries
+    # the answer's marker (read before, the sync below saved the old state over it and the next run
+    # applied the confirmation again: Phase 24, found by test_client_sync_hub_api)
     rows = frappe.get_all(
         "HD Ticket",
         filters={
@@ -647,16 +660,6 @@ def sync_conversations() -> int:
         order_by="modified desc",
         limit=0,
     )
-    synced = 0
-    skip = unreachable_connections()
-    # the customers' answers first (It's fixed, Still broken), every hub_api site, open tickets or
-    # not: a long run below must never keep them waiting (review of Phase 23)
-    for conn_name in _hub_api_connections():
-        if conn_name in skip:
-            continue
-        synced += _pull_client_changes(
-            frappe.get_doc("HDS Support Connection", conn_name)
-        )
     # every open linked ticket, a few hundred a run within the job's time: each run goes on from
     # where the last one stopped
     after = frappe.cache().get_value(SYNC_CURSOR) or 0
