@@ -63,6 +63,8 @@ import LucideReceipt from "~icons/lucide/receipt";
 import LucideBot from "~icons/lucide/bot";
 import LucideGitPullRequest from "~icons/lucide/git-pull-request";
 
+import DivisionAgents from "./Divisions/DivisionAgents.vue";
+import DivisionInvite from "./Divisions/DivisionInvite.vue";
 import Divisions from "./Divisions/Divisions.vue";
 import AuditLog from "./Divisions/AuditLog.vue";
 import LucideGlobe from "~icons/lucide/globe";
@@ -116,6 +118,19 @@ export const tabs = computed(() => {
           label: __("Divisions"),
           icon: markRaw(LucideGlobe),
           component: markRaw(Divisions),
+        },
+        // a division's own admins: its people and invites only (docs/divisions.md)
+        {
+          label: __("Agents"),
+          icon: markRaw(LucideUser),
+          component: markRaw(DivisionAgents),
+          condition: () => !auth.isAdmin && !auth.isManager,
+        },
+        {
+          label: __("Invite Agents"),
+          icon: markRaw(LucideUserPlus),
+          component: markRaw(DivisionInvite),
+          condition: () => !auth.isAdmin && !auth.isManager,
         },
         {
           label: __("Audit log"),

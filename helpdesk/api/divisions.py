@@ -215,6 +215,139 @@ def set_members(division: str, members: list | str) -> dict:
     return {"members": len(doc.members), "erp_problems": doc.apply_erp_roles()}
 
 
+# ---------- a division's agents (docs/divisions.md, "Agents of a division") ----------
+
+
+@frappe.whitelist()
+def get_division_agents(division: str) -> dict:
+    """The division's people as agents (name, image, whether the agent is active, their
+    role in the division) and the invites to it not yet accepted, for its admins."""
+    require_manager(division)
+    doc = frappe.get_doc(DIVISION, division)
+    users = [m.user for m in doc.members]
+    info = {
+        u.name: u
+        for u in frappe.get_all(
+            "User",
+            filters={"name": ("in", users or [""])},
+            fields=["name", "full_name", "user_image", "enabled"],
+        )
+    }
+    active = dict(
+        frappe.get_all(
+            "HD Agent",
+            filters={"name": ("in", users or [""])},
+            fields=["name", "is_active"],
+            as_list=True,
+        )
+    )
+    return {
+        "agents": [
+            {
+                "user": m.user,
+                "full_name": (info.get(m.user) or {}).get("full_name") or m.user,
+                "user_image": (info.get(m.user) or {}).get("user_image"),
+                "is_active": bool(
+                    active.get(m.user) and (info.get(m.user) or {}).get("enabled")
+                ),
+                "role": m.role,
+            }
+            for m in doc.members
+        ],
+        "invites": frappe.get_all(
+            "User Invitation",
+            filters={
+                "division": division,
+                "status": "Pending",
+                "app_name": "helpdesk",
+            },
+            fields=["name", "email", "division_role"],
+            order_by="creation desc",
+        ),
+        "roles": roles_for(division),
+    }
+
+
+@frappe.whitelist(methods=["POST"])
+def invite_to_division(division: str, emails: str, role: str) -> dict:
+    """Bring people into the division with `role`. Someone who is already an agent here
+    joins it now (and gets their role on its ERP site); anyone else is invited as an Agent
+    and joins it when they accept. {added, invited, already_invited, already_member,
+    disabled, erp_problems}."""
+    require_manager(division)
+    if role not in roles_for(division):
+        frappe.throw(_("{0} isn't a role you can give here.").format(role))
+    frappe.utils.validate_email_address(emails, throw=True)
+    emails = [e.lower() for e in frappe.utils.split_emails(emails)]
+    if not emails:
+        frappe.throw(_("Add at least one email."))
+    doc = frappe.get_doc(DIVISION, division)
+    result = {
+        k: []
+        for k in (
+            "added",
+            "invited",
+            "already_invited",
+            "already_member",
+            "disabled",
+        )
+    }
+    for email in dict.fromkeys(emails):
+        user = frappe.db.get_value("User", {"name": email}, ["name", "enabled"])
+        if user and not user[1]:
+            result["disabled"].append(email)
+        elif user and frappe.db.get_value("HD Agent", email, "is_active"):
+            key = "added" if doc.add_member(email, role) else "already_member"
+            result[key].append(email)
+        elif frappe.db.exists(
+            "User Invitation",
+            {"email": email, "status": "Pending", "app_name": "helpdesk"},
+        ):
+            result["already_invited"].append(email)
+        else:
+            invite_agent(email, division, role)
+            result["invited"].append(email)
+    if result["added"]:
+        doc.save(ignore_permissions=True)
+    result["erp_problems"] = (
+        doc.apply_erp_roles(result["added"]) if result["added"] else []
+    )
+    if result["added"] or result["invited"]:
+        log_activity(
+            _("Brought {0} into {1} as {2}").format(
+                ", ".join(result["added"] + result["invited"]), division, role
+            ),
+            division,
+        )
+    return result
+
+
+def invite_agent(email: str, division: str, role: str):
+    """An Agent's invite that puts them in `division` with `role` once accepted."""
+    invitation = frappe.get_doc(
+        doctype="User Invitation",
+        email=email,
+        roles=[{"role": "Agent"}],
+        app_name="helpdesk",
+        redirect_to_path="/helpdesk",
+        division=division,
+        division_role=role,
+    )
+    invitation.flags.division_invite = True
+    invitation.insert(ignore_permissions=True)
+
+
+@frappe.whitelist(methods=["POST"])
+def cancel_division_invite(division: str, name: str):
+    require_manager(division)
+    invitation = frappe.get_doc("User Invitation", name)
+    if invitation.division != division or invitation.status != "Pending":
+        frappe.throw(_("This isn't a pending invite to {0}.").format(division))
+    # a division admin holds no rights on invitations; checked above instead
+    invitation.flags.ignore_permissions = True
+    invitation.cancel_invite()
+
+
 @frappe.whitelist(methods=["POST"])
 def set_units(division: str, teams: list | str, departments: list | str) -> dict:
     """Put exactly these teams and departments in the division. A team or department of

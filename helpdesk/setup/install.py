@@ -376,6 +376,23 @@ def get_custom_fields():
                 "insert_after": "contact",
                 "set_only_once": 1,
             },
+            # a division admin's invite: the person joins this division with this role
+            # when they accept (docs/divisions.md, "Agents of a division")
+            {
+                "fieldname": "division",
+                "label": "Division",
+                "fieldtype": "Link",
+                "options": "HD Division",
+                "insert_after": "customer",
+                "set_only_once": 1,
+            },
+            {
+                "fieldname": "division_role",
+                "label": "Division role",
+                "fieldtype": "Data",
+                "insert_after": "division",
+                "set_only_once": 1,
+            },
         ],
         "User": [
             {
