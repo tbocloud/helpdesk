@@ -10,6 +10,16 @@ KEYED_URL_FIELDS = ("ai_base_url", "openai_base_url")
 
 
 class HDSHubSettings(Document):
+    def onload(self):
+        """Monitoring shows when the watcher was last heard from (its heartbeat lives in the cache,
+        not in a field)."""
+        from helpdesk import monitor
+
+        try:
+            self.set_onload("watcher_status", monitor.status("watcher"))
+        except Exception:
+            frappe.log_error(title="Watcher status not read for HDS Hub Settings")
+
     def validate(self):
         from helpdesk.ai_engine import check_job_rows
 

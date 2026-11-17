@@ -45,7 +45,7 @@ ACTIONS = {
         "method": "press.api.bench.restart",
         "target": "bench",
         "risk": "normal",
-        "job": "Restart Bench",
+        "job": "Bench Restart",  # Press's own name (press/agent.py restart_bench)
         "title": "Restart {target}",
     },
     "update_site": {
@@ -53,7 +53,8 @@ ACTIONS = {
         "method": "press.api.site.update",
         "target": "site",
         "risk": "normal",
-        "job": "Update Site",
+        # Press names the job by the update's kind (press/agent.py update_site)
+        "job": ("Update Site Pull", "Update Site Migrate"),
         "title": "Update {target} to its bench's newest build",
     },
     "migrate_site": {
@@ -229,6 +230,34 @@ def site_status(site: str) -> dict:
     }
 
 
+JOB_TARGETS = ("site", "bench", "group", "server")
+
+
+def release_groups() -> list[str]:
+    """Every release group Copilot's Press role shows."""
+    rows = press.get_list("Release Group", {}, ["name"], limit=200, order_by="name asc")
+    return [str(row["name"]) for row in rows if row.get("name")]
+
+
+def agent_jobs(filters: dict, fields: list[str], limit: int) -> list[dict]:
+    """Agent Jobs the way Press allows them: Press answers an Agent Job list only with a site,
+    bench, group or (owned) server filter (`AgentJob.get_list_query`), whatever the role. With a
+    target, one call; without one, one call per release group the role shows, merged, newest
+    first (the watcher's same fix, tbocloud-infra PR #9)."""
+    if any(filters.get(key) for key in JOB_TARGETS):
+        return press.get_list("Agent Job", filters, fields, limit=limit)
+    found: dict[str, dict] = {}
+    for group in release_groups():
+        for row in press.get_list(
+            "Agent Job", {**filters, "group": group}, fields, limit=limit
+        ):
+            found.setdefault(str(row.get("name")), row)
+    rows = sorted(
+        found.values(), key=lambda row: str(row.get("creation") or ""), reverse=True
+    )
+    return rows[:limit]
+
+
 def jobs(
     site: str | None = None, bench: str | None = None, limit: int = 10
 ) -> list[dict]:
@@ -237,8 +266,7 @@ def jobs(
         filters["site"] = site
     if bench:
         filters["bench"] = bench
-    return press.get_list(
-        "Agent Job",
+    return agent_jobs(
         filters,
         [
             "name",
@@ -266,8 +294,7 @@ def job(name: str) -> dict:
 
 def failed_jobs(hours: int = 24) -> list[dict]:
     since = add_to_date(now_datetime(), hours=-max(int(hours or 24), 1))
-    return press.get_list(
-        "Agent Job",
+    return agent_jobs(
         {"status": "Failure", "creation": [">", str(since)]},
         ["name", "job_type", "status", "creation", "site", "bench"],
         limit=50,
@@ -487,13 +514,19 @@ def deploy_group(group: str):
     return press.deploy_and_update(group, apps, sites)
 
 
+def job_type_filter(job):
+    """The Agent Job type filter for an action: one name, or any of several (an update is Press's
+    "Update Site Pull" or "Update Site Migrate")."""
+    return ["in", list(job)] if isinstance(job, (list, tuple)) else job
+
+
 def latest_job(rule: dict, target: str) -> dict | None:
     """The newest job of the action's type on the target, read once."""
     key = rule["target"] if rule["target"] in ("site", "bench") else "site"
     try:
         rows = press.get_list(
             "Agent Job",
-            {key: target, "job_type": rule["job"]},
+            {key: target, "job_type": job_type_filter(rule["job"])},
             ["name", "status", "creation", "start", "end", "duration"],
             limit=1,
         )
@@ -511,7 +544,7 @@ def follow(rule: dict, target: str) -> dict | None:
         try:
             rows = press.get_list(
                 "Agent Job",
-                {key: target, "job_type": rule["job"]},
+                {key: target, "job_type": job_type_filter(rule["job"])},
                 ["name", "status", "creation", "start", "end", "duration"],
                 limit=1,
             )

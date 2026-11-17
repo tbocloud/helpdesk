@@ -408,6 +408,16 @@ def on_communication_insert(doc, method=None):
         return
     if doc.communication_type != "Communication":
         return
+    if doc.sent_or_received == "Received" and not _first_message(doc):
+        # Phase 24: every step reaches the coordinators and the Leaders, the customer's replies too
+        try:
+            from helpdesk.copilot import thread
+
+            thread.on_customer_reply(doc.reference_name, doc.content or "")
+        except Exception:
+            frappe.log_error(
+                title=f"Copilot could not pass on the reply on {doc.reference_name}"
+            )
     run = latest_run(doc.reference_name)
     if not run:
         return
@@ -479,6 +489,20 @@ def on_customer_message(run):
     stage = frappe.db.get_value("HD Ticket", run.ticket, "custom_copilot_stage")
     if run.state == "Answered" and stage == "Waiting for you":
         runs.start_run(run.ticket, kind="followup")
+
+
+def _first_message(doc) -> bool:
+    """The ticket's own first message (its description), which the new-ticket card already
+    told: not a reply."""
+    return not frappe.db.exists(
+        "Communication",
+        {
+            "reference_doctype": "HD Ticket",
+            "reference_name": doc.reference_name,
+            "communication_type": "Communication",
+            "name": ["!=", doc.name],
+        },
+    )
 
 
 def on_customer_comment(ticket: str):

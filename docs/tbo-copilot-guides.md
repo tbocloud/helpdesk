@@ -23,8 +23,10 @@ Who does what, what Copilot sends you, and what you press. The full reference is
 
 - **Every new ticket** of your customers comes to you as a card (Teams, else the TBO Support panel), with who has it and who Copilot goes to.
 - **Assign to:** pick a person (the customer's own people come first) and press **Assign**; **Keep** leaves it with whoever has it. The first choice stands; **Change** on the decided card picks again. Assigning the ticket by hand on the ticket page also ends the wait.
-- **When no developer can take a ticket** (none set, or none working today), you are asked to choose; until you do, Copilot brings its work on that ticket to you. The card comes again at 06:45 on working days.
-- **Talk to a person:** when a customer asks for a person, the coordinator working today joins the ticket.
+- **When no developer can take a ticket** (none set, or none working today), you are asked to choose. The card comes again at 06:45 on working days.
+- **Every step of your customers' tickets** comes to you too: Copilot's diagnosis, a fix ready, approved or rejected, the deploy, resolved or reopened, failures, and each reply from the customer. **Mute this ticket** on a message stops one ticket.
+- **Talk to a person:** when a customer asks for a person, the coordinator working today joins the ticket and handles the customer.
+- **You do not approve fixes or press Deploy**: that stays with the developers, fix approvers, Seniors and Leaders, even on a ticket you gave to yourself.
 - You also write in the ticket chats of your customers, and hear risk alerts (with the settings' tick).
 
 ## A developer or fix approver
@@ -38,6 +40,7 @@ Who does what, what Copilot sends you, and what you press. The full reference is
 
 - **Seniors** decide sensitive fixes, data and settings corrections, releases that need a senior, **Deploy now**, and letting a release through without green CI or a staging check (with a reason).
 - **Leaders** are the last resort: escalations, approvals nobody else could take, "Copilot needs a person", failed deploys, the AI budget, the weekly pilot email. With no Leader set, the Agent Managers get these, and the settings page warns.
+- **Leaders also see everything** in TBO Support's notifications (the bell), never in Teams: each new ticket of every customer, and every step of every ticket (the same steps the coordinators get). Teams stays for what you must act on.
 - **Deploy now** on a fix scheduled for tonight moves the same deploy to now.
 
 ## An admin (System Manager)
@@ -50,6 +53,7 @@ Who does what, what Copilot sends you, and what you press. The full reference is
 ## DevOps (Infrastructure people)
 
 - **Press, AWS and repair actions** come to the Infrastructure people as cards; a heavy one goes to Infrastructure Senior (else a Leader). Nobody approves their own request.
-- **The watcher's tickets and alerts** come to you; "pause auto-repair: <why>" and "resume auto-repair" in Teams work for you and the Leaders.
+- **The watcher's alert tickets** go to the internal customer's ticket owner (else the backup, else the internal project's team); its **follow-up tasks** (a disk filling, a certificate expiring) go to the Infrastructure person working today, else a Leader, with a comment saying why. "pause auto-repair: <why>" and "resume auto-repair" in Teams work for you and the Leaders.
+- **HDS Hub Settings → Monitoring** shows **Watcher last seen**; "Quiet" means no heartbeat for the quiet time.
 - **Deploy notices:** one per Press deploy (started, live, failed), naming every release in the night's train.
 - **The watcher** reads the hub's `self_check`, which now includes the deploy state: a migrate that stopped half-way shows as patches still pending.

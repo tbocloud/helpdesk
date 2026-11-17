@@ -16,7 +16,7 @@ from datetime import timedelta
 
 import frappe
 from frappe import _
-from frappe.utils import escape_html, get_datetime, now_datetime
+from frappe.utils import escape_html, get_datetime, get_fullname, now_datetime
 
 from helpdesk import intake
 from helpdesk.automation import as_automation_user, automation_user
@@ -248,7 +248,8 @@ def followup(
     assign_to: str | None = None,
 ) -> dict:
     """A slow-burning issue becomes one task in the internal project, once per key while open;
-    infrastructure work, so a DevOps task, given to `assign_to` when there is one."""
+    infrastructure work, so a DevOps task, given to `assign_to`, else to the Infrastructure
+    person `followup_assignee` picks (Phase 24)."""
     key = normalise_key(key)
     existing = open_followup(key)
     if existing:
@@ -277,6 +278,9 @@ def followup(
                 "custom_monitor_key": key,
             }
         ).insert(ignore_permissions=True)
+    why = ""
+    if not assign_to:
+        assign_to, why = followup_assignee()
     if assign_to:
         add_assignment(
             {
@@ -287,7 +291,48 @@ def followup(
             },
             ignore_permissions=True,
         )
-    return {"task": task.name, "action": "created"}
+        if why:
+            with as_automation_user():
+                task.add_comment(
+                    "Comment",
+                    escape_html(
+                        _("Given to {0} by Copilot People: {1}.").format(
+                            get_fullname(assign_to), why
+                        )
+                    ),
+                )
+    return {"task": task.name, "action": "created", "assigned_to": assign_to}
+
+
+def followup_assignee() -> tuple[str | None, str]:
+    """Who takes a new follow-up task (the owner's decision of 17 Nov 2026): the Infrastructure
+    people working today (Main, then the fallbacks), else a Leader; never Infrastructure Senior.
+    Of them, the one with the fewest open follow-ups. (user, why), or (None, "") with nobody set."""
+    from helpdesk.copilot import people
+
+    found = people.resolve(
+        people.INFRA, steps=((people.INFRA, "common"), (people.LEADER, "common"))
+    )
+    users = found["users"]
+    if not users:
+        return None, ""
+    user = min(users, key=lambda u: (open_followups(u), users.index(u)))
+    why = people.label(found)
+    if not found.get("working"):
+        why = _("{0}, though nobody set is working today").format(why)
+    return user, why
+
+
+def open_followups(user: str) -> int:
+    """The follow-up tasks still open on `user`."""
+    return frappe.db.count(
+        "Task",
+        {
+            "custom_monitor_key": ["is", "set"],
+            "status": ["not in", ["Completed", "Cancelled", "Template"]],
+            "_assign": ["like", f'%"{user}"%'],
+        },
+    )
 
 
 # --- heartbeats ------------------------------------------------------------------------------
@@ -326,6 +371,22 @@ def last_heartbeat(source: str):
 def last_seen(source: str):
     value = _read(LAST_SEEN_KEY.format(source=source))
     return get_datetime(value) if value else None
+
+
+def status(source: str = "watcher", now=None) -> dict:
+    """For HDS Hub Settings → Monitoring: when the monitor was last heard from, and whether it is
+    quiet now (no heartbeat for the quiet time). Never heard from: last_seen None, not quiet."""
+    source = check_source(source)
+    now = now or now_datetime()
+    seen = last_seen(source)
+    quiet_minutes = settings()["quiet_minutes"]
+    return {
+        "source": source,
+        "last_seen": str(seen) if seen else None,
+        "seconds_ago": int((now - seen).total_seconds()) if seen else None,
+        "quiet": bool(seen) and not last_heartbeat(source),
+        "quiet_minutes": quiet_minutes,
+    }
 
 
 def watch_heartbeats(now=None):

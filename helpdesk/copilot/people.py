@@ -86,12 +86,11 @@ CHAINS = {
         (LEADER, "common"),
     ),
     # the common Fix Approvers stand in for every customer after the customer's own people
+    # Project Coordinators assign and are told; they never approve (the owner, 17 Nov 2026)
     FIX_APPROVER: (
         (FIX_APPROVER, "customer"),
         (DEVELOPER, "customer"),
         (DEVELOPER, "common"),
-        (COORDINATOR, "customer"),
-        (COORDINATOR, "common"),
         (FIX_APPROVER, "common"),
         (SENIOR, "common"),
         (LEADER, "common"),
@@ -407,6 +406,17 @@ def leaders() -> list[str]:
     return [u for group in groups(LEADER, "common") for u in group["users"]]
 
 
+def set_leaders() -> list[str]:
+    """Only the people set as Leader: not the Agent Managers who stand in when none is (for news,
+    which the Leaders asked for and the managers did not)."""
+    return [
+        u
+        for group in groups(LEADER, "common")
+        if group.get("where") != "agent managers"
+        for u in group["users"]
+    ]
+
+
 def leaders_today() -> list[str]:
     """The Leaders working today (else all of them)."""
     return resolve(LEADER)["users"]
@@ -579,12 +589,38 @@ def developer(customer: str | None, ticket: str | None = None) -> str | None:
 
 def may_approve(customer: str | None, ticket: str | None = None) -> set[str]:
     """Who the table and its fallbacks may put on this customer's fixes (and the person a
-    coordinator chose): they may decide them (Phase 23, A2)."""
+    coordinator chose, unless that is only a coordinator): they may decide them (Phase 23, A2;
+    Phase 24: coordinators never approve)."""
     found = in_chain(FIX_APPROVER, customer)
-    person = chosen(ticket)
+    person = chosen_approver(ticket, customer)
     if person:
         found.add(person)
     return found
+
+
+def chosen_approver(ticket: str | None, customer: str | None) -> str | None:
+    """The person a coordinator chose for the ticket, when they may approve its fixes: anyone but
+    a Project Coordinator who is nothing more on this customer's fixes (Phase 24: coordinators
+    assign tickets and are told everything; they never approve, so choosing themselves does not
+    make them the approver)."""
+    person = chosen(ticket)
+    if not person:
+        return None
+    if person in all_coordinators(customer) and person not in in_chain(
+        FIX_APPROVER, customer
+    ):
+        return None
+    return person
+
+
+def all_coordinators(customer: str | None) -> set[str]:
+    """Everyone set as a Project Coordinator for this customer or for every customer."""
+    return {
+        user
+        for where in ("customer", "common")
+        for group in groups(COORDINATOR, where, customer)
+        for user in group["users"]
+    }
 
 
 def need_a_person(customer: str | None) -> list[str]:
@@ -762,9 +798,18 @@ def _configured(customer: str | None) -> bool:
 
 
 def on_ticket_insert(doc, method=None):
-    """Hook: a new ticket's project coordinators hear of it, or choose who takes it. The error
-    watch's own tickets are left alone: they go to the infrastructure people."""
+    """Hook: a new ticket's project coordinators hear of it, or choose who takes it, and the
+    Leaders see it in TBO Support's panel (Phase 24). The error watch's own tickets are left to the
+    infrastructure people."""
     try:
+        if not doc.get("custom_copilot_source"):
+            frappe.enqueue(
+                "helpdesk.copilot.people.tell_leaders_of_ticket",
+                queue="short",
+                ticket=doc.name,
+                enqueue_after_commit=True,
+                now=frappe.flags.in_test,
+            )
         if doc.get("custom_copilot_source") or not _configured(doc.customer):
             return
         frappe.enqueue(
@@ -778,6 +823,32 @@ def on_ticket_insert(doc, method=None):
         frappe.log_error(
             title=f"Copilot could not tell the coordinators about ticket {doc.name}"
         )
+
+
+def tell_leaders_of_ticket(ticket: str) -> list[str]:
+    """Background: every new ticket of every customer, in the Leaders' TBO Support panel, never
+    Teams (the owner, 17 Nov 2026). Returns who was told."""
+    from helpdesk.work_reminders import notify_users
+
+    leaders = set_leaders()
+    if not leaders:
+        return []
+    doc = (
+        frappe.db.get_value(TICKET, str(ticket), ["subject", "customer"], as_dict=True)
+        or frappe._dict()
+    )
+    text = _("New ticket #{0} for {1}: {2}").format(
+        ticket, doc.customer or _("no customer"), doc.subject or ""
+    )
+    notify_users(
+        leaders,
+        TICKET,
+        str(ticket),
+        text[:300],
+        notification_type="New Ticket",
+        deliver=False,
+    )
+    return leaders
 
 
 def tell_coordinators(ticket: str, again: bool = False) -> list[str]:

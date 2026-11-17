@@ -15,12 +15,14 @@ from helpdesk.api import copilot_thread as api
 from helpdesk.copilot import assistant, deploy, fixes, router, runs, teams, thread
 from helpdesk.test_utils import (
     create_agent,
+    create_customer,
     fake_investigation,
     make_assignment,
     make_copilot_run,
     make_team,
     make_ticket,
     run_as_user,
+    set_customer_people,
 )
 from helpdesk.tests.test_copilot_fix_flow import FixCase
 
@@ -372,3 +374,94 @@ class TestTeamsAndThePanel(ThreadCase):
         with self.assertRaises(frappe.PermissionError):
             thread.receive(outsider, self.ticket.name, "hello")
         frappe.db.set_single_value("HD Settings", "restrict_tickets_by_agent_group", 0)
+
+
+class TestEveryStepToCoordinatorsAndLeaders(ThreadCase):
+    """Phase 24 (the owner, 17 Nov 2026): the customer's project coordinators hear every step of
+    its tickets in their chat; the Leaders see every step of every customer's tickets in TBO
+    Support's panel, never Teams."""
+
+    def setUp(self):
+        super().setUp()
+        from helpdesk.copilot import people
+
+        self.coord = create_agent("p24.coord@example.com").name
+        self.other_coord = create_agent("p24.other.coord@example.com").name
+        self.leader = create_agent("p24.leader@example.com").name
+        set_customer_people(
+            self.customer, developers=[self.developer], coordinators=[self.coord]
+        )
+        set_customer_people(
+            create_customer("Other Co P24").name, coordinators=[self.other_coord]
+        )
+        settings = frappe.get_single("HDS Copilot Settings")
+        settings.append(
+            people.TABLE,
+            {
+                "role": people.LEADER,
+                "person": self.leader,
+                "level": "Main",
+                "active": 1,
+            },
+        )
+        settings.save(ignore_permissions=True)
+
+    def told_in_panel(self, user, ticket=None):
+        ticket = ticket or self.ticket.name
+        return [
+            args[3]
+            for args in self.notified
+            if user in (args[0] or []) and len(args) > 3 and str(args[2]) == str(ticket)
+        ]
+
+    def test_the_coordinator_hears_every_step_of_their_customers_tickets(self):
+        self.routed("bug")
+        to_coord = [card for person, card in self.delivered if person == self.coord]
+        self.assertTrue(to_coord)
+        self.assertFalse([p for p, card in self.delivered if p == self.other_coord])
+
+    def test_the_leader_sees_every_step_in_the_panel_never_in_teams(self):
+        self.routed("bug")
+        self.assertFalse([p for p, card in self.delivered if p == self.leader])
+        self.assertTrue(self.told_in_panel(self.leader))
+
+    def test_a_customer_reply_is_a_step(self):
+        frappe.get_doc(
+            {
+                "doctype": "Communication",
+                "communication_type": "Communication",
+                "communication_medium": "Email",
+                "sent_or_received": "Received",
+                "reference_doctype": "HD Ticket",
+                "reference_name": self.ticket.name,
+                "subject": "Re: Margin wrong",
+                "content": "<p>It is <b>still</b> wrong on invoice 12.</p>",
+                "sender": "customer.p24@example.com",
+            }
+        ).insert(ignore_permissions=True)
+        self.assertTrue(
+            [
+                line
+                for line in self.said()
+                if "The customer replied" in line and "still wrong" in line
+            ],
+            self.said(),
+        )
+        self.assertTrue([p for p, card in self.delivered if p == self.coord])
+        self.assertTrue(self.told_in_panel(self.leader))
+
+    def test_a_tickets_own_first_message_is_not_a_reply(self):
+        ticket = make_ticket(
+            subject="New one", customer=self.customer, description="<p>first words</p>"
+        ).name
+        self.assertFalse(
+            [line for line in self.said(ticket) if "The customer replied" in line]
+        )
+
+    def test_the_leader_sees_each_new_ticket_in_the_panel(self):
+        from helpdesk.copilot import people
+
+        self.assertEqual(people.tell_leaders_of_ticket(self.ticket.name), [self.leader])
+        self.assertTrue(
+            [t for t in self.told_in_panel(self.leader) if "New ticket" in t]
+        )

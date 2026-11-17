@@ -19,6 +19,7 @@ from helpdesk.test_utils import (
     create_agent,
     create_customer,
     hold_commits,
+    make_copilot_settings,
     make_project,
 )
 
@@ -158,6 +159,110 @@ class TestFollowups(MonitorCase):
         )
         self.assertEqual(third["action"], "created")
         self.assertEqual(frappe.db.get_value("Task", third["task"], "priority"), "High")
+
+
+class TestFollowupAssignee(MonitorCase):
+    """Phase 24 (the owner, 17 Nov 2026): a follow-up task goes to the Infrastructure people
+    working today, else a Leader; never Infrastructure Senior."""
+
+    def set_people(self, rows):
+        from helpdesk.copilot import people
+
+        make_copilot_settings(
+            copilot_people=[
+                {"role": role, "person": person, "level": people.LEVELS[0], "active": 1}
+                for role, person in rows
+            ]
+        )
+
+    def setUp(self):
+        super().setUp()
+        self.infra = create_agent("infra.main@example.com").name
+        self.infra_two = create_agent("infra.two@example.com").name
+        self.infra_senior = create_agent("infra.senior@example.com").name
+        self.leader = create_agent("infra.leader@example.com").name
+
+    def assigned(self, task):
+        return frappe.parse_json(frappe.db.get_value("Task", task, "_assign") or "[]")
+
+    def test_it_goes_to_infrastructure_and_says_why(self):
+        self.set_people(
+            [
+                ("Infrastructure", self.infra),
+                ("Infrastructure Senior", self.infra_senior),
+                ("Leader", self.leader),
+            ]
+        )
+        made = monitor.followup(
+            "disk:workload", "Root disk above 75% on workload: make room"
+        )
+        self.assertEqual(made["assigned_to"], self.infra)
+        self.assertEqual(self.assigned(made["task"]), [self.infra])
+        note = frappe.get_all(
+            "Comment",
+            filters={"reference_doctype": "Task", "reference_name": made["task"]},
+            pluck="content",
+        )
+        self.assertTrue(any("Copilot People" in (n or "") for n in note), note)
+
+    def test_with_no_infrastructure_person_a_leader_gets_it_never_infrastructure_senior(
+        self,
+    ):
+        self.set_people(
+            [("Infrastructure Senior", self.infra_senior), ("Leader", self.leader)]
+        )
+        made = monitor.followup("cert:tbocloud.in", "Certificate expires in 13 days")
+        self.assertEqual(made["assigned_to"], self.leader)
+
+    def test_two_infrastructure_people_share_them_by_open_follow_ups(self):
+        self.set_people(
+            [("Infrastructure", self.infra), ("Infrastructure", self.infra_two)]
+        )
+        first = monitor.followup("disk:a", "Disk a")
+        second = monitor.followup("disk:b", "Disk b")
+        self.assertEqual(
+            {first["assigned_to"], second["assigned_to"]}, {self.infra, self.infra_two}
+        )
+
+    def test_nobody_set_leaves_it_unassigned(self):
+        self.set_people([])
+        with patch("helpdesk.copilot.people.groups", return_value=[]):
+            made = monitor.followup("disk:none", "Disk none")
+        self.assertIsNone(made["assigned_to"])
+        self.assertEqual(self.assigned(made["task"]), [])
+
+
+class TestWatcherStatus(MonitorCase):
+    """Phase 24: HDS Hub Settings → Monitoring shows when the watcher was last heard from."""
+
+    def test_never_heard_from_then_heard_then_quiet(self):
+        now = now_datetime()
+        self.assertEqual(
+            (
+                monitor.status("watcher", now)["last_seen"],
+                monitor.status("watcher", now)["quiet"],
+            ),
+            (None, False),
+        )
+        monitor.heartbeat("watcher")
+        heard = monitor.status("watcher")
+        self.assertTrue(heard["last_seen"])
+        self.assertFalse(heard["quiet"])
+        self.assertLess(heard["seconds_ago"], 60)
+        frappe.cache.delete_value(monitor.HEARTBEAT_KEY.format(source="watcher"))
+        frappe.cache.set_value(
+            monitor.LAST_SEEN_KEY.format(source="watcher"),
+            str(now - timedelta(minutes=10)),
+        )
+        quiet = monitor.status("watcher", now)
+        self.assertTrue(quiet["quiet"])
+        self.assertEqual(quiet["seconds_ago"], 600)
+
+    def test_the_settings_form_carries_it(self):
+        monitor.heartbeat("watcher")
+        doc = frappe.get_doc("HDS Hub Settings")
+        doc.run_method("onload")
+        self.assertTrue(doc.get_onload().get("watcher_status", {}).get("last_seen"))
 
 
 class TestHeartbeats(MonitorCase):

@@ -128,7 +128,7 @@ A run at Preparing Fix needs a code change. Until the worker can open pull reque
 1. **The fix task.** A live run gets a Task "Copilot fix: <subject>" in the customer's open project (else the hand-over project), assigned to the customer's **Assigned developer**, with the diagnosis and the instruction to open a pull request that says `Closes TASK-…`. A shadow run gets it from **Create fix task** in the ticket's Copilot chat. With no project at all the run says so on the ticket.
 2. **The pull request.** The GitHub sync links it to the task and calls `fixes.on_pull_request`. The hub puts the **hold label** (`no-auto-merge`, a setting) on it: the org merge bot and the repository's auto-merge workflow skip pull requests with that label, so nothing merges it before the approval. A draft waits; when it is ready, an **HDS Copilot Approval** is opened for its head commit, with the changed files, the risk and the checks, and assigned. One pull request per fix: while the run's own is open, another that closes the same task is left alone (an event says so) and is followed once the first is closed.
 3. **The risk** (`risk.py`, fixed rules on the changed files): accounting and tax, stock, payroll, permissions, migrations, `hooks.py`, doctype JSON, raw SQL writes, dependencies or CI make it **high** and **sensitive**; more than 300 changed lines make it high; no test makes it medium; otherwise low. Each reason is listed on the card.
-4. **Who approves.** Copilot People (see **People**): the person a coordinator chose for the ticket, then the Fix Approver chain (the customer's fix approver, its developers, its coordinators, the common Fix Approvers, the Seniors, the Leaders), the first with someone working today, the one with the fewest waiting approvals; a sensitive fix only a **Senior** (with no Senior set, the Leaders); never the people the fix task is assigned to. The approver hears it by chat or email with a link to the ticket; a sensitive one, and any approval that waits past **Escalate after**, also goes to the team's channel.
+4. **Who approves.** Copilot People (see **People**): the person a coordinator chose for the ticket (never a coordinator who is only that), then the Fix Approver chain (the customer's fix approver, its developers, the common developers, the common Fix Approvers, the Seniors, the Leaders; **Project Coordinators never approve**, Phase 24), the first with someone working today, the one with the fewest waiting approvals; a sensitive fix only a **Senior** (with no Senior set, the Leaders); never the people the fix task is assigned to. The approver hears it by chat or email with a link to the ticket; a sensitive one, and any approval that waits past **Escalate after**, also goes to the team's channel.
 5. **Deciding** (`approvals.decide`, row lock): the first decision wins. **Approve** with the planned deploy date: the hub re-reads the pull request, and if new commits arrived the approval is superseded and a new one opened. **Reject** needs a reason, which goes to the task and the pull request; the run goes back to Preparing Fix, and the rejected commit is not asked again: the developer's next push opens a new approval.
 6. **The merge** (`fixes.try_merge`): when the head is still the approved commit, every check run passed (success, neutral or skipped) with the commit status green or absent, and GitHub calls the merge clean, the hub merges with the approved commit pinned (GitHub refuses with 409 if the head moved), using the repository's own method as the org merge bot chooses it (merge commit where allowed, else squash, else rebase). It retries on every check webhook and the 10-minute refresh. A lasting block (failing checks, merge conflicts, a branch behind its base, a review GitHub requires) is told to the approver and the developer once, in plain words; GitHub still settling the merge state (`unknown`, `unstable`) is a quiet wait. Each finished workflow also updates the checks on the card. After merging, the hub replays the merged pull request through the task sync, so the fix task completes at once; GitHub's own webhook arriving later changes nothing, because the sync acts once per change of state. The customer then sees **Fix scheduled** with the planned date.
 7. **Merged elsewhere.** A pull request merged on GitHub without the approval moves the run to Merged too, with a note on the ticket, an event and a Leader told.
@@ -619,7 +619,9 @@ runs is what the approver saw.
 The watcher server (tbocloud-infra, `watcher/`) tells the hub what it sees. Callers hold the role
 **TBO Monitor** (API only; the user `watcher@teambackoffice.com` is made on migrate, DevOps makes
 its API key). HDS Hub Settings → Monitoring names the **internal customer** (the alert tickets'
-customer, TBO itself), the **internal project** (follow-up tasks) and the watcher's quiet time.
+customer, TBO itself), the **internal project** (follow-up tasks) and the watcher's quiet time, and
+shows **Watcher last seen** (the time, how long ago, "Quiet" after the quiet time, or "Never heard
+from"; `monitor.status`, Phase 24): the heartbeat lives in the cache, not in a field.
 
 - `alert(key, state, title, text, severity, evidence, runbook, source)`: `state` open opens one
   ticket per key while it is open (type Alert, raised by TBO AI, priority from the severity, the
@@ -628,6 +630,11 @@ customer, TBO itself), the **internal project** (follow-up tasks) and the watche
   does (`intake.open_alert`, `intake.resolved_status`). Sending the same thing twice changes nothing.
 - `followup(key, subject, details, priority)`: one open Task per key in the internal project
   (`custom_monitor_key`), for slow-burning issues (a certificate expiring in two weeks, a disk filling).
+  It goes to the **Infrastructure** people working today (Main, then the fallbacks), else a **Leader**,
+  never Infrastructure Senior (`monitor.followup_assignee`, Phase 24); of them the one with the fewest
+  open follow-ups, with a comment saying why. Nobody set: it stays unassigned.
+- Alert tickets (above) are assigned like any ticket of the internal customer: its ticket owner, else
+  the backup, else the least busy of the internal project's team working today.
 - `heartbeat(source)`: every minute from the watcher. `monitor.watch_heartbeats` (every 5 minutes)
   tells the Infrastructure people (else Infrastructure Senior, else a Leader) when a watcher that was once heard goes quiet for the quiet time, once an
   hour while it lasts, and once when it is back.
@@ -644,9 +651,9 @@ is the guard**:
 
 | Level | Actions | What happens |
 |---|---|---|
-| read | site status (`press.api.site.get`, `current_plan`, `installed_apps`, the last Site Backup and Site Update, a ping from the hub), sites, jobs, one job with its steps, failed jobs, benches, deploy history, servers, logs | answers at once |
+| read | site status (`press.api.site.get`, `current_plan`, `installed_apps`, the last Site Backup and Site Update, a ping from the hub), sites, jobs, one job with its steps, failed jobs, benches, deploy history, servers, logs | answers at once. Press answers an Agent Job list only with a site, bench, group or server filter, so jobs and failed jobs without a site or bench go per release group the role shows (`press_tools.agent_jobs`, Phase 24) |
 | logged | `backup` (`press.api.site.backup`) | runs at once, the job is followed, HDS Copilot Call Log keeps it |
-| approval | `restart_bench`, `update_site`, `migrate_site`, `change_plan` (any approver); `deploy`, `restore`, `new_site` (a senior) | an action approval (above) first; on Approve the hub runs the exact approved payload in the background (`press_tools.execute_approved`), follows the agent job, writes the outcome on the record and on the ticket, and tells the person who asked |
+| approval | `restart_bench`, `update_site`, `migrate_site`, `change_plan` (any approver); `deploy`, `restore`, `new_site` (a senior) | an action approval (above) first; on Approve the hub runs the exact approved payload in the background (`press_tools.execute_approved`), follows the agent job by Press's own names (Bench Restart, Update Site Pull or Migrate, Migrate Site, Restore Site, New Site), writes the outcome on the record and on the ticket, and tells the person who asked |
 | never | `press_tools.NEVER`: archive, reinstall, deactivate, login as admin, site config, SQL, uninstall app, bench archive, server archive and reboot, `press.api.client` writes | not callable; a test fails if any of these names appears anywhere else in the code |
 
 - **Chat** (`assistant.py`): intents `press_status`, `press_backup`, `press_action`; a site is found
@@ -739,7 +746,7 @@ A customer's own table holds only Developer, Fix Approver and Project Coordinato
 | Role | Then |
 |---|---|
 | Developer | Project Coordinator → Leader |
-| Fix Approver | the customer's Developers → Project Coordinators → the common Fix Approvers → Senior → Leader |
+| Fix Approver | the customer's Developers → the common Developers → the common Fix Approvers → Senior → Leader (never Project Coordinators: they assign and are told, Phase 24) |
 | Project Coordinator | Leader |
 | Senior | Leader |
 | Infrastructure | Infrastructure Senior → Leader |
@@ -747,7 +754,11 @@ A customer's own table holds only Developer, Fix Approver and Project Coordinato
 | Risk Alerts | Leader |
 | Deploy Notices | Infrastructure → Infrastructure Senior → Leader |
 
-Only active agents count where a person must act in TBO Support (every role except Risk Alerts and Deploy Notices); anyone with an enabled account hears news. **Who may act:** whoever the table and its fallbacks may put on a piece of work (`people.in_chain`), plus the Agent Managers for fixes and deploys. A fix is never approved by its author, and a sensitive one only by a Senior (or a Leader when no Senior is set).
+Only active agents count where a person must act in TBO Support (every role except Risk Alerts and Deploy Notices); anyone with an enabled account hears news. **Who may act:** whoever the table and its fallbacks may put on a piece of work (`people.in_chain`), plus the Agent Managers for fixes and deploys. A Project Coordinator never approves a fix or presses Deploy, even when they chose themselves for a ticket (`people.chosen_approver`), unless they are also set as that customer's Developer or Fix Approver.
+
+**Everyone hears every step (Phase 24, the owner's decision of 17 Nov 2026):**
+- the customer's **Project Coordinators** (its own, else the common ones; not those on leave) are among the people on every ticket of that customer (`thread.on_ticket`), so the diagnosis, a fix ready, approved or rejected, the deploy, resolved, reopened, "Talk to a person", failures and **the customer's replies** (`thread.on_customer_reply`, from any received message after the ticket's first) reach them, in Teams when the bot reaches them, else the TBO Support panel. **Mute this ticket** still works;
+- the **Leaders** see the same steps of every customer's tickets, and each new ticket (`tell_leaders_of_ticket`), as TBO Support notifications only (Ticket Update, New Ticket), never Teams (`thread.tell_leaders`); Teams stays for what a Leader must act on (escalations, a fix merged without approval, nobody available). Only people set as Leader: not the Agent Managers who stand in when none is. A fix is never approved by its author, and a sensitive one only by a Senior (or a Leader when no Senior is set).
 
 **Who Copilot Goes To Today**, on the settings page, shows each role and each customer that uses Copilot or has its own people: who is set at which level, who gets the work now and why, and every empty place. It warns about a role set nowhere, no Leader, a person who is not an active agent, a disabled account, and a cover that has ended.
 
@@ -762,13 +773,13 @@ Only active agents count where a person must act in TBO Support (every role exce
 
 The old fields stay hidden for one version.
 
-**Every new ticket** (`on_ticket_insert`, then `tell_coordinators` in the background) reaches the customer's project coordinators working today (its own, else the common ones), in Teams and in TBO Support, as **New Tickets to the Coordinators** says (both, TBO Support only, or Off). Never a stand-in or a Leader, and never for the error watch's own tickets. The card shows:
+**Every new ticket** (`on_ticket_insert`, then `tell_coordinators` in the background) reaches the customer's project coordinators working today (its own, else the common ones), in Teams and in TBO Support, as **New Tickets to the Coordinators** says (both, TBO Support only, or Off). Never a stand-in, and never for the error watch's own tickets. The Leaders see each new ticket in TBO Support's panel (above). The card shows:
 - the ticket's number, customer, subject, priority, and how it came in;
 - who has it and who Copilot goes to, with why;
 - **Assign to:** the customer's own developers and coordinators working today first, then every other agent who works tickets (not writers, designers, DM or sales), least busy first, with their open tickets (up to 100);
 - **Assign**, and **Keep** when someone already has it.
 
-**When no developer can take a ticket** (none set: the card says so; or none working today) and TBO Support did not already give it to someone working today, the coordinators (else a Leader) are asked to choose, even with New Tickets set to Off. Until one chooses, Copilot's approvals for the ticket go to them. The card comes again at 06:45 on working days (`ask_again`): only to people working that day, and not once someone working today has the ticket or the developer is back.
+**When no developer can take a ticket** (none set: the card says so; or none working today) and TBO Support did not already give it to someone working today, the coordinators (else a Leader) are asked to choose, even with New Tickets set to Off. Until one chooses, Copilot's approvals for the ticket follow the Fix Approver chain (never the coordinators). The card comes again at 06:45 on working days (`ask_again`): only to people working that day, and not once someone working today has the ticket or the developer is back.
 
 **Assign** (`press`, `choose`):
 - Only the customer's project coordinators (its own, the common ones) and the Leaders may choose; the person must work tickets, and TBO Support's own refusal is shown.

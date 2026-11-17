@@ -9,7 +9,7 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_days, add_to_date, now_datetime, nowdate
 
-from helpdesk.copilot import actions, approvals, people, teams, thread
+from helpdesk.copilot import actions, approvals, deploy, people, teams, thread
 from helpdesk.test_utils import (
     get_open_assignees,
     hold_commits,
@@ -336,8 +336,16 @@ class TestCopilotPeople(FrappeTestCase):
                 frappe._dict(name="X", customer=CUSTOMER, custom_copilot_source="watch")
             )
             people.on_ticket_insert(frappe._dict(name="Y", customer=CUSTOMER))
-        (call,) = enqueue.call_args_list  # only the customer's own ticket
-        self.assertEqual(call.kwargs["ticket"], "Y")
+        calls = enqueue.call_args_list
+        (call,) = [c for c in calls if c.args[0].endswith(".tell_coordinators")]
+        self.assertEqual(call.kwargs["ticket"], "Y")  # only the customer's own ticket
+        # Phase 24: the Leaders see every new ticket in TBO Support, not the error watch's own
+        leaders = [
+            c.kwargs["ticket"]
+            for c in calls
+            if c.args[0].endswith(".tell_leaders_of_ticket")
+        ]
+        self.assertEqual(leaders, ["Y"])
 
     def test_a_customer_without_anyone_set_is_left_alone(self):
         self.settings(
@@ -552,12 +560,13 @@ class TestCopilotPeople(FrappeTestCase):
             ),
             SECOND[0],
         )
-        # both wrote it: the project coordinator
+        # both wrote it: the common Fix Approver, never the project coordinator (Phase 24: the
+        # owner, 17 Nov 2026: coordinators assign and are told; they never approve)
         self.assertEqual(
             approvals.pick_approver(
                 self.fake_run(), sensitive=False, exclude={FIRST[0], SECOND[0]}
             ),
-            COORD[0],
+            SENIOR[0],
         )
         # the main is on leave: the fallback
         make_hd_leave(FIRST[0], nowdate(), nowdate())
@@ -615,12 +624,32 @@ class TestCopilotPeople(FrappeTestCase):
             approvals.pick_approver(self.fake_run(), sensitive=True), SENIOR[0]
         )
 
-    def test_a_common_coordinator_standing_in_may_decide(self):
-        # the customer has no coordinator of its own: the common one gets the fix and may act (A2)
-        set_customer_people(CUSTOMER, developers=[FIRST[0], SECOND[0]])
-        self.assertIn(COMMON[0], people.may_approve(CUSTOMER))
-        self.assertIn(LEAD[0], people.may_approve(CUSTOMER))
-        self.assertNotIn(OTHER[0], people.may_approve(CUSTOMER))
+    def test_a_coordinator_never_approves_or_deploys(self):
+        # Phase 24 (the owner, 17 Nov 2026): neither the customer's nor the common coordinator
+        set_customer_people(
+            CUSTOMER, developers=[FIRST[0], SECOND[0]], coordinators=[COORD[0]]
+        )
+        allowed = people.may_approve(CUSTOMER)
+        self.assertNotIn(COMMON[0], allowed)
+        self.assertNotIn(COORD[0], allowed)
+        self.assertIn(LEAD[0], allowed)
+        self.assertNotIn(OTHER[0], allowed)
+        self.assertFalse(deploy.may_deploy(COORD[0]))
+        self.assertFalse(deploy.may_deploy(COMMON[0]))
+
+    def test_a_coordinator_who_chose_themselves_is_still_not_the_approver(self):
+        set_customer_people(CUSTOMER, developers=[FIRST[0]], coordinators=[COORD[0]])
+        ticket = self.ticket()
+        frappe.db.set_value("HD Ticket", ticket, "custom_copilot_person", COORD[0])
+        self.assertNotIn(COORD[0], people.may_approve(CUSTOMER, ticket))
+        self.assertEqual(
+            approvals.pick_approver(self.fake_run(ticket), sensitive=False), FIRST[0]
+        )
+        # a developer they chose does approve
+        frappe.db.set_value("HD Ticket", ticket, "custom_copilot_person", SECOND[0])
+        self.assertEqual(
+            approvals.pick_approver(self.fake_run(ticket), sensitive=False), SECOND[0]
+        )
 
     # --- infrastructure ------------------------------------------------------------------
 

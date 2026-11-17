@@ -161,8 +161,10 @@ def deliver(
     """Background: a status message to the people on the ticket, headed with the ticket."""
     doc = frappe.get_doc(MESSAGE, message)
     ticket = doc.ticket
-    reply = headed(frappe.parse_json(doc.card) or {}, ticket)
-    for person in people if people is not None else on_ticket(ticket):
+    card = frappe.parse_json(doc.card) or {}
+    reply = headed(card, ticket)
+    told = people if people is not None else on_ticket(ticket)
+    for person in told:
         if person in (skip or []) or muted(ticket, person):
             continue
         try:
@@ -170,6 +172,40 @@ def deliver(
             set_current(person, ticket)
         except Exception:
             frappe.log_error(title=f"Copilot could not tell {person} about {ticket}")
+    tell_leaders(ticket, card, already=set(told) | set(skip or []))
+
+
+def tell_leaders(ticket: str, card: dict, already=()):
+    """Every step of every customer's tickets reaches the Leaders in TBO Support's notification
+    panel, never Teams (the owner, 17 Nov 2026); Teams stays for what a Leader must act on. Not
+    those already told in their chat, nor one who muted the ticket."""
+    from helpdesk.copilot import people as copilot_people
+    from helpdesk.work_reminders import notify_users
+
+    leaders = [
+        u
+        for u in copilot_people.set_leaders()
+        if u not in already and not muted(ticket, u)
+    ]
+    if not leaders:
+        return
+    words = card.get("title") or next(
+        (line for line in card.get("lines") or [] if line), ""
+    )
+    subject = frappe.db.get_value("HD Ticket", ticket, "subject") or ""
+    text = f"#{ticket} · {subject}: {words}" if words else f"#{ticket} · {subject}"
+    try:
+        notify_users(
+            leaders,
+            "HD Ticket",
+            str(ticket),
+            text[:300],
+            notification_type="Ticket Update",
+            once=False,
+            deliver=False,
+        )
+    except Exception:
+        frappe.log_error(title=f"Copilot could not tell the Leaders about {ticket}")
 
 
 def labelled(reply: dict, ticket: str) -> dict:
@@ -202,21 +238,25 @@ def headed(reply: dict, ticket: str) -> dict:
 
 
 def on_ticket(ticket: str) -> list[str]:
-    """Who hears a ticket's status: the agents assigned to it, the customer's developer, the
-    approver of a waiting fix, anyone who wrote in its chat, and whoever started its work from a
-    chat. Agents only."""
+    """Who hears a ticket's status: the agents assigned to it, the customer's developer, its
+    project coordinators (Phase 24), the approver of a waiting fix, anyone who wrote in its chat,
+    and whoever started its work from a chat. Agents only."""
     people = set(
         frappe.parse_json(frappe.db.get_value("HD Ticket", ticket, "_assign") or "[]")
         or []
     )
     from helpdesk.copilot import people as copilot_people
 
+    customer = frappe.db.get_value("HD Ticket", ticket, "customer")
     # the same chain as everything else (Copilot People; Phase 23, A22)
-    developer = copilot_people.developer(
-        frappe.db.get_value("HD Ticket", ticket, "customer"), ticket
-    )
+    developer = copilot_people.developer(customer, ticket)
     if developer:
         people.add(developer)
+    # Phase 24 (the owner, 17 Nov 2026): the customer's project coordinators hear every step of
+    # its tickets (its own, else the common ones), as long as they are not on leave
+    people.update(
+        copilot_people.working(copilot_people.coordinators(customer), acting=False)
+    )
     people.update(
         frappe.get_all(
             "HDS Copilot Approval",
@@ -1348,6 +1388,21 @@ def on_correction_ready(approval, run, records: int):
         ),
         run=run.name,
         approval=approval.name,
+    )
+
+
+def on_customer_reply(ticket: str, text: str = ""):
+    """The customer wrote on the ticket (portal, email or their own site): a short line for the
+    people on the ticket and the Leaders (Phase 24: every step reaches them)."""
+    from frappe.utils import strip_html_tags
+
+    words = " ".join(strip_html_tags(text or "").split())
+    if len(words) > 300:
+        words = words[:297] + "…"
+    post(
+        ticket,
+        _card(_("The customer replied"), [words] if words else []),
+        status=True,
     )
 
 

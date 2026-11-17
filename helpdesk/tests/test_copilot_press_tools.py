@@ -58,14 +58,26 @@ class FakePress:
                 "creation": "2026-11-12 01:30:00",
                 "duration": "0:00:41",
                 "site": "demoerp.tbo365.cloud",
+                "group": "bench-group-1",
             },
             {
                 "name": "48214",
-                "job_type": "Restart Bench",
+                "job_type": "Bench Restart",  # Press's own name (press/agent.py)
                 "status": "Success",
                 "creation": "2026-11-12 02:16:00",
                 "duration": "0:00:41",
                 "bench": "bench-0020",
+                "group": "bench-group-1",
+            },
+            {
+                "name": "48215",
+                "job_type": "Update Site Migrate",  # Press: "Update Site Pull" or "... Migrate"
+                "status": "Success",
+                "creation": "2026-11-12 02:20:00",
+                "duration": "0:02:10",
+                "site": "galom.tbo365.cloud",
+                "bench": "bench-0020",
+                "group": "bench-group-1",
             },
         ]
 
@@ -129,16 +141,29 @@ class FakePress:
                 {"name": "SU-1", "status": "Success", "creation": "2026-11-09 21:10:00"}
             ]
         if doctype == "Agent Job":
+            # Press answers an Agent Job list only with a target (AgentJob.get_list_query)
+            if not any(filters.get(k) for k in ("site", "bench", "group", "server")):
+                raise PressError(
+                    403, "Agent Job: a site, bench, group or server is needed"
+                )
+
+            def match(job, key, value):
+                if isinstance(value, list) and value and value[0] == "in":
+                    return job.get(key) in value[1]
+                return job.get(key) == value
+
             rows = [
                 j
                 for j in self.jobs
                 if all(
-                    j.get(k) == v
+                    match(j, k, v)
                     for k, v in filters.items()
-                    if k in ("site", "bench", "job_type")
+                    if k in ("site", "bench", "group", "job_type", "status")
                 )
             ]
             return rows[: args.get("limit") or 20]
+        if doctype == "Release Group":
+            return [{"name": "bench-group-1"}]
         return []
 
 
@@ -249,6 +274,22 @@ class TestReads(PressCase):
         self.assertEqual(args["doctype"], "Agent Job")
         self.assertEqual(args["filters"]["status"], "Failure")
 
+    def test_job_lists_without_a_site_or_bench_go_per_release_group(self):
+        # Phase 24: Press refuses an Agent Job list with no site, bench, group or server (the
+        # watcher's PR #9 bug); the hub asked that way for "failed jobs" and for jobs()
+        self.press.jobs[0]["status"] = "Failure"
+        self.press.jobs[0]["creation"] = str(frappe.utils.now_datetime())
+        failed = press_tools.failed_jobs(6)
+        self.assertEqual([j["name"] for j in failed], ["48213"])
+        recent = press_tools.jobs(limit=10)
+        self.assertEqual([j["name"] for j in recent], ["48213", "48215", "48214"])
+        for args in self.calls("press.api.client.get_list"):
+            if args["doctype"] == "Agent Job":
+                self.assertTrue(
+                    any(args["filters"].get(k) for k in ("site", "bench", "group")),
+                    args["filters"],
+                )
+
 
 class TestActions(PressCase):
     def test_the_levels_are_as_approved(self):
@@ -343,6 +384,21 @@ class TestActions(PressCase):
         told = [s for s in self.sent if isinstance(s, tuple)]
         self.assertEqual(told[0][0], self.one)
         self.assertIn("Restart bench-0020", told[0][1][0])
+
+    def test_an_update_is_followed_by_presss_own_job_names(self):
+        # Phase 24: Press names it "Update Site Pull" or "Update Site Migrate", never "Update Site"
+        self.assertEqual(
+            press_tools.latest_job(
+                press_tools.ACTIONS["update_site"], "galom.tbo365.cloud"
+            )["name"],
+            "48215",
+        )
+        self.assertEqual(
+            press_tools.latest_job(press_tools.ACTIONS["restart_bench"], "bench-0020")[
+                "name"
+            ],
+            "48214",
+        )
 
     def test_a_deploy_needs_a_senior(self):
         asked = press_tools.run("deploy", "bench-group-1", self.one, "Web")

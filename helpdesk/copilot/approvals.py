@@ -109,14 +109,15 @@ def pick_approver(
     copilot_only: bool = False,
 ) -> str | None:
     """Who approves this fix (Phase 23, all from Copilot People): the person a coordinator chose
-    for the ticket, then the Fix Approver chain (the customer's fix approver, its developers, its
-    project coordinators, the common Fix Approvers, the Seniors, the Leaders), the first group with
+    for the ticket (never a coordinator who is only that), then the Fix Approver chain (the
+    customer's fix approver, its developers, the common developers, the common Fix Approvers, the
+    Seniors, the Leaders; Project Coordinators never approve, Phase 24), the first group with
     someone working today who may decide it: not its author, and a senior for a sensitive fix.
     Within a group, the one with the fewest waiting approvals. With nobody working, the first who
     may decide it at all; else nobody."""
     excluded = (set() if copilot_only else authors(run)) | (exclude or set())
     allowed = set(seniors()) if sensitive else None
-    person = people.chosen(run.ticket)
+    person = people.chosen_approver(run.ticket, run.customer)
     if (
         person
         and person not in excluded

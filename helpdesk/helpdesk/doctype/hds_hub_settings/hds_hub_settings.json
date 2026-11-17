@@ -47,6 +47,7 @@
 		"internal_project",
 		"column_break_monitoring",
 		"monitor_quiet_minutes",
+		"watcher_status",
 		"auto_repair_section",
 		"auto_repair_paused",
 		"auto_repair_paused_by",
@@ -316,7 +317,12 @@
 			"fieldtype": "Int",
 			"label": "Watcher quiet after (minutes)",
 			"default": "3",
-			"description": "Minutes without a heartbeat before the Agent Managers hear that the watcher is quiet."
+			"description": "Minutes without a heartbeat before the Infrastructure people (Copilot People; else Infrastructure Senior, else a Leader) hear that the watcher is quiet."
+		},
+		{
+			"fieldname": "watcher_status",
+			"fieldtype": "HTML",
+			"label": "Watcher last seen"
 		},
 		{
 			"fieldname": "auto_repair_section",
@@ -370,7 +376,7 @@
 	],
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-11-12 18:00:00.000000",
+	"modified": "2026-11-17 18:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Hub Settings",
