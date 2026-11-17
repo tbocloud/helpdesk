@@ -309,6 +309,20 @@ class TestActions(PressCase):
         self.assertTrue(done["ran"])
         self.assertTrue(done["job"])
 
+    def test_two_backup_asks_at_once_start_one_backup(self):
+        # CodeRabbit on tbo-copilot #28: a per-site guard on TBO Support's side
+        from helpdesk.api import copilot_press
+
+        site = "demoerp.tbo365.cloud"
+        frappe.cache().delete_value(f"copilot:press-backup:{site}")
+        self.addCleanup(frappe.cache().delete_value, f"copilot:press-backup:{site}")
+        frappe.set_user(self.one)
+        first = copilot_press.backup(site)
+        second = copilot_press.backup(site)
+        self.assertEqual(len(self.calls("press.api.site.backup")), 1)
+        self.assertIn("a moment ago", second["text"])
+        self.assertTrue(first["job"])
+
     def test_a_restart_asks_first_and_runs_after_approve(self):
         asked = press_tools.run("restart_bench", "bench-0020", self.one, "Teams")
         self.assertEqual(self.calls("press.api.bench.restart"), [])

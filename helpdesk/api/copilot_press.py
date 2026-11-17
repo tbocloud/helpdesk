@@ -81,15 +81,40 @@ def logs(site: str, log: str = "") -> dict:
     return {"site": site, "logs": press_tools.site_logs(site)}
 
 
+BACKUP_LOCK_SECONDS = 120  # two asks this close together are one backup
+
+
 @frappe.whitelist(methods=["POST"])
 @agent_only
 def backup(site: str, ticket: str | None = None) -> dict:
-    """A backup now: runs, logged, no approval."""
-    # answered once Press took it: a hub worker is not held for minutes per backup (C5)
-    done = press_tools.run(
-        "backup", site, frappe.session.user, VIA, ticket=ticket or None, wait=False
-    )
-    return {"text": done["text"], "job": done.get("job")}
+    """A backup now: runs, logged, no approval. One per site at a time: a backup Press is still
+    running, or one asked for a moment ago, is answered with its job, never started twice."""
+    rule = press_tools.spec("backup")
+    cache = frappe.cache()
+    lock = cache.make_key(f"copilot:press-backup:{site}")
+    if not cache.set(
+        lock, 1, ex=BACKUP_LOCK_SECONDS, nx=True
+    ):  # the site's own key - nosemgrep
+        job = press_tools.latest_job(rule, site)
+        return {
+            "text": _("A backup of {0} was asked for a moment ago.").format(site),
+            "job": job,
+        }
+    try:
+        job = press_tools.latest_job(rule, site)
+        if job and job.get("status") in ("Pending", "Running"):
+            return {
+                "text": _("A backup of {0} is already running.").format(site),
+                "job": job,
+            }
+        # answered once Press took it: a hub worker is not held for minutes per backup (C5)
+        done = press_tools.run(
+            "backup", site, frappe.session.user, VIA, ticket=ticket or None, wait=False
+        )
+        return {"text": done["text"], "job": done.get("job")}
+    except Exception:
+        cache.delete(lock)  # nothing started: the next ask may try
+        raise
 
 
 @frappe.whitelist(methods=["POST"])
