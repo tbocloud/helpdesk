@@ -59,6 +59,12 @@ export function useNavigation() {
       )
   );
   const canViewBusiness = computed(() => !!leadOptions.data?.can_view_business);
+  // a division's sales user gets Add a lead, My leads, Leads and the Scoreboard only
+  const isDivisionSalesUser = computed(
+    () =>
+      authStore.divisions.find((d) => d.name === authStore.activeDivision)
+        ?.role === "Division Sales User"
+  );
 
   function isLeadTabVisible(tab: NonNullable<NavItem["leadTab"]>) {
     switch (tab) {
@@ -71,6 +77,8 @@ export function useNavigation() {
         return !isBd.value;
       case "business":
         return !isBd.value && canViewBusiness.value;
+      case "commission":
+        return !isDivisionSalesUser.value;
       default:
         return true;
     }
@@ -99,7 +107,7 @@ export function useNavigation() {
       (!item.overviewOnly || authStore.canSeeOverview) &&
       (!item.adoptionOnly || authStore.canSeeAdoption) &&
       (!item.customerReportOnly || authStore.canSeeCustomerReport) &&
-      (!item.crmDashboardsOnly || authStore.canViewCrmDashboards) &&
+      (!item.divisionOverviewOnly || authStore.canViewDivisionOverview) &&
       (!authStore.isContentTeam || CONTENT_TEAM_ROUTES.has(to))
     );
   }

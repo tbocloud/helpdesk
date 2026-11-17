@@ -18,6 +18,7 @@ from frappe.utils import add_days, getdate, nowdate
 
 from helpdesk import sales_scoreboard as sales
 from helpdesk import team_dashboard as td
+from helpdesk.divisions import active_division, scoreboard_people
 from helpdesk.tasky.permissions import is_tasky_admin
 from helpdesk.utils import agent_only
 
@@ -48,9 +49,15 @@ def get_team_dashboard(
     start, end = td.period_bounds(period, anchor)
     closed = end < today
     c_start, c_end = td.comparison_bounds(period, start, end, today)
+    # a division's sales roles see their division's people (or themselves) only, with
+    # sales from its own ERP site; the team-wide champions and analysis aren't theirs
+    people = scoreboard_people()
+    division = active_division() if people is not None else None
     # overdue is today's state: it only belongs to the period in progress
-    data = td.collect(start, end, with_overdue=not closed, today=today)
-    prev = td.collect(c_start, c_end, with_overdue=False, today=today)
+    data = td.collect(start, end, not closed, today, division)
+    prev = td.collect(c_start, c_end, False, today, division)
+    if people is not None:
+        data, prev = td.only_people(data, people), td.only_people(prev, people)
 
     keep = td.scope_filter(scope.departments)
     by_department = td.tally(
@@ -60,11 +67,14 @@ def get_team_dashboard(
         data, lambda r: access.group_of.get(r["department"]) if keep(r) else None
     )
     members = department_members(scope.departments)
+    if people is not None:
+        members = {d: users & people for d, users in members.items()}
     ranked = ranked_people(data, period, scope.departments, members)
-    champions = Champions(period, start, closed)
+    # stored champions are the whole team's: worked out from the narrowed rows instead
+    champions = Champions(period, start, closed and people is None)
     months = (
         year_months(period, start, today, scope, champions.of_month)
-        if period == "year"
+        if period == "year" and people is None
         else None
     )
     return {
@@ -91,17 +101,23 @@ def get_team_dashboard(
         "group": scope.group,
         "summary": summary(data, prev, keep),
         "trend": td.trend(data, keep, start, end, period),
-        "history": history(scope, anchor),
-        "champion": champions.card(
-            scope.group or scope.department, scope.group, ranked
+        "history": history(scope, anchor) if people is None else [],
+        "champion": (
+            champions.card(scope.group or scope.department, scope.group, ranked)
+            if people is None
+            else None
         ),
-        "previous_champion": previous_champion(period, start, scope),
+        "previous_champion": (
+            previous_champion(period, start, scope) if people is None else None
+        ),
         "people": people_rows(ranked, by_department, members, months),
         "departments": department_rows(
             data, prev, (by_department, by_group), members, access, scope, champions
         ),
         "projects": project_rows(data, keep, scope.departments),
-        "analysis": current_analysis(period, start, scope, closed),
+        "analysis": (
+            current_analysis(period, start, scope, closed) if people is None else None
+        ),
         "months": months and months["rows"],
         "rules": td.score_rules(period),
         "sales": {**data["sales_status"], "department": sales.SALES_DEPARTMENT},

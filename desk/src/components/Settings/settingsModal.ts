@@ -43,8 +43,6 @@ import IntakeSettings from "./Intake/IntakeSettings.vue";
 import LucideInbox from "~icons/lucide/inbox";
 import FileStorageSettings from "./FileStorage/FileStorageSettings.vue";
 import CRMSettings from "./CRM/CRMSettings.vue";
-import CrmDashboardSettings from "./CrmDashboards/CrmDashboardSettings.vue";
-import LucideChartPie from "~icons/lucide/chart-pie";
 import LucideHandshake from "~icons/lucide/handshake";
 import LucideHardDrive from "~icons/lucide/hard-drive";
 import LucideCalendarDays from "~icons/lucide/calendar-days";
@@ -64,6 +62,11 @@ import SalesSettings from "./Sales/SalesSettings.vue";
 import LucideReceipt from "~icons/lucide/receipt";
 import LucideBot from "~icons/lucide/bot";
 import LucideGitPullRequest from "~icons/lucide/git-pull-request";
+
+import Divisions from "./Divisions/Divisions.vue";
+import AuditLog from "./Divisions/AuditLog.vue";
+import LucideGlobe from "~icons/lucide/globe";
+import LucideScrollText from "~icons/lucide/scroll-text";
 
 export const showSettingsModal = ref(false);
 
@@ -100,6 +103,25 @@ export const tabs = computed(() => {
           label: __("Preferences"),
           icon: markRaw(SlidersIcon),
           component: markRaw(Preferences),
+        },
+      ],
+    },
+    // the divisions (docs/divisions.md): Super Admins run every one, a division's own
+    // admins theirs; helpdesk.api.divisions checks the roles itself
+    {
+      label: __("Central administration"),
+      condition: () => auth.canManageDivisions,
+      items: [
+        {
+          label: __("Divisions"),
+          icon: markRaw(LucideGlobe),
+          component: markRaw(Divisions),
+        },
+        {
+          label: __("Audit log"),
+          icon: markRaw(LucideScrollText),
+          component: markRaw(AuditLog),
+          condition: () => auth.isSuperAdmin,
         },
       ],
     },
@@ -297,13 +319,6 @@ export const tabs = computed(() => {
           component: markRaw(CRMSettings),
           condition: () => auth.isAdmin || auth.isManager,
         },
-        {
-          label: __("CRM dashboards"),
-          icon: markRaw(LucideChartPie),
-          component: markRaw(CrmDashboardSettings),
-          // helpdesk.api.crm_dashboard_settings checks the roles itself
-          condition: () => auth.isAdmin || auth.isManager,
-        },
       ],
     },
   ];
@@ -329,6 +344,8 @@ export const disableSettingModalOutsideClick = ref(false);
 type TabName =
   | "Profile"
   | "Preferences"
+  | "Divisions"
+  | "Audit log"
   | "Email Accounts"
   | "Email Notifications"
   | "General"
@@ -356,8 +373,7 @@ type TabName =
   | "AI providers"
   | "Sign-off templates"
   | "File storage"
-  | "CRM"
-  | "CRM dashboards";
+  | "CRM";
 
 export const setActiveSettingsTab = (tabName: TabName) => {
   activeTab.value =

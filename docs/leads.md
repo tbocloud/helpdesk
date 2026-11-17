@@ -17,6 +17,10 @@ connection in Settings → CRM (HD CRM Settings: site URL, API key and secret), 
 Smart's hub leads API on the ERP site. So there is nothing to sync, nothing to go stale, and
 ERPNext's own rules (visibility, stages, validation) apply to every change.
 
+With divisions (docs/divisions.md), the page talks to the ERP site of the person's active
+division when that division has a site of its own (its ERP site, an `HD CRM Source`), and to the CRM
+connection otherwise. The read cache is kept per division.
+
 The hub never gets ERPNext installed.
 
 ## Who sees it
@@ -96,7 +100,9 @@ user exists there with a sales role, applies what they may see, and records writ
   least once, last called first; `from_date` / `to_date` without a `metric` keep the leads last
   called in those days). `mine` keeps any view to the leads the person owns or created, and
   `created_by_me` to the ones they created (whoever owns them now; the ERP site lets them read,
-  not change, those). An older TBO Smart ignores both and has no `called`. Each row also brings
+  not change, those). A lead someone with a sales role added through the Lead Bank counts as
+  created by them: it shows in their My leads and *Created by me*, read only (TBO Smart's
+  `hub_leads.created_by`, 2026-11-17; on an older TBO Smart it shows only in the Lead Bank). An older TBO Smart ignores both and has no `called`. Each row also brings
   `created_by` and `call_count`. The hub sends `page_length` 20 (at most 100) and `start` from 0.
 - `data` (create and update) uses these keys: `lead_name, company_name, email_id, mobile_no,
   source, segment, territory, industry, state, district, org_size, lead_owner, next_follow_up` (date, `YYYY-MM-DD`), and `tbo_department` (a department's name).

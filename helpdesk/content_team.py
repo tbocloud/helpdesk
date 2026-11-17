@@ -79,31 +79,36 @@ def is_dm_employee(user: str | None = None) -> bool:
 
 
 def is_sales_employee(user: str | None = None) -> bool:
-    """A Sales Employee: the hub shows them the sales screens only. Their task, project,
-    ticket and content lists are empty and those records are refused when opened, and
-    nobody can give them a task or a ticket. System Managers and Agent Managers keep
-    everything, as with the department walls."""
+    """A Sales Employee, or a Division Admin or Division Sales User of their active
+    division (docs/divisions.md): the hub shows them the sales screens only. Their task,
+    project, ticket and content lists are empty and those records are refused when
+    opened, and nobody can give them a task or a ticket. System Managers and Agent
+    Managers keep everything, as with the department walls."""
+    from helpdesk.divisions import leads_role
     from helpdesk.tasky.permissions import is_tasky_admin
 
     user = user or frappe.session.user
     if is_tasky_admin(user):
         return False
-    return SALES_EMPLOYEE_ROLE in frappe.get_roles(user)
+    return SALES_EMPLOYEE_ROLE in frappe.get_roles(user) or bool(leads_role(user))
 
 
 def is_sales_bd_role(user: str | None = None) -> bool:
-    """A salesperson by role: a Sales Employee who is not a System Manager, Agent Manager or
-    Sales Manager. Whether they also head a department is known on the ERP site only
-    (`helpdesk.api.leads.is_bd` settles it); a BD sees Today's calls, their own leads and
-    follow-ups, nothing of the team's (docs/leads.md)."""
+    """A salesperson by role: a Division Sales User (a Division Admin manages instead), or a
+    Sales Employee who is not a System Manager, Agent Manager or Sales Manager. Whether they
+    also head a department is known on the ERP site only (`helpdesk.api.leads.is_bd`
+    settles it); a BD sees Today's calls, their own leads and follow-ups, nothing of the
+    team's (docs/leads.md)."""
+    from helpdesk.divisions import DIVISION_SALES_USER, leads_role
     from helpdesk.tasky.permissions import is_tasky_admin
 
     user = user or frappe.session.user
-    return (
-        is_sales_employee(user)
-        and not is_tasky_admin(user)
-        and "Sales Manager" not in frappe.get_roles(user)
-    )
+    if is_tasky_admin(user):
+        return False
+    division_role = leads_role(user)
+    if division_role:
+        return division_role == DIVISION_SALES_USER
+    return is_sales_employee(user) and "Sales Manager" not in frappe.get_roles(user)
 
 
 def sees_no_tickets(user: str | None = None) -> bool:

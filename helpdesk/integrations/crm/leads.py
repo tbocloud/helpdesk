@@ -1,7 +1,8 @@
 """Sales leads, live from ERPNext on the CRM site (docs/leads.md).
 
 The hub keeps no copy: every read and write goes to TBO Smart's hub leads API there
-(`tbo_smart.api.hub_leads.<method>`) over the CRM connection in HD CRM Settings, with
+(`tbo_smart.api.hub_leads.<method>`) over the CRM connection in HD CRM Settings, or the ERP
+site of the person's active division (docs/divisions.md), with
 `acting_user` set to the person signed in here. The CRM site attributes writes to them
 and shows them only the leads they may see.
 """
@@ -11,7 +12,15 @@ from urllib.parse import urlparse
 import frappe
 from frappe import _
 
-from helpdesk.integrations.crm.client import CRMClient, CRMError
+from helpdesk.divisions import (
+    NoDivisionSiteError,
+    crm_client,
+    division_without_site,
+    leads_closed_by_site,
+    leads_role,
+    no_site_message,
+)
+from helpdesk.integrations.crm.client import CRMError
 
 API = "tbo_smart.api.hub_leads"
 MANAGER_ROLES = {"System Manager", "Agent Manager"}
@@ -56,8 +65,9 @@ def leads_teams() -> list[str]:
 def can_use_leads(user: str | None = None) -> bool:
     """Leads are on, and `user` is a System Manager or Agent Manager, or an active agent
     who is a Sales Employee or in one of the Leads teams (any active agent when no team
-    is picked). The Digital team (content and DM roles) never sees them, Agent Managers
-    included, unless they're also a System Manager or a Sales Employee."""
+    is picked), or a Division Admin or Division Sales User of their active division. The
+    Digital team (content and DM roles) never sees them, Agent Managers included, unless
+    they're also a System Manager or a Sales Employee."""
     from helpdesk.content_team import CONTENT_CALENDAR_ROLES, SALES_EMPLOYEE_ROLE
     from helpdesk.utils import is_agent
 
@@ -71,7 +81,7 @@ def can_use_leads(user: str | None = None) -> bool:
         return True
     if roles & set(CONTENT_CALENDAR_ROLES) and SALES_EMPLOYEE_ROLE not in roles:
         return False
-    if MANAGER_ROLES & roles:
+    if MANAGER_ROLES & roles or leads_role(user):
         return True
     if not is_agent(user) or not frappe.db.get_value("HD Agent", user, "is_active"):
         return False
@@ -128,6 +138,17 @@ def require_leads():
             ),
             frappe.PermissionError,
         )
+    without_site = division_without_site()
+    if without_site:
+        frappe.throw(no_site_message(without_site), frappe.PermissionError)
+    closed = leads_closed_by_site()
+    if closed:
+        frappe.throw(
+            _(
+                "Your account on {0} has no sales role, so its leads aren't open to you. Ask its admin for one."
+            ).format(closed),
+            frappe.PermissionError,
+        )
 
 
 def call(
@@ -144,7 +165,9 @@ def call(
     `permission_message` is what a 403 means for a call that needs more than a sales
     account (e.g. managing departments), instead of "no sales account"."""
     try:
-        client = CRMClient.from_settings()
+        client = crm_client()
+    except NoDivisionSiteError as e:
+        fail(LeadsUnavailableError(str(e)))
     except CRMError:
         fail(
             LeadsUnavailableError(
@@ -177,7 +200,9 @@ def download(method: str, api: str = API, **params) -> tuple[bytes, str]:
     """A file from `<api>.<method>` on the CRM site as the signed-in person: (bytes,
     content type); failures as `call`'s."""
     try:
-        client = CRMClient.from_settings()
+        client = crm_client()
+    except NoDivisionSiteError as e:
+        fail(LeadsUnavailableError(str(e)))
     except CRMError:
         fail(
             LeadsUnavailableError(

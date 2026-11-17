@@ -20,6 +20,7 @@ from frappe.utils import (
 from helpdesk import lead_mirror_read, whatsapp_outreach
 from helpdesk.api import pending_calls
 from helpdesk.content_team import is_sales_bd_role, only_sales_team
+from helpdesk.divisions import active_division, on_crm_connection
 from helpdesk.integrations.crm.leads import (
     LeadsError,
     LeadsNotDeployedError,
@@ -128,7 +129,9 @@ def cached_read(part: str, params: dict, ttl: int, fresh, read, keep=bool):
     """`read()`'s answer, from the signed-in person's cache while it is fresh enough.
     `fresh` skips the cache and renews it. A failed read caches nothing, nor does an
     answer `keep` refuses (an ERP site that doesn't have the part yet)."""
-    key = f"{CACHE_PREFIX}:{frappe.session.user}:{part}:{json.dumps(params, sort_keys=True)}"
+    # per division too: each reads its own ERP site
+    division = active_division() or ""
+    key = f"{CACHE_PREFIX}:{frappe.session.user}:{division}:{part}:{json.dumps(params, sort_keys=True)}"
     if not cint(fresh):
         hit = frappe.cache.get_value(key, expires=True)
         if hit is not None:
@@ -276,11 +279,16 @@ def list_leads(
 def read_or_copy(read, copy):
     """`read` from the ERP site; when it can't be used right now and the hub's copy of the
     leads is ready, `copy` instead (docs/lead-mirror.md, phase 2a). The ERP's error stands
-    when the copy has no answer either (`copy` returns None)."""
+    when the copy has no answer either (`copy` returns None). The copy holds only the CRM
+    connection's leads, so another division's ERP site never falls back to it."""
     try:
         return read()
     except LeadsUnavailableError as error:
-        if isinstance(error, LeadsNotDeployedError) or not lead_mirror_read.ready():
+        if (
+            isinstance(error, LeadsNotDeployedError)
+            or not lead_mirror_read.ready()
+            or not on_crm_connection()
+        ):
             raise
         answer = copy()
         if answer is None:
@@ -1004,7 +1012,7 @@ def add_industry(name: str) -> dict:
         name=(name or "").strip(),
     )
     # the pick list is cached for ten minutes: this person sees the new one at once
-    frappe.cache.delete_keys(f"{CACHE_PREFIX}:{frappe.session.user}:options")
+    frappe.cache.delete_keys(f"{CACHE_PREFIX}:{frappe.session.user}:*:options")
     return result
 
 

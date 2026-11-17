@@ -10,7 +10,6 @@ DOCTYPE = "HD CRM Report Lead"
 COLUMNS = (
     "source",
     "remote_name",
-    "excluded",
     "company",
     "branch",
     "department",
@@ -33,9 +32,9 @@ CHUNK = 500
 
 
 class HDCRMReportLead(Document):
-    """The hub's reporting copy of one lead of a data source: its mapped fields as the source
-    sent them (`raw`) and the columns the dashboards count by. Nobody edits it; the sync
-    writes it in bulk and the source always wins (docs/crm-dashboard.md)."""
+    """The hub's reporting copy of one lead of an ERP site: its mapped fields as the site sent
+    them (`raw`) and the columns the division overview counts by. Nobody edits it; the sync
+    writes it in bulk and the site always wins (docs/divisions.md, "ERP sites")."""
 
     @staticmethod
     def name_of(source: str, remote_name: str) -> str:

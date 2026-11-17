@@ -1,3 +1,4 @@
+import type { Division } from "@/pages/divisions/divisions";
 import { LOGIN_PAGE, router } from "@/router";
 import { call, createResource } from "frappe-ui";
 import { defineStore } from "pinia";
@@ -92,9 +93,22 @@ export const useAuthStore = defineStore("auth", () => {
   const canUseLeadBank: ComputedRef<boolean> = computed(
     () => !!user__.value.can_use_lead_bank
   );
-  // CRM dashboards: someone who may open at least one (docs/crm-dashboard.md)
-  const canViewCrmDashboards: ComputedRef<boolean> = computed(
-    () => !!user__.value.can_view_crm_dashboards
+  // divisions the person may switch to, the active one, and what they may do with them
+  // (docs/divisions.md); the server enforces every one of these
+  const divisions: ComputedRef<Division[]> = computed(
+    () => user__.value.divisions || []
+  );
+  const activeDivision: ComputedRef<string | null> = computed(
+    () => user__.value.active_division || null
+  );
+  const isSuperAdmin: ComputedRef<boolean> = computed(
+    () => !!user__.value.is_super_admin
+  );
+  const canManageDivisions: ComputedRef<boolean> = computed(
+    () => !!user__.value.can_manage_divisions
+  );
+  const canViewDivisionOverview: ComputedRef<boolean> = computed(
+    () => !!user__.value.can_view_division_overview
   );
   const canSeeCustomerReport: ComputedRef<boolean> = computed(
     () => !!(user__.value.is_manager || user__.value.is_project_manager)
@@ -200,7 +214,11 @@ export const useAuthStore = defineStore("auth", () => {
     canWorkTickets,
     canUseLeads,
     canUseLeadBank,
-    canViewCrmDashboards,
+    divisions,
+    activeDivision,
+    isSuperAdmin,
+    canManageDivisions,
+    canViewDivisionOverview,
     telephonyInstalled,
     canOpenChat,
     isLoggedIn,

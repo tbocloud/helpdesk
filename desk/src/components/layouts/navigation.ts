@@ -9,7 +9,6 @@ import LucideCalendarDays from "~icons/lucide/calendar-days";
 import LucideCalendarRange from "~icons/lucide/calendar-range";
 import LucideCamera from "~icons/lucide/camera";
 import LucideChartColumn from "~icons/lucide/chart-column";
-import LucideChartPie from "~icons/lucide/chart-pie";
 import LucideClipboardList from "~icons/lucide/clipboard-list";
 import LucideClock from "~icons/lucide/clock";
 import LucideContact2 from "~icons/lucide/contact-2";
@@ -33,6 +32,8 @@ import LucideUsers from "~icons/lucide/users";
 import LucideUserRoundCog from "~icons/lucide/user-round-cog";
 import LucideActivity from "~icons/lucide/activity";
 import LucideVideo from "~icons/lucide/video";
+import LucideFileChartColumn from "~icons/lucide/file-chart-column";
+import LucideGlobe from "~icons/lucide/globe";
 
 /** A page in the sidebar. The flags are the role rules; see `isNavItemVisible`. */
 export interface NavItem {
@@ -59,8 +60,8 @@ export interface NavItem {
   overviewOnly?: boolean;
   adoptionOnly?: boolean;
   customerReportOnly?: boolean;
-  /** CRM dashboards: someone who may open at least one */
-  crmDashboardsOnly?: boolean;
+  /** Business overview and Division reports: Super Admins and division managers */
+  divisionOverviewOnly?: boolean;
 }
 
 /** A page in the tree under a parent item (a saved view). */
@@ -356,14 +357,6 @@ export const agentNavAreas: NavArea[] = [
             leadTab: "business",
             leadsOnly: true,
           },
-          // configurable lead reporting across companies (docs/crm-dashboard.md)
-          {
-            id: "crm-dashboards",
-            label: __("CRM dashboards"),
-            icon: LucideChartPie,
-            to: "CrmDashboard",
-            crmDashboardsOnly: true,
-          },
           // who is handed which product and how many calls per slot (docs/leads.md)
           {
             id: "assign-leads",
@@ -433,6 +426,21 @@ export const agentNavAreas: NavArea[] = [
     groups: [
       {
         items: [
+          // across divisions (docs/divisions.md)
+          {
+            id: "business-overview",
+            label: __("Business overview"),
+            icon: LucideGlobe,
+            to: "DivisionOverview",
+            divisionOverviewOnly: true,
+          },
+          {
+            id: "division-reports",
+            label: __("Division reports"),
+            icon: LucideFileChartColumn,
+            to: "DivisionReports",
+            divisionOverviewOnly: true,
+          },
           {
             id: "summaries",
             label: __("Summaries"),

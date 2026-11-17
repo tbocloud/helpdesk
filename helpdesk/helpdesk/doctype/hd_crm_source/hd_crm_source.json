@@ -42,7 +42,13 @@
 		"column_break_sync",
 		"leads_synced",
 		"last_error",
-		"sync_cursor"
+		"sync_cursor",
+		"users_section",
+		"use_erp_roles",
+		"role_map",
+		"column_break_users",
+		"users_read_on",
+		"users_error"
 	],
 	"fields": [
 		{
@@ -278,11 +284,46 @@
 			"hidden": 1,
 			"label": "Sync cursor",
 			"read_only": 1
+		},
+		{
+			"fieldname": "users_section",
+			"fieldtype": "Section Break",
+			"label": "Users and roles"
+		},
+		{
+			"default": "0",
+			"description": "Each hub user sees this source's leads by their role on the site, matched by email: its managers every lead, its executives their own. Hub admins see everything.",
+			"fieldname": "use_erp_roles",
+			"fieldtype": "Check",
+			"label": "Access follows this site's roles"
+		},
+		{
+			"depends_on": "use_erp_roles",
+			"fieldname": "role_map",
+			"fieldtype": "Table",
+			"label": "Role mapping",
+			"options": "HD CRM Source Role"
+		},
+		{
+			"fieldname": "column_break_users",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "users_read_on",
+			"fieldtype": "Datetime",
+			"label": "Users last read",
+			"read_only": 1
+		},
+		{
+			"fieldname": "users_error",
+			"fieldtype": "Small Text",
+			"label": "Last error reading users",
+			"read_only": 1
 		}
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-11-12 12:00:00.000000",
+	"modified": "2026-11-17 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD CRM Source",
