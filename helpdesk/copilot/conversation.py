@@ -527,7 +527,7 @@ def _greet(doc, context: dict, user: dict):
         text = "مرحبًا {0}، أنا مساعد TBO. {1}ما الذي حدث؟".format(first, where)
     else:
         template = (settings.get("chat_opening_text") or "").strip() or _(
-            "Hi {name}, I'm TBO Copilot. {where}What happened?"
+            "Hi {name}, I'm TBO Copilot, an automated assistant. {where}What happened?"
         )
         text = re.sub(
             r" {2,}", " ", template.replace("{name}", first).replace("{where}", where)
@@ -816,7 +816,7 @@ def _ask_to_record(doc, text: str, cost: float = 0):
         )
     else:
         consent = (settings.get("chat_recording_consent") or "").strip() or _(
-            "I'll record this browser tab only, while you try again. Only TBO's support team will see it, and it is attached privately to your ticket."
+            "I'll record the tab, window or screen you choose, while you try again; your voice only if you choose it. TBO's support team can watch it, and on your site so can the colleagues who follow this ticket and your System Managers."
         )
     return _say(
         doc,

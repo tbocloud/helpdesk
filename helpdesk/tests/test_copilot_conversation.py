@@ -189,7 +189,7 @@ class TestTheConversation(ChatCase):
         )
         self.assertEqual(
             reply["messages"][0]["text"],
-            "Hi Ali, I'm TBO Copilot. I see you are on Sales Invoice SINV-0042. What happened?",
+            "Hi Ali, I'm TBO Copilot, an automated assistant. I see you are on Sales Invoice SINV-0042. What happened?",
         )
         self.assertEqual(
             json.loads(self.doc().context)["user_roles"], ["Accounts User"]

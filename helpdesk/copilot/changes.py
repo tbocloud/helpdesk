@@ -796,6 +796,16 @@ def undo(run, user: str, reason: str):
         revert, "state_change", {"from": None, "to": "Preparing Fix"}, runs.AGENT
     )
     runs.update_ticket(revert)  # the ticket's card follows the undo from now on
+    # the customer hears nothing from an undo by itself: the agents are asked to tell them
+    # (Phase 23, B15)
+    from helpdesk import ticket_assignment
+
+    ticket_assignment.chat_line(
+        run.ticket,
+        _(
+            "Undo started ({0}). Tell the customer what changes back and why: Copilot says nothing to them about an undo."
+        ).format(reason),
+    )
     doc = frappe.get_doc(
         {
             "doctype": CHANGE_SET,

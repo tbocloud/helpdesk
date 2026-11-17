@@ -1368,6 +1368,16 @@ def undo(run, user: str, reason: str):
             pull["number"],
         ),
     )
+    # the customer hears nothing from an undo by itself: the agents are asked to tell them
+    # (Phase 23, B15)
+    from helpdesk import ticket_assignment
+
+    ticket_assignment.chat_line(
+        run.ticket,
+        _(
+            "Undo started ({0}). Tell the customer what changes back and why: Copilot says nothing to them about an undo."
+        ).format(reason),
+    )
     if sync_on():
         with contextlib.suppress(GitHubError):
             refresh(frappe.get_doc("HDS Copilot Run", revert.name))

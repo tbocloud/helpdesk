@@ -21,7 +21,8 @@ STAGES = (
 # used when the settings have no row (or an empty one) for a stage
 DEFAULT_TEMPLATES = {
     "Received": "We have received your ticket and are looking at it.",
-    "Working on it": "We found what is happening and are working on it. We will update you here.",
+    # said when the work starts: nothing is found yet (Phase 23, B10)
+    "Working on it": "We are looking into it and will update you here.",
     "Fix scheduled": "A fix is ready and will go live on {date}.",
     "Resolved": "{resolution} Please confirm this solved it, or reopen the ticket if not.",
     "With our team": "A TBO engineer is looking at this personally.",

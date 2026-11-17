@@ -328,3 +328,36 @@ class TestPhase23AskAgain(CustomerCase):
         )
         customer.send_stage(run, "Resolved", {})
         self.assertFalse(self.ticket_value("custom_customer_confirmation"))
+
+
+class TestPhase23Resend(CustomerCase):
+    """A stage the site missed goes again, but an older stage never follows a newer one (B2)."""
+
+    def resend(self):
+        from frappe.utils import add_to_date, now_datetime
+
+        from helpdesk.copilot import delivery
+
+        frappe.cache().delete_value(delivery.LOCK)
+        return delivery.resend_undelivered(now=add_to_date(now_datetime(), minutes=5))
+
+    def test_only_the_newest_missed_stage_goes_again(self):
+        run = self.investigated("bug")
+        self.pushed.clear()
+        with patch.object(client_api, "hub_api", side_effect=Exception("down")):
+            customer.send_stage(run, "Fix scheduled", {"date": "tonight"})
+            customer.send_stage(run, "Resolved", {})
+        result = self.resend()
+        self.assertEqual(result["stages"], 1)
+        self.assertEqual([s for s, _m in self.stages()], ["Resolved"])
+        self.pushed.clear()
+        self.assertEqual(self.resend()["stages"], 0)  # sent once
+
+    def test_a_missed_stage_older_than_one_that_arrived_stays(self):
+        run = self.investigated("bug")
+        with patch.object(client_api, "hub_api", side_effect=Exception("down")):
+            customer.send_stage(run, "Fix scheduled", {"date": "tonight"})
+        customer.send_stage(run, "Resolved", {})  # this one arrived
+        self.pushed.clear()
+        self.assertEqual(self.resend()["stages"], 0)
+        self.assertEqual(self.stages(), [])
