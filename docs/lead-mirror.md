@@ -23,6 +23,10 @@ telephony, AI, the mobile app and the Lead Bank all work on the ERP's Lead.
 4. **Every save reaches the ERP or tells the person.** A queued save is visible ("Saving…, will
    send when the CRM is back") and a failed one is shown with its reason; none disappears silently.
 
+**Divisions** (docs/divisions.md): the mirror holds only the CRM connection's leads. A person
+whose active division has its own ERP site reads and writes there and never falls back to the
+mirror (`api/leads.read_or_copy`).
+
 ## Phases
 
 | Phase | What | Visible change |

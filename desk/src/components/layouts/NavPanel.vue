@@ -19,6 +19,8 @@
         </div>
       </div>
 
+      <DivisionSwitcher v-if="!isCustomerPortal" class="mb-2" />
+
       <button
         v-if="showSearch"
         type="button"
@@ -192,6 +194,7 @@
 
 <script setup lang="ts">
 import BrandLogo from "@/components/BrandLogo.vue";
+import DivisionSwitcher from "@/components/layouts/DivisionSwitcher.vue";
 import FollowUpStrip from "@/components/FollowUpStrip.vue";
 import { useDevice } from "@/composables";
 import { useAuthStore } from "@/stores/auth";

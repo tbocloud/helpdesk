@@ -11,6 +11,7 @@
 		"column_break_1",
 		"is_active",
 		"parent_department",
+		"division",
 		"heads",
 		"description_section",
 		"description"
@@ -53,6 +54,13 @@
 			"description": "Leave empty for a main department. The Scoreboard adds a main department's sub-departments up into its group."
 		},
 		{
+			"fieldname": "division",
+			"fieldtype": "Link",
+			"label": "Division",
+			"options": "HD Division",
+			"search_index": 1
+		},
+		{
 			"fieldname": "heads",
 			"fieldtype": "Table MultiSelect",
 			"label": "Heads",
@@ -71,7 +79,7 @@
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-10-12 12:00:00.000000",
+	"modified": "2026-11-16 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Department",

@@ -1,5 +1,5 @@
-"""Copies each data source's leads into HD CRM Report Lead and its organisation into
-HD CRM Org Unit, for the CRM dashboards (docs/crm-dashboard.md).
+"""Copies each ERP site's leads into HD CRM Report Lead, for the division overview
+(docs/divisions.md, "ERP sites").
 
 The source stays the master: the copy holds only the mapped fields, and a full sync drops the
 leads the source no longer has. One run per source at a time (a file lock), so a sync and a
@@ -9,8 +9,9 @@ recount never overwrite each other's rows.
   A run reads the leads changed since the last one (a minute of overlap, so a change saved
   out of order is still read), or every lead when it is a full one.
 - `full_sync_all`, daily: every lead of every enabled source, which also drops deleted leads.
-- `recompute_source`, after a status mapping, rate, unit or relationship changes: counts the
-  copied leads again without reading the source.
+- `recompute_source`, after a status mapping or rate changes: counts the copied leads again
+  without reading the source.
+- After its leads, a run reads the site's users and their roles (`erp_roles`).
 """
 
 import json
@@ -22,7 +23,8 @@ from frappe.utils import add_to_date, flt, get_datetime, getdate, now_datetime
 from frappe.utils.background_jobs import is_job_enqueued
 from frappe.utils.synchronization import filelock
 
-from helpdesk.crm_dashboard.registry import CLOSED, ORG_LEVELS, UNIT_PARENTS, UNIT_TYPES
+from helpdesk.crm_dashboard.erp_roles import read_users
+from helpdesk.crm_dashboard.registry import CLOSED
 from helpdesk.helpdesk.doctype.hd_crm_report_lead.hd_crm_report_lead import COLUMNS
 from helpdesk.helpdesk.doctype.hd_crm_report_lead.hd_crm_report_lead import (
     DOCTYPE as REPORT_LEAD,
@@ -33,7 +35,6 @@ from helpdesk.helpdesk.doctype.hd_crm_report_lead.hd_crm_report_lead import (
 from helpdesk.integrations.crm.client import CRMError
 
 SOURCE = "HD CRM Source"
-UNIT = "HD CRM Org Unit"
 JOB = "helpdesk.crm_dashboard.sync.run_job"
 PAGE = 500
 OVERLAP_SECONDS = 60
@@ -43,16 +44,6 @@ LOCK_WAIT = 15 * 60
 INTERVAL_MINUTES = {"15 minutes": 15, "Hourly": 60, "Every 6 hours": 360, "Daily": 1440}
 # a tick is every 15 minutes; a run due a little after it waits for the next one otherwise
 SLACK_MINUTES = 2
-# ERPNext's own records, read when the source has them: {unit type: (doctype, fields)}
-ORG_DOCTYPES = {
-    "Company": ("Company", ["name"]),
-    "Branch": ("Branch", ["name"]),
-    "Department": ("Department", ["name", "department_name", "company"]),
-    "Employee": (
-        "Employee",
-        ["name", "employee_name", "user_id", "company", "branch", "department"],
-    ),
-}
 
 
 # ---------- scheduling ----------
@@ -154,22 +145,26 @@ class SourceSync:
         return self._client
 
     def run(self, full: bool = False) -> int:
-        """Read the leads, add the units they mention, count them again. Returns how many
-        leads the copy holds. A failure is recorded on the source, never raised: the next
-        tick tries again."""
+        """Read the leads and count them again. Returns how many leads the copy holds. A
+        failure is recorded on the source, never raised: the next tick tries again."""
         full = full or not self.source.sync_cursor
         try:
             leads = self.read_leads(full)
-            units_changed = self.sync_units(leads)
-            # a new unit or parent can move any lead: then every lead is counted again
-            only = None if full or units_changed else [lead["name"] for lead in leads]
+            only = None if full else [lead["name"] for lead in leads]
             copied = self.recompute(leads, drop_missing=full, only=only)
         except Exception as e:
             frappe.db.rollback()
             self.record_failure(e)
             return 0
         self.record_success(leads, copied, full)
+        self.read_users()
         return copied
+
+    def read_users(self) -> None:
+        """The site's users and their roles, for access that follows them; a failure here
+        never fails the leads' sync."""
+        read_users(self.source, self.client)
+        frappe.db.commit()  # nosemgrep
 
     def read_leads(self, full: bool) -> list[dict]:
         filters = []
@@ -189,162 +184,6 @@ class SourceSync:
                 return leads
             start += PAGE
 
-    # ---------- the organisation ----------
-
-    def sync_units(self, leads: list[dict]) -> bool:
-        """Add the units the source's ERPNext records and these leads name, top down so a
-        unit's parent exists before it. Never changes what an admin set: only empty fields
-        are filled, and nothing is switched off. Returns whether any unit was added or
-        changed."""
-        found = self.remote_units()
-        for unit_type, units in self.units_on_leads(leads).items():
-            for unit_name, values in units.items():
-                # the source's own record wins; the lead fills only what it leaves empty
-                merged = found[unit_type].setdefault(unit_name, {})
-                merged.pop("only_if_on_leads", None)
-                for key, value in values.items():
-                    if not merged.get(key):
-                        merged[key] = value
-        existing = {
-            (u.unit_type, u.unit_name): u
-            for u in frappe.qb.get_query(
-                UNIT,
-                fields=["name", "unit_type", "unit_name"],
-                filters={"source": self.source.name},
-            ).run(as_dict=True)
-        }
-        changed = False
-        for unit_type in UNIT_TYPES.values():
-            for unit_name, values in found[unit_type].items():
-                changed |= self.save_unit(
-                    unit_type, unit_name, values, existing.get((unit_type, unit_name))
-                )
-        return changed
-
-    def remote_units(self) -> dict[str, dict]:
-        """{unit type: {unit name: values}} from ERPNext's Company, Branch, Department and
-        Employee on the source; a doctype it doesn't have (or may not read) is skipped."""
-        found: dict[str, dict] = {t: {} for t in UNIT_TYPES.values()}
-        by_user = not self.source.employee_field
-        for unit_type, (doctype, fields) in ORG_DOCTYPES.items():
-            try:
-                records = self.client.get_list(doctype, fields)
-            except CRMError:
-                continue
-            for record in records:
-                if unit_type == "Employee":
-                    # leads name a salesperson by their owner's email unless an employee
-                    # field is mapped; only those on leads become units
-                    key = record.get("user_id") if by_user else record.get("name")
-                    if key:
-                        found["Employee"][key] = {
-                            "label": record.get("employee_name"),
-                            "user": record.get("user_id"),
-                            "company": record.get("company"),
-                            "branch": record.get("branch"),
-                            "department": record.get("department"),
-                            "only_if_on_leads": True,
-                        }
-                else:
-                    found[unit_type][record["name"]] = {
-                        "label": record.get("department_name"),
-                        "company": record.get("company"),
-                    }
-        return found
-
-    def units_on_leads(self, leads: list[dict]) -> dict[str, dict]:
-        """{unit type: {unit name: values}} for every org value on these leads, each with
-        the closest parent the lead carries next to it (the first lead seen decides)."""
-        mapping = self.source.field_map()
-        fields = {
-            "company": mapping.get("company_field"),
-            "branch": mapping.get("branch_field"),
-            "department": mapping.get("department_field"),
-            "team": mapping.get("team_field"),
-            "employee": mapping.get("employee_field") or mapping.get("owner_field"),
-        }
-        found: dict[str, dict] = {t: {} for t in UNIT_TYPES.values()}
-        if self.source.company_label:
-            found["Company"][self.source.company_label] = {}
-        for lead in leads:
-            values = {lvl: text(lead.get(f)) if f else "" for lvl, f in fields.items()}
-            for level in ORG_LEVELS:
-                if not values[level]:
-                    continue
-                parents = UNIT_PARENTS[UNIT_TYPES[level]]
-                closest = next((p for p in reversed(parents) if values[p]), None)
-                found[UNIT_TYPES[level]].setdefault(
-                    values[level], {closest: values[closest]} if closest else {}
-                )
-        return found
-
-    def save_unit(self, unit_type: str, unit_name: str, values: dict, existing) -> bool:
-        """Add or fill one unit; returns whether it was saved."""
-        if existing is None and values.get("only_if_on_leads"):
-            return False
-        doc = (
-            frappe.get_doc(UNIT, existing.name)
-            if existing
-            else frappe.get_doc(
-                {
-                    "doctype": UNIT,
-                    "source": self.source.name,
-                    "unit_type": unit_type,
-                    "unit_name": unit_name,
-                    "origin": "Synced",
-                }
-            )
-        )
-        before = doc.as_dict()
-        if values.get("label") and doc.label in (None, "", unit_name):
-            doc.label = values["label"]
-        if (
-            values.get("user")
-            and not doc.user
-            and frappe.db.exists("User", values["user"])
-        ):
-            doc.user = values["user"]
-        for level in UNIT_PARENTS[unit_type]:
-            if (
-                values.get(level)
-                and not doc.get(level)
-                and self.has_unit(level, values[level])
-            ):
-                doc.set(level, values[level])
-        if existing and all(
-            doc.get(k) == before.get(k) for k in ("label", "user", *ORG_LEVELS[:-1])
-        ):
-            return False
-        doc.flags.from_sync = True
-        doc.flags.ignore_permissions = True
-        try:
-            doc.save()
-        except frappe.ValidationError:
-            # parents that disagree: keep what it had, or a new unit's closest parent
-            # alone (the ones above fill from it)
-            frappe.clear_last_message()
-            closest = next(
-                (lvl for lvl in reversed(UNIT_PARENTS[unit_type]) if doc.get(lvl)),
-                None,
-            )
-            for level in UNIT_PARENTS[unit_type]:
-                keep = before.get(level) if existing else None
-                doc.set(level, keep or (doc.get(level) if level == closest else ""))
-            doc.save()
-        return True
-
-    def has_unit(self, level: str, unit_name: str) -> bool:
-        return bool(
-            frappe.db.exists(
-                UNIT,
-                {
-                    "source": self.source.name,
-                    "unit_type": UNIT_TYPES[level],
-                    "unit_name": unit_name,
-                },
-            )
-        )
-
     # ---------- counting ----------
 
     def recompute(
@@ -354,7 +193,7 @@ class SourceSync:
         only: list[str] | None = None,
     ) -> int:
         """Work out the copied leads' columns again from their raw fields (with `fetched`
-        replacing the ones just read) and the units as they are now: every lead, or with
+        replacing the ones just read): every lead, or with
         `only` just those. Only rows that change are written. With `drop_missing`, the
         copies of leads not in `fetched` go. Returns how many leads the copy holds."""
         filters = {"source": self.source.name}
@@ -415,39 +254,32 @@ class SourceSync:
         if first:
             # once per outage, so a site that is down doesn't fill the Error Log
             frappe.log_error(
-                title=_("CRM dashboard sync failed: {0}").format(self.source.name)
+                title=_("ERP site sync failed: {0}").format(self.source.name)
             )
         # the failure must stay visible in Settings although the job's work rolled back
         frappe.db.commit()  # nosemgrep
 
 
 class RowBuilder:
-    """Turns one lead's raw fields into the columns the dashboards count by."""
+    """Turns one lead's raw fields into the columns the division overview counts by."""
 
     def __init__(self, source):
         self.source = source
         self.fields = source.field_map()
         self.categories = source.categories()
         self.rate = flt(source.exchange_rate) or 1
-        self.units = {
-            (u.unit_type, u.unit_name): u
-            for u in frappe.qb.get_query(
-                UNIT,
-                fields=["unit_type", "unit_name", "is_active", *ORG_LEVELS[:-1]],
-                filters={"source": source.name},
-            ).run(as_dict=True)
-        }
 
     def build(self, name: str, raw: dict) -> dict:
         owner = self.value(raw, "owner_field")
         dims = {
-            "company": self.value(raw, "company_field"),
+            # leads with no company go under the source's own
+            "company": self.value(raw, "company_field")
+            or (self.source.company_label or ""),
             "branch": self.value(raw, "branch_field"),
             "department": self.value(raw, "department_field"),
             "team": self.value(raw, "team_field"),
             "employee": self.value(raw, "employee_field") or owner,
         }
-        self.derive(dims)
         status = self.value(raw, "status_field")
         category = self.categories.get(
             (dims["company"], status)
@@ -463,7 +295,6 @@ class RowBuilder:
         return {
             "source": self.source.name,
             "remote_name": name,
-            "excluded": int(self.has_inactive_unit(dims)),
             **dims,
             "lead_owner": owner,
             "status": status,
@@ -480,34 +311,6 @@ class RowBuilder:
             else None,
             "raw": json.dumps(raw, sort_keys=True, default=str),
         }
-
-    def derive(self, dims: dict) -> None:
-        """Fill the levels the lead doesn't carry from the units below them, closest first:
-        an employee's team, then that team's department, its branch, its company. Leads with
-        no company at all go under the source's company."""
-        for level in reversed(ORG_LEVELS):
-            unit = (
-                self.units.get((UNIT_TYPES[level], dims[level]))
-                if dims[level]
-                else None
-            )
-            if not unit:
-                continue
-            for upper in UNIT_PARENTS[UNIT_TYPES[level]]:
-                if not dims[upper] and unit.get(upper):
-                    dims[upper] = unit[upper]
-        dims["company"] = dims["company"] or (self.source.company_label or "")
-
-    def has_inactive_unit(self, dims: dict) -> bool:
-        for level in ORG_LEVELS:
-            unit = (
-                self.units.get((UNIT_TYPES[level], dims[level]))
-                if dims[level]
-                else None
-            )
-            if unit and not unit.is_active:
-                return True
-        return False
 
     def value(self, raw: dict, target: str) -> str:
         field = self.fields.get(target)

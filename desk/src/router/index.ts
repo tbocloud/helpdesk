@@ -201,20 +201,20 @@ const portalRoutes = [
     component: () => import("@/pages/leads/Proposal.vue"),
     props: true,
   },
-  // configurable lead reporting across companies (docs/crm-dashboard.md)
+  // the central and per-division overview and reports (docs/divisions.md)
   {
-    path: "/crm-dashboards/:dashboardId?",
-    name: "CrmDashboard",
-    component: () => import("@/pages/crm-dashboard/CrmDashboard.vue"),
-    // admins too before the first dashboard exists, to see the page's set-up prompt
-    beforeEnter: () => {
-      const auth = useAuthStore();
-      return (
-        auth.canViewCrmDashboards ||
-        auth.isAdmin ||
-        auth.isManager || { name: "Home" }
-      );
-    },
+    path: "/business-overview",
+    name: "DivisionOverview",
+    component: () => import("@/pages/divisions/DivisionOverview.vue"),
+    beforeEnter: () =>
+      useAuthStore().canViewDivisionOverview || { name: "Home" },
+  },
+  {
+    path: "/division-reports",
+    name: "DivisionReports",
+    component: () => import("@/pages/divisions/DivisionReports.vue"),
+    beforeEnter: () =>
+      useAuthStore().canViewDivisionOverview || { name: "Home" },
   },
   // the Lead Bank: any active agent adds leads by photo and sees their own (docs/lead-bank.md)
   {

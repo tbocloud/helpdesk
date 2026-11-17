@@ -92,3 +92,4 @@ helpdesk.patches.v16_0_2.mend_pasted_malayalam
 helpdesk.patches.v16_0_2.seed_signoff_mail_templates
 helpdesk.patches.v16_0_2.signoff_pdf_statuses
 helpdesk.patches.v16_0_2.signoff_stage_templates
+helpdesk.patches.v16_0_2.remove_crm_dashboards

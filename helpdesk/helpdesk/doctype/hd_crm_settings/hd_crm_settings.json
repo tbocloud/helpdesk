@@ -118,14 +118,14 @@
 		{
 			"fieldname": "dashboards_section",
 			"fieldtype": "Section Break",
-			"label": "CRM Dashboards"
+			"label": "Divisions"
 		},
 		{
 			"fieldname": "dashboard_currency",
 			"fieldtype": "Link",
 			"label": "Reporting Currency",
 			"options": "Currency",
-			"description": "CRM dashboards show money in this currency; each data source converts its own amounts with its rate."
+			"description": "The division overview shows money in this currency; each ERP site converts its own amounts with its rate."
 		},
 		{
 			"fieldname": "status_section",

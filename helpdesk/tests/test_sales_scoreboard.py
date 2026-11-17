@@ -4,7 +4,9 @@ from unittest.mock import patch
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
+from helpdesk import divisions
 from helpdesk import team_dashboard as td
+from helpdesk.helpdesk.doctype.hd_crm_source.hd_crm_source import HDCRMSource
 from helpdesk.helpdesk.doctype.hd_department.hd_department import (
     ensure_default_departments,
 )
@@ -14,6 +16,8 @@ from helpdesk.test_utils import (
     call_team_dashboard,
     enable_leads,
     hold_commits,
+    make_crm_source,
+    make_division,
     make_done_task,
     make_project,
     make_tasky_user,
@@ -179,3 +183,72 @@ class TestSalesOnTheScoreboard(FrappeTestCase):
         data = call_team_dashboard("Administrator", TODAY, period="week")
         self.assertEqual(data["sales"]["status"], "off")
         self.assertEqual(self.crm.lead_calls, [])
+
+
+class TestDivisionScoreboard(FrappeTestCase):
+    """A division's sales roles see its people only, with sales from its own ERP site:
+    Joel runs the division, Niya sells in it and Dev isn't in it (docs/divisions.md)."""
+
+    def setUp(self):
+        hold_commits(self)
+        self.addCleanup(frappe.set_user, "Administrator")
+        self.addCleanup(td.clear_cache)
+        ensure_default_departments()
+        make_tasky_user(NIYA, "Niya Thomas")
+        make_tasky_user(JOEL, "Joel Mathew")
+        make_tasky_user(DEV, "Dev Anand")
+        enable_leads()
+        for table in ("HD Division", "HD Division Member"):
+            frappe.db.delete(table)
+        frappe.db.delete("DefaultValue", {"defkey": divisions.ACTIVE_DEFAULT})
+        site, home = FakeCRM(), FakeCRM()
+        site.lead_answers["get_sales_activity"] = {
+            "currency": "INR",
+            "people": [
+                sales_person(NIYA, contacted=10),
+                sales_person(JOEL, contacted=4),
+                sales_person(DEV, contacted=6),
+            ],
+        }
+        home.lead_answers["get_sales_activity"] = {
+            "currency": "INR",
+            "people": [sales_person(NIYA, contacted=99)],
+        }
+        for patcher in (
+            patch(FROM_SETTINGS, return_value=home),
+            patch.object(HDCRMSource, "client", lambda doc: site),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        make_division(
+            "SCB",
+            "Scoreboard Division",
+            members=[
+                (NIYA, divisions.DIVISION_SALES_USER),
+                (JOEL, divisions.DIVISION_ADMIN),
+            ],
+            crm_source=make_crm_source("Scoreboard ERP").name,
+        )
+
+    def board(self, user):
+        data = call_team_dashboard(user, TODAY, period="week")
+        return data, {p["user"]: p for p in data["people"]}
+
+    def test_a_division_admin_sees_their_divisions_people_from_its_site(self):
+        data, people = self.board(JOEL)
+        self.assertEqual(set(people), {NIYA, JOEL})
+        self.assertEqual(people[NIYA]["sales"]["contacted"], 10, "its own site")
+        # the team-wide champions and analysis aren't the division's
+        self.assertIsNone(data["champion"])
+        self.assertIsNone(data["previous_champion"])
+        self.assertEqual(data["history"], [])
+        self.assertIsNone(data["analysis"])
+
+    def test_a_division_sales_user_sees_only_themselves(self):
+        _, people = self.board(NIYA)
+        self.assertEqual(set(people), {NIYA})
+
+    def test_everyone_else_sees_the_whole_team_as_before(self):
+        _, people = self.board(DEV)
+        self.assertEqual(people[NIYA]["sales"]["contacted"], 99, "the CRM connection")
+        self.assertIn(JOEL, people)

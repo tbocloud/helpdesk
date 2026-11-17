@@ -14,7 +14,11 @@ from helpdesk.content_team import (
     is_sales_bd_role,
     is_sales_employee,
 )
-from helpdesk.crm_dashboard.report import open_dashboards
+from helpdesk.divisions import (
+    division_info,
+    division_without_site,
+    leads_closed_by_site,
+)
 from helpdesk.helpdesk.doctype.hd_customer.hd_customer import can_set_ticket_owner
 from helpdesk.integrations.crm.leads import can_use_lead_bank, can_use_leads
 from helpdesk.tasky.permissions import is_project_manager as tasky_is_project_manager
@@ -106,11 +110,11 @@ def get_user():
         # the Tickets list and New ticket: System / Agent Managers and the ERP team
         "can_work_tickets": can_work_tickets(current_user),
         # the Leads page, live from the CRM site (docs/leads.md)
-        "can_use_leads": can_use_leads(current_user),
+        "can_use_leads": can_use_leads(current_user)
+        and not division_without_site(current_user)
+        and not leads_closed_by_site(current_user),
         # Add a lead and My leads: every active agent while Leads is on (docs/lead-bank.md)
         "can_use_lead_bank": can_use_lead_bank(current_user),
-        # CRM dashboards: someone who may open at least one (docs/crm-dashboard.md)
-        "can_view_crm_dashboards": bool(open_dashboards(current_user)),
         # lets the frontend skip call-integration checks when telephony isn't installed
         "telephony_installed": "telephony" in frappe.get_installed_apps(),
         "user_image": user_image,
@@ -122,6 +126,8 @@ def get_user():
         # chime with a new ticket's notice (Settings → Preferences, default off)
         "new_ticket_sound": bool(user.hd_new_ticket_sound),
         "user_teams": user_team_names,
+        # divisions, the active one and what the person may do with them (docs/divisions.md)
+        **division_info(current_user),
         "availability": availability.get("availability"),
         "availability_changed_on": availability.get("availability_changed_on"),
         "persona_captured": persona_captured,

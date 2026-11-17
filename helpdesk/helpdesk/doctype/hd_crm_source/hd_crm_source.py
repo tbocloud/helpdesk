@@ -31,22 +31,23 @@ COUNT_FIELDS = ("company_label", "currency", "exchange_rate", "enabled")
 
 
 class HDCRMSource(Document):
-    """One company's (or one site's) leads for the CRM dashboards: where to read them, which of
-    their fields mean what, how their statuses count, and how often to copy them
-    (docs/crm-dashboard.md)."""
+    """A division's ERP site: where to read its leads, which of their fields mean what, how
+    their statuses count, how often to copy them, and whose roles there count
+    (docs/divisions.md, "ERP sites")."""
 
     def validate(self):
         self.validate_connection()
         self.validate_mapping()
         self.validate_status_map()
         self.validate_money()
+        self.fill_default_role_map()
+        self.validate_role_map()
 
     def on_update(self):
         self.refresh_copies()
+        self.refresh_access()
 
     def on_trash(self):
-        units = self.unit_names()
-        self.validate_unused(units)
         self.delete_copies()
 
     # ---------- validation ----------
@@ -193,6 +194,28 @@ class HDCRMSource(Document):
                 )
             )
 
+    def fill_default_role_map(self):
+        """A source switched to its site's roles starts with ERPNext's sales roles."""
+        from helpdesk.crm_dashboard.erp_roles import DEFAULT_ROLE_MAP
+
+        if self.use_erp_roles and not self.role_map:
+            for role, access in DEFAULT_ROLE_MAP:
+                self.append("role_map", {"erp_role": role, "access": access})
+
+    def validate_role_map(self):
+        seen = set()
+        for row in self.role_map:
+            row.erp_role = (row.erp_role or "").strip()
+            if not row.erp_role:
+                frappe.throw(
+                    _("Row {0}: type the role's name on the site.").format(row.idx)
+                )
+            if row.erp_role in seen:
+                frappe.throw(
+                    _("{0} is mapped twice. Keep one row.").format(row.erp_role)
+                )
+            seen.add(row.erp_role)
+
     def check_remote_fields(self, remote_fields: list[dict]) -> list[str]:
         """What's wrong with the mapping on the source's own lead fields: a field it doesn't
         have, or one of the wrong type. Empty when the mapping fits."""
@@ -233,6 +256,27 @@ class HDCRMSource(Document):
         elif self.changed(*COUNT_FIELDS) or self.status_map_changed():
             enqueue_recompute(self.name)
 
+    def refresh_access(self):
+        """A new role mapping changes who sees what at once; the site isn't read. Switched
+        on before its users were ever read, the source reads them now."""
+        from helpdesk.crm_dashboard.erp_roles import recompute_access
+        from helpdesk.crm_dashboard.sync import enqueue_sync
+
+        if self.changed("use_erp_roles") or self.role_map_changed():
+            recompute_access(self)
+        if self.use_erp_roles and self.enabled and not self.users_read_on:
+            enqueue_sync(self.name)
+
+    def role_map_changed(self) -> bool:
+        before = self.get_doc_before_save()
+        if not before:
+            return False
+        return self.role_rows(before) != self.role_rows(self)
+
+    @staticmethod
+    def role_rows(doc) -> list[tuple]:
+        return sorted((r.erp_role, r.access) for r in doc.role_map)
+
     def changed(self, *fields: str) -> bool:
         before = self.get_doc_before_save()
         if not before:
@@ -249,21 +293,9 @@ class HDCRMSource(Document):
     def status_rows(doc) -> list[tuple]:
         return sorted((r.company or "", r.status, r.category) for r in doc.status_map)
 
-    def unit_names(self) -> list[str]:
-        return frappe.qb.get_query(
-            "HD CRM Org Unit", fields=["name"], filters={"source": self.name}
-        ).run(pluck=True)
-
-    def validate_unused(self, units: list[str]):
-        from helpdesk.helpdesk.doctype.hd_crm_dashboard.hd_crm_dashboard import (
-            HDCRMDashboard,
-        )
-
-        HDCRMDashboard.refuse_if_covering(units, _("A unit of {0}").format(self.name))
-
     def delete_copies(self):
-        frappe.db.delete("HD CRM Org Unit", {"source": self.name})
         frappe.db.delete("HD CRM Report Lead", {"source": self.name})
+        frappe.db.delete("HD CRM Source User", {"source": self.name})
 
     # ---------- used by the sync and the report ----------
 
@@ -285,6 +317,10 @@ class HDCRMSource(Document):
 
     def fields_to_read(self) -> list[str]:
         return sorted({"name", "modified", *self.field_map().values()})
+
+    def role_map_dict(self) -> dict[str, str]:
+        """{role on the site: Manager or Executive}."""
+        return {r.erp_role: r.access for r in self.role_map}
 
     def categories(self) -> dict[tuple[str, str], str]:
         """{(company, status): category}; company "" is every company of the source."""

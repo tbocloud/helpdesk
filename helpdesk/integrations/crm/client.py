@@ -288,6 +288,25 @@ class CRMClient:
                 ).format(role)
             )
 
+    def remove_role(self, email: str, user: dict, role: str):
+        """Take `role` off `user` (as `get_user` read it), keeping their other roles. A Role
+        Profile on the User puts its own roles back on save, so the saved User is checked."""
+        roles = [
+            {"role": row.get("role")}
+            for row in user.get("roles") or []
+            if row.get("role") != role
+        ]
+        data = self.request(
+            "PUT", f"/api/resource/User/{quote(email)}", json={"roles": roles}
+        )
+        saved = (data or {}).get("data") or {}
+        if role in {row.get("role") for row in saved.get("roles") or []}:
+            raise CRMError(
+                _(
+                    "The CRM site kept the {0} role; the user's Role Profile may give it."
+                ).format(role)
+            )
+
     # --- ERPNext on the CRM site, for invoicing (docs/timesheet-invoicing.md) ---
 
     def get_list(self, doctype: str, fields: list[str], filters=None) -> list[dict]:
@@ -354,6 +373,42 @@ class CRMClient:
         """The document, or None when it doesn't exist (404)."""
         data = self.request("GET", f"/api/resource/{quote(doctype)}/{quote(name)}")
         return None if data is None else data.get("data")
+
+    def users_with_roles(self) -> list[dict]:
+        """The site's desk users with their roles, for access that follows the site's
+        roles (docs/divisions.md, "ERP sites"): [{email, full_name, enabled, roles}]."""
+        users = self.get_list(
+            "User",
+            ["name", "full_name", "enabled"],
+            [
+                ["user_type", "=", "System User"],
+                ["name", "not in", ["Administrator", "Guest"]],
+            ],
+        )
+        # a child table is listed through its parent; a GET sends JSON as text
+        rows = (
+            self.call(
+                "frappe.client.get_list",
+                doctype="Has Role",
+                parent="User",
+                fields=json.dumps(["parent", "role"]),
+                filters=json.dumps([["parenttype", "=", "User"]]),
+                limit_page_length=0,
+            )
+            or []
+        )
+        roles: dict[str, list[str]] = {}
+        for row in rows:
+            roles.setdefault(row.get("parent"), []).append(row.get("role"))
+        return [
+            {
+                "email": user["name"],
+                "full_name": user.get("full_name") or "",
+                "enabled": int(user.get("enabled") or 0),
+                "roles": sorted(set(roles.get(user["name"], []))),
+            }
+            for user in users
+        ]
 
     def companies(self) -> list[dict]:
         return self.get_list("Company", ["name", "default_currency"])

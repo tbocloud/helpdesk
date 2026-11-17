@@ -47,7 +47,9 @@ export const SALES_EMPLOYEE_ROUTES = new Set([
   "LeadProposal",
   "LeadNewProposal",
   "AssignLeads",
-  "CrmDashboard",
+  // a Sales Manager of a division (docs/divisions.md)
+  "DivisionOverview",
+  "DivisionReports",
   "TeamDashboard",
   "Notifications",
   "Invalid Page",

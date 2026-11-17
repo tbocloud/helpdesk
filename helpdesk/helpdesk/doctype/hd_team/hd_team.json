@@ -9,6 +9,7 @@
  "field_order": [
   "team_name",
   "assignment_rule",
+  "division",
   "users",
   "column_break_feto",
   "disabled",
@@ -30,6 +31,13 @@
    "label": "Assignment Rule",
    "options": "Assignment Rule",
    "read_only": 1
+  },
+  {
+   "fieldname": "division",
+   "fieldtype": "Link",
+   "label": "Division",
+   "options": "HD Division",
+   "search_index": 1
   },
   {
     "fieldname": "users",
@@ -59,7 +67,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-05-11 13:28:58.204342",
+ "modified": "2026-11-16 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Helpdesk",
  "name": "HD Team",
