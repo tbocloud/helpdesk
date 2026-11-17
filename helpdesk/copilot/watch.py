@@ -32,7 +32,6 @@ from frappe.utils import (
     today,
 )
 
-from helpdesk import ticket_assignment
 from helpdesk.automation import automation_user
 from helpdesk.copilot import known_issues
 from helpdesk.copilot import settings as copilot_settings
@@ -347,7 +346,7 @@ def capped(card, rules: dict) -> bool:
 
 
 def note_cap(card):
-    """Past a cap: the error keeps being counted; the Agent Managers hear it once a day."""
+    """Past a cap: the error keeps being counted; the Leaders hear it once a day."""
     from helpdesk.copilot import approvals, assistant
 
     key = frappe.cache.make_key(f"copilot:watch-capped:{today()}")
@@ -356,7 +355,7 @@ def note_cap(card):
     text = _(
         "The error watch reached its daily limit of tickets (at {0}); new errors are counted and wait for tomorrow."
     ).format(card.site_url or card.name)
-    for person in approvals._managers():
+    for person in approvals.leaders():
         try:
             assistant.send(person, assistant.text_card(text, "warning"))
         except Exception:
@@ -517,15 +516,16 @@ def _to_a_senior(ticket: str, run):
 
 
 def tell(card, ticket, run, kind: str):
-    """The customer's developer (else the Agent Managers) hears it in the Copilot chat; they then
-    hear the diagnosis there too. Never stops the watch."""
+    """The customer's developer working today (Copilot People) hears it in the Copilot chat, else
+    a Leader; they then hear the diagnosis there too. Never stops the watch."""
     from helpdesk.copilot import approvals, assistant
+    from helpdesk.copilot import people as copilot_people
 
-    developer = ticket_assignment.developer_of(card.customer_name)
+    developer = copilot_people.developer(card.customer_name)
     people = (
         [developer]
         if developer and assistant.is_agent(developer)
-        else approvals._managers()
+        else approvals.leaders()
     )
     reply = assistant.card(
         ticket.subject,

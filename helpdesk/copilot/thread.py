@@ -209,8 +209,11 @@ def on_ticket(ticket: str) -> list[str]:
         frappe.parse_json(frappe.db.get_value("HD Ticket", ticket, "_assign") or "[]")
         or []
     )
-    developer = ticket_assignment.developer_of(
-        frappe.db.get_value("HD Ticket", ticket, "customer")
+    from helpdesk.copilot import people as copilot_people
+
+    # the same chain as everything else (Copilot People; Phase 23, A22)
+    developer = copilot_people.developer(
+        frappe.db.get_value("HD Ticket", ticket, "customer"), ticket
     )
     if developer:
         people.add(developer)
@@ -338,8 +341,11 @@ def may_write(user: str, ticket: str) -> bool:
     from helpdesk.copilot import people as copilot_people
 
     customer = frappe.db.get_value("HD Ticket", str(ticket), "customer")
-    # Phase 22: the project coordinators set for the customer (else the common ones)
-    return user in copilot_people.of_customer(customer)["coordinators"]
+    # Copilot People: the customer's project coordinators (else the common ones) and the Leaders
+    return (
+        user in copilot_people.coordinators(customer)
+        or user in copilot_people.leaders()
+    )
 
 
 def people(ticket: str) -> list[dict]:
@@ -352,7 +358,7 @@ def people(ticket: str) -> list[dict]:
 
     found += [
         (user, "coordinator")
-        for user in copilot_people.of_customer(customer)["coordinators"]
+        for user in copilot_people.coordinators(customer)
         if user not in taken
     ]
     return [
@@ -552,7 +558,14 @@ def _now(ticket: str, user: str) -> dict:
     if fix.get("can_decide"):
         primary += [
             b(_("Approve"), "approve", "positive", approval=approval.get("name")),
-            b(_("Reject"), "reject", "destructive", approval=approval.get("name")),
+            # the strip has no box of its own: the button asks for the reason (Phase 23, A8)
+            b(
+                _("Reject…"),
+                "reject",
+                "destructive",
+                approval=approval.get("name"),
+                needs="reason",
+            ),
         ]
     if fix.get("can_request_fix"):
         primary.append(b(_("Let Copilot fix it"), "fix", "positive", run=info["run"]))
@@ -692,7 +705,12 @@ def _start(user, ticket, data, inputs):
 
 def _cancel(user, ticket, data, inputs):
     from helpdesk.api import copilot as api
+    from helpdesk.copilot import runs
 
+    run = runs.active_run(str(ticket))
+    if not run or run.state not in runs.CANCELLABLE:
+        # nothing was running: say so instead of "stopped" (Phase 23, A26)
+        return assistant.text_card(_("Copilot is not working on this ticket now."))
     api.cancel_run(ticket)
     return assistant.text_card(_("Copilot stopped on this ticket."))
 
@@ -719,7 +737,9 @@ def _to_developer(user, ticket, data, inputs):
     from helpdesk.copilot import customer
 
     run = customer.latest_run(ticket)
-    developer = ticket_assignment.developer_of(run.customer) if run else None
+    from helpdesk.copilot import people as copilot_people
+
+    developer = copilot_people.developer(run.customer, ticket) if run else None
     if run:
         from helpdesk.copilot import runs
 
@@ -1181,11 +1201,7 @@ def on_fix_ready(approval, run):
     change = payload.get("change") or {}
     if change.get("tested_on"):
         lines.append(_("Tested on {0}.").format(change["tested_on"]))
-    who = (
-        get_fullname(approval.assigned_to)
-        if approval.assigned_to
-        else _("the managers")
-    )
+    who = get_fullname(approval.assigned_to) if approval.assigned_to else _("a leader")
     lines.append(
         _("It waits for {0}'s approval; once approved it deploys by itself.").format(
             who
@@ -1336,10 +1352,10 @@ def on_correction_ready(approval, run, records: int):
 
 
 def on_hand_over(ticket: str, line: str = ""):
-    """The customer asked for a person in the chat. Phase 22: the customer's project coordinator
-    working today joins the ticket (the developer stays on it), and the coordinators and the people
-    on the ticket are told at once, in Teams and TBO Support. Copilot keeps quiet to the customer
-    until a person replies."""
+    """The customer asked for a person in the chat: the customer's project coordinator working
+    today joins the ticket (the developer stays on it), and the coordinators and the people on the
+    ticket get one card at once, in Teams or TBO Support (else a Leader). Copilot keeps quiet to the
+    customer until a person replies."""
     from helpdesk.copilot import approvals
     from helpdesk.copilot import people as copilot_people
     from helpdesk.work_reminders import notify_users
@@ -1358,18 +1374,21 @@ def on_hand_over(ticket: str, line: str = ""):
                 "{0} asked to talk to a person; project coordinator {1} joined the ticket."
             ).format(_("The customer"), get_fullname(lead)),
         )
-    # nothing set at all: the Agent Managers, as before Phase 22, so the request never goes nowhere
+    # no coordinator working: a Leader (with no Leader set, the Agent Managers), so the request
+    # never goes nowhere
     people = list(dict.fromkeys(on_ticket(ticket) + coordinators)) or [
         m
-        for m in (copilot_people.need_a_person(customer) or approvals._managers())
+        for m in (copilot_people.need_a_person(customer) or approvals.leaders())
         if assistant.is_agent(m)
     ]
+    # the bell only: the card below is their one message (Phase 23, A18)
     notify_users(
         coordinators,
         "HD Ticket",
         str(ticket),
         _("The customer asked to talk to a person on ticket {0}").format(ticket),
         once=False,
+        deliver=False,
     )
     return post(
         ticket,

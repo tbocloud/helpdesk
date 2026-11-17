@@ -249,12 +249,12 @@ def _fix_card(run) -> dict | None:
         "can_deploy": run.state == "Merged"
         and not deploy.open_request(run)
         and press.configured()
-        and deploy.may_deploy(user),
+        and deploy.may_deploy(user, run),
         "can_deploy_now": deploy.may_deploy_now(user),
         # the exact sites Deploy updates, shown before it is pressed
         "deploy_sites": deploy.card_sites(run)[1] if run.state == "Merged" else [],
         "press_backups": not copilot_settings.get_settings().press_skip_backups,
-        "can_undo": fixes.can_undo(run) and deploy.may_deploy(user),
+        "can_undo": fixes.can_undo(run) and deploy.may_deploy(user, run),
         "reverts": run.get("reverts"),
         "revert_run": (fixes.revert_run_of(run) or frappe._dict()).get("name"),
         "copilot": {
@@ -269,7 +269,7 @@ def _fix_card(run) -> dict | None:
         "change_set": changes.card(frappe.get_doc(changes.CHANGE_SET, run.change_set))
         if run.get("change_set")
         else None,
-        "can_undo_change": changes.can_undo(run) and deploy.may_deploy(user),
+        "can_undo_change": changes.can_undo(run) and deploy.may_deploy(user, run),
     }
 
 
@@ -425,7 +425,9 @@ def undo_fix(ticket: str | int, reason: str) -> dict:
     frappe.has_permission("HD Ticket", "write", str(ticket), throw=True)
     if not deploy.may_deploy(frappe.session.user):
         frappe.throw(
-            _("Only the Copilot approvers and the Agent Managers may undo fixes."),
+            _(
+                "Only the people Copilot People puts on fixes, the Seniors, the Leaders and the Agent Managers may undo fixes."
+            ),
             frappe.PermissionError,
         )
     fixes.undo(_run_of(ticket), frappe.session.user, reason)
@@ -456,7 +458,7 @@ def undo_change(ticket: str | int, reason: str) -> dict:
     if not deploy.may_deploy(frappe.session.user):
         frappe.throw(
             _(
-                "Only the Copilot approvers and the Agent Managers may undo corrections."
+                "Only the people Copilot People puts on fixes, the Seniors, the Leaders and the Agent Managers may undo corrections."
             ),
             frappe.PermissionError,
         )
@@ -679,10 +681,15 @@ def get_release(release: str) -> dict:
         if doc.status == "Waiting for approval"
         else None,
         "may_deploy_now": deploy.may_deploy_now(user),
-        "may_override_ci": doc.status == "Waiting for CI"
+        # a staging check that failed or never ran is let through or cancelled too (Phase 23, A4)
+        "may_override_ci": (
+            doc.status == "Waiting for CI" or releases.stuck_in_staging(doc)
+        )
         and user in approvals.seniors(),
-        "may_cancel": doc.status
-        in ("Waiting for CI", "Waiting for approval") + deploy.WAITING
+        "may_cancel": (
+            doc.status in ("Waiting for CI", "Waiting for approval") + deploy.WAITING
+            or releases.stuck_in_staging(doc)
+        )
         and deploy.may_deploy(user),
     }
 
@@ -728,13 +735,18 @@ def cancel_release(release: str, reason: str = "") -> dict:
 
     doc = _release(release)
     user = frappe.session.user
-    if doc.status not in ("Waiting for CI", "Waiting for approval") + deploy.WAITING:
+    if doc.status not in (
+        "Waiting for CI",
+        "Waiting for approval",
+    ) + deploy.WAITING and not releases.stuck_in_staging(doc):
         frappe.throw(
             _("Only a release that has not started deploying can be cancelled.")
         )
     if not deploy.may_deploy(user):
         frappe.throw(
-            _("Only the Copilot approvers and the Agent Managers may cancel releases."),
+            _(
+                "Only the Fix Approvers, the Seniors, the Leaders and the Agent Managers may cancel releases."
+            ),
             frappe.PermissionError,
         )
     doc.db_set({"status": "Cancelled", "finished_at": now_datetime()})

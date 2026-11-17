@@ -76,24 +76,24 @@ def open_request(kind: str, digest: str, user: str):
     return frappe.get_doc(ACTION, name) if name else None
 
 
-def deciders(risk: str) -> list[str]:
-    """Who may approve an action of this risk. Phase 22: the infrastructure people when any are
-    set (a senior action: the seniors among them); else the Copilot approvers, as before."""
+def _role(risk: str) -> str:
     from helpdesk.copilot import people
 
-    if people.infra_people():
-        return people.infra_seniors() if risk == "senior" else people.infra_people()
-    return (
-        approvals.seniors()
-        if risk == "senior"
-        else list(dict.fromkeys(approvals.approvers() + approvals.seniors()))
-    )
+    return people.INFRA_SENIOR if risk == "senior" else people.INFRA
+
+
+def deciders(risk: str, exclude: set[str] | None = None) -> list[str]:
+    """Who approves an action of this risk (Phase 23, Copilot People): the Infrastructure people
+    working today (a senior action: Infrastructure Senior), else the next in the chain
+    (Infrastructure Senior, then a Leader); with nobody working, whoever is set."""
+    from helpdesk.copilot import people
+
+    return people.resolve(_role(risk), exclude=exclude or ())["users"]
 
 
 def pick_approver(risk: str, exclude: set[str] | None = None) -> str | None:
-    """A senior for a senior action, else the least loaded approver; never the requester."""
-    allowed = deciders(risk)
-    candidates = [user for user in allowed if user not in (exclude or set())]
+    """The least loaded of `deciders`; never the requester."""
+    candidates = deciders(risk, exclude)
     if not candidates:
         return None
 
@@ -163,7 +163,8 @@ def request(
             _("A senior {0} action waits for approval: {1}").format(kind, doc.title),
             [_("Asked by {0}.").format(frappe.utils.get_fullname(user))],
             ticket=ticket,
-            link=frappe.utils.get_url(f"/app/hds-action-approval/{doc.name}"),
+            # a page every agent may open (Phase 23, A20)
+            link=None if ticket else frappe.utils.get_url("/helpdesk/copilot"),
             skip=(approver,),
         )
     return doc
@@ -173,31 +174,19 @@ def request(
 
 
 def may_decide(approval, user: str) -> str | None:
-    """Why `user` may not decide `approval`, or None when they may."""
+    """Why `user` may not decide `approval`, or None when they may: everyone the chain may put on
+    it (Infrastructure, Infrastructure Senior, the Leaders), never the requester."""
     from helpdesk.copilot import people
 
     if user == approval.requested_by:
         return _("You asked for this action, so someone else must approve it.")
-    if people.infra_people():
-        # Phase 22: the infrastructure people set in HDS Copilot Settings decide
-        if approval.risk == "senior" and user not in people.infra_seniors():
-            return _(
-                "This action is a heavy one; only a senior among the infrastructure people may approve it."
-            )
-        if user not in people.infra_people():
-            return _("Only the infrastructure people may decide actions.")
+    if user in people.in_chain(_role(approval.risk)):
         return None
-    if approval.risk == "senior" and user not in approvals.seniors():
-        return _("This action is a heavy one; only a senior approver may approve it.")
-    if (
-        user not in approvals.approvers()
-        and user not in approvals.seniors()
-        and user not in approvals.managers()
-    ):
+    if approval.risk == "senior":
         return _(
-            "Only the Copilot approvers and the Agent Managers may decide actions."
+            "This action is a heavy one; only Infrastructure Senior people or a Leader may approve it."
         )
-    return None
+    return _("Only the Infrastructure people or a Leader may decide actions.")
 
 
 def decide(name: str, user: str, approve: bool, note: str = "", via: str = "Web"):
@@ -316,7 +305,7 @@ def remind_and_escalate(now=None):
                     _("An action has waited {0} minutes for approval: {1}").format(
                         int(waited), approval.title
                     ),
-                    also=approvals.managers(),
+                    also=approvals.leaders(),
                     escalate=True,
                 )
             elif waited >= REMIND_MINUTES and not approval.reminded_at:
@@ -451,15 +440,16 @@ def send_card(person: str, approval) -> str | None:
 def announce(
     approval, subject: str, also: list[str] | None = None, escalate: bool = False
 ):
-    """The approver (or, with none, the Agent Managers) gets the card with its buttons: in Teams
-    when the bot can reach them, else in the TBO Support panel plus the usual chat message or email."""
+    """The approver (or, with none, the Infrastructure people's chain) gets the card with its
+    buttons: in Teams when the bot can reach them, else in the TBO Support panel plus the usual chat
+    message or email."""
     from helpdesk.copilot import people as copilot_people
     from helpdesk.work_reminders import helpdesk_path, new_notification, notify_users
 
     people = (
         [approval.assigned_to]
         if approval.assigned_to
-        else (copilot_people.infra_people() or approvals.managers())
+        else copilot_people.resolve(copilot_people.INFRA)["users"]
     )
     people = list(dict.fromkeys(people + (also or [])))
     doctype, name = (

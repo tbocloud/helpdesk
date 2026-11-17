@@ -483,13 +483,18 @@ def gate(release):
     start_staging(release)
 
 
-def override_ci(release, user: str, reason: str):
-    """A senior lets a release through red or missing CI, or a staging check that failed or
-    never ran, to its approval; the reason is kept and the approval needs a senior."""
-    staging = release.status == "Staging" and release.staging_status in (
+def stuck_in_staging(release) -> bool:
+    """Its staging check failed or never ran: a senior lets it through, or someone cancels it."""
+    return release.status == "Staging" and release.staging_status in (
         "Failed",
         "Not run",
     )
+
+
+def override_ci(release, user: str, reason: str):
+    """A senior lets a release through red or missing CI, or a staging check that failed or
+    never ran, to its approval; the reason is kept and the approval needs a senior."""
+    staging = stuck_in_staging(release)
     if release.status != "Waiting for CI" and not staging:
         frappe.throw(
             _(
@@ -498,7 +503,9 @@ def override_ci(release, user: str, reason: str):
         )
     if user not in approvals.seniors():
         frappe.throw(
-            _("Only a senior approver may let a release through without its checks."),
+            _(
+                "Only a Senior (or a Leader, with no Senior set) may let a release through without its checks."
+            ),
             frappe.PermissionError,
         )
     if not (reason or "").strip():
@@ -555,16 +562,45 @@ def approval_hash(release) -> str:
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 
 
-def pick_approver(needs_senior: bool, excluded: set[str]) -> str | None:
-    """The least loaded approver who wrote none of it; a senior when one is needed."""
-    allowed = (
-        approvals.seniors()
-        if needs_senior
-        else list(dict.fromkeys(approvals.approvers() + approvals.seniors()))
+def _steps():
+    from helpdesk.copilot import people
+
+    return (
+        (people.FIX_APPROVER, "common"),
+        (people.SENIOR, "common"),
+        (people.LEADER, "common"),
     )
-    candidates = [user for user in allowed if user not in excluded] or [
-        user for user in approvals.managers() if user not in excluded
-    ]
+
+
+def deciders() -> set[str]:
+    """Everyone who may decide a release: the Fix Approvers who stand in for every customer, the
+    Seniors, the Leaders (Copilot People) and the Agent Managers."""
+    from helpdesk.copilot import people
+
+    return (
+        {
+            u
+            for group in people.chain_groups(people.FIX_APPROVER, steps=_steps())
+            for u in group["users"]
+        }
+        | set(approvals.seniors())
+        | set(approvals.managers())
+    )
+
+
+def pick_approver(needs_senior: bool, excluded: set[str]) -> str | None:
+    """Who approves a release: the first of the common Fix Approvers, the Seniors and the Leaders
+    with someone working today who wrote none of it (a senior when one is needed), the least
+    loaded of them; with nobody working, whoever may decide it."""
+    from helpdesk.copilot import people
+
+    found = people.resolve(
+        people.FIX_APPROVER,
+        exclude=excluded,
+        allowed=set(approvals.seniors()) if needs_senior else None,
+        steps=_steps(),
+    )
+    candidates = found["users"]
     if not candidates:
         return None
 
@@ -604,7 +640,7 @@ def ask_approval(release):
     if not approver:
         tell(
             release,
-            approvals.managers(),
+            approvals.leaders(),
             _(
                 "A release of {0} waits for approval, but no approver is free to take it."
             ).format(release.repository),
@@ -623,11 +659,9 @@ def may_decide(release, user: str) -> str | None:
                 release.risk_reasons or _("a push, or a bench other customers share")
             ).splitlines()[0]
         )
-    if user not in set(approvals.approvers()) | set(approvals.seniors()) | set(
-        approvals.managers()
-    ):
+    if user not in deciders():
         return _(
-            "Only the Copilot approvers and the Agent Managers may decide releases."
+            "Only the Fix Approvers for every customer, the Seniors, the Leaders and the Agent Managers may decide releases."
         )
     return None
 
@@ -689,7 +723,7 @@ def decide(
     if now and not deploy.may_deploy_now(user):
         frappe.throw(
             _(
-                "Only senior approvers and Agent Managers may deploy now; approve it for tonight."
+                "Only the Seniors, the Leaders and the Agent Managers may deploy now; approve it for tonight."
             ),
             frappe.PermissionError,
         )
@@ -720,24 +754,50 @@ def decide(
 
 
 def remind():
-    """Approvals waiting longer than the reminder hours are sent again, at most once in that time."""
+    """Approvals waiting longer than the reminder hours are sent again, at most once in that time.
+    Each time the approver is picked again (Phase 23, A5): one who is no longer working today, or
+    a release nobody could take, goes to the next person who may decide it."""
+    from helpdesk.copilot import people
+
     hours = copilot_settings.get_settings().get("approval_reminder_hours") or 4
     due = add_to_date(now_datetime(), hours=-hours)
     for release in frappe.get_all(
         DEPLOY,
-        filters={
-            "status": "Waiting for approval",
-            "assigned_to": ["is", "set"],
-            "assigned_at": ["<", due],
-        },
-        fields=["name", "assigned_to", "reminded_at"],
+        filters={"status": "Waiting for approval", "assigned_at": ["<", due]},
+        fields=["name", "assigned_to", "reminded_at", "needs_senior"],
     ):
         if release.reminded_at and get_datetime(release.reminded_at) > due:
             continue
+        doc = frappe.get_doc(DEPLOY, release.name)
+        approver = release.assigned_to
+        if not approver or not people.working([approver]):
+            approver = (
+                pick_approver(bool(release.needs_senior), authors(doc)) or approver
+            )
         frappe.db.set_value(
-            DEPLOY, release.name, "reminded_at", now_datetime(), update_modified=False
+            DEPLOY,
+            release.name,
+            {
+                "reminded_at": now_datetime(),
+                **(
+                    {"assigned_to": approver, "assigned_at": now_datetime()}
+                    if approver != release.assigned_to
+                    else {}
+                ),
+            },
+            update_modified=False,
         )
-        announce(frappe.get_doc(DEPLOY, release.name), release.assigned_to)
+        if approver:
+            announce(frappe.get_doc(DEPLOY, release.name), approver)
+        else:
+            tell(
+                doc,
+                approvals.leaders(),
+                _(
+                    "A release of {0} still waits for approval, and nobody who may decide it is set."
+                ).format(doc.repository),
+            )
+        frappe.db.commit()  # one release at a time - nosemgrep
 
 
 # --- telling people ------------------------------------------------------------------
@@ -751,26 +811,38 @@ def tell(release, people, message: str):
         notify_users(people, DEPLOY, release.name, message, once=False)
 
 
-def announce(release, person: str):
-    """The release's card to the approver (Teams, else the Copilot panel), and the usual notice."""
-    from helpdesk.copilot import assistant
+def announce(release, person: str, ask: tuple[str, str] | None = None):
+    """The release's card to the approver (Teams, else the Copilot panel), and one notice. `ask`:
+    (what someone asked, their note), e.g. a developer asking for their task to go live: it heads
+    the card and is the notice's subject."""
 
-    tell(
-        release,
-        [person],
-        _("A release of {0} {1} waits for your approval").format(
+    subject = (
+        ask[0]
+        if ask
+        else _("A release of {0} {1} waits for your approval").format(
             release.repository, release.branch
-        ),
+        )
     )
+    from helpdesk.copilot import people
+
     try:
-        assistant.send(person, release_card(release), release=release.name)
+        # one message: the card, and a notification that adds no second chat message or email
+        people.deliver(
+            [person],
+            release_card(release, viewer=person, ask=ask),
+            subject,
+            doctype=DEPLOY,
+            name=release.name,
+            release=release.name,
+        )
     except Exception:
         frappe.log_error(title=f"Copilot could not send the card of {release.name}")
 
 
-def release_card(release) -> dict:
-    """A release waiting for approval: what changed, CI, risk, the sites; Approve, Deploy now, Reject."""
-    from helpdesk.copilot import assistant
+def release_card(release, viewer: str | None = None, ask=None) -> dict:
+    """A release waiting for approval: what changed, CI, risk, the sites; Approve, Deploy now
+    (only for someone who may deploy now), Reject. `ask`: (a request, its note) shown first."""
+    from helpdesk.copilot import assistant, deploy
 
     if isinstance(release, str):
         release = frappe.get_doc(DEPLOY, release)
@@ -790,8 +862,20 @@ def release_card(release) -> dict:
     )
     if pushes:
         lines.append(_("{0} commits pushed without a pull request").format(len(pushes)))
+    if ask:
+        lines = [line for line in ask if line] + lines
     customers = sorted({row.customer for row in release.sites if row.customer})
     data = {"release": release.name, "hash": release.approval_hash}
+    actions = [
+        assistant.button(
+            _("Approve for tonight"), "release_approve", "positive", **data
+        )
+    ]
+    if viewer is None or deploy.may_deploy_now(viewer):
+        actions.append(assistant.button(_("Deploy now"), "release_now", **data))
+    actions.append(
+        assistant.button(_("Reject"), "release_reject", "destructive", **data)
+    )
     return assistant.card(
         _("Release of {0} ({1}) waits for approval").format(
             release.repository, ", ".join(customers) or release.release_group
@@ -817,19 +901,24 @@ def release_card(release) -> dict:
                 f"https://github.com/{release.repository}/compare/"
                 f"{release.apps[0].from_commit[:12]}...{release.apps[0].to_commit[:12]}",
             ),
-            (_("Open the release"), get_url(f"/app/hds-deploy-request/{release.name}")),
+            release_link(release, viewer),
         ],
-        actions=[
-            assistant.button(
-                _("Approve for tonight"), "release_approve", "positive", **data
-            ),
-            assistant.button(_("Deploy now"), "release_now", **data),
-            assistant.button(_("Reject"), "release_reject", "destructive", **data),
-        ],
+        actions=actions,
         inputs=[
             {"id": "reason", "label": _("Reason (needed to reject)"), "multiline": True}
         ],
     )
+
+
+def release_link(release, viewer: str | None = None) -> tuple[str, str]:
+    """Where a card's link goes: the release's form for someone who may open it, else the Copilot
+    board, which every agent may open (Phase 23, A20)."""
+    if viewer and frappe.has_permission(DEPLOY, "read", user=viewer):
+        return (
+            _("Open the release"),
+            get_url(f"/app/hds-deploy-request/{release.name}"),
+        )
+    return (_("Open the Copilot board"), get_url("/helpdesk/copilot"))
 
 
 def decided_card(release) -> dict:
@@ -848,9 +937,7 @@ def decided_card(release) -> dict:
     return assistant.card(
         _("Release of {0}: {1}").format(release.repository, _(release.status).lower()),
         lines,
-        links=[
-            (_("Open the release"), get_url(f"/app/hds-deploy-request/{release.name}"))
-        ],
+        links=[release_link(release)],
         tone="good" if release.status in ("Scheduled", "Succeeded") else "default",
     )
 
@@ -987,7 +1074,7 @@ def failed(release, reason: str, links: str = "", after_check: bool = False):
     from helpdesk.work_reminders import notify_users
 
     reverts = undo(release) if after_check else []
-    people = list(authors(release)) + [release.decided_by] + approvals.managers()
+    people = list(authors(release)) + [release.decided_by] + approvals.leaders()
     notify_users(
         [p for p in dict.fromkeys(people) if p],
         DEPLOY,

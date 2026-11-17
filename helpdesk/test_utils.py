@@ -4359,18 +4359,82 @@ def get_recurring_tasks_created(recurring_task: str) -> list[dict]:
     )
 
 
+# the Phase 22 tables a test may still pass to make_copilot_settings, and the People roles each
+# one stands for
+OLD_PEOPLE = {
+    "approvers": ("Senior", "Fix Approver"),
+    "project_coordinators": ("Project Coordinator",),
+    "risk_alert_people": ("Risk Alerts",),
+    "deploy_notice_people": ("Deploy Notices",),
+    "infrastructure_people": ("Infrastructure", "Infrastructure Senior"),
+}
+
+
+def set_customer_people(
+    customer: str,
+    developers=(),
+    fix_approvers=(),
+    coordinators=(),
+    rows=(),
+):
+    """A customer's Copilot People: `developers` in order (Main, then Fallback 1, 2, 3), the same
+    for `fix_approvers`, `coordinators` all Main, plus any `rows` as given."""
+    from helpdesk.copilot import people
+
+    doc = frappe.get_doc("HD Customer", customer)
+    doc.set(people.CUSTOMER_TABLE, [])
+    for role, users, ordered in (
+        (people.DEVELOPER, developers, True),
+        (people.FIX_APPROVER, fix_approvers, True),
+        (people.COORDINATOR, coordinators, False),
+    ):
+        for i, user in enumerate(users):
+            doc.append(
+                people.CUSTOMER_TABLE,
+                {
+                    "role": role,
+                    "person": user,
+                    "level": people.LEVELS[min(i, 3)] if ordered else people.LEVELS[0],
+                },
+            )
+    for row in rows:
+        doc.append(people.CUSTOMER_TABLE, {"level": people.LEVELS[0], **row})
+    doc.flags.ignore_links = True
+    doc.save(ignore_permissions=True)
+    return doc
+
+
 def make_copilot_settings(templates: dict[str, str] | None = None, **values):
     """Saves HDS Copilot Settings with `values`; `templates` maps a stage to its message text.
 
     Shadow mode is off and customers default to the Correct level unless asked for, so a
     test sees what a live customer would.
     """
+    from helpdesk.copilot import people
+
     values.setdefault("shadow_mode", 0)
     values.setdefault("default_copilot_level", "Correct")
     # before Phase 11 a person asked for every fix and pressed every deploy; tests of that flow keep it
     values.setdefault("ask_before_every_fix", 1)
     values.setdefault("deploy_needs_a_press", 1)
+    # tests written before Phase 23 set the Phase 22 tables; they become rows of People, the one
+    # table the code reads (a test may also pass `copilot_people` rows itself)
+    old = {field: values.pop(field) for field in OLD_PEOPLE if field in values}
     settings = frappe.get_single("HDS Copilot Settings")
+    if old:
+        replaced = {role for field in old for role in OLD_PEOPLE[field]}
+        settings.set(
+            people.TABLE,
+            [
+                row.as_dict()
+                for row in settings.get(people.TABLE) or []
+                if row.role not in replaced
+            ],
+        )
+        for row in people.rows_from_old_settings(
+            {field: [frappe._dict(r) for r in rows] for field, rows in old.items()}
+        ):
+            settings.append(people.TABLE, row)
     settings.update(values)
     for stage, message in (templates or {}).items():
         row = next((r for r in settings.message_templates if r.stage == stage), None)

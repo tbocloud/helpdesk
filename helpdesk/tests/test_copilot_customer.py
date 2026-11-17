@@ -12,6 +12,7 @@ from helpdesk import client_api
 from helpdesk.api import copilot as api
 from helpdesk.copilot import customer, router, runs
 from helpdesk.test_utils import (
+    create_agent,
     create_contact,
     create_customer,
     create_user,
@@ -146,7 +147,9 @@ class TestExplanations(CustomerCase):
 
 class TestHandOver(CustomerCase):
     def test_core_issue_makes_a_task_for_the_customers_developer(self):
-        developer = create_user("dev.copilot@example.com").name
+        developer = create_agent(
+            "dev.copilot@example.com"
+        ).name  # only an active agent takes work
         frappe.db.set_value(
             "HD Customer", self.customer, "custom_assigned_developer", developer
         )
@@ -314,3 +317,14 @@ class TestResolutionApi(CustomerCase):
         info = api.get_run(self.ticket.name)
         self.assertEqual(info["state"], "Cancelled")
         self.assertTrue(info["can_start"])
+
+
+class TestPhase23AskAgain(CustomerCase):
+    def test_every_resolved_asks_is_it_fixed_again(self):
+        # Phase 23 (B7): an earlier answer does not hide the question after the next fix
+        run = self.investigated("bug")
+        frappe.db.set_value(
+            "HD Ticket", self.ticket.name, "custom_customer_confirmation", "Reopened"
+        )
+        customer.send_stage(run, "Resolved", {})
+        self.assertFalse(self.ticket_value("custom_customer_confirmation"))

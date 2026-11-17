@@ -370,6 +370,22 @@ class TestWhatItMaySay(ChatCase):
                 text, "Thanks for the details. Which record is it?", promise
             )
 
+    def test_ordinary_questions_about_amounts_and_topics_are_kept(self):
+        # Phase 23 (B12): topic words and the customer's own figures are not promises
+        for keep in (
+            "Does the total show 1,150 SAR instead of 1,000 SAR?",
+            "Is this about a bank guarantee entry?",
+            "Apply the discount in the Pricing Rule.",
+            "A refund is a Credit Note against the invoice.",
+        ):
+            self.assertEqual(conversation.safe_text(keep, []), keep, keep)
+        for drop in (
+            "We will refund you 100 SAR.",
+            "We guarantee it works.",
+            "It will be ready by tomorrow.",
+        ):
+            self.assertEqual(conversation.safe_text(drop, []), "", drop)
+
     def test_text_that_instructs_the_ai_is_kept_as_data_and_flagged(self):
         self.say(action="start")
         self.answers.append({"next": "question", "text": "Which record is it?"})
@@ -403,8 +419,9 @@ class TestTalkToAPerson(ChatCase):
     def setUp(self):
         super().setUp()
         self.agent = create_agent("chat.person@example.com").name
+        # nobody set in Copilot People and no Leader: the Agent Managers are the last resort
         patcher = patch(
-            "helpdesk.copilot.approvals._managers", return_value=[self.agent]
+            "helpdesk.copilot.people.agent_managers", return_value=[self.agent]
         )
         patcher.start()
         self.addCleanup(patcher.stop)
@@ -662,7 +679,10 @@ class TestTheLimits(ChatCase):
 
     def test_switched_off_the_site_shows_its_form(self):
         make_copilot_settings(enabled=1, chat_enabled=0)
-        self.assertEqual(self.say(action="start"), {"enabled": False})
+        reply = self.say(action="start")
+        # an older site reads "enabled"; a newer one also shows the hub's line (Phase 23, B1)
+        self.assertFalse(reply["enabled"])
+        self.assertIn("switched off", reply["message"])
 
     def test_another_users_conversation_is_refused(self):
         self.say(action="start")
@@ -933,3 +953,82 @@ class TestJoiningAColleaguesTicket(ChatCase):
         self.say(action="raise")
         with self.assertRaises(frappe.ValidationError):
             self.say(action="joined", client_ticket="SUP-2026-00031")
+
+
+class TestPhase23Delivery(ChatCase):
+    """What the customer sends or gets is never lost (Phase 23, B1 to B3)."""
+
+    def raised(self):
+        self.gathered()
+        return self.say(action="raise")["ticket"]
+
+    def test_with_the_ai_off_a_tickets_chat_still_reaches_the_team(self):
+        ticket = self.raised()
+        make_copilot_settings(enabled=0)
+        reply = self.say("Here is the screenshot you asked for.")
+        self.assertTrue(reply["enabled"])
+        received = frappe.get_all(
+            "Communication",
+            filters={
+                "reference_doctype": "HD Ticket",
+                "reference_name": ticket,
+                "sent_or_received": "Received",
+            },
+            pluck="content",
+        )
+        self.assertTrue(any("screenshot you asked for" in c for c in received))
+
+    def test_with_the_ai_off_a_new_chat_is_refused_in_words(self):
+        make_copilot_settings(chat_enabled=0)
+        reply = self.say(action="start", name="")
+        self.assertEqual((reply["enabled"], reply["ok"]), (False, False))
+        self.assertIn("nothing you typed was sent", reply["message"])
+
+    def test_a_retry_with_the_same_message_id_is_taken_once(self):
+        ticket = self.raised()
+        before = frappe.db.count(
+            "Communication",
+            {"reference_name": ticket, "sent_or_received": "Received"},
+        )
+        message_id = "abc12345def67890"
+        self.say("It still shows the old rate.", client_message_id=message_id)
+        again = self.say("It still shows the old rate.", client_message_id=message_id)
+        self.assertEqual(again["conversation"], self.chat)
+        after = frappe.db.count(
+            "Communication",
+            {"reference_name": ticket, "sent_or_received": "Received"},
+        )
+        self.assertEqual(after, before + 1)
+
+    def test_a_reply_the_site_missed_is_sent_again(self):
+        from helpdesk.copilot import delivery
+
+        ticket = self.raised()
+        failing = patch(
+            "helpdesk.client_api.hub_api", side_effect=Exception("site restarting")
+        )
+        with failing:
+            conversation.tell_stage(
+                frappe._dict(ticket=ticket, name=None), "Resolved", "The fix is live."
+            )
+        missed = frappe.get_all(
+            conversation.MESSAGE,
+            filters={"conversation": self.chat, "kind": "Stage", "delivered": 0},
+            pluck="name",
+        )
+        self.assertEqual(len(missed), 1)
+        self.pushed.clear()
+        result = delivery.resend_undelivered(
+            now=frappe.utils.add_to_date(frappe.utils.now_datetime(), minutes=5)
+        )
+        self.assertEqual(result["messages"], 1)
+        self.assertEqual(self.pushed[-1][1]["hub_ref"], missed[0])
+        self.assertEqual(
+            frappe.db.get_value(conversation.MESSAGE, missed[0], "delivered"), 1
+        )
+        # replies given in the site's own answer count as delivered: nothing more to send
+        self.pushed.clear()
+        delivery.resend_undelivered(
+            now=frappe.utils.add_to_date(frappe.utils.now_datetime(), minutes=5)
+        )
+        self.assertEqual(self.pushed, [])

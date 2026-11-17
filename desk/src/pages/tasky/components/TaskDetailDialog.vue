@@ -185,7 +185,7 @@ import { computed, ref, watch, type Ref } from "vue";
 import { useIntervalFn } from "@vueuse/core";
 import { useRouter } from "vue-router";
 import LucideArrowRight from "~icons/lucide/arrow-right";
-import LucideBot from "~icons/lucide/bot";
+import LucideLaptop from "~icons/lucide/laptop";
 import LucideCalendarClock from "~icons/lucide/calendar-clock";
 import LucideCheckCheck from "~icons/lucide/check-check";
 import LucideCircleCheck from "~icons/lucide/circle-check";
@@ -496,16 +496,23 @@ const { approve } = useApproveTask(
   { offerRating: false }
 );
 
-// the desktop app takes tbo-copilot:// links; it asks before it does anything with one
+// the desktop app takes tbo-copilot:// links; it asks before it does anything with one. The
+// link goes through a hidden frame, so a browser without the app installed stays on this page
+// (Phase 23, A25), and the notice offers the install page
 function openInCopilot(task: string) {
   const site = encodeURIComponent(window.location.origin);
-  window.location.href = `tbo-copilot://task/${encodeURIComponent(task)}?site=${site}`;
-  toast.info(
-    __(
-      "Opening TBO Copilot. Nothing opened? Install it from {0}.",
-      `${window.location.origin}/copilot-desktop`
-    )
-  );
+  const frame = document.createElement("iframe");
+  frame.style.display = "none";
+  frame.src = `tbo-copilot://task/${encodeURIComponent(task)}?site=${site}`;
+  document.body.appendChild(frame);
+  window.setTimeout(() => frame.remove(), 3000);
+  toast.info(__("Opening TBO Copilot. Nothing opened? Install the app."), {
+    action: {
+      label: __("Install"),
+      onClick: () =>
+        window.open(`${window.location.origin}/copilot-desktop`, "_blank"),
+    },
+  });
 }
 
 const dialogActions = computed(() => {
@@ -559,8 +566,9 @@ const dialogActions = computed(() => {
     // Phase 22: the task in the TBO Copilot desktop app, with the folders linked to it there
     actions.push({
       label: __("Open in TBO Copilot"),
-      icon: LucideBot,
-      tooltip: __("Open in TBO Copilot"),
+      iconLeft: LucideLaptop,
+      variant: "subtle",
+      tooltip: __("Open this task in the TBO Copilot desktop app"),
       onClick: () => openInCopilot(d.name),
     });
     // done work goes through the Complete dialog, which logs the hours to a timesheet

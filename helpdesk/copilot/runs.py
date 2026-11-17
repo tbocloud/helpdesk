@@ -521,14 +521,14 @@ def _expire_fix_leases():
 
 
 def tell_people(run, subject: str):
-    """A reminder (and the chat channel): Copilot needs a person here. Phase 22: the customer's
-    project coordinators working today, else the Copilot approvers (settings, never a job role);
-    with nothing set at all, the Agent Managers as before, so it never goes nowhere."""
+    """A reminder (and the chat channel): Copilot needs a person here: the customer's project
+    coordinators working today, else a Leader (Copilot People; with no Leader set, the Agent
+    Managers), so it never goes nowhere."""
     from helpdesk.copilot import approvals, people
     from helpdesk.work_reminders import notify_users
 
     notify_users(
-        people.need_a_person(run.customer) or approvals.managers(),
+        people.need_a_person(run.customer) or approvals.leaders(),
         "HD Ticket",
         run.ticket,
         subject,

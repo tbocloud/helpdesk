@@ -44,9 +44,20 @@ def history(ticket: str | int) -> dict:
 def send(ticket: str | int, text: str = "", files: str | list | None = None) -> dict:
     """A message to Copilot in the ticket's chat: answered, or the action proposed or done."""
     _readable(ticket)
-    replies = thread.receive(
-        frappe.session.user, str(ticket), text, _parse(files, []), via="Web"
-    )
+    from helpdesk.copilot import assistant
+
+    # only files uploaded to this ticket's chat: a File named here is copied on (to a new ticket,
+    # as its owner), so a name from elsewhere could expose a private file (Phase 23, A7)
+    chat = thread.thread_for(str(ticket)).name
+    names = [
+        name
+        for name in _parse(files, [])
+        if frappe.db.get_value(
+            "File", name, ["attached_to_doctype", "attached_to_name"]
+        )
+        == (assistant.CHAT, chat)
+    ]
+    replies = thread.receive(frappe.session.user, str(ticket), text, names, via="Web")
     return {"replies": replies}
 
 

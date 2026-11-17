@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+      # TBO Copilot's branch: its tests run on every push too (Phase 23, D1)
+      - tbo-copilot
     paths-ignore:
       - '**.js'
       - '**.css'

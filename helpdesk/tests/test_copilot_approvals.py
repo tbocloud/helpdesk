@@ -23,6 +23,10 @@ from helpdesk.test_utils import (
 class ApprovalCase(FrappeTestCase):
     def setUp(self):
         hold_commits(self)
+        # reminders wait for the working day; these tests run at any hour
+        hours = patch("helpdesk.copilot.approvals.in_working_hours", return_value=True)
+        hours.start()
+        self.addCleanup(hours.stop)
         self.one = create_agent("approver.one@example.com").name
         self.two = create_agent("approver.two@example.com").name
         self.senior = create_agent("approver.senior@example.com").name
@@ -123,3 +127,27 @@ class TestReminders(ApprovalCase):
         self.approval(self.one, hours_ago=30, status="Approved")
         approvals.remind_and_escalate()
         self.assertEqual(self.notified, [])
+
+
+class TestPhase23Moves(ApprovalCase):
+    def test_no_reminder_at_night(self):
+        doc = self.approval(self.one, hours_ago=5)
+        with patch("helpdesk.copilot.approvals.in_working_hours", return_value=False):
+            approvals.remind_and_escalate()
+        self.assertFalse(
+            frappe.db.get_value("HDS Copilot Approval", doc.name, "reminded_at")
+        )
+        self.assertEqual(self.notified, [])
+
+    def test_an_approver_on_leave_hands_the_fix_on(self):
+        from frappe.utils import nowdate
+
+        from helpdesk.test_utils import make_hd_leave
+
+        doc = self.approval(self.one, hours_ago=1)
+        make_hd_leave(self.one, nowdate(), nowdate())
+        approvals.remind_and_escalate()
+        doc.reload()
+        self.assertNotEqual(doc.assigned_to, self.one)
+        self.assertIn(doc.assigned_to, (self.two, self.senior))
+        self.assertIn(doc.assigned_to, self.notified[-1])

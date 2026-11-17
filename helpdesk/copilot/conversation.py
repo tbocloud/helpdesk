@@ -169,10 +169,46 @@ def chat_on() -> bool:
     return bool(settings.get("enabled") and settings.get("chat_enabled"))
 
 
+TICKET_STATES = ("Ticket raised", "With a person", "Closed")
+REPEAT_KEY = "copilot:chat-message:{connection}:{id}"
+
+
+def _ticket_chat_open(connection: str, payload: dict) -> bool:
+    """The message belongs to a ticket's chat (the customer and the team): it needs no AI."""
+    if str(payload.get("action") or "") == "open_ticket":
+        return True
+    name = payload.get("conversation")
+    if not name:
+        return False
+    row = frappe.db.get_value(
+        CONVERSATION, name, ["connection", "state", "ticket"], as_dict=True
+    )
+    return bool(
+        row
+        and row.connection == connection
+        and (row.ticket or row.state in TICKET_STATES)
+    )
+
+
 def receive(connection: str, payload: dict) -> dict:
-    """The customer wrote, or pressed a button: the assistant's replies, as the site shows them."""
-    if not chat_on():
-        return {"enabled": False}
+    """The customer wrote, or pressed a button: the assistant's replies, as the site shows them.
+
+    With Copilot or the customer chat switched off, a ticket's chat still reaches the team (it
+    needs no AI); anything else is answered "not delivered", with a line the site shows (Phase 23,
+    B1). A message the site sends again with the same `client_message_id` (a retry after a time
+    out) is not taken twice (B3)."""
+    ai = chat_on()
+    if not ai and not _ticket_chat_open(connection, payload):
+        return {
+            "enabled": False,
+            "ok": False,
+            "message": _(
+                "The support chat is switched off right now. Please raise a ticket with the form; nothing you typed was sent."
+            ),
+        }
+    repeat = _repeat(connection, payload)
+    if repeat is not None:
+        return repeat
     user = payload.get("user") or {}
     email = str(user.get("email") or "").strip().lower()[:140]
     if not frappe.utils.validate_email_address(email):
@@ -191,6 +227,7 @@ def receive(connection: str, payload: dict) -> dict:
     if action == "open_ticket":
         return _reply(_ticket_chat(connection, payload, email, user), None)
     doc = _conversation(connection, payload, email, user)
+    _remember(connection, payload, doc.name)
     before = _last_message_name(doc)
     text = str(payload.get("text") or "").strip()[:MAX_TEXT]
     files = [
@@ -204,7 +241,9 @@ def receive(connection: str, payload: dict) -> dict:
     ]
     if text or files:
         _customer_said(doc, text, files)
-    if action == "start" or (not action and not text and not files):
+    if not ai and doc.state not in TICKET_STATES + ("Before a person",):
+        pass  # the AI is off: nothing answers but the team
+    elif action == "start" or (not action and not text and not files):
         _greet(doc, payload.get("context") or {}, user)
     elif action:
         _act(doc, action, payload)
@@ -218,6 +257,45 @@ def receive(connection: str, payload: dict) -> dict:
         _turn(doc)
     doc.db_set("last_message_at", now_datetime(), update_modified=False)
     return _reply(doc, before)
+
+
+def _client_id(payload: dict) -> str:
+    value = str(payload.get("client_message_id") or "").strip()
+    return value if value.isalnum() and 8 <= len(value) <= 64 else ""
+
+
+def _repeat(connection: str, payload: dict) -> dict | None:
+    """A message the hub has seen: the conversation as it stands (the site keeps one of each
+    message), or "still working" while the first one is being answered."""
+    client_id = _client_id(payload)
+    if not client_id:
+        return None
+    cache = frappe.cache()
+    key = cache.make_key(REPEAT_KEY.format(connection=connection, id=client_id))
+    if cache.set(key, "", ex=2 * 24 * 3600, nx=True):  # the site's own key - nosemgrep
+        return None  # the first time
+    name = cache.get(key)
+    name = name.decode() if isinstance(name, bytes) else name
+    if name and frappe.db.exists(CONVERSATION, name):
+        return _reply(frappe.get_doc(CONVERSATION, name), None)
+    return {
+        "enabled": True,
+        "ok": False,
+        "message": _(
+            "TBO Support is still answering your last message; it shows here in a moment."
+        ),
+    }
+
+
+def _remember(connection: str, payload: dict, conversation: str):
+    client_id = _client_id(payload)
+    if client_id:
+        cache = frappe.cache()
+        cache.set(  # the site's own key (make_key) - nosemgrep
+            cache.make_key(REPEAT_KEY.format(connection=connection, id=client_id)),
+            conversation,
+            ex=2 * 24 * 3600,
+        )
 
 
 def _conversation(connection: str, payload: dict, email: str, user: dict):
@@ -475,18 +553,23 @@ def _within_limits(doc) -> bool:
         return False
     if not pilot.budget_allows_work():
         return False
-    return _rate_ok(doc.connection or doc.customer or doc.name)
+    return _rate_ok(doc.connection or doc.customer or doc.name, doc.site_user or "")
 
 
-def _rate_ok(connection: str) -> bool:
-    """Per customer (its site's connection; a TBO Chat by its customer): messages a minute and a day."""
+def _rate_ok(connection: str, user: str = "") -> bool:
+    """Messages a minute per person (Phase 23, B23: colleagues in an incident no longer share
+    it), and a day per customer (its site's connection; a TBO Chat by its customer)."""
     settings = copilot_settings.get_settings()
     cache = frappe.cache()
-    for window, limit in (
-        (60, cint(settings.get("chat_messages_per_minute") or 10)),
-        (86400, cint(settings.get("chat_messages_per_day") or 200)),
+    for window, limit, who in (
+        (
+            60,
+            cint(settings.get("chat_messages_per_minute") or 10),
+            f"{connection}:{user}",
+        ),
+        (86400, cint(settings.get("chat_messages_per_day") or 200), connection),
     ):
-        key = cache.make_key(f"{RATE_KEY}{connection}:{window}")
+        key = cache.make_key(f"{RATE_KEY}{who}:{window}")
         cache.set(
             key, 0, ex=window, nx=True
         )  # the site's own key (make_key) - nosemgrep
@@ -580,10 +663,13 @@ def _turn(doc):
         step, text = "question", _offer(doc)
     if step == "summary" and not (doc.title and doc.actual):
         step = "question"
+    if step == "handover":
+        # never the offer to raise a ticket as the hand-over's own line (Phase 23, B12)
+        return _hand_over(
+            doc, text or _("I'll pass this to our team so a person can help you.")
+        )
     if not text:
         text = _offer(doc)
-    if step == "handover":
-        return _hand_over(doc, text)
     if step == "summary":
         return _summary(doc, text, cost)
     if step == "record":
@@ -617,13 +703,45 @@ def _turn(doc):
     )
 
 
+_MONEY = (
+    r"(?:[$€£₹﷼]\s?\d|\d[\d,.]*\s?(?:[$€£₹﷼]|\b(?:usd|sar|aed|inr|eur|gbp|riyals?|dirhams?|rupees?)\b)"
+    r"|\b(?:usd|sar|aed|inr|eur|gbp)\s?\d)"
+)
+_WHEN = (
+    r"(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|tomorrow|today|tonight"
+    r"|next week|end of (?:the )?(?:day|week|month)|\d+\s+(?:minutes?|hours?|days?|weeks?))"
+)
+# Phase 23 (B12): a sentence is held back when it commits TBO to something (a refund, a fix, a
+# date, a change made), or states a price; never for a topic word ("discount", "refund",
+# "guarantee") or an amount in a question about the customer's own figures
 PROMISES = re.compile(
-    r"(\$|€|£|₹|﷼|\b(?:usd|sar|aed|inr|eur|gbp|riyal|dirham|rupee)s?\b)\s?\d|\d\s?(?:\$|€|£|₹|﷼|\b(?:usd|sar|aed|inr|eur|gbp|riyals?|dirhams?|rupees?)\b)"
-    r"|\b(?:by|before|on|until)\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|tomorrow|today|tonight|next week|end of (?:the )?(?:day|week|month))\b"
-    r"|\bwithin\s+\d+\s+(?:minutes?|hours?|days?|weeks?)\b"
-    r"|\b(?:refund|discount|free of charge|no charge|guarantee[ds]?|we will fix|we'll fix|will be fixed|i (?:have )?(?:changed|updated|deleted|corrected))\b",
+    r"\b(?:we|i|our team|the team|tbo(?: support)?|support)\s*(?:will|'ll|shall|are going to|am going to)\s+"
+    r"(?:\w+\s+){0,2}?(?:refund|reimburse|credit|compensate|waive|discount|give|offer|send|fix|resolve"
+    r"|repair|deliver|deploy|change|update|correct|delete|restore|guarantee|promise)\b"
+    r"|\b(?:will|'ll)\s+be\s+(?:fixed|resolved|ready|done|live|deployed|refunded|credited|waived)\b"
+    r"|\b(?:will|'ll|shall)\b[^.!?]{0,60}\b(?:by|before|until|within)\s+"
+    + _WHEN
+    + r"\b"
+    r"|\b(?:we|i)\s+(?:guarantee|promise|assure)\b"
+    r"|\b(?:i|we)\s+(?:have\s+|'ve\s+)?(?:changed|updated|deleted|corrected|fixed|refunded|credited)\b"
+    r"|\b(?:will be|is|it's)\s+(?:free of charge|at no (?:extra )?cost)\b",
     re.I,
 )
+PRICES = re.compile(
+    r"\b(?:costs?|price[sd]?|fee|charges?|you (?:will )?pay)\b[^.!?]{0,30}"
+    + _MONEY
+    + r"|"
+    + _MONEY
+    + r"[^.!?]{0,20}\b(?:fee|charge|to change|to fix|per (?:month|year|hour|user))\b",
+    re.I,
+)
+
+
+def promises(sentence: str) -> bool:
+    """A sentence that commits TBO to something or states a price (a question is never a price)."""
+    if PROMISES.search(sentence):
+        return True
+    return not sentence.rstrip().endswith(("?", "؟")) and bool(PRICES.search(sentence))
 
 
 def cited(answer: dict, articles: list[dict]) -> list[dict]:
@@ -647,7 +765,7 @@ def safe_text(text: str, articles: list[dict]) -> str:
     text = remove_unknown_urls(text, articles)
     text = re.sub(r"\*\*|__", "", text)  # the chat shows plain text
     sentences = re.split(r"(?<=[.!?؟])\s+", text)
-    kept = [s for s in sentences if s and not PROMISES.search(s)]
+    kept = [s for s in sentences if s and not promises(s)]
     return " ".join(kept).strip()[:MAX_TEXT]
 
 
@@ -793,6 +911,8 @@ def _raise(doc, transcript_only: bool = False):
         {
             "ticket": ticket,
             "state": "With a person" if transcript_only else "Ticket raised",
+            # the site names its ticket after it, not "Support request" (Phase 23, B20)
+            "title": doc.title or title,
         },
         update_modified=False,
     )
@@ -1379,6 +1499,15 @@ def _reply(doc, after) -> dict:
         m.card = frappe.parse_json(m.card) if m.card else None
         m.sources = frappe.parse_json(m.sources) if m.sources else []
         m.creation = str(m.creation)
+    if messages:
+        # delivered in this answer: the five-minute resend leaves them alone (Phase 23, B2)
+        frappe.db.set_value(
+            MESSAGE,
+            {"name": ["in", [m.name for m in messages]], "delivered": 0},
+            "delivered",
+            1,
+            update_modified=False,
+        )
     return {
         "enabled": True,
         "conversation": doc.name,

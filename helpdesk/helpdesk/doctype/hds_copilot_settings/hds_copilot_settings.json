@@ -22,6 +22,8 @@
 		"approval_escalate_hours",
 		"hold_label",
 		"people_section",
+		"copilot_people",
+		"people_options_section",
 		"project_coordinators",
 		"new_ticket_notice",
 		"column_break_people",
@@ -183,14 +185,16 @@
 		{
 			"fieldname": "approval_section",
 			"fieldtype": "Section Break",
-			"label": "Fix Approval"
+			"label": "Fix Approval Timing"
 		},
 		{
-			"description": "Who may approve a Copilot fix. Changes to sensitive areas need a senior; with no senior in the list, Agent Managers act as seniors",
+			"description": "Kept for one version after Phase 23 moved these people into the People table; not read any more",
 			"fieldname": "approvers",
 			"fieldtype": "Table",
-			"label": "Approvers",
-			"options": "HDS Copilot Approver"
+			"label": "Approvers (before Phase 23)",
+			"options": "HDS Copilot Approver",
+			"hidden": 1,
+			"read_only": 1
 		},
 		{
 			"fieldname": "column_break_approval",
@@ -216,21 +220,34 @@
 			"label": "Hold Label"
 		},
 		{
-			"description": "Who Copilot goes to. Nobody is named in the code: each customer's own people are set on the customer (Copilot People), and these are for every customer. A customer's own setting wins; where nobody is set anywhere, the Approvers above stand in.",
+			"description": "Everyone Copilot goes to, for every customer. A customer's own rows (HD Customer → Copilot People) come first for Developer, Fix Approver and Project Coordinator; these rows follow. Each role: Main first, then Fallback 1, 2 and 3; only people working today count. Nobody is named in the code.",
 			"fieldname": "people_section",
 			"fieldtype": "Section Break",
 			"label": "People"
 		},
 		{
-			"description": "For customers with no project coordinator of their own: they hear of every new ticket, choose who takes a ticket when both developers are away, and take \"Talk to a person\"",
+			"description": "Developer and Fix Approver are usually set on each customer. Here: Project Coordinator (customers without their own), Fix Approver (stand-ins for every customer, after the customer's own people), Senior (sensitive fixes, corrections, releases that need a senior, Deploy Now), Leader (the last resort for everything; with none, the Agent Managers), Infrastructure and Infrastructure Senior (Press, AWS and repair actions, the watcher), Risk Alerts and Deploy Notices (for information)",
+			"fieldname": "copilot_people",
+			"fieldtype": "Table",
+			"label": "People",
+			"options": "HDS Copilot Role Person"
+		},
+		{
+			"fieldname": "people_options_section",
+			"fieldtype": "Section Break"
+		},
+		{
+			"description": "Kept for one version after Phase 23 moved these people into the People table; not read any more",
 			"fieldname": "project_coordinators",
 			"fieldtype": "Table",
-			"label": "Project Coordinators",
-			"options": "HDS Copilot Person"
+			"label": "Project Coordinators (before Phase 23)",
+			"options": "HDS Copilot Person",
+			"hidden": 1,
+			"read_only": 1
 		},
 		{
 			"default": "Teams and TBO Support",
-			"description": "Every new ticket is told to the customer's project coordinators (else those above), with Assign to",
+			"description": "Every new ticket is told to the customer's project coordinators (else the common ones), with Assign to. Never to stand-ins, and never for the error watch's own tickets",
 			"fieldname": "new_ticket_notice",
 			"fieldtype": "Select",
 			"label": "New Tickets to the Coordinators",
@@ -241,37 +258,44 @@
 			"fieldtype": "Column Break"
 		},
 		{
-			"description": "Told in Teams and TBO Support of risky work for every customer: a fix in a sensitive area, a data or settings correction, a senior Press or AWS action, Deploy Now, a fix Copilot could not make pass. For information: who approves does not change",
+			"description": "Kept for one version after Phase 23 moved these people into the People table; not read any more",
 			"fieldname": "risk_alert_people",
 			"fieldtype": "Table",
-			"label": "Risk Alerts Go To",
-			"options": "HDS Copilot Person"
+			"label": "Risk Alerts Go To (before Phase 23)",
+			"options": "HDS Copilot Person",
+			"hidden": 1,
+			"read_only": 1
 		},
 		{
 			"default": "1",
-			"description": "Risk alerts also go to the customer's project coordinators (else those on the left)",
+			"description": "Risk alerts also go to the customer's project coordinators (else the common ones)",
 			"fieldname": "risk_alert_coordinators",
 			"fieldtype": "Check",
 			"label": "Also Tell the Project Coordinators"
 		},
 		{
-			"description": "Told in Teams and TBO Support when Press starts a deploy, when it goes live, and when it fails: releases, Copilot's fixes and Deploy Now, for every customer (for example DevOps and a senior)",
+			"description": "Kept for one version after Phase 23 moved these people into the People table; not read any more",
 			"fieldname": "deploy_notice_people",
 			"fieldtype": "Table",
-			"label": "Deploy Notices Go To",
-			"options": "HDS Copilot Person"
+			"label": "Deploy Notices Go To (before Phase 23)",
+			"options": "HDS Copilot Person",
+			"hidden": 1,
+			"read_only": 1
 		},
 		{
 			"fieldname": "infrastructure_section",
 			"fieldtype": "Section Break",
-			"label": "Infrastructure People"
+			"label": "Infrastructure People",
+			"hidden": 1
 		},
 		{
-			"description": "Approve Press, AWS and watcher repair actions (a senior action needs a Senior), and get the watcher's tickets and alerts. Empty: the Approvers above",
+			"description": "Kept for one version after Phase 23 moved these people into the People table; not read any more",
 			"fieldname": "infrastructure_people",
 			"fieldtype": "Table",
-			"label": "Infrastructure People",
-			"options": "HDS Copilot Approver"
+			"label": "Infrastructure People (before Phase 23)",
+			"options": "HDS Copilot Approver",
+			"hidden": 1,
+			"read_only": 1
 		},
 		{
 			"collapsible": 1,

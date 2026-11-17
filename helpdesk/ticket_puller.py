@@ -366,6 +366,33 @@ def due_connections(statuses) -> list[str]:
     )
 
 
+def _customer_reply(ticket: str, comment: dict):
+    """A comment the customer wrote on their site's ticket: a received reply on the hub ticket.
+    Their site's HTML is cleaned first."""
+    from frappe.utils.html_utils import sanitize_html
+
+    sender = str(comment.get("owner") or "").strip()
+    communication = frappe.get_doc(
+        {
+            "doctype": "Communication",
+            "communication_type": "Communication",
+            "communication_medium": "Other",
+            "sent_or_received": "Received",
+            "email_status": "Open",
+            "status": "Linked",
+            "subject": "Re: "
+            + (frappe.db.get_value("HD Ticket", ticket, "subject") or ""),
+            "sender": sender if frappe.utils.validate_email_address(sender) else None,
+            "content": sanitize_html(comment.get("content") or ""),
+            "reference_doctype": "HD Ticket",
+            "reference_name": ticket,
+        }
+    )
+    communication.flags.from_customer_site = True
+    communication.insert(ignore_permissions=True)
+    return communication
+
+
 def unreachable_connections() -> set[str]:
     """Connections in an outage: the per-minute pull probes them, the other jobs skip them."""
     return set(
@@ -615,7 +642,9 @@ def sync_conversations() -> int:
             "custom_conv_state",
             "custom_sync_state",
         ],
-        limit=100,
+        # every open linked ticket, the latest first (Phase 23, B6: it was the first 100 only)
+        order_by="modified desc",
+        limit=0,
     )
     by_conn = {}
     for r in rows:
@@ -664,19 +693,10 @@ def sync_conversations() -> int:
                 for c in comments:
                     if c["name"] in state["client"] or c.get("owner") == support_user:
                         continue
-                    # the customer's own words relayed from their ERP: not the
-                    # hub's work, so not credited to the automation user
-                    hd_comment = frappe.get_doc(
-                        {
-                            "doctype": "HD Ticket Comment",
-                            "reference_ticket": row.name,
-                            "commented_by": "Administrator",
-                            "content": "\N{SPEECH BALLOON} Customer (%s): %s"
-                            % (c.get("owner"), c.get("content") or ""),
-                        }
-                    )
-                    hd_comment.flags.skip_notifications = True
-                    hd_comment.insert(ignore_permissions=True)
+                    # the customer's own words on their ticket form: their reply, as a
+                    # chat message is (Phase 23, B4), so the ticket's status follows and
+                    # the agents hear it; never a silent internal note
+                    _customer_reply(row.name, c)
                     state["client"].append(c["name"])
                     synced += 1
                     _follow_up_on_comment(row.name)
@@ -831,7 +851,7 @@ def _pull_client_changes(conn) -> int:
         )
         return 0
 
-    handled = 0
+    handled, failed = 0, False
     for change in changes.get("tickets") or []:
         confirmation = change.get("customer_confirmation")
         if confirmation not in ("Confirmed", "Reopened"):
@@ -868,7 +888,15 @@ def _pull_client_changes(conn) -> int:
                 f"Customer confirmation not applied for {ticket}",
                 f"hds_client_confirmation:{ticket}",
             )
-    if changes.get("server_time"):
+            # the cursor stays, so the customer's answer is tried again next time (Phase 23,
+            # B5); after a few tries it stops holding the others back
+            key = frappe.cache().make_key(
+                f"hds_client_confirmation_tries:{marker}:{ticket}"
+            )
+            tries = frappe.cache().incr(key)
+            frappe.cache().expire(key, 3 * 24 * 3600)
+            failed = failed or tries < CONFIRMATION_TRIES
+    if changes.get("server_time") and not failed:
         frappe.db.set_value(
             "HDS Support Connection",
             conn.name,
@@ -877,6 +905,11 @@ def _pull_client_changes(conn) -> int:
             update_modified=False,
         )
     return handled
+
+
+CONFIRMATION_TRIES = (
+    6  # a customer's answer that keeps failing stops holding the cursor
+)
 
 
 def _save_sync_state(ticket: str, state: dict) -> None:

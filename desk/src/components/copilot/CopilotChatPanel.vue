@@ -72,11 +72,12 @@
         <FileUploader
           v-if="store.chat"
           :upload-args="{
-            doctype: 'HDS Copilot Chat',
             docname: store.chat,
+            method: 'helpdesk.api.copilot_chat.attach',
             private: true,
           }"
           @success="(f) => files.push(f)"
+          @failure="uploadFailed"
         >
           <template #default="{ openFileSelector, uploading }">
             <Button
@@ -108,7 +109,7 @@
 import CopilotCard from "@/components/copilot/CopilotCard.vue";
 import { useCopilotChatStore } from "@/stores/copilotChat";
 import { __ } from "@/translation";
-import { Button, FileUploader } from "frappe-ui";
+import { Button, FileUploader, toast } from "frappe-ui";
 import { nextTick, ref, watch } from "vue";
 import LucidePaperclip from "~icons/lucide/paperclip";
 import LucideX from "~icons/lucide/x";
@@ -117,6 +118,14 @@ const store = useCopilotChatStore();
 const draft = ref("");
 const files = ref<{ name: string; file_name: string }[]>([]);
 const scroller = ref<HTMLElement | null>(null);
+
+// the upload's own refusal (too big, not allowed) instead of a spinner that ends in nothing
+function uploadFailed(error: unknown) {
+  const text =
+    (error as { messages?: string[]; message?: string })?.messages?.[0] ||
+    (error as { message?: string })?.message;
+  toast.error(text || __("The file could not be attached."));
+}
 
 async function send() {
   if (!draft.value.trim() && !files.value.length) return;

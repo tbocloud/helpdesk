@@ -37,8 +37,15 @@ class RepairCase(FrappeTestCase):
         self.devops_two = create_agent("repair.devops2@example.com").name
         self.agent = create_agent("repair.agent@example.com").name
         self.approver = create_agent("repair.approver@example.com").name
+        # Phase 23: the infrastructure work goes to the Infrastructure people set in Copilot
+        # People (never a project role); the approver is their senior
         make_copilot_settings(
-            enabled=1, approvers=[{"user": self.approver, "senior": 1, "active": 1}]
+            enabled=1,
+            infrastructure_people=[
+                {"user": self.devops, "senior": 0, "active": 1},
+                {"user": self.devops_two, "senior": 0, "active": 1},
+                {"user": self.approver, "senior": 1, "active": 1},
+            ],
         )
         self.customer = create_customer("Team Back Office International LLP").name
         self.project = make_project(
@@ -136,7 +143,7 @@ class TestSwitch(RepairCase):
             refused = assistant.receive(
                 self.agent, "Web", "pause auto-repair: migration tonight"
             )
-            self.assertIn("Only the Agent Managers", refused[0]["lines"][0])
+            self.assertIn("Only the Infrastructure people", refused[0]["lines"][0])
             self.assertEqual(repairs.policy()["paused"], False)
             paused = assistant.receive(
                 self.manager, "Web", "pause auto-repair: migration tonight"
@@ -223,8 +230,9 @@ class TestRecord(RepairCase):
             done["assigned_to"],
         )
 
-    def test_without_devops_engineers_the_managers_get_it(self):
-        frappe.db.delete("Project User", {"parent": self.project})
+    def test_without_infrastructure_people_a_leader_gets_it(self):
+        # nobody in Infrastructure and no Leader set: the Agent Managers are the last resort
+        make_copilot_settings(infrastructure_people=[])
         ticket = self.alert()
         started = repairs.started(KEY, "nginx", target="workload")
         done = repairs.finished(

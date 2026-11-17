@@ -106,8 +106,11 @@ def create_fix_task(
         )
     from helpdesk.copilot import people
 
-    developer = people.developer(ticket.customer, ticket.name)
-    assignee = developer if developer and _is_project_member(project, developer) else ""
+    # the developer the chain gives, else the next working developer who is on the project
+    candidates = [people.developer(ticket.customer, ticket.name)] + people.working(
+        people.developers(ticket.customer)
+    )
+    assignee = next((u for u in candidates if u and _is_project_member(project, u)), "")
     with customer.as_automation_user():
         result = create_task_from_ticket(
             ticket.name,
@@ -143,15 +146,34 @@ def create_fix_task(
     customer.comment(
         run.ticket, _("Copilot fix task {0} created in {1}.").format(task, project)
     )
-    if assignee:
-        from helpdesk.work_reminders import notify_users
+    from helpdesk.work_reminders import notify_users
 
+    if assignee:
         notify_users(
             [assignee],
             "Task",
             task,
             _("Copilot asks you to fix ticket {0}").format(ticket.name),
             once=False,
+        )
+    else:
+        # nobody could be given it: the coordinators hear it, never silence (Phase 23, A22)
+        notify_users(
+            people.need_a_person(ticket.customer),
+            "Task",
+            task,
+            _(
+                "Copilot's fix task {0} for ticket {1} has nobody: no developer working today is on project {2}. Assign it."
+            ).format(task, ticket.name, project),
+            once=False,
+        )
+        from helpdesk import ticket_assignment
+
+        ticket_assignment.chat_line(
+            ticket.name,
+            _(
+                "Fix task {0} has nobody yet: no developer working today is on project {1}; the coordinators were asked to assign it."
+            ).format(task, project),
         )
     return task
 
@@ -655,6 +677,7 @@ def fix_failed(run, reason: str, actor: str = runs.WORKER):
         [reason],
         ticket=run.ticket,
         customer=run.customer,
+        approval=False,
     )
     if run.task:
         frappe.get_doc("Task", run.task).add_comment("Comment", escape_html(text))
@@ -1192,16 +1215,20 @@ def on_merged(run, pull: dict, by_hub: bool = False):
                 run.ticket
             ),
         )
-    when = approval.deploy_date if approval and approval.deploy_date else None
-    customer.send_stage(
-        run,
-        "Fix scheduled",
-        {"date": formatdate(when) if when else _("our next update")},
-    )
+    request = None
     if approved:
         from helpdesk.copilot import deploy
 
-        deploy.auto_request(run, approval)
+        request = deploy.auto_request(run, approval)
+    if not request:
+        # a deploy that starts by itself tells the customer its own time; only one "Fix
+        # scheduled" reaches them (Phase 23, B21)
+        when = approval.deploy_date if approval and approval.deploy_date else None
+        customer.send_stage(
+            run,
+            "Fix scheduled",
+            {"date": formatdate(when) if when else _("our next update")},
+        )
 
 
 def on_closed(run, pull: dict):

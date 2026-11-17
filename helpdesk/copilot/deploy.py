@@ -4,7 +4,7 @@
 """Deploying a merged Copilot fix through Press (Phase 2).
 
 A person presses Deploy on the ticket: Tonight (the next deploy window) or
-Now (senior approvers and Agent Managers only). A cron every five minutes
+Now (the Seniors, the Leaders and the Agent Managers only). A cron every five minutes
 moves each deploy request along: it waits for Press (one Copilot deploy at a
 time, none while Press is deploying the bench, the merged commit registered
 on the bench), asks Press to update only the customer's sites (Press takes
@@ -105,16 +105,28 @@ def local_time(moment) -> str:
 # --- who may deploy, where ------------------------------------------------------------
 
 
-def may_deploy(user: str) -> bool:
-    return user in (
+def may_deploy(user: str, run=None) -> bool:
+    """Deploy Tonight: whoever may decide the customer's fixes (Copilot People and its fallbacks,
+    the person a coordinator chose), the Seniors, the Leaders and the Agent Managers."""
+    from helpdesk.copilot import people
+
+    allowed = (
         set(approvals.approvers())
         | set(approvals.seniors())
+        | set(people.leaders())
         | set(approvals.managers())
     )
+    if run is not None:
+        allowed |= people.may_approve(run.customer, run.ticket)
+    return user in allowed
 
 
 def may_deploy_now(user: str) -> bool:
-    return user in set(approvals.seniors()) | set(approvals.managers())
+    from helpdesk.copilot import people
+
+    return user in (
+        set(approvals.seniors()) | set(people.leaders()) | set(approvals.managers())
+    )
 
 
 def open_request(run):
@@ -235,20 +247,45 @@ def request_deploy(run, when: str, user: str, auto: bool = False):
         frappe.throw(
             _("Only a merged fix can be deployed (this run is {0}).").format(run.state)
         )
-    if open_request(run):
+    waiting = open_request(run)
+    if waiting:
+        # Deploy now on a fix scheduled for tonight: the same deploy moves to now (Phase 23, A19)
+        if (
+            str(when).strip().lower() == "now"
+            and waiting.status == "Scheduled"
+            and may_deploy_now(user)
+        ):
+            waiting.db_set(
+                {"when": "Now", "scheduled_for": now_datetime(), "requested_by": user}
+            )
+            runs.add_event(
+                run, "deploy_moved_to_now", {"request": waiting.name}, runs.AGENT
+            )
+            from helpdesk.copilot import people
+
+            people.alert_risk(
+                _("Deploy Now pressed for ticket {0}").format(run.ticket),
+                [_("By {0}.").format(frappe.utils.get_fullname(user))],
+                ticket=run.ticket,
+                customer=run.customer,
+            )
+            return waiting
         frappe.throw(_("This fix already has a deploy waiting or running."))
     if not press.configured():
         frappe.throw(_("Press is not set up in HDS Copilot Settings."))
-    if not may_deploy(user):
+    # an automatic deploy is the approver's own go: they already passed may_decide (Phase 23, A1)
+    if not auto and not may_deploy(user, run):
         frappe.throw(
-            _("Only the Copilot approvers and the Agent Managers may deploy fixes."),
+            _(
+                "Only the people Copilot People puts on this customer's fixes, the Seniors, the Leaders and the Agent Managers may deploy fixes."
+            ),
             frappe.PermissionError,
         )
     now = str(when).strip().lower() == "now"
     if now and not auto and not may_deploy_now(user):
         frappe.throw(
             _(
-                "Only senior approvers and Agent Managers may deploy now; schedule it for tonight."
+                "Only the Seniors, the Leaders and the Agent Managers may deploy now; schedule it for tonight."
             ),
             frappe.PermissionError,
         )
@@ -325,7 +362,11 @@ def request_deploy(run, when: str, user: str, auto: bool = False):
         from helpdesk.copilot import people
 
         people.alert_risk(
-            _("Deploy Now on ticket {0}, outside the night window").format(run.ticket),
+            (
+                _("Deploy Now on ticket {0}, outside the night window")
+                if not in_window(at)
+                else _("Deploy Now on ticket {0}")
+            ).format(run.ticket),
             [_("Asked by {0}.").format(frappe.utils.get_fullname(user))],
             ticket=run.ticket,
             customer=run.customer,
@@ -389,7 +430,7 @@ def _auto(run, approval, when: str):
                     _("Copilot could not deploy it by itself: {0}").format(
                         str(e)[:300]
                     ),
-                    _("A senior or an Agent Manager presses Deploy."),
+                    _("A Senior or a Leader presses Deploy."),
                 ],
                 tone="warning",
             ),
@@ -634,8 +675,13 @@ def _start(request):
         )
     from helpdesk.copilot import go_live
 
-    for member in train:  # Phase 22: the deploy notice people hear it started
-        go_live.alert_deploy(member.name, "started", _("Press {0}").format(reference))
+    # one notice per Press deploy, naming every release of the night's train (Phase 23, A23)
+    go_live.alert_deploy(
+        train[0].name,
+        "started",
+        _("Press {0}").format(reference),
+        also=[m.name for m in train[1:]],
+    )
 
 
 def _wait(request, reason: str):
@@ -836,7 +882,11 @@ def fail(request, reason: str):
         if request.approval
         else None
     )
-    people = [p for p in (approval, request.requested_by) if p] + approvals.managers()
+    from helpdesk.copilot import people as copilot_people
+
+    people = [
+        p for p in (approval, request.requested_by) if p
+    ] + copilot_people.leaders_today()
     notify_users(
         list(dict.fromkeys(people)),
         "HD Ticket",

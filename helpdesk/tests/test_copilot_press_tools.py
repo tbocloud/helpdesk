@@ -153,7 +153,8 @@ class PressCase(FrappeTestCase):
             press_url="https://press.example.com",
             press_api_key="key",
             press_api_secret="secret",
-            approvers=[
+            # Phase 23: Press actions are decided by the Infrastructure people (Copilot People)
+            infrastructure_people=[
                 {"user": self.one, "senior": 0, "active": 1},
                 {"user": self.two, "senior": 0, "active": 1},
                 {"user": self.senior, "senior": 1, "active": 1},

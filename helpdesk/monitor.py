@@ -336,10 +336,8 @@ def watch_heartbeats(now=None):
     from helpdesk.copilot.pilot import _once, _tell_managers
 
     def tell(subject, doctype):
-        # Phase 22: the infrastructure people set in HDS Copilot Settings, else the Agent Managers
-        if people.infra_people():
-            people.tell_infra(subject, doctype)
-        else:
+        # Copilot People: Infrastructure, else Infrastructure Senior, else a Leader
+        if not people.tell_infra(subject, doctype):
             _tell_managers(subject, doctype)
 
     now = now or now_datetime()
@@ -466,6 +464,39 @@ def self_check() -> dict:
             lambda: _last_run("helpdesk.copilot.deploy.run_due")
         ),
         "worker_last_seen": _guard(_worker_last_seen),
+        # what the hub runs, and whether its last migrate finished (Phase 23, D2)
+        "deploy": _guard(deploy_state, {}),
+    }
+
+
+def deploy_state() -> dict:
+    """Each app's version, branch and commit, and the patches that have not run: a migrate that
+    stopped half-way leaves some, while the new code already serves."""
+    from frappe.modules.patch_handler import get_all_patches
+    from frappe.utils.change_log import get_app_branch, get_app_last_commit_ref
+
+    done = set(frappe.get_all("Patch Log", pluck="patch", limit=0))
+    pending = [p for p in get_all_patches() if p not in done]
+
+    def quiet(fn):
+        # a bench without git answers nothing here: no error log for that
+        try:
+            return fn() or ""
+        except Exception:
+            return ""
+
+    apps = {}
+    for app in frappe.get_installed_apps():
+        apps[app] = {
+            "version": quiet(lambda app=app: frappe.get_attr(f"{app}.__version__")),
+            "branch": quiet(lambda app=app: get_app_branch(app)),
+            "commit": quiet(lambda app=app: get_app_last_commit_ref(app)),
+        }
+    return {
+        "apps": apps,
+        "pending_patches": len(pending),
+        "first_pending": pending[:5],
+        "migrate_finished": not pending,
     }
 
 

@@ -6,6 +6,7 @@ The same engine as the Teams bot (helpdesk.copilot.assistant); docs/tbo-copilot.
 import json
 
 import frappe
+from frappe import _
 
 from helpdesk.copilot import assistant
 from helpdesk.utils import agent_only
@@ -51,6 +52,43 @@ def send(message: str = "", files: list | str | None = None) -> dict:
         user, CHANNEL, message or "", names
     )  # the replies are kept in the chat
     return history()
+
+
+@frappe.whitelist(methods=["POST"])
+@agent_only
+def attach():
+    """The paperclip in Copilot's chats (Phase 23, A6). Frappe's upload_file calls this with the
+    uploaded file instead of saving it, because agents have no write permission on HDS Copilot
+    Chat itself: the File goes on the person's own chat, or on a ticket's chat they may write in."""
+    from helpdesk.copilot import thread
+
+    user = frappe.session.user
+    chat = str(frappe.form_dict.get("docname") or "")
+    content = getattr(frappe.local, "uploaded_file", None)
+    filename = getattr(frappe.local, "uploaded_filename", None)
+    if not chat or content is None or not filename:
+        frappe.throw(_("No file came with the upload."))
+    row = frappe.db.get_value(assistant.CHAT, chat, ["user", "ticket"], as_dict=True)
+    if not row:
+        frappe.throw(_("That chat does not exist."), frappe.DoesNotExistError)
+    if row.ticket:
+        allowed = frappe.has_permission(
+            "HD Ticket", "read", str(row.ticket)
+        ) and thread.may_write(user, str(row.ticket))
+    else:
+        allowed = row.user == user
+    if not allowed:
+        frappe.throw(_("You may not add files to that chat."), frappe.PermissionError)
+    return frappe.get_doc(
+        {
+            "doctype": "File",
+            "attached_to_doctype": assistant.CHAT,
+            "attached_to_name": chat,
+            "file_name": filename,
+            "is_private": 1,
+            "content": content,
+        }
+    ).save(ignore_permissions=True)
 
 
 @frappe.whitelist(methods=["POST"])

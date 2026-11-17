@@ -107,6 +107,16 @@ def send_stage(run, stage: str, context: dict | None = None) -> bool:
             runs.SYSTEM,
         )
         return False
+    if stage == "Resolved":
+        # a new fix: "Is it fixed?" is asked again, on the portal and the customer's form, even
+        # after an earlier answer (Phase 23, B7)
+        frappe.db.set_value(
+            "HD Ticket",
+            run.ticket,
+            "custom_customer_confirmation",
+            None,
+            update_modified=False,
+        )
     pushed = _push_stage(run, hub_ref, stage, text)
     note = _("Copilot → customer: <b>{0}</b> — {1}").format(
         escape_html(_(stage)), escape_html(text)

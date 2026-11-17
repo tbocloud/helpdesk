@@ -22,48 +22,37 @@ from helpdesk.copilot import settings as copilot_settings
 
 APPROVAL = "HDS Copilot Approval"
 OPEN = ("Pending", "Approved")
-MANAGER = "Agent Manager"
+WORK_HOURS = (8, 20)  # reminders and moves only between these hours (the site's time)
+MANAGER = people.MANAGER
 
 
-# --- people ---------------------------------------------------------------------
-
-
-def _approver_rows() -> list:
-    return [
-        row
-        for row in copilot_settings.get_settings().get("approvers") or []
-        if row.active and row.user and frappe.db.get_value("User", row.user, "enabled")
-    ]
+# --- people (all from HDS Copilot Settings → People and each customer's Copilot People) ----------
 
 
 def _managers() -> list[str]:
-    users = frappe.get_all(
-        "Has Role", filters={"role": MANAGER, "parenttype": "User"}, pluck="parent"
-    )
-    return sorted(
-        set(
-            frappe.get_all(
-                "User",
-                filters={"name": ["in", users or [""]], "enabled": 1},
-                pluck="name",
-            )
-        )
-    )
+    return people.agent_managers()
 
 
 def managers() -> list[str]:
-    """The enabled Agent Managers."""
-    return _managers()
+    """The enabled Agent Managers: they may still decide (TBO Support's managers), but messages go
+    to the Leaders (`leaders`)."""
+    return people.agent_managers()
+
+
+def leaders() -> list[str]:
+    """Who hears what nobody else can take: the Leaders working today (else all of them; with no
+    Leader set, the Agent Managers)."""
+    return people.leaders_today()
 
 
 def seniors() -> list[str]:
-    """Senior approvers; with none in the list, the Agent Managers act as seniors."""
-    listed = [row.user for row in _approver_rows() if row.senior]
-    return listed or _managers()
+    """The Seniors; with none set, the Leaders (else the Agent Managers) act as seniors."""
+    return people.seniors()
 
 
 def approvers() -> list[str]:
-    return [row.user for row in _approver_rows()]
+    """The Fix Approvers who stand in for every customer."""
+    return people.stand_in_approvers()
 
 
 def authors(run, approval=None) -> set[str]:
@@ -95,15 +84,22 @@ def may_decide(approval, user: str) -> str | None:
             "This fix changes a sensitive area; only a senior approver may approve it."
         )
     if (
-        user not in approvers()
-        and user not in seniors()
+        user not in seniors()
         and user not in _managers()
         and user not in people.may_approve(run.customer, run.ticket)
     ):
         return _(
-            "Only the customer's Copilot people, the Copilot approvers and the Agent Managers may decide fixes."
+            "Only the people Copilot People puts on this customer's fixes (and the Agent Managers) may decide them."
         )
     return None
+
+
+def _load(user: str):
+    pending = frappe.db.count(APPROVAL, {"assigned_to": user, "status": "Pending"})
+    last = frappe.db.get_value(
+        APPROVAL, {"assigned_to": user}, "assigned_at", order_by="assigned_at desc"
+    )
+    return (pending, get_datetime(last) if last else get_datetime("2000-01-01"))
 
 
 def pick_approver(
@@ -112,27 +108,28 @@ def pick_approver(
     exclude: set[str] | None = None,
     copilot_only: bool = False,
 ) -> str | None:
-    """The customer's people for this fix, in order (Phase 22, all from settings): the
-    coordinator's choice, the fix approver, the first developer, the second developer, then a
-    project coordinator; the first who may decide it (not its author; a senior for a sensitive
-    fix) gets it. Else the least loaded approver; else nobody."""
+    """Who approves this fix (Phase 23, all from Copilot People): the person a coordinator chose
+    for the ticket, then the Fix Approver chain (the customer's fix approver, its developers, its
+    project coordinators, the common Fix Approvers, the Seniors, the Leaders), the first group with
+    someone working today who may decide it: not its author, and a senior for a sensitive fix.
+    Within a group, the one with the fewest waiting approvals. With nobody working, the first who
+    may decide it at all; else nobody."""
     excluded = (set() if copilot_only else authors(run)) | (exclude or set())
-    allowed = seniors() if sensitive else list(dict.fromkeys(approvers() + seniors()))
-    for person in people.fix_chain(run.customer, run.ticket):
-        if person not in excluded and (not sensitive or person in seniors()):
-            return person
-    candidates = [user for user in allowed if user not in excluded]
-    if not candidates:
-        return None
-
-    def load(user: str):
-        pending = frappe.db.count(APPROVAL, {"assigned_to": user, "status": "Pending"})
-        last = frappe.db.get_value(
-            APPROVAL, {"assigned_to": user}, "assigned_at", order_by="assigned_at desc"
-        )
-        return (pending, get_datetime(last) if last else get_datetime("2000-01-01"))
-
-    return min(candidates, key=load)
+    allowed = set(seniors()) if sensitive else None
+    person = people.chosen(run.ticket)
+    if (
+        person
+        and person not in excluded
+        and (allowed is None or person in allowed)
+        and people.working([person])
+    ):
+        return person
+    found = people.resolve(
+        people.FIX_APPROVER, run.customer, exclude=excluded, allowed=allowed
+    )
+    if not found["users"] and sensitive:
+        found = people.resolve(people.SENIOR, exclude=excluded, allowed=allowed)
+    return min(found["users"], key=_load) if found["users"] else None
 
 
 # --- opening and superseding --------------------------------------------------------
@@ -269,7 +266,7 @@ def open_approval(
                     run.ticket,
                     frappe.utils.get_fullname(doc.assigned_to)
                     if doc.assigned_to
-                    else _("the managers"),
+                    else _("a leader"),
                 )
             ],
             links=[(_("Open the pull request"), doc.pr_url)],
@@ -606,14 +603,14 @@ def _decide(
 def announce(
     approval, subject: str, also: list[str] | None = None, escalate: bool = False
 ):
-    """The approver (or, with none, the Agent Managers) gets the fix's card with its buttons in
-    the Copilot chat: in Teams when the bot can reach them (then the panel's notice only), else in
-    the TBO Support panel plus the usual chat message or email. A sensitive fix or a long wait
-    also goes to the team's channel."""
+    """The approver (or, with none, a Leader) gets the fix's card with its buttons in the Copilot
+    chat: in Teams when the bot can reach them (then the panel's notice only), else in the TBO
+    Support panel plus the usual chat message or email. A sensitive fix or a long wait also goes
+    to the team's channel."""
     from helpdesk.copilot import assistant
     from helpdesk.work_reminders import helpdesk_path, new_notification, notify_users
 
-    people = [approval.assigned_to] if approval.assigned_to else _managers()
+    people = [approval.assigned_to] if approval.assigned_to else leaders()
     people = list(dict.fromkeys(people + (also or [])))
     by_bot = []
     for person in people:
@@ -643,9 +640,13 @@ def remind_and_escalate():
     remind = max(int(settings.get("approval_reminder_hours") or 4), 1)
     escalate = max(int(settings.get("approval_escalate_hours") or 24), remind)
     now = now_datetime()
+    daytime = in_working_hours(now)
     for name in frappe.get_all(APPROVAL, filters={"status": "Pending"}, pluck="name"):
         approval = frappe.get_doc(APPROVAL, name)
         if not approval.assigned_at:
+            continue
+        if daytime and _move_from_away(approval):
+            frappe.db.commit()  # one approval at a time - nosemgrep
             continue
         waited = (now - get_datetime(approval.assigned_at)).total_seconds() / 3600
         if waited >= escalate and not approval.escalated_at:
@@ -675,11 +676,12 @@ def remind_and_escalate():
                 _(
                     "A Copilot fix on ticket {0} has waited {1} hours for approval"
                 ).format(approval.ticket, int(waited)),
-                also=_managers(),
+                also=leaders(),
                 escalate=True,
             )
         elif (
-            waited >= remind
+            daytime
+            and waited >= remind
             and not (
                 approval.get("snoozed_until")
                 and get_datetime(approval.snoozed_until) > now
@@ -698,6 +700,48 @@ def remind_and_escalate():
                 ).format(approval.ticket),
             )
         frappe.db.commit()  # one approval at a time; a failure on the next must not undo this - nosemgrep
+
+
+def in_working_hours(now=None) -> bool:
+    """Reminders and moves wait for the working day (WORK_HOURS, the site's time)."""
+    now = get_datetime(now or now_datetime())
+    return WORK_HOURS[0] <= now.hour < WORK_HOURS[1]
+
+
+def _move_from_away(approval) -> bool:
+    """An approver who is not working today (leave, Unavailable, no longer an active agent) hands
+    the fix to the next person the chain gives (Phase 23, A21). True when it moved."""
+    if not approval.assigned_to or people.working([approval.assigned_to]):
+        return False
+    run = frappe.get_doc("HDS Copilot Run", approval.run)
+    successor = pick_approver(
+        run,
+        bool(approval.sensitive),
+        exclude={approval.assigned_to},
+        copilot_only=bool(
+            (frappe.parse_json(approval.payload or "{}") or {}).get("copilot_only")
+        ),
+    )
+    if not successor or not people.working([successor]):
+        return False
+    away = approval.assigned_to
+    approval.db_set(
+        {"assigned_to": successor, "assigned_at": now_datetime(), "reminded_at": None},
+        update_modified=False,
+    )
+    runs.add_event(
+        run,
+        "approval_moved",
+        {"approval": approval.name, "from": away, "to": successor},
+        runs.SYSTEM,
+    )
+    announce(
+        approval,
+        _("A Copilot fix waits for your approval on ticket {0} ({1})").format(
+            approval.ticket, people.away_text(away)
+        ),
+    )
+    return True
 
 
 def due_in_hours(approval) -> float:

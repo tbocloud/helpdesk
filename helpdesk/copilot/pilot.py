@@ -48,11 +48,12 @@ def _once(key: str, seconds: int) -> bool:
 
 
 def _tell_managers(subject: str, doctype: str = "HDS Copilot Settings", name=None):
-    from helpdesk.copilot.approvals import managers
+    """The Leaders (Copilot People; with no Leader set, the Agent Managers)."""
+    from helpdesk.copilot.approvals import leaders
     from helpdesk.work_reminders import notify_users
 
     notify_users(
-        managers(),
+        leaders(),
         doctype,
         name or doctype,
         subject,
@@ -392,13 +393,14 @@ def last_week(now=None) -> tuple:
 
 
 def pilot_recipients() -> list[str]:
-    from helpdesk.copilot.approvals import managers
+    """The addresses listed in the settings and every Leader (else the Agent Managers)."""
+    from helpdesk.copilot import people
 
     listed = (copilot_settings.get_settings().get("pilot_report_to") or "").replace(
         ",", "\n"
     )
     emails = [line.strip() for line in listed.splitlines() if "@" in line]
-    return sorted(set(emails + managers()))
+    return sorted(set(emails + people.leaders()))
 
 
 def send_weekly_email(now=None, force: bool = False):

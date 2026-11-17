@@ -73,10 +73,12 @@ scheduler_events = {
             "helpdesk.helpdesk.doctype.hd_project_signoff.hd_project_signoff.send_signoff_reminders",
         ],
         "*/5 * * * *": [
-            # the watcher's heartbeat: the Agent Managers hear when it goes quiet (Phase 18)
+            # the watcher's heartbeat: the Infrastructure people hear when it goes quiet (Phase 18)
             "helpdesk.monitor.watch_heartbeats",
             # Copilot deploys through Press: start, follow, check (helpdesk.copilot.deploy)
             "helpdesk.copilot.deploy.run_due",
+            # what did not reach the customer's site (a chat reply, a stage) goes again (Phase 23)
+            "helpdesk.copilot.delivery.resend_undelivered",
             # releases of every merge: the CI gate and approval reminders (off by default)
             "helpdesk.copilot.releases.run_due",
             # customer sites' new errors become tickets (off by default; docs/tbo-copilot.md, Error watch)
@@ -239,8 +241,12 @@ doc_events = {
     "ToDo": {
         # nobody is given a task in a department their team keeps out of
         "validate": "helpdesk.tasky.permissions.check_assignment_department",
-        # the person given a task hears about it (docs/workspace-pages.md, "New tasks")
-        "after_insert": "helpdesk.tasky.new_assignments.notify_assignee",
+        "after_insert": [
+            # the person given a task hears about it (docs/workspace-pages.md, "New tasks")
+            "helpdesk.tasky.new_assignments.notify_assignee",
+            # a ticket given to someone else by hand ends a coordinator's choice (Phase 23, A15)
+            "helpdesk.copilot.people.on_ticket_assigned",
+        ],
         # In progress and Overview reload when a task changes hands
         "on_update": "helpdesk.tasky.api.notify_task_assignment",
     },
@@ -309,6 +315,7 @@ doc_events = {
     # customer health (helpdesk/customer_health.py) is cached for 10 minutes; a
     # manager's change to these shows at once, tickets and tasks within the 10
     "HD Customer": {
+        "validate": "helpdesk.copilot.people.validate_customer",
         "after_insert": "helpdesk.customer_health.clear_health_cache",
         "after_rename": [
             "helpdesk.customer_health.clear_health_cache",

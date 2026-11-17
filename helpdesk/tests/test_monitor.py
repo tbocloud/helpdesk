@@ -65,6 +65,11 @@ class MonitorCase(FrappeTestCase):
                 "helpdesk.copilot.pilot._tell_managers",
                 lambda subject, *a, **k: self.told.append(subject),
             ),
+            # Phase 23: the Infrastructure people (else a Leader) hear the watcher first
+            (
+                "helpdesk.copilot.people.tell_infra",
+                lambda subject, *a, **k: self.told.append(subject) or ["infra"],
+            ),
         ):
             patcher = patch(target, side_effect=side_effect)
             patcher.start()
@@ -224,3 +229,18 @@ class TestApi(MonitorCase):
             api.followup("disk:workload", "Disk above 75% on the workload")["action"],
             "created",
         )
+
+
+class TestDeployState(MonitorCase):
+    def test_a_migrate_that_stopped_half_way_shows(self):
+        # Phase 23 (D2): the new code serves while some patches never ran
+        state = monitor.deploy_state()
+        self.assertIn("helpdesk", state["apps"])
+        with patch(
+            "frappe.modules.patch_handler.get_all_patches",
+            return_value=["helpdesk.patches.never_ran_p23"],
+        ):
+            state = monitor.deploy_state()
+        self.assertFalse(state["migrate_finished"])
+        self.assertEqual(state["first_pending"], ["helpdesk.patches.never_ran_p23"])
+        self.assertIn("deploy", monitor.self_check())

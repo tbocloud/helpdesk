@@ -76,6 +76,14 @@ def self_check() -> dict:
     return monitor.self_check()
 
 
+@frappe.whitelist()
+def deploy_check() -> dict:
+    """For a System Manager after a deploy: each app's version and commit, and whether the last
+    migrate finished (Phase 23, D2). The watcher reads the same in `self_check`."""
+    frappe.only_for(("System Manager", monitor.ROLE))
+    return monitor.deploy_state()
+
+
 # --- auto-repair (Phase 19) ----------------------------------------------------------------
 
 

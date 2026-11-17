@@ -790,7 +790,7 @@ def help_card() -> dict:
                 'Ask Press for more: "restart the bench of galom", "update demoerp", "deploy bench group X"; an approver gets a card first.'
             ),
             _(
-                '"Pause auto-repair: migration tonight" stops the watcher\'s repairs; "resume auto-repair" starts them (managers and DevOps).'
+                '"Pause auto-repair: migration tonight" stops the watcher\'s repairs; "resume auto-repair" starts them (the Infrastructure people and the Leaders).'
             ),
             _(
                 '"Report a problem: …" tells the TBO Copilot team what went wrong; it becomes a task for them.'
@@ -1026,15 +1026,19 @@ def waiting_card(user: str) -> dict:
             or []
         )
     ]
-    lines = [
-        _("Fix for ticket {0} ({1}) waits for your approval").format(
-            i["ticket"], i.get("task") or "-"
-        )
-        for i in items
-    ] + [
-        _("Fix task {0} (ticket {1}) is yours").format(t.task, t.ticket)
-        for t in mine[:10]
-    ]
+    lines = (
+        [
+            _("Fix for ticket {0} ({1}) waits for your approval").format(
+                i["ticket"], i.get("task") or "-"
+            )
+            for i in items
+        ]
+        + [
+            _("Fix task {0} (ticket {1}) is yours").format(t.task, t.ticket)
+            for t in mine[:10]
+        ]
+        + _other_waiting(user)
+    )
     return card(
         _("What waits for you"),
         lines or [_("Nothing waits for you right now.")],
@@ -1046,6 +1050,54 @@ def waiting_card(user: str) -> dict:
             )
             for i in items[:5]
         ],
+    )
+
+
+def _other_waiting(user: str) -> list[str]:
+    """Besides fixes (Phase 23, A27): releases and Press, AWS or repair actions waiting for the
+    person's approval, and tickets waiting for them to choose who takes them."""
+    from helpdesk.copilot import people
+
+    lines = [
+        _("Release of {0} {1} waits for your approval").format(r.repository, r.branch)
+        for r in frappe.get_all(
+            "HDS Deploy Request",
+            filters={"status": "Waiting for approval", "assigned_to": user},
+            fields=["repository", "branch"],
+            limit=10,
+        )
+    ]
+    lines += [
+        _("{0} action waits for your approval: {1}").format(a.kind, a.title)
+        for a in frappe.get_all(
+            "HDS Action Approval",
+            filters={"status": "Pending", "assigned_to": user},
+            fields=["kind", "title"],
+            limit=10,
+        )
+    ]
+    lines += [
+        _("Ticket {0} ({1}) waits for you to choose who takes it").format(
+            t.name, t.customer or "-"
+        )
+        for t in waiting_tickets()
+        if people.may_assign(user, t.customer)
+    ][:10]
+    return lines
+
+
+def waiting_tickets() -> list:
+    """Open tickets whose coordinators have not chosen who takes them yet."""
+    from helpdesk.copilot import people
+
+    return frappe.get_all(
+        "HD Ticket",
+        filters={
+            "custom_copilot_waiting": 1,
+            "status_category": ["in", list(people.OPEN_CATEGORIES)],
+        },
+        fields=["name", "customer"],
+        limit=200,
     )
 
 
@@ -2243,6 +2295,8 @@ def send_digest(now=None):
     local = (now or datetime.now(ZoneInfo(PILOT_TZ))).astimezone(ZoneInfo(PILOT_TZ))
     if local.hour != 9:
         return []
+    from helpdesk.copilot import people as copilot_people
+
     people = set(
         frappe.get_all(
             "HDS Copilot Approval",
@@ -2250,6 +2304,23 @@ def send_digest(now=None):
             pluck="assigned_to",
         )
     )
+    # releases, actions and tickets waiting for a choice count too (Phase 23, A27)
+    people.update(
+        frappe.get_all(
+            "HDS Deploy Request",
+            filters={"status": "Waiting for approval", "assigned_to": ["is", "set"]},
+            pluck="assigned_to",
+        )
+    )
+    people.update(
+        frappe.get_all(
+            "HDS Action Approval",
+            filters={"status": "Pending", "assigned_to": ["is", "set"]},
+            pluck="assigned_to",
+        )
+    )
+    for ticket in waiting_tickets():
+        people.update(copilot_people.coordinators_today(ticket.customer))
     for task in frappe.get_all(
         "HDS Copilot Run",
         filters={"state": "Preparing Fix", "task": ["is", "set"]},

@@ -22,9 +22,10 @@ class ActionCase(FrappeTestCase):
         self.one = create_agent("action.one@example.com").name
         self.two = create_agent("action.two@example.com").name
         self.senior = create_agent("action.senior@example.com").name
+        # Phase 23: Press and AWS actions belong to the Infrastructure people (Copilot People)
         make_copilot_settings(
             enabled=1,
-            approvers=[
+            infrastructure_people=[
                 {"user": self.one, "senior": 0, "active": 1},
                 {"user": self.two, "senior": 0, "active": 1},
                 {"user": self.senior, "senior": 1, "active": 1},

@@ -47,7 +47,7 @@ A run is Copilot's work on one ticket. It starts when a ticket of a customer wit
 | — | Queued | hub, agent | the ticket arrives; Start Copilot; a follow-up after the customer's reply |
 | Queued | Investigating | worker | `claim_job` |
 | Investigating | Queued | hub | the lease expired (fewer than **Max lease losses** times) |
-| Investigating | Failed | worker, hub | `submit_result(failure)`; too many lost leases (the Agent Managers are told) |
+| Investigating | Failed | worker, hub | `submit_result(failure)`; too many lost leases (a Leader is told) |
 | Investigating | Explaining | hub (router) | question, not_allowed_request, customer_mistake, unclear |
 | Investigating | Preparing Fix | hub (router) | wrong_setting, bug, data_damaged_by_bug |
 | Investigating | Handed Over | hub (router) | core_issue |
@@ -59,7 +59,7 @@ A run is Copilot's work on one ticket. It starts when a ticket of a customer wit
 | Awaiting Approval, Approved | Preparing Fix | agent, hub | rejected with a reason; the pull request went back to draft or was closed |
 | Approved | Awaiting Approval | hub | new commits arrived after the approval |
 | Approved | Merged | hub | the hub merged it |
-| Preparing Fix, Awaiting Approval | Merged | hub | merged on GitHub without the approval (recorded, the Agent Managers told) |
+| Preparing Fix, Awaiting Approval | Merged | hub | merged on GitHub without the approval (recorded, a Leader told) |
 | Merged | Resolved | agent | Mark deployed, after an engineer deployed it |
 | Merged | Deploying | hub | Press started the deploy (or the bench already runs the merged commit) |
 | Deploying | Verifying | hub | Press updated every site |
@@ -101,7 +101,7 @@ The context holds the ticket, its triage fields, the customer, the registered si
 | unclear (or confidence below the setting) | Explaining → Answered when the agent sends | Working on it → **Waiting for you** | the questions land in the card; the customer's reply (email, portal or their site) starts a **follow-up run** |
 | wrong_setting, bug, data_damaged_by_bug | Preparing Fix | **Working on it** | continues in the next phases (sandbox, pull request, approval) |
 | customization_request | Explaining → Answered when the agent sends | Working on it → **With our team** | the explanation says it is a change, not a fault, and offers an estimate; a live run makes the ticket a Customization by itself (`customization.estimate_from_copilot`), with Copilot's hours unless triage or an agent estimated it already, and its draft of **What we will build** and **Done when** (a shadow run leaves the ticket alone); the agent checks the estimate card and sends it; once the customer approves it, **Build with Copilot** (see **Builds of approved customizations**) |
-| core_issue | Handed Over | **With our team** | a Task for the customer's **Assigned developer** in the customer's open Project (else the hand-over project); without a project the Agent Managers are told |
+| core_issue | Handed Over | **With our team** | a Task for the customer's developer (Copilot People) in the customer's open Project (else the hand-over project); without a project a Leader is told |
 
 Every diagnosis is an internal note on the ticket (category, confidence, summary, evidence, proposal), credited to the hub's automation user.
 
@@ -128,10 +128,10 @@ A run at Preparing Fix needs a code change. Until the worker can open pull reque
 1. **The fix task.** A live run gets a Task "Copilot fix: <subject>" in the customer's open project (else the hand-over project), assigned to the customer's **Assigned developer**, with the diagnosis and the instruction to open a pull request that says `Closes TASK-…`. A shadow run gets it from **Create fix task** in the ticket's Copilot chat. With no project at all the run says so on the ticket.
 2. **The pull request.** The GitHub sync links it to the task and calls `fixes.on_pull_request`. The hub puts the **hold label** (`no-auto-merge`, a setting) on it: the org merge bot and the repository's auto-merge workflow skip pull requests with that label, so nothing merges it before the approval. A draft waits; when it is ready, an **HDS Copilot Approval** is opened for its head commit, with the changed files, the risk and the checks, and assigned. One pull request per fix: while the run's own is open, another that closes the same task is left alone (an event says so) and is followed once the first is closed.
 3. **The risk** (`risk.py`, fixed rules on the changed files): accounting and tax, stock, payroll, permissions, migrations, `hooks.py`, doctype JSON, raw SQL writes, dependencies or CI make it **high** and **sensitive**; more than 300 changed lines make it high; no test makes it medium; otherwise low. Each reason is listed on the card.
-4. **Who approves.** HDS Copilot Settings → **Approvers** (user, senior, active). The customer's developer when allowed, else the approver with the fewest pending approvals; a sensitive fix only a **senior** (with no senior listed, the Agent Managers act as seniors); never the people the fix task is assigned to. The approver hears it by chat or email with a link to the ticket; a sensitive one, and any approval that waits past **Escalate after**, also goes to the team's channel.
+4. **Who approves.** Copilot People (see **People**): the person a coordinator chose for the ticket, then the Fix Approver chain (the customer's fix approver, its developers, its coordinators, the common Fix Approvers, the Seniors, the Leaders), the first with someone working today, the one with the fewest waiting approvals; a sensitive fix only a **Senior** (with no Senior set, the Leaders); never the people the fix task is assigned to. The approver hears it by chat or email with a link to the ticket; a sensitive one, and any approval that waits past **Escalate after**, also goes to the team's channel.
 5. **Deciding** (`approvals.decide`, row lock): the first decision wins. **Approve** with the planned deploy date: the hub re-reads the pull request, and if new commits arrived the approval is superseded and a new one opened. **Reject** needs a reason, which goes to the task and the pull request; the run goes back to Preparing Fix, and the rejected commit is not asked again: the developer's next push opens a new approval.
 6. **The merge** (`fixes.try_merge`): when the head is still the approved commit, every check run passed (success, neutral or skipped) with the commit status green or absent, and GitHub calls the merge clean, the hub merges with the approved commit pinned (GitHub refuses with 409 if the head moved), using the repository's own method as the org merge bot chooses it (merge commit where allowed, else squash, else rebase). It retries on every check webhook and the 10-minute refresh. A lasting block (failing checks, merge conflicts, a branch behind its base, a review GitHub requires) is told to the approver and the developer once, in plain words; GitHub still settling the merge state (`unknown`, `unstable`) is a quiet wait. Each finished workflow also updates the checks on the card. After merging, the hub replays the merged pull request through the task sync, so the fix task completes at once; GitHub's own webhook arriving later changes nothing, because the sync acts once per change of state. The customer then sees **Fix scheduled** with the planned date.
-7. **Merged elsewhere.** A pull request merged on GitHub without the approval moves the run to Merged too, with a note on the ticket, an event and the Agent Managers told.
+7. **Merged elsewhere.** A pull request merged on GitHub without the approval moves the run to Merged too, with a note on the ticket, an event and a Leader told.
 8. **Deploy, or Mark deployed.** A site on TBO's Press is updated with **Deploy** (see **Deploying through Press**). Otherwise, after an engineer deploys the merged fix by hand, **Mark deployed** in the dialog resolves the run; the customer is asked to confirm (Resolved), as in Phase 1a. Mark deployed is refused while a deploy is waiting or running.
 
 The GitHub token in Settings → GitHub needs, on the repositories Copilot fixes: Contents read and write (to merge), Pull requests read and write (the pull request, labels, comments), Commit statuses read, and Checks read. GitHub gives no fine-grained personal token Checks read; with one, give it Actions read instead: the hub then reads the commit's GitHub Actions workflow runs, the card says that only those were seen, and GitHub's own merge state still has to be clean. Those repositories must also be allowed in the sync. Copilot follows pull requests only while the GitHub sync is on: switched off, the refresh says so and nothing acts on GitHub's events. Crons: `fixes.refresh_open` every 10 minutes (reads every open fix's pull request from GitHub and replays it as its webhook would have; finds one that says `Closes TASK-…` but never reached the hub, and moves on to a new pull request when the run's was closed), `approvals.remind_and_escalate` every 15 minutes (a reminder after **Remind after** hours, then a senior or the Agent Managers after **Escalate after** hours). API (agents): `helpdesk.api.copilot.create_fix_task`, `decide_fix(ticket, approve, note, deploy_date)`, `refresh_fix`, `mark_deployed`; `get_run` returns the fix card (deploys: see below). When the Task of a Copilot fix completes on the merge, its note on the ticket says to deploy and press Mark deployed instead of "Reply to the customer".
@@ -169,7 +169,7 @@ The weekly pilot report counts builds started, merged and reopened, their estima
 
 ## Deploying through Press (Phase 2: `press.py`, `deploy.py`, `verify.py`)
 
-After the merge, a person presses **Deploy** on the ticket's Copilot card: **Tonight** (the next deploy window; inside the window, at once) or **Now**. The approvers and the Agent Managers may deploy Tonight; only senior approvers and Agent Managers may deploy Now. If other customers' sites share the bench, only a senior may deploy, and they stay on their old code: Press's normal update moves only the sites it is given, and keeps every other app at its last deployed commit. TBO Support's own site may share the bench too (TBO's demo bench does): it is not another customer, it never moves (a site card naming it is refused), and its code stays as it is. The Deploy dialog lists the exact sites it updates before it is pressed, and pressing it approves that set: the deploy request keeps them as a fixed list (a change to it is refused), and only those rows go to Press. The card lists the sites left on the bench under **Not moved**; until they move, Press runs the old and the new bench side by side.
+After the merge, a person presses **Deploy** on the ticket's Copilot card: **Tonight** (the next deploy window; inside the window, at once) or **Now**. Whoever may decide the customer's fixes (Copilot People and its fallbacks), the Seniors, the Leaders and the Agent Managers may deploy Tonight; only the Seniors, the Leaders and the Agent Managers may deploy Now. An automatic deploy after an approval needs no second permission: the approval was the go. If other customers' sites share the bench, only a senior may deploy, and they stay on their old code: Press's normal update moves only the sites it is given, and keeps every other app at its last deployed commit. TBO Support's own site may share the bench too (TBO's demo bench does): it is not another customer, it never moves (a site card naming it is refused), and its code stays as it is. The Deploy dialog lists the exact sites it updates before it is pressed, and pressing it approves that set: the deploy request keeps them as a fixed list (a change to it is refused), and only those rows go to Press. The card lists the sites left on the bench under **Not moved**; until they move, Press runs the old and the new bench side by side.
 
 **What moves.** The Press site of each of the customer's Production site cards on that bench, with the merged commit of the app whose repository the fix changed. The request (`HDS Deploy Request`, `TBO-DEP-.YYYY.-.#####`) lists the sites, the app with its old and new commit, and the other sites on the bench.
 
@@ -181,7 +181,7 @@ After the merge, a person presses **Deploy** on the ticket's Copilot card: **Ton
 4. **Checking.** The run is Verifying, and the hub checks the site through the customer's connection: it runs the merged commit; no error signature since the deploy began that the week before did not have (the connector's own left out); the scheduler is on and maintenance mode off; the documents the diagnosis names still open. A site that does not answer is asked again for **Check after deploy** minutes. A ticket without a connection is not checked, and the card says so.
 5. **Succeeded.** The run is Resolved, and the customer sees Resolved ("The fix is live") and is asked to confirm.
 
-**When it fails**, the request is Failed with Press's reason or the failed check, the run is Escalated, a note goes on the ticket, and the approver, the person who pressed Deploy and the Agent Managers are told. **Cancel deploy** works while the request has not started.
+**When it fails**, the request is Failed with Press's reason or the failed check, the run is Escalated, a note goes on the ticket, and the approver, the person who pressed Deploy and the Leaders are told. **Cancel deploy** works while the request has not started.
 
 **Undo the fix.** On a run whose merged fix went wrong (Escalated or Resolved), an approver or Agent Manager presses **Undo the fix** with a reason. The hub asks GitHub for its own revert of the merged pull request (`revertPullRequest`; with the GitHub App when it is set up) and starts a revert run with its own task ("Copilot revert: …"); the revert pull request says `Closes` that task and goes through the one approval and the merge like any fix, then Deploy (Now, for a senior). The ticket's card follows the revert run. The customer hears nothing from it: its stages are recorded as events only. One undo per run. A database restore from Press's backup stays a person's decision.
 
@@ -264,15 +264,15 @@ API (agents): `helpdesk.api.copilot.decide_fix` (also for corrections), `change_
 
 **The instant stop.** With **Copilot enabled** off, no run starts, `claim_job` hands out no work, and a worker mid-run is answered `cancel` at its next heartbeat (within 30 seconds): an investigation is Cancelled, a fix job is marked Failed (event `fix_stopped`), and the team takes the ticket as before Copilot.
 
-**Monthly AI budget** (HDS Copilot Settings → Pilot). The month's spend is the AI usage log rows with a Copilot run (the worker's stages; the hub's own AI features are not counted). At 80% the Agent Managers are told once a month; at 100% `claim_job` hands out no work until the next month or a larger budget (0: no budget). **Dollar cap per diagnosis** goes to the worker in the run context (`limits.max_usd`); a fix has **Dollar cap per fix** in `fix.max_usd`.
+**Monthly AI budget** (HDS Copilot Settings → Pilot). The month's spend is the AI usage log rows with a Copilot run (the worker's stages; the hub's own AI features are not counted). At 80% the Leaders are told once a month; at 100% `claim_job` hands out no work until the next month or a larger budget (0: no budget). **Dollar cap per diagnosis** goes to the worker in the run context (`limits.max_usd`); a fix has **Dollar cap per fix** in `fix.max_usd`.
 
-**Worker watch** (every 10 minutes, `pilot.watch_workers`): runs queued, or fixes asked for, more than 15 minutes ago with no worker claiming them → the Agent Managers are told, once an hour while it lasts (not while the budget holds the work).
+**Worker watch** (every 10 minutes, `pilot.watch_workers`): runs queued, or fixes asked for, more than 15 minutes ago with no worker claiming them → the Leaders are told, once an hour while it lasts (not while the budget holds the work).
 
 **Text that tries to instruct the AI** (`suspicious.py`; the red team of 18 Oct 2026 found the model reports it only sometimes). When a diagnosis arrives, the hub looks at the ticket's subject, description and the customer's messages; the worker looks at everything its tools return (files, error logs, records). Lines such as "ignore your previous rules", "note to the AI assistant", "you are now in maintenance mode" or "paste the contents of the .env file" become `suspicious_instruction` events (source and line, at most 5 a run from the worker), and the ticket's Copilot chat shows them in a warning box: Copilot is told to ignore such text, and the agent reads it before sending anything. The patterns leave ordinary requests alone (tested).
 
 **Copilot Pilot** (Script Report, System and Agent Managers; filters dates and customer): per week and customer, tickets, diagnoses, ratings (Right, Partly, Wrong; rated right % counts Partly half), root causes, explanations sent and the median **edit** (how much agents changed Copilot's explanation before sending it: 0 as drafted, 100 rewritten; kept on the run as `explanation_edited`), fixes asked, opened, approved, merged, deployed and undone, corrections applied, records skipped and corrections undone, refused approvals, escalations and hand-overs, median approval wait and time to resolve, AI cost (hub and worker) per ticket, and the runs rated Wrong.
 
-**Weekly pilot email** (hourly check, sent once on Monday from 08:00 Riyadh time): last week's rows, the cost, links to the runs rated Wrong and to the report, to the **Weekly pilot email to** addresses and the Agent Managers.
+**Weekly pilot email** (hourly check, sent once on Monday from 08:00 Riyadh time): last week's rows, the cost, links to the runs rated Wrong and to the report, to the **Weekly pilot email to** addresses and the Leaders (else the Agent Managers).
 
 ## Customer chat (Phase 5: `conversation.py`, `api/copilot_conversation.py`; helpdesk_client `chat.py`)
 
@@ -298,7 +298,7 @@ The Support button in a customer's ERP opens a chat with TBO Copilot instead of 
   - From then on the chat is the ticket's channel: the customer's messages become Received Communications (a Copilot run waiting for an answer gets it, as from email), and no AI runs. The site's call runs as Guest, so the message is saved as the automation user: it reopens the ticket, and Guest may not save a ticket. Until 31 Oct 2026 every such message failed with "That did not reach TBO Support".
   - An agent's reply reaches the chat even when the hub has no outgoing email account. A ticket the customer follows in a chat (this one or TBO Chat) or on their own site skips the email instead of failing (`HDTicket.reaches_customer_without_email`). Any other ticket refuses the reply before anything is saved or sent. Before, the reply failed after its chat copy had gone, so the customer saw a reply the ticket did not keep.
   - **Talk to a person** raises the ticket with the transcript at any point. When the customer has not said anything yet, the chat first asks "Sure. In one line, what is it about?" (state **Before a person**). Their line becomes the ticket's subject, or **Just connect me** raises it at once.
-  - On a hand-over, the people on the ticket (else the Agent Managers) are told at once in Teams or their Copilot panel (`thread.on_hand_over`).
+  - On a hand-over, the people on the ticket (else a Leader) are told at once in Teams or their Copilot panel (`thread.on_hand_over`).
   - Copilot still looks into the ticket for the team, but its stage messages are held until a person has replied (`customer.quiet_for_customer`, as for a ticket the error watch raised).
   - **Just connect me** before the customer has written anything starts no Copilot run: there is nothing to investigate, and a run would only guess from the page context. The people's card says Copilot waits. They ask in the chat, then press **Start Copilot** if it helps.
   - The ticket's context lists at most 8 of the user's roles.
@@ -393,10 +393,10 @@ Copilot notices a new error on a customer's site and opens a ticket for it befor
 - **Raised for:** the customer's first contact, with source **Error watch** (`custom_copilot_source`), linked to its known issue (`custom_known_issue`).
 - **Description:** when it started, how often, the users, and up to 5 samples (time, document, code lines).
 - **What follows:** Copilot investigates it like any ticket.
-- **Who hears it:** the customer's assigned developer (else the Agent Managers) gets it in the Copilot chat, and the diagnosis later.
+- **Who hears it:** the customer's developer working today (Copilot People; else a Leader) gets it in the Copilot chat, and the diagnosis later.
 - **The customer hears nothing from Copilot** until a person replies on the ticket: no acknowledgement email, and every stage except Resolved is held (`watch.held`; the stage event says `held`).
 
-**Limits.** At most **Tickets per Site per Day** (default 3) and **Tickets per Day** in all (default 10). Past them the error keeps being counted and waits for the next day, and the Agent Managers hear it once a day. The watch itself uses no AI; investigations count toward the monthly budget as usual.
+**Limits.** At most **Tickets per Site per Day** (default 3) and **Tickets per Day** in all (default 10). Past them the error keeps being counted and waits for the next day, and the Leaders hear it once a day. The watch itself uses no AI; investigations count toward the monthly budget as usual.
 
 ## Known issues (Phase 9: `known_issues.py`)
 
@@ -629,7 +629,7 @@ customer, TBO itself), the **internal project** (follow-up tasks) and the watche
 - `followup(key, subject, details, priority)`: one open Task per key in the internal project
   (`custom_monitor_key`), for slow-burning issues (a certificate expiring in two weeks, a disk filling).
 - `heartbeat(source)`: every minute from the watcher. `monitor.watch_heartbeats` (every 5 minutes)
-  tells the Agent Managers when a watcher that was once heard goes quiet for the quiet time, once an
+  tells the Infrastructure people (else Infrastructure Senior, else a Leader) when a watcher that was once heard goes quiet for the quiet time, once an
   hour while it lasts, and once when it is back.
 - `self_check()`: the hub's own numbers for the watcher (and any agent): the scheduler, the queues
   and failed jobs, stuck mail, the error rate, when the error watch and the deploy train last ran,
@@ -668,14 +668,14 @@ The watcher repairs what its runbooks cover; TBO Support holds the switch and th
 - **The switch** (HDS Hub Settings → Auto-repair): `auto_repair_paused` with who, when and why; `auto_repair_off`
   (runbooks turned off, one per line); `auto_repair_max_per_hour` (default 6). The watcher reads `repair_policy`
   every minute. In Teams, "pause auto-repair: <why>" and "resume auto-repair" (intents `repair_pause`,
-  `repair_resume`) act at once for the Agent Managers and the internal project's **DevOps Engineers**; the channel
+  `repair_resume`) act at once for the Infrastructure people, the Leaders and the Agent Managers; the channel
   hears either way. While paused the watcher repairs nothing, approved repairs included.
 - **HDS Repair**, one per attempt, credited to TBO AI: runbook, level (Automatic / Approval), target, alert key and
   ticket, attempt, evidence, the exact action, the check after, outcome (Fixed / Not fixed / Refused / Paused /
   Skipped). `repair_started` / `repair_finished`; the note goes on the alert's ticket ("Copilot repair (runbook,
   attempt N): outcome. …"). An automatic fix posts "🔧 Fixed by Copilot" to the channel.
-- **Hand-over:** `repair_finished(escalate=1)` assigns the ticket to the least busy DevOps Engineer of the internal
-  project (the Agent Managers when there is none) and tells the channel.
+- **Hand-over:** `repair_finished(escalate=1)` assigns the ticket to the least busy Infrastructure person working
+  today (else Infrastructure Senior, else a Leader; Copilot People) and tells the channel.
 - **Repairs that wait for an approver:** `request_repair` makes an action approval of kind **Repair**, requested by
   the watcher's user, on the alert's ticket (risk `senior` for the heavy ones); `approved_repairs` lists what someone
   approved and nobody ran, with `payload_hash` = sha256 of `json.dumps(payload, sort_keys=True, default=str,
@@ -710,61 +710,91 @@ What changed so a few people can use TBO Copilot for a week (TASK-2026-00024; th
 - **Listing:** it links the privacy and terms pages; the description and the command list mention "report a problem".
 - **Admin steps:** in **Setting up the bot**, step 5. Upload the package, then Setup policies → Global (Org-wide default) → Installed apps → add **TBO Copilot**, and Permission policies → allow it. Installation reaches everyone within a day, and the bot can then message people first.
 
-## People (Phase 22: `copilot/people.py`)
+## People (Phases 22 and 23: `copilot/people.py`)
 
-**Every person Copilot goes to comes from settings.** The code names nobody and picks nobody by a job role, so TBO changes the people without a deploy.
+**Every person Copilot goes to comes from one table.** The code names nobody and picks nobody by a job role, so TBO changes the people without a deploy. The table (`HDS Copilot Role Person`) is on the settings page (**People**, for every customer) and on each customer (**Copilot People**):
 
-| Where | Setting | Used for |
-|---|---|---|
-| **Each customer** (HD Customer → Copilot People) | **First Developer** | Fix approvals, Copilot's news, new work, the digest |
-| | **Second Developer** | The same while the first is on leave, Unavailable or not an active agent |
-| | **Fix Approver** (optional) | Approves this customer's fixes; empty: the first or second developer |
-| | **Project Coordinators** (table) | Every new ticket; the choice when both developers are away; "Talk to a person"; risk alerts |
-| **Every customer** (HDS Copilot Settings → People) | **Project Coordinators** (table) | Customers with none of their own |
-| | **New Tickets to the Coordinators** | Teams and TBO Support (default), TBO Support only, or Off |
-| | **Risk Alerts Go To** (table) | Every risk alert, for every customer |
-| | **Also Tell the Project Coordinators** (on) | Risk alerts also go to the customer's coordinators |
-| | **Infrastructure People** (table, Senior tick) | Press, AWS and repair approvals; the watcher's tickets and quiet alerts |
-| | **Approvers** (Fix Approval) | Where nobody else is set |
+| Column | Holds |
+|---|---|
+| Role | Developer, Fix Approver, Project Coordinator, Senior, Leader, Infrastructure, Infrastructure Senior, Risk Alerts, Deploy Notices |
+| Person | a user |
+| Level | Main, Fallback 1, Fallback 2, Fallback 3 |
+| Active | off pauses the row without removing it |
+| Until | optional: the row stops counting after this date (a temporary cover) |
 
-A customer's own setting wins over the common one. An empty First or Second Developer is the customer's Ticket Owner (else Copilot's older Assigned Developer) or Backup Ticket Owner, also set on the customer. **Who Copilot Goes To Today**, on the settings page, shows each customer's people, who Copilot would go to now and why, and every empty place. The Phase 22 patch copied each customer's Ticket Owner and Backup Ticket Owner into the first and second developer once; after that they are set on their own.
+A customer's own table holds only Developer, Fix Approver and Project Coordinator; the other roles are set once, on the settings page.
 
-**The chain** (`for_ticket`): the person a coordinator chose for the ticket, then for a fix the fix approver, then the first developer, then the second. Working today is TBO Support's rule (`ticket_assignment.working_today`: active agent, not on approved leave, not Unavailable); someone set here who is not an agent at all counts while their account is enabled and they are not on leave. With neither developer working, the work goes to the customer's project coordinators (else the common ones), the least busy first. The ticket's chat says each time why it went where it did.
+| Role | Copilot uses it for |
+|---|---|
+| Developer | fix and hand-over tasks, Copilot's news on the ticket, the digest. Empty on a customer: its Ticket Owner (Main), then its Backup Ticket Owner (Fallback 1), so a manager's change of owner moves Copilot too |
+| Fix Approver | approving the customer's fixes; the common rows stand in for every customer after the customer's own people |
+| Project Coordinator | every new ticket, choosing a person when no developer can take a ticket, "Talk to a person", risk alerts, writing in the ticket chat |
+| Senior | sensitive fixes, corrections, releases that need a senior, Deploy Now, letting a release through without green CI |
+| Leader | the last resort for everything: escalations, approvals nobody else can take, "Copilot needs a person", failed deploys, the AI budget and worker alerts, the weekly pilot email. With no Leader set, the Agent Managers (the settings page warns) |
+| Infrastructure, Infrastructure Senior | Press, AWS and repair actions (a heavy one: Infrastructure Senior), the watcher's tickets and alerts, pausing auto-repair |
+| Risk Alerts, Deploy Notices | news only: everyone in the role is told |
 
-**Fix approvals.** `approvals.pick_approver` walks the chain in order (`people.fix_chain`: the coordinator's choice, the fix approver, the first developer, the second developer, then the project coordinators, least busy first) and gives the approval to the first who may decide it: not the fix's author, and a senior approver for a sensitive fix. So when the first developer wrote the fix or is on leave, the second developer gets it; only when nobody in the chain may, the least loaded of the Approvers. The customer's people (first, second, fix approver, chosen person, coordinators) may decide that customer's fixes even when they are not in Approvers.
+**The fallback order** (`people.CHAINS`, `people.resolve`). For each role Copilot looks at the customer's rows (Main, then Fallback 1, 2, 3), then the common rows, then the next role, and takes the first group with someone **working today** (TBO Support's rule, `ticket_assignment.working_today`: an active agent, not on approved leave, not Unavailable). Several people at one level: the least busy takes single work (a fix approval, a ticket), and all of them hear news. With nobody working anywhere, the first group with anybody at all, so work is never lost.
 
-**Every new ticket** (`on_ticket_insert`, then `tell_coordinators` in the background) reaches the project coordinators working today, in Teams and in TBO Support. The card shows:
+| Role | Then |
+|---|---|
+| Developer | Project Coordinator → Leader |
+| Fix Approver | the customer's Developers → Project Coordinators → the common Fix Approvers → Senior → Leader |
+| Project Coordinator | Leader |
+| Senior | Leader |
+| Infrastructure | Infrastructure Senior → Leader |
+| Infrastructure Senior | Leader |
+| Risk Alerts | Leader |
+| Deploy Notices | Infrastructure → Infrastructure Senior → Leader |
+
+Only active agents count where a person must act in TBO Support (every role except Risk Alerts and Deploy Notices); anyone with an enabled account hears news. **Who may act:** whoever the table and its fallbacks may put on a piece of work (`people.in_chain`), plus the Agent Managers for fixes and deploys. A fix is never approved by its author, and a sensitive one only by a Senior (or a Leader when no Senior is set).
+
+**Who Copilot Goes To Today**, on the settings page, shows each role and each customer that uses Copilot or has its own people: who is set at which level, who gets the work now and why, and every empty place. It warns about a role set nowhere, no Leader, a person who is not an active agent, a disabled account, and a cover that has ended.
+
+**Hand over someone's places** (settings page button, `people.hand_over_places`): someone leaves or changes job. Choose from whom, to whom, and optionally one customer; the counts come first. Every row they hold moves to the other person (a duplicate row is removed), their waiting fix approvals go to the next person the chain gives, and a note is left on the settings and on each customer touched.
+
+**The Phase 23 patch** (`copilot_people_roles_table`) moved Phase 22's fields and tables into the table once, where the new table was still empty:
+- Approvers with Senior ticked: Senior and Fix Approver; without: Fix Approver;
+- Infrastructure People with Senior ticked: Infrastructure Senior; without: Infrastructure;
+- Project Coordinators, Risk Alerts Go To and Deploy Notices Go To: their roles, Main;
+- each customer's first and second developer, only when they differ from its ticket owners (Main and Fallback 1); its fix approver and coordinators;
+- a customer with no coordinator anywhere: its open projects' Project Coordinators, so they keep writing in the ticket chat.
+
+The old fields stay hidden for one version.
+
+**Every new ticket** (`on_ticket_insert`, then `tell_coordinators` in the background) reaches the customer's project coordinators working today (its own, else the common ones), in Teams and in TBO Support, as **New Tickets to the Coordinators** says (both, TBO Support only, or Off). Never a stand-in or a Leader, and never for the error watch's own tickets. The card shows:
 - the ticket's number, customer, subject, priority, and how it came in;
 - who has it and who Copilot goes to, with why;
-- **Assign to:** active agents working today, least busy first, with their open tickets;
+- **Assign to:** the customer's own developers and coordinators working today first, then every other agent who works tickets (not writers, designers, DM or sales), least busy first, with their open tickets (up to 100);
 - **Assign**, and **Keep** when someone already has it.
 
-The coordinator who raised the ticket is not told. A customer with no Copilot people set (no coordinators anywhere, no developer) is left alone.
-
-**When both developers are away** the same card asks the coordinators to choose, even with New Tickets set to Off; the ticket's chat says they were asked. Until one chooses, Copilot's approvals for the ticket go to a coordinator, and the card comes again at 06:45 each morning (`ask_again`, after the leave moves at 06:30); a ticket whose developer is back stops waiting.
+**When no developer can take a ticket** (none set: the card says so; or none working today) and TBO Support did not already give it to someone working today, the coordinators (else a Leader) are asked to choose, even with New Tickets set to Off. Until one chooses, Copilot's approvals for the ticket go to them. The card comes again at 06:45 on working days (`ask_again`): only to people working that day, and not once someone working today has the ticket or the developer is back.
 
 **Assign** (`press`, `choose`):
+- Only the customer's project coordinators (its own, the common ones) and the Leaders may choose; the person must work tickets, and TBO Support's own refusal is shown.
 - The ticket goes to the chosen person, and its open Copilot task too.
 - A fix waiting for approval moves to them when they may decide it; else it stays, and the card says why.
-- `custom_copilot_person` on the ticket makes them Copilot's person for it, and the ticket's chat says "Assigned to X by project coordinator Y".
+- `custom_copilot_person` on the ticket makes them Copilot's person for it; the ticket's chat says "Assigned to X by project coordinator Y" (or leader Y).
 - The first choice stands: a card pressed after someone chose answers with that choice.
-- Only the customer's project coordinators (its own, else the common ones) and the Approvers may choose.
 
-**Talk to a person** (`thread.on_hand_over`): the customer's coordinator working today joins the ticket (the developer stays) and is told in Teams and TBO Support with what the customer wrote. With nothing set anywhere (no coordinators, no Approvers), it and "Copilot needs a person" (`runs.tell_people`) still reach the Agent Managers as before, so a request never goes nowhere; the settings page warns. Who writes in a ticket's chat (`thread.may_write`) also follows the coordinators set here.
+**Talk to a person** (`thread.on_hand_over`): the customer's coordinator working today joins the ticket (the developer stays) and is told in Teams and TBO Support with what the customer wrote; with none working, a Leader. Who writes in a ticket's chat (`thread.may_write`): its assignees, the customer's coordinators, the Leaders and the admins.
 
-**Risk alerts** (`alert_risk`, queued) go to Risk Alerts Go To and, with the tick on, the customer's coordinators. They are for information only: who approves does not change, and the approver is not told twice. They are sent for:
-- a fix in a sensitive area;
-- a data or settings correction;
-- a senior Press or AWS action;
-- Deploy Now pressed by a person;
-- a fix Copilot gave up on.
-
-**Infrastructure People**:
-- With anyone listed, they alone decide Press, AWS and repair actions (`actions.deciders`), a senior action by a Senior among them.
-- The watcher's tickets go to them (`repairs.devops_engineers`), and so do its quiet alerts (`monitor.watch_heartbeats`).
-- With nobody listed, these work as before (the Approvers; the internal project's DevOps Engineers; the Agent Managers).
+**Risk alerts** (`alert_risk`, queued) go to Risk Alerts (else a Leader) and, with **Also Tell the Project Coordinators**, the customer's coordinators. For information only: who approves does not change, and the approver is not told twice. They are sent for a fix in a sensitive area, a data or settings correction, a senior Press or AWS action, Deploy Now pressed by a person, and a fix Copilot gave up on.
 
 **Cards** carry a list input (`{"type": "choice", "choices": [[title, value]]}`): Teams draws it as `Input.ChoiceSet`, the panel as a select, and the picked value arrives as the input `person` (`teams.CARD_INPUTS`).
+
+## What the customer sends and gets is never lost (Phase 23: `conversation.py`, `delivery.py`, `ticket_puller.py`)
+
+- **The AI switched off.** With **Copilot enabled** or **Customer Chat** off, a ticket's chat (the customer and the team) still works: it needs no AI. A new chat is refused with a line the site shows ("nothing you typed was sent"), never taken in silence.
+- **A send that is repeated.** The site sends a `client_message_id` with each message; the hub takes each one once (two days, per connection). A retry after a time-out gets the conversation as it stands, or "still answering" while the first is being answered.
+- **What did not arrive.** Every five minutes `delivery.resend_undelivered` sends again what the site missed in the last two days: the team's chat replies and Copilot's stages (`delivered` 0), and stages on the ticket whose push failed (`pushed` false), with the same `hub_ref` (the site keeps one of each). Replies given in the site's own answer count as delivered.
+- **A comment on the ticket form** is the customer's reply (a received Communication, its HTML cleaned), so the ticket's status follows and the agents hear it; it used to be a silent internal note.
+- **The customer's answer** (It's fixed, Still broken) that fails to apply keeps the connection's cursor, so it is tried again next time; after six tries it stops holding the others back.
+- **Every open linked ticket** is synced, the latest first (it was the first 100).
+- **"Is it fixed?"** is asked again after every Resolved stage: the earlier answer is cleared.
+- **The promise filter** holds back a sentence that commits TBO to something (a refund, a fix, a date, a change made) or states a price, never a topic word ("discount", "refund", "guarantee") or an amount in a question about the customer's own figures. A hand-over never ends with the offer to raise a ticket.
+- **Limits:** messages a minute per person (colleagues in an incident no longer share them), messages a day per customer.
+- The site names its ticket after the chat's title; one "Fix scheduled" reaches the customer when a deploy starts by itself.
 
 ## Going live from a task, and deploy notices (Phase 22: `copilot/go_live.py`, `api/copilot_go_live.py`)
 

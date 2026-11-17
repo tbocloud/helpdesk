@@ -69,9 +69,13 @@ class TestGoLive(FrappeTestCase):
         ) as notify:
             result = go_live.ask_go_live(self.task, "now", "The customer is waiting")
         self.assertTrue(result["asked"])
+        # one notice: the card, headed by the request and its note (Phase 23, A10)
         announce.assert_called_once()
+        notify.assert_not_called()
         self.assertEqual(announce.call_args.args[1], APPROVER[0])
-        self.assertIn("go live now", notify.call_args.args[3])
+        subject, note = announce.call_args.kwargs["ask"]
+        self.assertIn("go live now", subject)
+        self.assertIn("The customer is waiting", note)
         self.assertIn("nobody approves their own change", result["next"])
         comments = frappe.get_all(
             "Comment",
@@ -91,6 +95,13 @@ class TestGoLive(FrappeTestCase):
         announce.assert_not_called()
         self.assertIn("Press deploys it tonight", result["next"])
 
+    def test_a_staging_copy_is_never_taken_for_the_release(self):
+        release = self.release()
+        staging = self.release(status="Succeeded", staging_for=release.name)
+        self.assertNotEqual(staging.name, release.name)
+        result = go_live.task_release(self.task)
+        self.assertEqual([r["release"] for r in result["releases"]], [release.name])
+
     def test_only_tonight_or_now(self):
         self.release()
         with self.assertRaises(frappe.ValidationError):
@@ -109,12 +120,17 @@ class TestGoLive(FrappeTestCase):
         )
         self.assertIn("Approved by Hari Approver", card["lines"])
 
-    def test_nobody_set_means_no_notice(self):
-        make_copilot_settings(deploy_notice_people=[])
+    def test_nobody_in_deploy_notices_means_a_leader_hears_it(self):
+        # Phase 23: Deploy Notices → Infrastructure → Infrastructure Senior → Leader
+        make_copilot_settings(
+            copilot_people=[
+                {"role": "Leader", "person": SENIOR[0], "level": "Main", "active": 1}
+            ]
+        )
         release = self.release(status="Deploying")
-        with patch("helpdesk.copilot.assistant.send") as send:
+        with patch("helpdesk.copilot.assistant.send", return_value="Web") as send:
             go_live.alert_deploy(release.name, "live")
-        send.assert_not_called()
+        self.assertEqual([c.args[0] for c in send.call_args_list], [SENIOR[0]])
 
     def test_a_failed_deploy_tells_them(self):
         release = self.release(status="Deploying")

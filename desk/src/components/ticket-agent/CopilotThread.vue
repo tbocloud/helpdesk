@@ -206,11 +206,12 @@
         <FileUploader
           v-if="thread.data?.chat"
           :upload-args="{
-            doctype: 'HDS Copilot Chat',
             docname: thread.data.chat,
+            method: 'helpdesk.api.copilot_chat.attach',
             private: true,
           }"
           @success="(f) => files.push(f)"
+          @failure="uploadFailed"
         >
           <template #default="{ openFileSelector, uploading }">
             <Button
@@ -369,13 +370,31 @@ function when(at: string) {
   return dayjs(at).format("D MMM, HH:mm");
 }
 
+// the upload's own refusal (too big, not allowed) instead of a spinner that ends in nothing
+function uploadFailed(error: unknown) {
+  const text =
+    (error as { messages?: string[]; message?: string })?.messages?.[0] ||
+    (error as { message?: string })?.message;
+  toast.error(text || __("The file could not be attached."));
+}
+
 async function call(method: string, params: Record<string, unknown>) {
   busy.value = true;
   try {
-    await createResource({ url: `${API}.${method}` }).submit({
+    const result = await createResource({ url: `${API}.${method}` }).submit({
       ticket: props.ticket,
       ...params,
     });
+    // a refusal is answered to the person who pressed, not written in the shared chat: show it
+    const refused = (result?.replies || []).filter(
+      (r: { tone?: string }) => r && r.tone === "warning"
+    );
+    for (const reply of refused) {
+      toast.error(
+        [reply.title, ...(reply.lines || [])].filter(Boolean).join(" ") ||
+          __("Copilot could not do that")
+      );
+    }
   } catch (error) {
     toast.error(errorText(error) || __("Copilot could not do that"));
   } finally {

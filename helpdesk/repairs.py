@@ -34,7 +34,6 @@ KIND = "Repair"
 LEVELS = ("Automatic", "Approval")
 OUTCOMES = ("Fixed", "Not fixed", "Refused", "Paused", "Skipped")
 DEFAULT_MAX_PER_HOUR = 6
-DEVOPS_ROLE = "DevOps Engineer"
 RECUR_COUNT = 3  # the same runbook on the same target this often in RECUR_DAYS: find the root cause
 RECUR_DAYS = 7
 JSON_CHARS = 6000
@@ -80,22 +79,19 @@ def policy() -> dict:
 
 
 def devops_engineers() -> list[str]:
-    """Who takes infrastructure work. Phase 22: the infrastructure people in HDS Copilot Settings;
-    with none set, the enabled DevOps Engineers of the internal project, as before."""
+    """Who takes infrastructure work today (Copilot People): the Infrastructure people working
+    today, else Infrastructure Senior, else a Leader; with nobody working, whoever is set."""
     from helpdesk.copilot import people as copilot_people
-    from helpdesk.ticket_assignment import project_members
 
-    if copilot_people.infra_people():
-        return copilot_people.infra_people()
-    project = monitor.settings()["internal_project"]
-    people = project_members([project], [DEVOPS_ROLE]) if project else []
-    return [u for u in people if frappe.db.get_value("User", u, "enabled")]
+    return copilot_people.resolve(copilot_people.INFRA)["users"]
 
 
 def may_pause(user: str) -> bool:
+    from helpdesk.copilot import people as copilot_people
+
     return (
         user in approvals.managers()
-        or user in devops_engineers()
+        or user in copilot_people.in_chain(copilot_people.INFRA)
         or "System Manager" in frappe.get_roles(user)
     )
 
@@ -105,7 +101,7 @@ def set_paused(user: str, paused: bool, reason: str = "") -> dict:
     if not may_pause(user):
         frappe.throw(
             _(
-                "Only the Agent Managers and the internal project's DevOps Engineers may pause or resume auto-repair."
+                "Only the Infrastructure people, the Leaders and the Agent Managers may pause or resume auto-repair."
             ),
             frappe.PermissionError,
         )
@@ -243,7 +239,7 @@ def assign_to_devops(ticket: str | None, why: str) -> str | None:
 
     if not ticket:
         return None
-    people = devops_engineers() or approvals.managers()
+    people = devops_engineers() or approvals.leaders()
     current = _open_assignees(ticket)
     already = [p for p in current if p in people]
     if already:

@@ -52,23 +52,27 @@ frappe.ui.form.on("HDS Deploy Request", {
           frm.dashboard.set_headline(release.why_not);
         }
         if (release.may_override_ci) {
-          frm.add_custom_button(__("Let through without green CI"), () =>
-            frappe.prompt(
-              {
-                fieldname: "reason",
-                fieldtype: "Small Text",
-                label: __("Why"),
-                reqd: 1,
-              },
-              ({ reason }) =>
-                frappe
-                  .call("helpdesk.api.copilot.override_release_ci", {
-                    release: frm.doc.name,
-                    reason,
-                  })
-                  .then(() => frm.reload_doc()),
-              __("Let it through without green CI")
-            )
+          frm.add_custom_button(
+            release.status === "Staging"
+              ? __("Let through without its staging check")
+              : __("Let through without green CI"),
+            () =>
+              frappe.prompt(
+                {
+                  fieldname: "reason",
+                  fieldtype: "Small Text",
+                  label: __("Why"),
+                  reqd: 1,
+                },
+                ({ reason }) =>
+                  frappe
+                    .call("helpdesk.api.copilot.override_release_ci", {
+                      release: frm.doc.name,
+                      reason,
+                    })
+                    .then(() => frm.reload_doc()),
+                __("Let it through without green CI")
+              )
           );
         }
         if (release.may_cancel) {

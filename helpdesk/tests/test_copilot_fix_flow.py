@@ -503,7 +503,7 @@ class TestOutcomes(FixCase):
         frappe.set_user(create_agent("fix.bystander@example.com").name)
         fix = api.get_run(self.ticket.name)["fix"]
         self.assertFalse(fix["can_decide"])
-        self.assertIn("approvers", fix["approval"]["why_not_me"])
+        self.assertIn("Copilot People", fix["approval"]["why_not_me"])
 
 
 class TestGitHubSync(FixCase):
