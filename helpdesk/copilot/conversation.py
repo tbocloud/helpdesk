@@ -228,6 +228,7 @@ def receive(connection: str, payload: dict) -> dict:
         return _reply(_ticket_chat(connection, payload, email, user), None)
     doc = _conversation(connection, payload, email, user)
     _remember(connection, payload, doc.name)
+    _link_client_ticket(connection, doc, payload)
     before = _last_message_name(doc)
     text = str(payload.get("text") or "").strip()[:MAX_TEXT]
     files = [
@@ -257,6 +258,35 @@ def receive(connection: str, payload: dict) -> dict:
         _turn(doc)
     doc.db_set("last_message_at", now_datetime(), update_modified=False)
     return _reply(doc, before)
+
+
+def _link_client_ticket(connection: str, doc, payload: dict):
+    """The site names its own ticket with every message: a hub ticket whose first "linked" call
+    was lost learns it here, so stages and statuses reach the site again (Phase 23, B19)."""
+    name = str(payload.get("client_ticket") or "").strip()[:140]
+    if not name or not doc.ticket:
+        return
+    row = frappe.db.get_value(
+        "HD Ticket",
+        doc.ticket,
+        ["custom_qcs_connection", "custom_client_ticket"],
+        as_dict=True,
+    )
+    if not row or row.custom_client_ticket:
+        return
+    if row.custom_qcs_connection and row.custom_qcs_connection != connection:
+        return
+    if frappe.db.exists(
+        "HD Ticket",
+        {"custom_qcs_connection": connection, "custom_client_ticket": name},
+    ):
+        return  # that site ticket already belongs to another hub ticket
+    frappe.db.set_value(
+        "HD Ticket",
+        doc.ticket,
+        {"custom_qcs_connection": connection, "custom_client_ticket": name},
+        update_modified=False,
+    )
 
 
 def _client_id(payload: dict) -> str:

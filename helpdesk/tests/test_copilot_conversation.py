@@ -1032,3 +1032,18 @@ class TestPhase23Delivery(ChatCase):
             now=frappe.utils.add_to_date(frappe.utils.now_datetime(), minutes=5)
         )
         self.assertEqual(self.pushed, [])
+
+
+class TestPhase23Linking(ChatCase):
+    def test_a_lost_link_is_made_from_the_next_message(self):
+        # Phase 23 (B19): the first "linked" call failed; the site's ticket name comes again
+        self.gathered()
+        ticket = self.say(action="raise")["ticket"]
+        frappe.db.set_value(
+            "HD Ticket", ticket, {"custom_client_ticket": None}, update_modified=False
+        )
+        self.say("Any news?", client_ticket="SUP-2026-00777")
+        self.assertEqual(
+            frappe.db.get_value("HD Ticket", ticket, "custom_client_ticket"),
+            "SUP-2026-00777",
+        )
