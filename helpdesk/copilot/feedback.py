@@ -117,6 +117,10 @@ def report(user: str, channel: str, text: str) -> dict:
                 "description": describe(user, channel, text),
             }
         ).insert(ignore_permissions=True)
+    if user and user not in ("Guest", "Administrator"):
+        # the reporter can open their own report (Task permission: its owner reads it); the
+        # automation user only made it (Phase 23, C13)
+        frappe.db.set_value("Task", task.name, "owner", user, update_modified=False)
     from helpdesk.copilot import assistant
 
     assistant.log_action(

@@ -349,8 +349,11 @@ def run(
     channel: str,
     extra: dict | None = None,
     ticket: str | None = None,
+    wait: bool = True,
 ) -> dict:
     """A logged action runs now; an approval action asks first and runs after Approve.
+    `wait` False: answer once Press took it, with its job as it stands, instead of watching the
+    job for up to FOLLOW_SECONDS (the desktop app asks for the status itself; Phase 23, C5).
 
     Returns {"ran": True, "result": …} or {"approval": name, "title": …, "approver": …}.
     """
@@ -367,7 +370,11 @@ def run(
                 user, channel, f"press_{action}", "Error", args, str(e), ticket=ticket
             )
             raise
-        followed = follow(rule, target) if rule.get("job") else None
+        followed = (
+            (follow(rule, target) if wait else latest_job(rule, target))
+            if rule.get("job")
+            else None
+        )
         text = outcome_text(action, target, followed)
         log_action(user, channel, f"press_{action}", "OK", args, text, ticket=ticket)
         return {"ran": True, "result": result, "job": followed, "text": text}
@@ -478,6 +485,21 @@ def deploy_group(group: str):
     if not apps:
         frappe.throw(_("The bench group {0} has nothing new to deploy.").format(group))
     return press.deploy_and_update(group, apps, sites)
+
+
+def latest_job(rule: dict, target: str) -> dict | None:
+    """The newest job of the action's type on the target, read once."""
+    key = rule["target"] if rule["target"] in ("site", "bench") else "site"
+    try:
+        rows = press.get_list(
+            "Agent Job",
+            {key: target, "job_type": rule["job"]},
+            ["name", "status", "creation", "start", "end", "duration"],
+            limit=1,
+        )
+    except PressError:
+        return None
+    return rows[0] if rows else None
 
 
 def follow(rule: dict, target: str) -> dict | None:

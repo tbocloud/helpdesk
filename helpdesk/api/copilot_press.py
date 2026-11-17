@@ -85,8 +85,9 @@ def logs(site: str, log: str = "") -> dict:
 @agent_only
 def backup(site: str, ticket: str | None = None) -> dict:
     """A backup now: runs, logged, no approval."""
+    # answered once Press took it: a hub worker is not held for minutes per backup (C5)
     done = press_tools.run(
-        "backup", site, frappe.session.user, VIA, ticket=ticket or None
+        "backup", site, frappe.session.user, VIA, ticket=ticket or None, wait=False
     )
     return {"text": done["text"], "job": done.get("job")}
 

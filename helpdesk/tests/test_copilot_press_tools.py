@@ -299,6 +299,16 @@ class TestActions(PressCase):
         self.assertEqual((row[0].status, row[0].kind), ("OK", "Web"))
         self.assertEqual(frappe.db.count(actions.ACTION, {"kind": "Press"}), 0)
 
+    def test_the_desktop_backup_answers_once_press_took_it(self):
+        # Phase 23 (C5): the job as it stands, read once; no watching for minutes
+        with patch.object(press_tools, "follow") as follow:
+            done = press_tools.run(
+                "backup", "demoerp.tbo365.cloud", self.one, "Desktop", wait=False
+            )
+        follow.assert_not_called()
+        self.assertTrue(done["ran"])
+        self.assertTrue(done["job"])
+
     def test_a_restart_asks_first_and_runs_after_approve(self):
         asked = press_tools.run("restart_bench", "bench-0020", self.one, "Teams")
         self.assertEqual(self.calls("press.api.bench.restart"), [])

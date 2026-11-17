@@ -233,8 +233,9 @@ class TestFeedback(PilotReadyCase):
             task[0].subject, "Copilot feedback: the fix card showed the wrong ticket"
         )
         self.assertIn(AGENT, task[0].description)
+        # made by the automation user, then owned by the reporter so they can open it (C13)
         self.assertEqual(
-            (task[0].owner, task[0].custom_category), (self.ai, "Development")
+            (task[0].owner, task[0].custom_category), (AGENT, "Development")
         )
         self.assertIn(task[0].name, replies[0]["title"])
         self.assertIn(f"task={task[0].name}", replies[0]["links"][0][1])
@@ -259,6 +260,11 @@ class TestFeedback(PilotReadyCase):
             frappe.db.get_value("Task", filed["task"], "project"), self.project
         )
         self.assertEqual(self.logs(tool="report_problem")[0].kind, "Desktop")
+        # the reporter can open what they reported (Phase 23, C13)
+        self.assertEqual(frappe.db.get_value("Task", filed["task"], "owner"), AGENT)
+        self.assertTrue(
+            frappe.has_permission("Task", "read", filed["task"], user=AGENT)
+        )
 
     def test_an_empty_report_is_refused_and_reports_are_limited(self):
         frappe.set_user(AGENT)
