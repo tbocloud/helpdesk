@@ -542,3 +542,97 @@ class TestDivisionSalesRoles(DivisionCase):
         self.assertEqual(divisions.scoreboard_people(CARA), {ANN, CARA})
         self.assertIsNone(divisions.scoreboard_people(DEV))
         self.assertIsNone(divisions.scoreboard_people(BOB), "KSA's Sales Executive")
+
+
+class TestDivisionAgents(DivisionCase):
+    """A division's admins see its agents and bring people into it (docs/divisions.md,
+    "Agents of a division"): Cara runs India, Ann works in it, Bob in KSA."""
+
+    NEW = "new.division.agent@example.com"
+
+    def setUp(self):
+        super().setUp()
+        self.make_india_and_ksa()
+        frappe.db.delete("User Invitation", {"email": self.NEW})
+        frappe.set_user(CARA)
+
+    def test_an_admin_sees_only_their_divisions_agents(self):
+        agents = divisions_api.get_division_agents("IND")
+        self.assertEqual(
+            {a["user"]: a["role"] for a in agents["agents"]},
+            {ANN: divisions.EMPLOYEE, CARA: divisions.DIVISION_ADMIN},
+        )
+        self.assertNotIn(divisions.GROUP_ADMIN, agents["roles"])
+        with self.assertRaises(frappe.PermissionError):
+            divisions_api.get_division_agents("KSA")
+
+    def test_an_agent_already_here_joins_now_without_an_invite(self):
+        result = divisions_api.invite_to_division(
+            "IND", BOB, divisions.DIVISION_SALES_USER
+        )
+        self.assertEqual(result["added"], [BOB])
+        self.assertEqual(
+            divisions.memberships(BOB),
+            {"IND": divisions.DIVISION_SALES_USER, "KSA": divisions.SALES_EXECUTIVE},
+        )
+        self.assertFalse(frappe.db.exists("User Invitation", {"email": BOB}))
+        again = divisions_api.invite_to_division("IND", BOB, divisions.EMPLOYEE)
+        self.assertEqual(again["already_member"], [BOB])
+
+    def test_someone_new_is_invited_as_an_agent_and_joins_on_accepting(self):
+        result = divisions_api.invite_to_division(
+            "IND", self.NEW, divisions.DIVISION_SALES_USER
+        )
+        self.assertEqual(result["invited"], [self.NEW])
+        invitation = frappe.get_doc("User Invitation", {"email": self.NEW})
+        self.assertEqual([r.role for r in invitation.roles], ["Agent"])
+        self.assertEqual(
+            (invitation.division, invitation.division_role),
+            ("IND", divisions.DIVISION_SALES_USER),
+        )
+        pending = divisions_api.get_division_agents("IND")["invites"]
+        self.assertEqual([i["email"] for i in pending], [self.NEW])
+        again = divisions_api.invite_to_division("IND", self.NEW, divisions.EMPLOYEE)
+        self.assertEqual(again["already_invited"], [self.NEW])
+
+        frappe.set_user("Administrator")
+        invitation.accept(ignore_permissions=True)
+        self.assertTrue(frappe.db.get_value("HD Agent", self.NEW, "is_active"))
+        self.assertEqual(
+            divisions.memberships(self.NEW), {"IND": divisions.DIVISION_SALES_USER}
+        )
+
+    def test_an_admin_cant_give_group_admin_or_bring_people_elsewhere(self):
+        with self.assertRaisesRegex(frappe.ValidationError, "isn't a role"):
+            divisions_api.invite_to_division("IND", self.NEW, divisions.GROUP_ADMIN)
+        with self.assertRaises(frappe.PermissionError):
+            divisions_api.invite_to_division("KSA", self.NEW, divisions.EMPLOYEE)
+        frappe.set_user(ANN)
+        with self.assertRaises(frappe.PermissionError):
+            divisions_api.invite_to_division("IND", self.NEW, divisions.EMPLOYEE)
+
+    def test_a_division_invite_can_be_cancelled_by_its_admins_only(self):
+        divisions_api.invite_to_division("IND", self.NEW, divisions.EMPLOYEE)
+        name = frappe.db.get_value("User Invitation", {"email": self.NEW})
+        frappe.set_user(BOB)
+        with self.assertRaises(frappe.PermissionError):
+            divisions_api.cancel_division_invite("IND", name)
+        frappe.set_user(CARA)
+        divisions_api.cancel_division_invite("IND", name)
+        self.assertEqual(
+            frappe.db.get_value("User Invitation", name, "status"), "Cancelled"
+        )
+
+    def test_a_plain_invite_still_needs_an_inviting_role(self):
+        invitation = frappe.get_doc(
+            doctype="User Invitation",
+            email=self.NEW,
+            roles=[{"role": "Agent"}],
+            app_name="helpdesk",
+            redirect_to_path="/helpdesk",
+            division="IND",
+            division_role=divisions.EMPLOYEE,
+        )
+        # no division_invite flag: Cara holds no inviting role of her own
+        with self.assertRaisesRegex(frappe.ValidationError, "not an allowed role"):
+            invitation.insert(ignore_permissions=True)

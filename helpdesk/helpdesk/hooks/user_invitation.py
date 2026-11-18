@@ -10,6 +10,7 @@ def after_accept(invitation: Document, user: Document, user_inserted: bool) -> N
 
     if invited_roles & agent_roles:  # Intersection of invited roles and agent roles
         create_agent(user)
+        join_division(invitation, user)
 
     if invited_roles & customer_roles:
         contact = get_or_create_contact(invitation, user)
@@ -19,6 +20,19 @@ def after_accept(invitation: Document, user: Document, user_inserted: bool) -> N
             contact,
             is_manager="HD Customer Manager" in invited_roles,
         )
+
+
+def join_division(invitation: Document, user: Document) -> None:
+    """A division admin's invite puts the new agent in their division with the role picked
+    (docs/divisions.md, "Agents of a division"), and gives them its ERP site's role."""
+    division = invitation.get("division")
+    if not (division and frappe.db.exists("HD Division", division)):
+        return
+    doc = frappe.get_doc("HD Division", division)
+    if doc.add_member(user.name, invitation.division_role):
+        doc.save(ignore_permissions=True)
+        # what the ERP site couldn't do shows when an admin next saves People
+        doc.apply_erp_roles([user.name])
 
 
 def get_or_create_contact(invitation: Document, user: Document) -> str | None:

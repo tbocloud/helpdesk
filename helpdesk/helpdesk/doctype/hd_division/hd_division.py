@@ -87,6 +87,14 @@ class HDDivision(Document):
                 )
             seen.add(member.user)
 
+    def add_member(self, user: str, role: str) -> bool:
+        """Put `user` in the division with `role`, in memory; False when they are in it
+        already (their role there stays). The caller saves."""
+        if any(m.user == user for m in self.members):
+            return False
+        self.append("members", {"user": user, "role": role})
+        return True
+
     def apply_erp_roles(self, users: list[str] | None = None) -> list[str]:
         """Give the Division Admins and Division Sales Users among `users` (every member
         when None) their role on the division's ERP site, whose lead rules then decide what

@@ -176,6 +176,26 @@ own division without it, and it is hidden when there are no divisions.
   profile, people, ERP site), projects moved between divisions (Project Versions), division
   switches and report exports (Activity Log, `divisions.log_activity`).
 
+### Agents of a division (owner, 2026-11-17)
+
+A division's own admins (Division Admin, Group Admin) who aren't Super Admins get **Agents** and
+**Invite Agents** under Central administration (`DivisionAgents.vue`, `DivisionInvite.vue`, a
+division picker when they run several); Super Admins keep the hub-wide Agents and Invite Agents.
+
+- **Agents** (`get_division_agents`): the division's members with their name, picture, whether
+  their agent is active and their role in it, and its pending invites. Roles are changed in
+  Divisions → People; a division admin can't make anyone a Manager or Admin of the hub.
+- **Invite Agents** (`invite_to_division`): emails and a division role (the roles they may give:
+  never Group Admin). Someone who is already an active agent joins the division at once (and
+  gets its ERP site's role, as a People save does); anyone else gets a hub invite as **Agent**
+  that carries `division` and `division_role` (custom fields on User Invitation) and joins the
+  division with that role when they accept (`hooks/user_invitation.join_division`). Already in
+  it, already invited and disabled accounts are listed, not invited again.
+- A division admin holds no inviting role of their own: only an invite made by
+  `invite_to_division` (flag `division_invite`, after `require_manager`) passes
+  `HelpdeskUserInvitation._validate_roles`, and only as Agent. Their own invites can be
+  cancelled (`cancel_division_invite`); the audit log records who was brought in.
+
 How the brief's settings list maps onto the hub: General Settings, User Management (Agents,
 Invite agents), Department Management, Team Management, Global CRM Settings (CRM),
 Integration Settings (the Integrations group) and Notification Settings stay where
@@ -337,4 +357,5 @@ secret; with the statuses on its copied leads and its users), `save_source`, `de
   `test_utils.py`); `TestDivisionSiteRoles` covers a division whose ERP site decides access,
   `TestDivisionSalesRoles` the ERP roles given on save (with `FakeCRM.remove_role`), the Leads
   page and sales screens for the two roles, `TestDivisionLeadsConnection` a division without a
-  site; `test_sales_scoreboard.TestDivisionScoreboard` the division's Scoreboard.
+  site, `TestDivisionAgents` a division's agents and invites;
+  `test_sales_scoreboard.TestDivisionScoreboard` the division's Scoreboard.
