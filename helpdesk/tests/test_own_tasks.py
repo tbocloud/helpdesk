@@ -189,6 +189,33 @@ class TestWhoSeesWhichTasks(OwnTasksCase):
         self.assertIn(self.mine, get_visible_tasks(CONSULTANT[0], self.project))
 
 
+class TestSearchWork(OwnTasksCase):
+    """The ⌘K palette's task and project search (docs/workspace-pages.md, Command palette)."""
+
+    def search(self, user, query):
+        return call_as_user(user, "helpdesk.tasky.api.search_work", query=query)
+
+    def test_finds_own_tasks_and_the_project_by_title(self):
+        found = self.search(CONSULTANT[0], "hr set")
+        self.assertEqual([t["name"] for t in found["tasks"]], [self.mine])
+        self.assertEqual(found["tasks"][0]["project_name"], f"{CUSTOMER} - ERP Rollout")
+
+        projects = self.search(CONSULTANT[0], "erp rollout")["projects"]
+        self.assertEqual([p["name"] for p in projects], [self.project])
+
+    def test_never_finds_a_task_the_person_cannot_see(self):
+        self.assertEqual(self.search(CONSULTANT[0], "iOS App Store")["tasks"], [])
+        self.assertEqual(
+            [t["name"] for t in self.search(PM[0], "iOS App Store")["tasks"]],
+            [self.other],
+        )
+
+    def test_a_single_character_searches_nothing(self):
+        self.assertEqual(
+            self.search(CONSULTANT[0], " h "), {"tasks": [], "projects": []}
+        )
+
+
 class TestHandingOver(OwnTasksCase):
     def test_the_assignee_hands_over_and_loses_sight_of_it(self):
         hand_over_task_as(CONSULTANT[0], self.mine, DEV[0])

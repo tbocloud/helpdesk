@@ -129,7 +129,7 @@ altogether, because a salesperson's work is leads, which live on the ERP site.
   a salesperson's way until someone decides it is a sales page. `AppSidebar.vue` shows only
   those items, and the router (`desk/src/router/index.ts`) sends every other route to Leads
   (to the Scoreboard while Leads is switched off). The search card, the command palette
-  (it finds tickets and articles), saved ticket views and the follow-up strip (it opens My
+  (it finds pages, tasks, projects and tickets), saved ticket views and the follow-up strip (it opens My
   Work) are left out for them.
 - **Leads for every salesperson:** `can_use_leads` is true for a Sales Employee whatever the
   "Leads for" teams say, while Leads is on and they are an active agent
@@ -184,8 +184,9 @@ for example, doesn't get it:
   `AppSidebar.vue`);
 - the `TicketsAgent` (`/tickets`) and `TicketAgentNew` routes send everyone else to Home
   (`beforeEnter` in `desk/src/router/index.ts`);
-- the command palette's **Tickets** entry is shown only to them (`CP.vue`). Typing `#<id>`
-  still jumps to a ticket.
+- the command palette's **Search tickets** entry is shown only to them (`CP.vue`); the
+  Tickets page shows under Pages only if their sidebar has it. Typing `#<id>` still jumps to
+  a ticket.
 
 | Who | Tickets list and New ticket | Which tickets (server) |
 | --- | --- | --- |
