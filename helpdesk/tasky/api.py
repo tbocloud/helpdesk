@@ -1853,8 +1853,11 @@ def get_kanban_tasks(project: str | None = None):
             "custom_recurring_task",
             # a content post's task may be handed to anyone (TeammatePicker)
             "content_post",
+            "completed_on",
+            "modified",
         ],
-        order_by="custom_phase asc, subject asc",
+        # newest work on top of each column; Completed is re-sorted below
+        order_by="creation desc",
     )
 
     # one query for the whole board; a card shows its most recently active open PR
@@ -1895,6 +1898,12 @@ def get_kanban_tasks(project: str | None = None):
                 "attachment_count": media.get(t["name"], 0),
             }
         )
+
+    # last finished first; completed_on is only a date, so same-day ties go by last change
+    columns["Completed"].sort(
+        key=lambda t: (str(t.get("completed_on") or ""), str(t.get("modified"))),
+        reverse=True,
+    )
 
     return {"columns": columns}
 
