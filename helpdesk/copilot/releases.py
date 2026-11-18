@@ -623,6 +623,11 @@ def ask_approval(release):
         release.repository, release.apps[0].from_commit, release.apps[0].to_commit
     )["files"]
     assessed = risk.assess(files)
+    from helpdesk.copilot import pulls
+
+    # Phase 26: pull requests Copilot merged with an approval go ahead without another card
+    if pulls.approved_release(release, assessed):
+        return
     needs_senior = bool(release.needs_senior or assessed["sensitive"])
     approver = pick_approver(needs_senior, authors(release))
     release.db_set(

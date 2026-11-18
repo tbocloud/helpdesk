@@ -101,6 +101,8 @@ scheduler_events = {
             "helpdesk.error_alerts.post_error_digest",
             # Copilot fixes read their pull requests, so a missed webhook never strands an approval
             "helpdesk.copilot.fixes.refresh_open",
+            # developers' pull requests Copilot takes live: reviews, CI, merges (Phase 26)
+            "helpdesk.copilot.pulls.refresh",
             # Copilot runs waiting with no worker claiming them: the Agent Managers hear hourly
             "helpdesk.copilot.pilot.watch_workers",
             # every merge into a branch a customer site runs becomes a release (off by default)

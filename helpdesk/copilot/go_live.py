@@ -120,6 +120,13 @@ def ask_go_live(task: str, when: str = "tonight", note: str = "") -> dict:
     if when not in WHEN:
         frappe.throw(_("Say tonight or now."))
     note = str(note or "").strip()[:500]
+    from helpdesk.copilot import pulls
+
+    # Phase 26: the task's pull request is still open: Copilot takes it live
+    if pulls.enabled():
+        taken = pulls.take(task, frappe.session.user, when, note)
+        if taken is not None:
+            return taken
     found = _releases(task)
     if not found:
         return task_release(task)

@@ -75,7 +75,16 @@ def claim_job(
         # the code the site runs now, not what its card last saw (a deploy from Press's dashboard)
         registry.refresh_for_run(run)
     if not run:
-        if "release_check" in re.split(r"[\s,]+", (capabilities or "").lower()):
+        offered = re.split(r"[\s,]+", (capabilities or "").lower())
+        if "pr_fix" in offered:
+            from helpdesk.copilot import pulls
+
+            job = pulls.claim(
+                worker_id
+            )  # a round on a developer's pull request (Phase 26)
+            if job:
+                return job
+        if "release_check" in offered:
             from helpdesk.copilot import releases
 
             return releases.claim_check(worker_id)  # a release's sandbox check, or {}
@@ -226,3 +235,30 @@ def submit_result(run: str, lease_token: str, result: dict | str) -> dict:
     else:
         frappe.throw(_("Unknown result kind: {0}").format(kind))
     return {"run": doc.name, "state": doc.state, "root_cause": doc.root_cause_category}
+
+
+# --- a developer's pull request Copilot takes live (Phase 26, helpdesk.copilot.pulls) ------------
+
+
+@frappe.whitelist(methods=["POST"])
+def pr_heartbeat(pull_request: str, lease_token: str) -> dict:
+    worker_only()
+    from helpdesk.copilot import pulls
+
+    return pulls.heartbeat(pull_request, lease_token)
+
+
+@frappe.whitelist(methods=["POST"])
+def pr_push_key(pull_request: str, lease_token: str) -> dict:
+    worker_only()
+    from helpdesk.copilot import pulls
+
+    return pulls.push_key(pull_request, lease_token)
+
+
+@frappe.whitelist(methods=["POST"])
+def pr_result(pull_request: str, lease_token: str, result: dict | str) -> dict:
+    worker_only()
+    from helpdesk.copilot import pulls
+
+    return pulls.result(pull_request, lease_token, _parse(result, "result") or {})

@@ -330,3 +330,127 @@ def compare(repo: str, base: str, head: str) -> dict:
 def commit_pulls(repo: str, sha: str) -> list[dict]:
     """The pull requests a commit belongs to (open or merged)."""
     return request("GET", f"/repos/{repo}/commits/{sha}/pulls") or []
+
+
+# --- a developer's pull request Copilot takes live (Phase 26, helpdesk.copilot.pulls) -------------
+
+THREADS = """
+query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      reviewThreads(first: 100) {
+        nodes {
+          id
+          isResolved
+          isOutdated
+          path
+          line
+          comments(first: 1) { nodes { databaseId author { login } body } }
+        }
+      }
+    }
+  }
+}
+"""
+RESOLVE = """
+mutation($id: ID!) { resolveReviewThread(input: {threadId: $id}) { thread { isResolved } } }
+"""
+
+
+def _graphql(repo: str, query: str, variables: dict) -> dict:
+    result = request(
+        "POST",
+        "/graphql",
+        body={"query": query, "variables": variables},
+        owner=repo.split("/")[0],
+    )
+    if (result or {}).get("errors"):
+        raise GitHubError(422, str(result["errors"][0].get("message"))[:300])
+    return (result or {}).get("data") or {}
+
+
+def open_pulls(repo: str) -> list[dict]:
+    """The repository's open pull requests (the newest 50)."""
+    return (
+        request(
+            "GET",
+            f"/repos/{repo}/pulls",
+            params={"state": "open", "per_page": 50, "sort": "updated"},
+        )
+        or []
+    )
+
+
+def pull_reviews(repo: str, number: int) -> list[dict]:
+    """Every review of the pull request, oldest first."""
+    return (
+        request(
+            "GET",
+            f"/repos/{repo}/pulls/{int(number)}/reviews",
+            params={"per_page": 100},
+        )
+        or []
+    )
+
+
+def review_threads(repo: str, number: int) -> list[dict]:
+    """The pull request's review threads: `{id, resolved, outdated, path, line, comment_id,
+    author, body}` (the first comment of each)."""
+    owner, name = repo.split("/", 1)
+    data = _graphql(
+        repo, THREADS, {"owner": owner, "name": name, "number": int(number)}
+    )
+    nodes = (
+        ((data.get("repository") or {}).get("pullRequest") or {}).get("reviewThreads")
+        or {}
+    ).get("nodes") or []
+    out = []
+    for node in nodes:
+        first = ((node.get("comments") or {}).get("nodes") or [{}])[0] or {}
+        out.append(
+            {
+                "id": node.get("id"),
+                "resolved": bool(node.get("isResolved")),
+                "outdated": bool(node.get("isOutdated")),
+                "path": node.get("path") or "",
+                "line": node.get("line"),
+                "comment_id": first.get("databaseId"),
+                "author": ((first.get("author") or {}).get("login") or ""),
+                "body": first.get("body") or "",
+            }
+        )
+    return out
+
+
+def reply_to_comment(repo: str, number: int, comment_id: int, body: str):
+    request(
+        "POST",
+        f"/repos/{repo}/pulls/{int(number)}/comments/{int(comment_id)}/replies",
+        body={"body": body},
+    )
+
+
+def resolve_thread(repo: str, thread_id: str):
+    _graphql(repo, RESOLVE, {"id": thread_id})
+
+
+def failed_checks(repo: str, sha: str) -> list[dict]:
+    """The commit's check runs that finished and did not pass: `{name, title, summary}`, the
+    check's own words (the start of them)."""
+    runs, _partial = _check_runs(repo, sha)
+    out = []
+    for run in runs:
+        if run.get("status") == "completed" and run.get("conclusion") not in GREEN:
+            output = run.get("output") or {}
+            out.append(
+                {
+                    "name": run.get("name") or "",
+                    "title": (output.get("title") or "")[:300],
+                    "summary": (
+                        (output.get("summary") or "")
+                        + "\n"
+                        + (output.get("text") or "")
+                    )[:3000].strip(),
+                }
+            )
+    return out

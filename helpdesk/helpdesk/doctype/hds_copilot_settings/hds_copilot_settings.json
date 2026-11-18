@@ -87,6 +87,7 @@
   "release_repositories",
   "release_staging",
   "release_check_hours",
+  "copilot_takes_prs",
   "chat_section",
   "chat_enabled",
   "chat_messages_per_minute",
@@ -841,11 +842,18 @@
    "fieldtype": "Small Text",
    "label": "Copilot May Change",
    "description": "One bench, bench group or site per line. Copilot's actions are offered for approval only on these; for anything else its card says what a person should run. During testing: the demo bench and its sites only."
+  },
+  {
+   "fieldname": "copilot_takes_prs",
+   "fieldtype": "Check",
+   "default": "1",
+   "label": "Copilot Takes Developers' Pull Requests Live",
+   "description": "When a developer asks to go live (desktop app) while the task's pull request is open: Copilot fixes what CodeRabbit and CI find (3 rounds at most), asks one approver, then merges and deploys through the release. Only pull requests the developer hands to Copilot; repositories in the pipeline only."
   }
  ],
  "issingle": 1,
  "links": [],
- "modified": "2026-11-18 12:00:00.000000",
+ "modified": "2026-11-18 14:00:00.000000",
  "modified_by": "Administrator",
  "module": "Helpdesk",
  "name": "HDS Copilot Settings",

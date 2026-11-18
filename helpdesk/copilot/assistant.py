@@ -1548,6 +1548,10 @@ def _press(user: str, channel: str, chat, verb: str, data: dict, inputs: dict) -
         from helpdesk.copilot import releases
 
         return releases.press_button(user, channel, verb, data, inputs)
+    from helpdesk.copilot import pulls
+
+    if verb in pulls.VERBS:  # a pull request Copilot takes live (Phase 26)
+        return pulls.press_button(user, channel, verb, data, inputs)
     if verb == "fix":  # the diagnosis card's button: the same as the ticket page's
         run = frappe.get_doc("HDS Copilot Run", data.get("run"))
         try:

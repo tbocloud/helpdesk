@@ -847,6 +847,45 @@ The old fields stay hidden for one version.
 - **Limits:** messages a minute per person (colleagues in an incident no longer share them), messages a day per customer.
 - The site names its ticket after the chat's title; one "Fix scheduled" reaches the customer when a deploy starts by itself.
 
+## Copilot takes a developer's pull request live (Phase 26: `copilot/pulls.py`, record HDS Copilot Pull Request)
+
+Only a pull request the developer hands to Copilot is followed: **Ask to go live** on the task (desktop app,
+`go_live.ask_go_live`) while the task's pull request is still open (`pulls.take`; the pull request TBO Support linked
+to the task, else one in the pipeline's repositories that names the task). Every other pull request stays with the
+people. Switch: Settings → Releases → **Copilot Takes Developers' Pull Requests Live** (patch
+`v16_0_3.copilot_takes_prs_default`); it needs **Release every merge** and the repository in the pipeline. Refused
+(the answer says why, nothing changes): a repository outside the pipeline, a fork, a draft, Copilot's own fix, a base
+branch no customer site runs. GitHub that cannot be asked: the release flow answers as before.
+
+1. **Reviewing** (`pulls.evaluate`, at once and every 10 minutes in `pulls.refresh`): CI on the head commit must be
+   green; CodeRabbit must have reviewed that commit and left no open thread. Copilot asks CodeRabbit
+   (`@coderabbitai review`) at most once an hour (its free plan reviews about hourly for the organisation). No check at
+   all after 30 minutes: back to the developer (the repository needs CI).
+2. **Fixing**: failed checks (their own words, `github.failed_checks`) and CodeRabbit's open threads become the round's
+   findings. A worker that claims with `pr_fix` gets the round (`pulls.claim`, a 60-minute lease, `pr_heartbeat`
+   cancels when the developer pushed or the pull request closed); `pr_push_key` gives a one-hour App key for the
+   repository (an App key cannot be limited to one branch: the worker pushes only to the pull request's branch,
+   fast-forward on the head it was given, and the base branch's protection refuses a direct push); `pr_result` reports
+   what it fixed (with the commit) and what not (why). The hub replies on each CodeRabbit thread, resolves the fixed
+   ones, asks CodeRabbit again and tells the developer. A round that fixed nothing, a failed round or **3 rounds**: back
+   to the developer.
+3. **Merge without CodeRabbit**: the button on Copilot's cards to the developer (`pr_skip_review`), for the developer
+   or anyone who may change the task; then only CI counts, and the approval card says who asked.
+4. **Ready for approval** (`pulls.ask_approval`): one card to the customer's Fix Approver chain (Copilot People),
+   never an author (the developer, the task's assignees, users with a commit's email; Copilot's own commits are not an
+   author's), a Senior when `risk.assess` finds the change sensitive; bound to the head commit (`payload_hash`).
+   Reminders every 4 hours. Reject needs a reason.
+5. **Approved → Merged** (`pulls.merge`): the approved head pinned; new commits after the approval go back to
+   Reviewing and ask again; failing checks or a merge GitHub refuses wait and say why.
+6. **The release** of the merged commit (Releases, above) runs its CI gate and sandbox check, then
+   `releases.ask_approval` → `pulls.approved_release`: a release made only of pull requests Copilot merged with an
+   approval is scheduled without another card, **now** for low or medium risk when the developer asked for now,
+   **tonight** otherwise; a release that needs a Senior keeps its own card unless a Senior approved the pull request.
+   The developer hears each step in Teams (else the panel), and the task keeps the same lines.
+
+Worker API (Copilot Worker role): `claim_job(..., capabilities="pr_fix")`, `pr_heartbeat(pull_request, lease_token)`,
+`pr_push_key(pull_request, lease_token)`, `pr_result(pull_request, lease_token, result)`.
+
 ## Going live from a task, and deploy notices (Phase 22: `copilot/go_live.py`, `api/copilot_go_live.py`)
 
 **Open in TBO Copilot.** A task's dialog has this action for the people assigned to it. It opens `tbo-copilot://task/<task>?site=<this site>` in the TBO Copilot desktop app, which asks before it opens the task in its project's folders (tbo-copilot `docs/tbo/projects-and-tasks.md`).

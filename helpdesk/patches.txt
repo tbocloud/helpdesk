@@ -100,3 +100,4 @@ helpdesk.patches.v16_0_2.signoff_stage_templates
 helpdesk.patches.v16_0_2.copilot_people_from_ticket_owners
 helpdesk.patches.v16_0_2.copilot_people_roles_table
 helpdesk.patches.v16_0_3.copilot_infra_defaults
+helpdesk.patches.v16_0_3.copilot_takes_prs_default

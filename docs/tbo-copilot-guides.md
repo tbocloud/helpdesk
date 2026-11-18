@@ -35,6 +35,7 @@ Who does what, what Copilot sends you, and what you press. The full reference is
 - **Main, then fallbacks:** while you are on leave or Unavailable, the next person in Copilot People gets the work; a waiting approval moves to them the next working morning.
 - **Deploy:** after the merge, press **Deploy** (Tonight). Approving an automatic deploy is enough: it needs no second permission.
 - **Going live from a task** (desktop app): ask for your task's release to go live; the approver's card carries your request and your note.
+- **Hand your open pull request to Copilot** (Phase 26): press **Ask to go live** on the task while its pull request is still open. Copilot fixes what CodeRabbit and CI find (at most 3 rounds, pushing to your branch and answering CodeRabbit), then sends one approval card to the customer's Fix Approver (a Senior for risky code); on Approve it merges, the release runs its sandbox check and deploys (now for low risk if you asked for now, else tonight). You hear every step. **Merge without CodeRabbit** on Copilot's card skips waiting for CodeRabbit (CI still counts). If you push yourself meanwhile, Copilot starts again from your commit.
 
 ## A Senior or a Leader
 
