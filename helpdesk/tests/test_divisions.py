@@ -544,6 +544,26 @@ class TestDivisionSalesRoles(DivisionCase):
         self.assertIsNone(divisions.scoreboard_people(BOB), "KSA's Sales Executive")
 
 
+    def test_a_division_admin_sets_up_lead_departments_on_their_divisions_site(self):
+        from helpdesk.api import lead_bank as lead_bank_api
+        from helpdesk.api import leads as leads_api
+
+        enable_leads()
+        self.india.db_set("crm_source", self.source.name)
+        self.set_india_members((CARA, divisions.DIVISION_ADMIN))
+        self.erp.lead_answers.update(
+            save_lead_department={"name": "KSA"}, save_referral_settings={"ok": True}
+        )
+        frappe.set_user(CARA)
+        leads_api.save_lead_department({"department_name": "KSA", "members": [CARA]})
+        lead_bank_api.save_referral_settings({"regions": [], "cap": 0})
+        # sent to India's own site as Cara, who is its Sales Manager: that site decides
+        sent = [(name, kw["acting_user"]) for name, _, kw in self.erp.lead_calls]
+        self.assertEqual(
+            sent, [("save_lead_department", CARA), ("save_referral_settings", CARA)]
+        )
+        self.assertIn("Sales Manager", self.roles(CARA))
+
 class TestDivisionAgents(DivisionCase):
     """A division's admins see its agents and bring people into it (docs/divisions.md,
     "Agents of a division"): Cara runs India, Ann works in it, Bob in KSA."""

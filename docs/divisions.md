@@ -195,6 +195,15 @@ division picker when they run several); Super Admins keep the hub-wide Agents an
   `invite_to_division` (flag `division_invite`, after `require_manager`) passes
   `HelpdeskUserInvitation._validate_roles`, and only as Agent. Their own invites can be
   cancelled (`cancel_division_invite`); the audit log records who was brought in.
+- **Lead setup** (Division Admins of their active division, while Leads is on;
+  `DivisionLeadSetup.vue`, `auth.isActiveDivisionAdmin`): the same **Lead departments** and
+  **Referral (Lead Bank)** sections as Settings → CRM, on the active division's own ERP site, so
+  a KSA admin makes the KSA department and picks it for KSA without a Super Admin. No new
+  server code: `helpdesk.api.leads.save_lead_department` and
+  `helpdesk.api.lead_bank.save_referral_settings` already call the active division's site as
+  the person, and a Division Admin is a Sales Manager there (`ERP_SALES_ROLES`); that site
+  decides. Department people are picked from the division's members (`get_division_agents`),
+  not every hub agent. A Group Admin doesn't get it: they hold no sales role on the site.
 
 How the brief's settings list maps onto the hub: General Settings, User Management (Agents,
 Invite agents), Department Management, Team Management, Global CRM Settings (CRM),
@@ -357,5 +366,7 @@ secret; with the statuses on its copied leads and its users), `save_source`, `de
   `test_utils.py`); `TestDivisionSiteRoles` covers a division whose ERP site decides access,
   `TestDivisionSalesRoles` the ERP roles given on save (with `FakeCRM.remove_role`), the Leads
   page and sales screens for the two roles, `TestDivisionLeadsConnection` a division without a
-  site, `TestDivisionAgents` a division's agents and invites;
+  site, `TestDivisionAgents` a division's agents and invites,
+  `TestDivisionSalesRoles.test_a_division_admin_sets_up_lead_departments_on_their_divisions_site`
+  the Lead setup saves;
   `test_sales_scoreboard.TestDivisionScoreboard` the division's Scoreboard.

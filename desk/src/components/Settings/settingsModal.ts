@@ -65,6 +65,7 @@ import LucideGitPullRequest from "~icons/lucide/git-pull-request";
 
 import DivisionAgents from "./Divisions/DivisionAgents.vue";
 import DivisionInvite from "./Divisions/DivisionInvite.vue";
+import DivisionLeadSetup from "./Divisions/DivisionLeadSetup.vue";
 import Divisions from "./Divisions/Divisions.vue";
 import AuditLog from "./Divisions/AuditLog.vue";
 import LucideGlobe from "~icons/lucide/globe";
@@ -131,6 +132,15 @@ export const tabs = computed(() => {
           icon: markRaw(LucideUserPlus),
           component: markRaw(DivisionInvite),
           condition: () => !auth.isAdmin && !auth.isManager,
+        },
+        // lead departments and Lead Bank referral on the admin's own division's ERP site;
+        // admins and managers have them in Settings → CRM
+        {
+          label: __("Lead setup"),
+          icon: markRaw(LucideHandshake),
+          component: markRaw(DivisionLeadSetup),
+          condition: () =>
+            !auth.isAdmin && !auth.isManager && auth.isActiveDivisionAdmin,
         },
         {
           label: __("Audit log"),
@@ -366,6 +376,7 @@ type TabName =
   | "General"
   | "Agents"
   | "Invite Agents"
+  | "Lead setup"
   | "Teams"
   | "Departments"
   | "SLA Policies"
