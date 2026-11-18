@@ -63,6 +63,7 @@ sending `acting_user`; each maps 1:1 to `tbo_smart.api.hub_proposals.<same name>
 | `get_requirements_from_lead(lead)`, `extract_requirements(lead, text)` | A blank text is refused here |
 | `read_chat_answer(lead, question, text)` | An off-script chat answer; a blank text is refused here, the question capped at 300 and the text at 3,000 characters |
 | `finalise_proposal(name, ready)` | 1: Mark ready, 0: Reopen |
+| `change_template(name, template, scoping)` | A draft moved to another template, same number; a blank template is refused here |
 | `regenerate_section(name, index, force)`, `regenerate_proposal(name, force)`, `chat_edit(name, message)` | `chat_edit` refuses a blank message and caps it at 1,000 characters |
 | `price_from_modules(name)`, `get_pricing_form(name)`, `save_pricing(name, values)`, `request_approval(name, reason)` | A reason is required here too |
 | `share_proposal(name)`, `send_proposal(name, recipients, message, attach_pdf)`, `create_revision(name)` | |
@@ -299,6 +300,14 @@ lead's first proposal with a website (the summary is kept on the lead); none wit
   client's page with the print dialog).
 - **Can't send yet:** every reason in the ERP site's words. **With the client**
   (`ProposalTracking.vue`) once sent.
+- **Change template** (a proposal, while it is a draft and not marked ready; off with unsaved
+  edits): the Details show **Template: <name>** and the button, which opens the start page's
+  **Implementation type** picker (ERP with its add-ons, or Digital Marketing) and the Template
+  list (another template brings its default modules). The ERP site moves the proposal to it in
+  place (`change_template`): same number; the new template's sections in its order; sections
+  edited by hand and the AI's text kept (a toast names the kept ones); the timeline and payment
+  terms back to the new template's defaults; repriced. Off until the template or the modules
+  differ.
 - **Details:** title, valid till, **Price shown** (Itemised / Consolidated), **Letter head**
   (Default (<name>) or any Letter Head; editors see a warning when the ERP site has none), about
   how many pages against the template's length guide, and for editors the AI on this proposal

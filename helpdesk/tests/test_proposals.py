@@ -185,6 +185,20 @@ class TestProposals(FrappeTestCase):
         with self.assertRaises(frappe.ValidationError):
             proposals_api.extract_requirements("CRM-LEAD-1", "  ")
 
+    def test_change_template_goes_to_the_erp_site(self):
+        proposals_api.change_template(
+            "PROP-2026-00001",
+            "  ERPNext + Flutter Mobile App ",
+            '{"modules": ["Accounts"], "mobile_app": 1}',
+        )
+        calls = {name: (post, params) for name, post, params in self.crm.lead_calls}
+        post, params = calls["change_template"]
+        self.assertTrue(post)
+        self.assertEqual(params["template"], "ERPNext + Flutter Mobile App")
+        self.assertEqual(params["scoping"], {"modules": ["Accounts"], "mobile_app": 1})
+        with self.assertRaises(frappe.ValidationError):
+            proposals_api.change_template("PROP-2026-00001", " ")
+
     def test_regenerate_share_and_libraries_go_to_the_erp_site(self):
         proposals_api.regenerate_section("PROP-2026-00001", "3", "1")
         proposals_api.regenerate_proposal("PROP-2026-00001")
