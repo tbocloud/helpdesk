@@ -1428,9 +1428,17 @@ def lead_file(lead: str, file: str, filename: str | None = None) -> None:
     bytes. `filename` is only the name the browser saves it as."""
     require_leads()
     content, content_type = download("get_lead_file", lead=lead, file=file)
+    send_file(content, content_type, filename, file)
+
+
+def send_file(
+    content: bytes, content_type: str, filename: str | None, fallback: str
+) -> None:
+    """Answer with a file from the ERP site: PDFs and pictures open in the browser, anything
+    else is saved as plain bytes, under `filename` cleaned (or `fallback`)."""
     inline = content_type in FILE_INLINE_TYPES
     frappe.local.response.filename = (
-        re.sub(r'[\\/:*?"<>|\x00-\x1f]', "", filename or "").strip()[:140] or file
+        re.sub(r'[\\/:*?"<>|\x00-\x1f]', "", filename or "").strip()[:140] or fallback
     )
     frappe.local.response.filecontent = content
     frappe.local.response.content_type = (

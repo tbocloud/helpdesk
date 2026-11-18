@@ -52,6 +52,7 @@ export const SALES_EMPLOYEE_ROUTES = new Set([
   "DivisionReports",
   "SalesTargets",
   "MyTargets",
+  "Expenses",
   "TeamDashboard",
   "Notifications",
   "Invalid Page",

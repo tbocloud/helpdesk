@@ -25,6 +25,7 @@ import LucideListTodo from "~icons/lucide/list-todo";
 import LucideMessagesSquare from "~icons/lucide/messages-square";
 import LucideNewspaper from "~icons/lucide/newspaper";
 import LucidePhoneCall from "~icons/lucide/phone-call";
+import LucideReceipt from "~icons/lucide/receipt";
 import LucideShapes from "~icons/lucide/shapes";
 import LucideSquareKanban from "~icons/lucide/square-kanban";
 import LucideTarget from "~icons/lucide/target";
@@ -348,6 +349,14 @@ export const agentNavAreas: NavArea[] = [
             icon: LucideBadgeIndianRupee,
             to: "Leads",
             leadTab: "commission",
+            leadsOnly: true,
+          },
+          // expense claims on the division's ERP site: claim and approve (docs/expenses.md)
+          {
+            id: "expenses",
+            label: __("Expenses"),
+            icon: LucideReceipt,
+            to: "Expenses",
             leadsOnly: true,
           },
         ],
