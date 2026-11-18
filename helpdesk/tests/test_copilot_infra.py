@@ -230,10 +230,22 @@ class TestTheProposal(InfraCase):
             ("Pending", self.devops, automation_user(), "normal"),
         )
         payload = frappe.parse_json(approval.payload)
+        # testing fixes 3: Copilot named the group; Press restarts one bench, the site's own
         self.assertEqual(
-            (payload["action"], payload["target"], payload["copilot_run"]),
-            ("restart_bench", "bench-0015", run.name),
+            (
+                payload["action"],
+                payload["target"],
+                payload["args"],
+                payload["copilot_run"],
+            ),
+            (
+                "restart_bench",
+                "bench-0015-000001",
+                {"name": "bench-0015-000001"},
+                run.name,
+            ),
         )
+        self.assertIn("named the bench group bench-0015", approval.details)
         self.assertEqual(self.cards, [self.devops])
         told = self.said_to(self.devops)
         self.assertTrue(
@@ -304,6 +316,78 @@ class TestTheProposal(InfraCase):
         self.assertTrue(
             any("What a person should do" in t for t in self.said_to(self.devops))
         )
+
+
+class TestBenchNames(InfraCase):
+    """Testing fixes 3: a restart names one bench (Press restarts a Bench, never a group), and
+    Copilot May Change may name a bench group, so a deploy's new bench stays in scope."""
+
+    def asked_for(self, run):
+        approval = (frappe.parse_json(run.proposal) or {}).get("approval")
+        return (
+            frappe.parse_json(frappe.db.get_value(actions.ACTION, approval, "payload"))[
+                "target"
+            ]
+            if approval
+            else None
+        )
+
+    def test_the_sites_own_bench_named_directly_is_asked_for(self):
+        ticket = self.open_alert()
+        run = self.report(
+            self.claimed(ticket), action="restart_bench", target="bench-0015-000001"
+        )
+        self.assertEqual(run.state, "Awaiting Approval")
+        self.assertEqual(self.asked_for(run), "bench-0015-000001")
+
+    def test_a_group_on_the_list_covers_a_new_bench_in_it(self):
+        self.settings(infra_may_change="bench-0015\n" + SITE)
+        ticket = self.open_alert()
+        run = self.report(
+            self.claimed(ticket), action="restart_bench", target="bench-0015-000001"
+        )
+        self.assertEqual(run.state, "Awaiting Approval")
+
+    def test_a_bench_on_the_list_by_name_still_works(self):
+        self.settings(infra_may_change="bench-0015-000001")
+        ticket = self.open_alert()
+        run = self.report(
+            self.claimed(ticket), action="restart_bench", target="bench-0015-000001"
+        )
+        self.assertEqual(run.state, "Awaiting Approval")
+
+    def test_a_bench_whose_group_is_not_listed_goes_to_a_person(self):
+        self.settings(infra_may_change="bench-0099\n" + SITE)
+        ticket = self.open_alert()
+        run = self.report(
+            self.claimed(ticket), action="restart_bench", target="bench-0015-000001"
+        )
+        self.assertEqual(run.state, "Handed Over")
+        self.assertTrue(
+            any("Copilot May Change" in t for t in self.said_to(self.devops))
+        )
+
+    def test_a_target_that_is_not_a_bench_is_never_restarted(self):
+        # the alert is about a group (the benches check), not a site: no bench to restart
+        ticket = self.open_alert(key="bench-jobs:bench-0015")
+        with patch.object(
+            infra, "press_facts", return_value={"available": True}
+        ), patch("helpdesk.copilot.press.configured", return_value=True), patch(
+            "helpdesk.copilot.press.get_list", return_value=[]
+        ):
+            run = self.report(
+                self.claimed(ticket), action="restart_bench", target="bench-0015"
+            )
+        self.assertEqual(run.state, "Handed Over")
+        self.assertTrue(
+            any("not a bench Press can restart" in t for t in self.said_to(self.devops))
+        )
+
+    def test_a_site_action_still_needs_the_site_on_the_list(self):
+        self.settings(infra_may_change="bench-0015")
+        ticket = self.open_alert()
+        run = self.report(self.claimed(ticket), action="migrate_site", target=SITE)
+        self.assertEqual(run.state, "Handed Over")
 
 
 class TestAfterTheDecision(InfraCase):
@@ -393,7 +477,10 @@ class TestAfterTheDecision(InfraCase):
             press_tools.time, "sleep"
         ):
             press_tools.execute_approved(approval)
-        self.assertEqual(calls[0], ("press.api.bench.restart", {"name": "bench-0015"}))
+        # testing fixes 3: Press restarts one bench, the site's own (Copilot named the group)
+        self.assertEqual(
+            calls[0], ("press.api.bench.restart", {"name": "bench-0015-000001"})
+        )
         self.assertEqual(
             frappe.db.get_value(actions.ACTION, approval, "status"), "Executed"
         )

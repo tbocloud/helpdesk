@@ -659,7 +659,11 @@ Diagnosis**, **Copilot May Change** (one bench, group or site per line; the patc
 3. **The proposal check** (`infra.check_proposal`): the action must be one of `infra.ACTIONS`
    (backup, restart_bench, migrate_site, update_site), the target one the alert is about (its site, the
    site's bench or group), proposals on and auto-repair not paused, and the target in **Copilot May
-   Change**. Then an HDS Action Approval of kind Press is asked by the automation user, with
+   Change**. A restart names one bench, because Press restarts a Bench, never a group
+   (`press.api.bench.restart(name)`): Copilot naming the site's group becomes the site's own bench, and the
+   card says so; a name that is no bench Press knows goes to a person (testing fixes 3). For a bench,
+   **Copilot May Change** may list its group instead, so the line survives a deploy that moves the sites to
+   a new bench (`bench-0015` covers `bench-0015-000052-f1`). Then an HDS Action Approval of kind Press is asked by the automation user, with
    `copilot_run` in the payload (a backup too, which a person would run at once); the run waits in
    Awaiting Approval. Otherwise the run is Handed Over and the card says what a person should run.
 4. **The decision** (`actions.decide` / `expire` / `mark_executed` → `infra.on_action`): approved →
@@ -693,7 +697,8 @@ from"; `monitor.status`, Phase 24): the heartbeat lives in the cache, not in a f
   (`custom_monitor_key`), for slow-burning issues (a certificate expiring in two weeks, a disk filling).
   It goes to the **Infrastructure** people working today (Main, then the fallbacks), else a **Leader**,
   never Infrastructure Senior (`monitor.followup_assignee`, Phase 24); of them the one with the fewest
-  open follow-ups, with a comment saying why. Nobody set: it stays unassigned.
+  open follow-ups, with a comment saying why. Nobody set: it stays unassigned, and the next time the watcher
+  reports it while still open, it is assigned the same way (testing fixes 3; one made before Phase 24 too).
 - Alert tickets (above) are assigned like any ticket of the internal customer: its ticket owner, else
   the backup, else the least busy of the internal project's team working today.
 - `heartbeat(source)`: every minute from the watcher. `monitor.watch_heartbeats` (every 5 minutes)

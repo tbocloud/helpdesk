@@ -231,6 +231,27 @@ class TestFollowupAssignee(MonitorCase):
         self.assertIsNone(made["assigned_to"])
         self.assertEqual(self.assigned(made["task"]), [])
 
+    def test_an_open_follow_up_with_nobody_on_it_is_assigned_when_reported_again(self):
+        # testing fixes 3, G3: TASK-2026-00010 was made before Phase 24 and stayed unassigned
+        self.set_people([])
+        with patch("helpdesk.copilot.people.groups", return_value=[]):
+            made = monitor.followup("disk:old", "Disk old")
+        self.assertEqual(self.assigned(made["task"]), [])
+
+        self.set_people([("Infrastructure", self.infra)])
+        again = monitor.followup("disk:old", "Disk old")
+        self.assertEqual(
+            (again["task"], again["action"], again.get("assigned_to")),
+            (made["task"], "exists", self.infra),
+        )
+        self.assertEqual(self.assigned(made["task"]), [self.infra])
+
+        # someone has it now: reported again, nothing changes
+        self.set_people([("Infrastructure", self.infra_two)])
+        third = monitor.followup("disk:old", "Disk old")
+        self.assertNotIn("assigned_to", third)
+        self.assertEqual(self.assigned(made["task"]), [self.infra])
+
 
 class TestWatcherStatus(MonitorCase):
     """Phase 24: HDS Hub Settings → Monitoring shows when the watcher was last heard from."""

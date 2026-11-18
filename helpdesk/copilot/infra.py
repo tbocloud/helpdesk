@@ -405,20 +405,92 @@ def check_proposal(run, proposal: dict) -> tuple[str, str]:
         return "person", _("The proposal names no target.")
     key = frappe.db.get_value(TICKET, run.ticket, "alert_key") or ""
     name = target_of(key)
-    allowed = known_targets(name, press_facts(name) if name else {})
+    facts = press_facts(name) if name else {}
+    allowed = known_targets(name, facts)
     if target.lower() not in allowed:
         return "person", _(
             "Copilot named {0}, which this alert is not about; a person checks."
         ).format(target)
+    if action == "restart_bench":
+        refused = _bench_to_restart(proposal, facts)
+        if refused:
+            return "person", refused
+        target = proposal["target"]
     if not proposing():
         return "person", _(
             "Copilot's proposals are off (settings, or auto-repair is paused)."
         )
-    if target.lower() not in may_change():
+    if not _may_change(action, target, facts):
         return "person", _(
             "{0} is not on the list of places Copilot may change (Copilot May Change)."
         ).format(target)
     return "ask", ""
+
+
+def _site_facts(facts: dict | None) -> dict:
+    site = (facts or {}).get("site")
+    return site if isinstance(site, dict) else {}
+
+
+def _bench_group(bench: str, facts: dict | None) -> str | None:
+    """The bench group of a bench: from the alert site's facts when it is the site's bench, else
+    Press's Bench record; None when it is not a bench Press knows (or Press could not say)."""
+    site = _site_facts(facts)
+    if str(site.get("bench") or "").lower() == bench.lower():
+        return site.get("group") or None
+    from helpdesk.copilot import press
+
+    if not press.configured():
+        return None
+    rows = _safely(press.get_list, "Bench", {"name": bench}, ["group"], limit=1)
+    if isinstance(rows, list) and rows:
+        return rows[0].get("group") or None
+    return None
+
+
+def _bench_to_restart(proposal: dict, facts: dict | None) -> str:
+    """Press restarts one Bench, never a group (`press.api.bench.restart(name)`; testing fixes 3,
+    G1): the alert site's group becomes the site's own bench, and the card says so. Returns why a
+    person must check instead, or ""."""
+    target = proposal["target"]
+    site = _site_facts(facts)
+    group, bench = str(site.get("group") or ""), str(site.get("bench") or "")
+    if group and target.lower() == group.lower():
+        if not bench:
+            return _(
+                "{0} is a bench group, and Press restarts one bench; the site's bench is not known. A person checks."
+            ).format(target)
+        proposal["target"] = bench
+        proposal["why"] = " ".join(
+            part
+            for part in (
+                proposal.get("why") or "",
+                _(
+                    "(Copilot named the bench group {0}; Press restarts one bench, so the site's own bench {1}.)"
+                ).format(group, bench),
+            )
+            if part
+        )
+        return ""
+    if not _bench_group(target, facts):
+        return _("{0} is not a bench Press can restart; a person checks.").format(
+            target
+        )
+    return ""
+
+
+def _may_change(action: str, target: str, facts: dict | None) -> bool:
+    """On Copilot May Change: the place itself, or for a bench its bench group, so a line naming
+    the group keeps working when a deploy moves the sites to a new bench (testing fixes 3, G2)."""
+    from helpdesk.copilot import press_tools
+
+    places = may_change()
+    if target.lower() in places:
+        return True
+    if press_tools.spec(action).get("target") != "bench":
+        return False
+    group = _bench_group(target, facts)
+    return bool(group and group.lower() in places)
 
 
 def on_report(run_name: str, report: dict):

@@ -270,7 +270,18 @@ def followup(
     key = normalise_key(key)
     existing = open_followup(key)
     if existing:
-        return {"task": existing, "action": "exists"}
+        # one made before anyone was assigned (before Phase 24, or nobody free then) gets a person
+        # now, the next time the watcher reports it (testing fixes 3, G3)
+        assigned = None
+        if not frappe.parse_json(
+            frappe.db.get_value("Task", existing, "_assign") or "[]"
+        ):
+            assigned = _assign_followup(frappe.get_doc("Task", existing), assign_to)
+        return {
+            "task": existing,
+            "action": "exists",
+            **({"assigned_to": assigned} if assigned else {}),
+        }
     project = settings()["internal_project"]
     if not project:
         frappe.throw(
@@ -295,6 +306,13 @@ def followup(
                 "custom_monitor_key": key,
             }
         ).insert(ignore_permissions=True)
+    assign_to = _assign_followup(task, assign_to)
+    return {"task": task.name, "action": "created", "assigned_to": assign_to}
+
+
+def _assign_followup(task, assign_to: str | None = None) -> str | None:
+    """The follow-up task to `assign_to`, else the Infrastructure person `followup_assignee`
+    picks (with a comment why); returns who has it, or None when nobody could be picked."""
     why = ""
     if not assign_to:
         assign_to, why = followup_assignee()
@@ -318,7 +336,7 @@ def followup(
                         )
                     ),
                 )
-    return {"task": task.name, "action": "created", "assigned_to": assign_to}
+    return assign_to
 
 
 def followup_assignee() -> tuple[str | None, str]:
