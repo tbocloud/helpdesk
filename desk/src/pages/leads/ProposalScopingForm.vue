@@ -47,7 +47,7 @@
       <p class="text-p-sm text-ink-gray-6">
         {{
           __(
-            "One short line each, in the client's words. The AI turns each into a proper description; the effort stays yours."
+            "One short line each, in the client's words. The AI turns each into a proper description; the effort stays yours. Leave the price blank to charge its days at the day rate."
           )
         }}
       </p>
@@ -59,9 +59,10 @@
         <li
           v-for="(c, i) in model.customisations"
           :key="i"
-          class="grid grid-cols-[1fr_6rem_auto] items-end gap-2"
+          class="grid grid-cols-[1fr_1fr_auto] items-end gap-2 sm:grid-cols-[1fr_5rem_8rem_auto]"
         >
           <FormControl
+            class="col-span-3 sm:col-span-1"
             :model-value="c.item"
             :label="i === 0 ? __('What') : ''"
             :aria-label="__('Customisation {0}', String(i + 1))"
@@ -84,6 +85,19 @@
               setCustomisation(i, { days: Number($event) || 0 })
             "
           />
+          <FormControl
+            :model-value="c.price || ''"
+            type="number"
+            min="0"
+            step="any"
+            :label="i === 0 ? __('Price') : ''"
+            :aria-label="__('Price of customisation {0}', String(i + 1))"
+            :placeholder="__('Day rate')"
+            :disabled="disabled"
+            @update:model-value="
+              setCustomisation(i, { price: Number($event) || null })
+            "
+          />
           <Button
             variant="ghost"
             :label="__('Remove customisation {0}', String(i + 1))"
@@ -94,7 +108,10 @@
               <LucideX class="size-4" aria-hidden="true" />
             </template>
           </Button>
-          <p v-if="c.detail" class="col-span-3 -mt-1 text-p-xs text-ink-gray-6">
+          <p
+            v-if="c.detail"
+            class="col-span-3 -mt-1 text-p-xs text-ink-gray-6 sm:col-span-4"
+          >
             {{ c.detail }}
           </p>
         </li>
@@ -161,6 +178,34 @@
           />
         </div>
       </template>
+      <!-- additional branches, each at the branch rate unless a price is set here -->
+      <template v-if="asks('branches')">
+        <FormControl
+          :model-value="model.branches || ''"
+          type="number"
+          min="0"
+          max="1000"
+          :label="__('Additional branches')"
+          :description="__('Beyond the head office and the first branch.')"
+          :disabled="disabled"
+          @update:model-value="
+            set('branches', Math.max(Math.round(Number($event) || 0), 0))
+          "
+        />
+        <FormControl
+          :model-value="model.branch_rate || ''"
+          type="number"
+          min="0"
+          step="any"
+          :label="__('Price per branch')"
+          :placeholder="
+            branchRate ? String(branchRate) : __('The ERP site\'s branch rate')
+          "
+          :description="__('Blank: the branch rate set on the ERP site.')"
+          :disabled="disabled"
+          @update:model-value="set('branch_rate', Number($event) || null)"
+        />
+      </template>
       <FormControl
         v-if="asks('timeline_weeks')"
         :model-value="model.timeline_weeks || ''"
@@ -218,6 +263,10 @@ const props = defineProps<{
   solutionType?: string | null;
   hosting: string[];
   disabled?: boolean;
+  /** questions another control on the page already asks */
+  hidden?: Question[];
+  /** the ERP site's branch rate, shown while no price per branch is set */
+  branchRate?: number | null;
 }>();
 const emit = defineEmits<{
   (e: "update:modelValue", value: Scoping): void;
@@ -227,6 +276,7 @@ const architectureId = `scoping-architecture-${useId()}`;
 const model = computed(() => props.modelValue);
 
 function asks(key: Question) {
+  if (props.hidden?.includes(key)) return false;
   return !props.questions?.length || props.questions.includes(key);
 }
 

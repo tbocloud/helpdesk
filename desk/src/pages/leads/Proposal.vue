@@ -354,6 +354,7 @@
                   :catalogue="options?.catalogue || []"
                   :solution-type="proposal.solution_type"
                   :hosting="options?.hosting || []"
+                  :branch-rate="options?.branch_rate"
                   :disabled="!editable"
                 />
                 <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">

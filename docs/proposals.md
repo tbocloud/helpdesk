@@ -151,6 +151,52 @@ the scoping form (`ProposalScopingForm.vue`), and the timeline, payment terms an
 edit one state: every chat answer lands in the summary at once, and presales can click any field
 to change it, or **Skip to the form** (and **Back to the assistant**) at any point.
 
+**Implementation type** (`ProposalImplementation.vue`, top of "What the proposal covers"; the
+owner's ask of 2026-11-18): **ERP** or **Digital Marketing**, a segmented control. It maps onto
+what the ERP site seeds, so nothing new is stored: ERP is always ERPNext, the *ERPNext
+Implementation* template; **ERPNext, with** any mix of **Mobile app** (the *ERPNext + Flutter
+Mobile App* template, `mobile_app` and the *Flutter Mobile App* module; off is ERPNext without
+one), **Website** (the *Website & Portal* module) and **ERPNext customisation** (the
+Customisations list, which shows once picked). Digital Marketing is the *Digital Marketing –
+6-month strategy* template. Switching type takes that template's default modules and clears the
+add-ons; a type whose template is off on the ERP site isn't offered. The Template select stays
+for the other templates (HRMS, Helpdesk, CRM…); on one of those the control shows no type and
+says so. On ERP the scoping form doesn't ask the mobile app again (`hidden`). The helpers
+(`implementationOf`, `withImplementation`, `withAddon`, `erpAddons`) are in `proposals.ts`, shared
+with the chat.
+
+**Price** (`ProposalPriceEstimate.vue`, under the summary once there is a module or a
+customisation): the modules by app (**ERPNext** or **Digital Marketing**, **Mobile app**,
+**Website**), each with its price (the catalogue's list price until one is typed; **Use the list
+price** undoes it) and a subtotal, then **ERPNext customisation** (each customisation's own
+price, or its days at the day rate), **Branch rollout** (the additional branches × the price per
+branch, or the ERP site's branch rate, `options.branch_rate`; with neither it says to set one and
+adds nothing), and the **Total before GST** in the ERP site's currency
+(`options.currency`, INR when the site doesn't send it). A note says a module linked to an Item
+takes the segment's rate and that the quotation has the final figures. On **Generate** the typed
+prices are set on the new proposal's modules by hand (`save_proposal` with `rate_overridden`), so
+the quotation, the builder and the preview use them; if that save fails the proposal is still
+opened, with a warning to set them in its Modules. Preview and sending by email (typing the To)
+are the builder's, below.
+
+**Additional branches** (the ERPNext templates ask them, `branches`): in the scoping form (here
+and in the builder) the number of branches beyond the head office and the first branch, and a
+**Price per branch** (blank: the ERP site's **Branch rate** in TBO Smart Settings, shown as its
+placeholder). The ERP site prices them as one quotation line, "Additional branch rollout (n
+branches)", and adds an Investment note on what a branch covers.
+
+**The ERPNext + mobile template** follows the owner's model proposal of 2026-11-18 (the order,
+headings, fixed Security and AMC sections, 50 / 30 / 20 milestones, assumptions and exclusions):
+that is the ERP site's preset (TBO Smart's `docs/proposals.md` §3.2), so the hub shows whatever the
+template says; nothing about it is fixed here.
+
+**A customisation's price.** Each customisation in the scoping form (here and in the builder) has
+a **Price** beside its days: blank charges its days at the ERP site's day rate, as before; a price
+typed is sent as `price` on its row and the ERP site makes it a quotation line of its own
+("Customisation: <item>"). This needs TBO Smart's priced customisations
+(`customisation_rows` keeping `price`, `priced_customisation_line`); an ERP site without it drops
+the price and charges the days.
+
 The chat is **scripted**: its questions cost no tokens, and quick-reply chips are used wherever
 the choices are fixed. It starts once the lead's profile is in, **greets with a recap** of what is
 already known (website, what they do, industry, pain points, modules) and **skips every question
@@ -170,17 +216,22 @@ points. In order:
 3. **What the client needs** (skipped when the requirements are filled) (typed, pasted or "Use the lead's notes"): kept as the requirements
    and, with the AI on, read into the form by the one extraction call (template, modules,
    customisations, users, hosting, AMC…); the assistant says what it filled.
-4. **Modules** (chips, the template's or the extraction's picked; **Done**).
-5. **Customisations** (one short line each, split one a line, 1 day each until set; or "None").
-6. **Mobile app / data migration / integrations / source code** (chips), then which systems to
-   connect when integrations is picked.
-7. **Users** (chips 10 / 25 / 50 / 100 / Unlimited, or a number), **companies** (chips 1 / 2 / 3 /
-   Unlimited, or a number) and **hosting** (chips). In the form each is a number with an
+4. **ERP or Digital Marketing** (chips; skipped when only one is on), then on ERP **ERPNext with
+   any of these?** (Mobile app, Website, ERPNext customisation; **Done** with none is ERPNext on
+   its own).
+5. **Modules** (chips, the template's or the extraction's picked; **Done**).
+6. **Customisations** (one short line each, split one a line, 1 day each until set; or "None").
+   On ERP, asked only when the customisation add-on was picked.
+7. **Mobile app / data migration / integrations / source code** (chips; on ERP without the mobile
+   app, asked above), then which systems to connect when integrations is picked.
+8. **Users** (chips 10 / 25 / 50 / 100 / Unlimited, or a number), **companies** (chips 1 / 2 / 3 /
+   Unlimited, or a number), on ERP when the template asks it the **additional branches** (chips 0
+   / 5 / 10, or a number) and **hosting** (chips). In the form each is a number with an
    **Unlimited** box.
-8. **Timeline** (45 / 60 / 90 / 120 days, the suggested one marked), **payment terms**, **AMC**
+9. **Timeline** (45 / 60 / 90 / 120 days, the suggested one marked), **payment terms**, **AMC**
    (a plan, or No AMC).
-9. **Anything else** (added to the requirements).
-10. Before offering Generate, the chat asks for whatever required profile field is still empty
+10. **Anything else** (added to the requirements).
+11. Before offering Generate, the chat asks for whatever required profile field is still empty
     (industry, pain points).
 
 **Off-script answers.** An answer that doesn't fit its question (an intent at the website step,
