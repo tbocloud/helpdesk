@@ -422,7 +422,12 @@ so the client is called once (TBO Smart's `call-batches.md` §3, §5).
 batches, and the page opens on it for Sales Employees. It **replaces Call today** for those people
 (an old `?view=call_today` link lands on it): both answer "who do I phone now", so they would be two
 places for one job. People without batches keep Call today. Managers who are not members see
-neither; they have the batch table on the Daily report.
+neither; they have the batch table on the Daily report. People with the **Presales
+Executive** role (2026-11-17) don't get *Today's calls* at all: no sidebar item, no pill in
+the row of list pills, and Leads never opens on it (an old `?view=today` link opens their
+usual tab; a BD among them starts on My leads). Everything else on Leads stays. **Sales Users
+keep Today's calls**, and so does someone with both roles (`hide_todays_calls` from
+`get_user`, `helpdesk.sales_targets.hides_todays_calls`; Administrator is left out).
 
 **The screen (2026-11-16: the mockup redesign; the call is made on the lead's page).** A header
 with the title, the **Calling for** switch (`CallingFor.vue`, a button that opens the same picker),

@@ -1052,15 +1052,21 @@ function queryValue(key: string) {
 function defaultTab(): LeadTab {
   const loaded = leadOptions.data as LeadOptions | undefined;
   // a BD never opens on the team's figures; before the options arrive they get Today's calls
-  if (authStore.isSalesBd && (!loaded || !loaded.departments)) return "today";
+  // a Presales Executive has no Today's calls: a BD among them starts on their own leads
+  const today = authStore.hideTodaysCalls ? "mine" : "today";
+  if (authStore.isSalesBd && (!loaded || !loaded.departments)) return today;
   if (loaded?.is_bd ?? authStore.isSalesBd)
-    return batchesOn(loaded) ? "today" : "call_today";
-  return authStore.isSalesEmployee && batchesOn(loaded) ? "today" : "overview";
+    return batchesOn(loaded) ? today : "call_today";
+  return authStore.isSalesEmployee && batchesOn(loaded) && !authStore.hideTodaysCalls
+    ? "today"
+    : "overview";
 }
 
 function queryView(): LeadTab {
   const value = queryValue("view");
-  return TABS.some((v) => v.value === value)
+  // an old ?view=today link from a Presales Executive opens their usual tab
+  return TABS.some((v) => v.value === value) &&
+    !(value === "today" && authStore.hideTodaysCalls)
     ? (value as LeadTab)
     : defaultTab();
 }
@@ -1421,7 +1427,7 @@ const tabs = computed(() =>
     if (tab.value === "daily") return hasDaily.value;
     if (tab.value === "business") return canViewBusiness.value;
     if (tab.value === "outreach") return hasOutreach.value;
-    if (tab.value === "today") return hasBatches.value;
+    if (tab.value === "today") return hasBatches.value && !authStore.hideTodaysCalls;
     if (tab.value === "call_today") return !hasBatches.value;
     return true;
   })
@@ -1499,7 +1505,9 @@ watch(options, (value) => {
     view.value = "overview";
   if (!hasBatches.value && view.value === "today")
     view.value = isBd.value ? "call_today" : "overview";
-  if (hasBatches.value && view.value === "call_today") view.value = "today";
+  if (hasBatches.value && view.value === "call_today")
+    view.value = authStore.hideTodaysCalls ? homeTab.value : "today";
+  if (authStore.hideTodaysCalls && view.value === "today") view.value = homeTab.value;
   // a link to a tab the person may not open
   if (value && !value.can_view_business && view.value === "business")
     view.value = "overview";

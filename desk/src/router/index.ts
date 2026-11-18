@@ -216,6 +216,19 @@ const portalRoutes = [
     beforeEnter: () =>
       useAuthStore().canViewDivisionOverview || { name: "Home" },
   },
+  // each month's targets: a Sales Head sets them, the people read theirs (docs/sales-targets.md)
+  {
+    path: "/sales-targets",
+    name: "SalesTargets",
+    component: () => import("@/pages/sales-targets/SalesTargets.vue"),
+    beforeEnter: () => useAuthStore().canAssignSalesTargets || { name: "Home" },
+  },
+  {
+    path: "/my-targets",
+    name: "MyTargets",
+    component: () => import("@/pages/sales-targets/MyTargets.vue"),
+    beforeEnter: () => useAuthStore().hasSalesTargets || { name: "Home" },
+  },
   // the Lead Bank: any active agent adds leads by photo and sees their own (docs/lead-bank.md)
   {
     path: "/lead-bank",

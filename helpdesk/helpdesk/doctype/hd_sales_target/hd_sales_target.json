@@ -1,0 +1,104 @@
+{
+	"actions": [],
+	"creation": "2026-11-17 12:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"employee",
+		"employee_name",
+		"column_break_month",
+		"month",
+		"assigned_by",
+		"section_break_criteria",
+		"criteria"
+	],
+	"fields": [
+		{
+			"fieldname": "employee",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"label": "Employee",
+			"options": "User",
+			"reqd": 1,
+			"set_only_once": 1
+		},
+		{
+			"fetch_from": "employee.full_name",
+			"fieldname": "employee_name",
+			"fieldtype": "Data",
+			"label": "Employee Name",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_month",
+			"fieldtype": "Column Break"
+		},
+		{
+			"description": "The first day of the month the targets are for.",
+			"fieldname": "month",
+			"fieldtype": "Date",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"label": "Month",
+			"reqd": 1,
+			"set_only_once": 1
+		},
+		{
+			"fieldname": "assigned_by",
+			"fieldtype": "Link",
+			"label": "Assigned By",
+			"options": "User",
+			"read_only": 1
+		},
+		{
+			"fieldname": "section_break_criteria",
+			"fieldtype": "Section Break"
+		},
+		{
+			"fieldname": "criteria",
+			"fieldtype": "Table",
+			"label": "Criteria",
+			"options": "HD Sales Target Criterion",
+			"reqd": 1
+		}
+	],
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-11-17 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Sales Target",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "System Manager",
+			"share": 1,
+			"write": 1
+		},
+		{
+			"create": 1,
+			"delete": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Sales Head",
+			"write": 1
+		}
+	],
+	"search_fields": "employee_name,month",
+	"show_title_field_in_link": 1,
+	"sort_field": "month",
+	"sort_order": "DESC",
+	"states": [],
+	"title_field": "employee_name",
+	"track_changes": 1
+}

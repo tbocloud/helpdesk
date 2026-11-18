@@ -110,6 +110,18 @@ export const useAuthStore = defineStore("auth", () => {
   const canViewDivisionOverview: ComputedRef<boolean> = computed(
     () => !!user__.value.can_view_division_overview
   );
+  // Sales targets: Sales Heads set each month's targets (docs/sales-targets.md)
+  const canAssignSalesTargets: ComputedRef<boolean> = computed(
+    () => !!user__.value.can_assign_sales_targets
+  );
+  // Sales targets (their own): Presales Executives and Sales Users read theirs
+  const hasSalesTargets: ComputedRef<boolean> = computed(
+    () => !!user__.value.has_sales_targets
+  );
+  // Presales Executives don't get Today's calls: no sidebar item, no pill, never the landing tab
+  const hideTodaysCalls: ComputedRef<boolean> = computed(
+    () => !!user__.value.hide_todays_calls
+  );
   const canSeeCustomerReport: ComputedRef<boolean> = computed(
     () => !!(user__.value.is_manager || user__.value.is_project_manager)
   );
@@ -219,6 +231,9 @@ export const useAuthStore = defineStore("auth", () => {
     isSuperAdmin,
     canManageDivisions,
     canViewDivisionOverview,
+    canAssignSalesTargets,
+    hasSalesTargets,
+    hideTodaysCalls,
     telephonyInstalled,
     canOpenChat,
     isLoggedIn,

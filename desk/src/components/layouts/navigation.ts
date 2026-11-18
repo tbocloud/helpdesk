@@ -14,6 +14,7 @@ import LucideClock from "~icons/lucide/clock";
 import LucideContact2 from "~icons/lucide/contact-2";
 import LucideFileSpreadsheet from "~icons/lucide/file-spreadsheet";
 import LucideFolderKanban from "~icons/lucide/folder-kanban";
+import LucideGoal from "~icons/lucide/goal";
 import LucideHandshake from "~icons/lucide/handshake";
 import LucideGauge from "~icons/lucide/gauge";
 import LucideHome from "~icons/lucide/home";
@@ -26,6 +27,7 @@ import LucideNewspaper from "~icons/lucide/newspaper";
 import LucidePhoneCall from "~icons/lucide/phone-call";
 import LucideShapes from "~icons/lucide/shapes";
 import LucideSquareKanban from "~icons/lucide/square-kanban";
+import LucideTarget from "~icons/lucide/target";
 import LucideTicket from "~icons/lucide/ticket";
 import LucideTrophy from "~icons/lucide/trophy";
 import LucideUsers from "~icons/lucide/users";
@@ -62,6 +64,10 @@ export interface NavItem {
   customerReportOnly?: boolean;
   /** Business overview and Division reports: Super Admins and division managers */
   divisionOverviewOnly?: boolean;
+  /** Sales targets: Sales Heads (and admins) */
+  salesHeadOnly?: boolean;
+  /** Sales targets (their own): Presales Executives and Sales Users */
+  ownTargetsOnly?: boolean;
 }
 
 /** A page in the tree under a parent item (a saved view). */
@@ -293,6 +299,14 @@ export const agentNavAreas: NavArea[] = [
     groups: [
       {
         items: [
+          // their own targets for the month, set by a Sales Head (docs/sales-targets.md)
+          {
+            id: "my-targets",
+            label: __("Sales targets"),
+            icon: LucideGoal,
+            to: "MyTargets",
+            ownTargetsOnly: true,
+          },
           // the batch of calls for today; only for people whose department hands them out
           {
             id: "todays-calls",
@@ -356,6 +370,14 @@ export const agentNavAreas: NavArea[] = [
             to: "Leads",
             leadTab: "business",
             leadsOnly: true,
+          },
+          // each month's targets for the presales and sales people (docs/sales-targets.md)
+          {
+            id: "sales-targets",
+            label: __("Assign Sales targets"),
+            icon: LucideTarget,
+            to: "SalesTargets",
+            salesHeadOnly: true,
           },
           // who is handed which product and how many calls per slot (docs/leads.md)
           {

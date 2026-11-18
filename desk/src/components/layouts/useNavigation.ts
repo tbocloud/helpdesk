@@ -50,6 +50,8 @@ export function useNavigation() {
   );
   const isBd = computed(() => leadOptions.data?.is_bd ?? authStore.isSalesBd);
   const hasBatches = computed(() => batchesOn(leadOptions.data));
+  // Today's calls: for members of a department with call batches, but not Presales Executives
+  const todaysCalls = computed(() => hasBatches.value && !authStore.hideTodaysCalls);
   // the ERP site decides who may plan (a Sales Manager, a head); a BD never does
   // a department's viewer watches Assign leads even as a BD
   const canPlanCalls = computed(
@@ -69,10 +71,10 @@ export function useNavigation() {
   function isLeadTabVisible(tab: NonNullable<NavItem["leadTab"]>) {
     switch (tab) {
       case "today":
-        return hasBatches.value;
+        return todaysCalls.value;
       case "all":
-        // a BD with call batches has Today's calls in its place
-        return !(isBd.value && hasBatches.value);
+        // a BD with Today's calls has it in its place
+        return !(isBd.value && todaysCalls.value);
       case "overview":
         return !isBd.value;
       case "business":
@@ -86,8 +88,11 @@ export function useNavigation() {
 
   // the tab the Leads page opens on when the URL names none
   function defaultLeadTab() {
-    if (isBd.value) return hasBatches.value ? "today" : "call_today";
-    return authStore.isSalesEmployee && hasBatches.value ? "today" : "overview";
+    if (isBd.value) {
+      if (todaysCalls.value) return "today";
+      return hasBatches.value ? "mine" : "call_today";
+    }
+    return authStore.isSalesEmployee && todaysCalls.value ? "today" : "overview";
   }
 
   function isItemVisible(item: NavItem) {
@@ -108,6 +113,8 @@ export function useNavigation() {
       (!item.adoptionOnly || authStore.canSeeAdoption) &&
       (!item.customerReportOnly || authStore.canSeeCustomerReport) &&
       (!item.divisionOverviewOnly || authStore.canViewDivisionOverview) &&
+      (!item.salesHeadOnly || authStore.canAssignSalesTargets) &&
+      (!item.ownTargetsOnly || authStore.hasSalesTargets) &&
       (!authStore.isContentTeam || CONTENT_TEAM_ROUTES.has(to))
     );
   }
