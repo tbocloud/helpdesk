@@ -229,6 +229,13 @@ const portalRoutes = [
     component: () => import("@/pages/sales-targets/MyTargets.vue"),
     beforeEnter: () => useAuthStore().hasSalesTargets || { name: "Home" },
   },
+  // expense claims on the division's ERP site: claim and approve (docs/expenses.md)
+  {
+    path: "/expenses",
+    name: "Expenses",
+    component: () => import("@/pages/expenses/Expenses.vue"),
+    beforeEnter: () => useAuthStore().canUseLeads || { name: "Home" },
+  },
   // the Lead Bank: any active agent adds leads by photo and sees their own (docs/lead-bank.md)
   {
     path: "/lead-bank",
