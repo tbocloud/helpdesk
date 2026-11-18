@@ -481,17 +481,19 @@ class TestTalkToAPerson(ChatCase):
         self.assertFalse(
             frappe.db.exists("HDS Copilot Run", {"ticket": self.doc().ticket})
         )
-        self.assertIn("Copilot waits", json.dumps(self.told[0][1]))
+        self.assertIn("Copilot stays out", json.dumps(self.told[0][1]))
 
-    def test_with_their_words_copilot_looks_into_it(self):
+    def test_with_their_words_copilot_still_stays_out(self):
+        # testing fixes 2 (the owner, 18 Nov 2026): a hand-over never starts Copilot
         frappe.db.set_value("HD Customer", self.customer, "custom_copilot_enabled", 1)
         self.say(action="start")
         self.say(action="person")
         self.say("the margin report lists the wrong invoices")
 
-        self.assertTrue(
+        self.assertFalse(
             frappe.db.exists("HDS Copilot Run", {"ticket": self.doc().ticket})
         )
+        self.assertEqual(self.doc().asked_for_person, 1)
 
     def test_after_the_hand_over_the_customers_messages_reach_the_ticket(self):
         # the site's call arrives as Guest, who may not save the ticket the message reopens
@@ -521,7 +523,8 @@ class TestTalkToAPerson(ChatCase):
             any("customization in the user list" in r.content for r in received)
         )
 
-    def test_copilot_keeps_quiet_to_the_customer_until_a_person_replies(self):
+    def test_copilot_tells_the_customer_nothing_but_the_resolve_question(self):
+        # testing fixes 2: before, Copilot spoke again once a person had replied
         self.say(action="start")
         self.say("my invoice will not submit")
         self.say(action="person")
@@ -540,20 +543,19 @@ class TestTalkToAPerson(ChatCase):
                 "subject": "Re: my invoice",
             }
         ).insert(ignore_permissions=True)
-        customer.send_stage(run, "Fix scheduled", {"date": "tonight"})
+        self.assertFalse(customer.send_stage(run, "Fix scheduled", {"date": "tonight"}))
+        customer.send_stage(run, "Resolved", {"resolution": "The fix is live."})
 
-        kinds = [
-            m.kind
+        stages = [
+            json.loads(m.card or "{}").get("title")
             for m in frappe.get_all(
                 "HDS Conversation Message",
-                filters={"conversation": self.chat},
-                fields=["kind"],
+                filters={"conversation": self.chat, "kind": "Stage"},
+                fields=["card"],
                 order_by="creation asc",
             )
         ]
-        self.assertEqual(
-            kinds.count("Stage"), 1
-        )  # only the one after the person replied
+        self.assertEqual(stages, ["Resolved"])
 
     def test_the_roles_are_kept_short(self):
         roles = [f"Role {i}" for i in range(30)]
@@ -1334,3 +1336,151 @@ def assistant_message():
     from helpdesk.copilot import assistant
 
     return assistant.MESSAGE
+
+
+class TestTestingFixes2(ChatCase):
+    """Talk to a person means no Copilot (the owner, 18 Nov 2026; ticket #0018 on the demo hub):
+    nothing starts by itself, nothing of Copilot's reaches the customer but the resolve question,
+    and a person resolving the ticket asks "Is it fixed?"."""
+
+    def setUp(self):
+        super().setUp()
+        self.agent = create_agent("fixes2.person@example.com").name
+        patcher = patch(
+            "helpdesk.copilot.people.agent_managers", return_value=[self.agent]
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        patcher = patch("helpdesk.copilot.assistant.send")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        frappe.db.set_value("HD Customer", self.customer, "custom_copilot_enabled", 1)
+
+    def handed_over(self):
+        self.say(action="start")
+        self.say(action="person")
+        self.say(action="person_now")
+        return self.doc().ticket
+
+    def stages(self):
+        return [
+            (json.loads(m.card or "{}").get("title"), m.name)
+            for m in frappe.get_all(
+                conversation.MESSAGE,
+                filters={"conversation": self.chat, "kind": "Stage"},
+                fields=["card", "name"],
+                order_by="creation asc",
+            )
+        ]
+
+    def resolve(self, ticket):
+        doc = frappe.get_doc("HD Ticket", ticket)
+        doc.status = "Resolved"
+        doc.save(ignore_permissions=True)
+        return doc
+
+    def test_a_hand_over_marks_the_chat_and_still_broken_does_not(self):
+        self.handed_over()
+        self.assertEqual(self.doc().asked_for_person, 1)
+
+        self.chat = None
+        self.gathered()
+        self.say(action="raise")
+        with patch.object(customer, "decide_resolution"):
+            self.say(action="still_broken", note="It still fails on SINV-0043")
+        self.assertEqual(self.doc().state, "With a person")
+        self.assertEqual(self.doc().asked_for_person, 0)
+
+    def test_a_hand_over_on_a_raised_ticket_stops_copilots_run(self):
+        self.gathered()
+        ticket = self.say(action="raise")["ticket"]
+        run = runs.active_run(ticket)
+        self.assertTrue(run)
+
+        self.say(action="person")
+
+        self.assertEqual(
+            frappe.db.get_value("HDS Copilot Run", run.name, "state"), "Cancelled"
+        )
+        self.assertEqual(self.doc().asked_for_person, 1)
+
+    def test_the_customers_later_message_starts_no_run(self):
+        ticket = self.handed_over()
+        run = make_copilot_run(ticket, "Answered")  # a person started Copilot before
+        frappe.db.set_value(
+            "HD Ticket",
+            ticket,
+            {"custom_copilot_run": run.name, "custom_copilot_stage": "Waiting for you"},
+        )
+
+        self.say("i need a customization")
+
+        self.assertFalse(
+            frappe.db.exists("HDS Copilot Run", {"ticket": ticket, "kind": "followup"})
+        )
+
+    def test_a_person_resolving_asks_if_its_fixed_once(self):
+        ticket = self.handed_over()
+        self.pushed.clear()
+
+        doc = self.resolve(ticket)
+        [(title, _name)] = self.stages()
+        self.assertEqual(title, "Resolved")
+        posted = [p for m, p in self.pushed if m == "post_message"]
+        self.assertEqual(
+            [a["verb"] for a in json.loads(posted[-1]["card"])["actions"]],
+            ["fixed", "still_broken"],
+        )
+
+        # saved again, or a run's own Resolved at the same time: still asked once
+        doc.reload()
+        doc.priority = doc.priority
+        doc.save(ignore_permissions=True)
+        conversation.tell_stage(
+            frappe._dict(ticket=ticket, name=None), "Resolved", "The fix is live."
+        )
+        self.assertEqual(len(self.stages()), 1)
+
+    def test_still_broken_after_a_persons_resolve_goes_back_to_the_person(self):
+        ticket = self.handed_over()
+        self.resolve(ticket)
+
+        self.say(action="still_broken", note="It still shows the old rate")
+
+        self.assertEqual(
+            frappe.db.get_value("HD Ticket", ticket, "custom_customer_confirmation"),
+            "Reopened",
+        )
+        self.assertEqual(self.doc().asked_for_person, 1)
+        self.assertFalse(frappe.db.exists("HDS Copilot Run", {"ticket": ticket}))
+
+    def test_a_ticket_raised_from_copilots_summary_is_not_asked_by_the_hook(self):
+        self.gathered()
+        ticket = self.say(action="raise")["ticket"]
+        runs.active_run(ticket) and frappe.db.set_value(
+            "HDS Copilot Run", runs.active_run(ticket).name, "state", "Closed"
+        )
+        self.resolve(ticket)
+        self.assertEqual(self.stages(), [])
+
+    def test_the_patch_marks_chats_already_handed_over(self):
+        from helpdesk.patches.v16_0_3 import conversation_asked_for_person
+
+        self.handed_over()
+        handed = self.chat
+        frappe.db.set_value(conversation.CONVERSATION, handed, "asked_for_person", 0)
+        self.chat = None
+        self.gathered()
+        self.say(action="raise")
+        raised = self.chat
+
+        conversation_asked_for_person.execute()
+
+        self.assertEqual(
+            frappe.db.get_value(conversation.CONVERSATION, handed, "asked_for_person"),
+            1,
+        )
+        self.assertEqual(
+            frappe.db.get_value(conversation.CONVERSATION, raised, "asked_for_person"),
+            0,
+        )

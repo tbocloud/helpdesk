@@ -1544,12 +1544,9 @@ def on_hand_over(ticket: str, line: str = ""):
                 _("They wrote: {0}").format(line[:300])
                 if line
                 else _("They have not said what it is about yet."),
+                # testing fixes 2: Copilot stays out of a ticket the customer gave to a person
                 _(
-                    "Copilot looks into it for you but says nothing to them until a person replies."
-                )
-                if line
-                else _(
-                    "Copilot waits: ask them in the chat, then press Start Copilot if it helps."
+                    "Copilot stays out of this ticket: answer them in the chat. Start Copilot if you want its help; it works for the team only."
                 ),
             ],
             tone="warning",

@@ -302,6 +302,8 @@ doc_events = {
         ],
         "on_update": [
             "helpdesk.chatwoot_bridge.on_ticket_update",
+            # a ticket the customer gave to a person: its chat asks "Is it fixed?" (testing fixes 2)
+            "helpdesk.copilot.conversation.on_ticket_update",
             "helpdesk.kb_drafts.on_ticket_update",
             # the customer came back: counts against the tasks made from the ticket
             "helpdesk.helpdesk.doctype.task.task.count_ticket_comeback",

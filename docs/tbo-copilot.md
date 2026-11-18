@@ -302,6 +302,14 @@ The Support button in a customer's ERP opens a chat with TBO Copilot instead of 
     with raw `**` and `>` marks.
   - An agent's reply reaches the chat even when the hub has no outgoing email account. A ticket the customer follows in a chat (this one or TBO Chat) or on their own site skips the email instead of failing (`HDTicket.reaches_customer_without_email`). Any other ticket refuses the reply before anything is saved or sent. Before, the reply failed after its chat copy had gone, so the customer saw a reply the ticket did not keep.
   - **Talk to a person** raises the ticket with the transcript at any point. When the customer has not said anything yet, the chat first asks "Sure. In one line, what is it about?" (state **Before a person**). Their line becomes the ticket's subject, or **Just connect me** raises it at once.
+  - From **Talk to a person** on, the ticket is a person's (testing fixes 2, the owner, 18 Nov 2026): the chat is
+    marked (HDS Conversation `asked_for_person`; **Still broken** does not mark it), the ticket is raised with no
+    Copilot run, a run already working on it stops, the customer's later messages start none, and nothing of
+    Copilot's reaches the customer but **Resolved** (`customer.quiet_for_customer`). A person may still press
+    **Start Copilot**; its work stays with the team. When a person resolves the ticket, the chat asks "Is it fixed?"
+    with **It's fixed** / **Still broken** itself (`conversation.on_ticket_update`), once (a run's own Resolved at
+    the same moment is not asked again). Patch `v16_0_3.conversation_asked_for_person` marks the chats handed over
+    before.
   - On a hand-over, the people on the ticket (else a Leader) are told at once in Teams or their Copilot panel (`thread.on_hand_over`).
   - Copilot still looks into the ticket for the team, but its stage messages are held until a person has replied (`customer.quiet_for_customer`, as for a ticket the error watch raised).
   - **Just connect me** before the customer has written anything starts no Copilot run: there is nothing to investigate, and a run would only guess from the page context. The people's card says Copilot waits. They ask in the chat, then press **Start Copilot** if it helps.
@@ -841,7 +849,7 @@ The old fields stay hidden for one version.
 - `custom_copilot_person` on the ticket makes them Copilot's person for it; the ticket's chat says "Assigned to X by project coordinator Y" (or leader Y).
 - The first choice stands: a card pressed after someone chose answers with that choice.
 
-**Talk to a person** (`thread.on_hand_over`): the customer's coordinator working today joins the ticket (the developer stays) and is told in Teams and TBO Support with what the customer wrote; with none working, a Leader. Who writes in a ticket's chat (`thread.may_write`): its assignees, the customer's coordinators, the Leaders and the admins.
+**Talk to a person** (`thread.on_hand_over`): the customer's coordinator working today joins the ticket (the developer stays) and is told in Teams and TBO Support with what the customer wrote; with none working, a Leader. The card says Copilot stays out of the ticket, and that **Start Copilot** brings it in for the team only (testing fixes 2). Who writes in a ticket's chat (`thread.may_write`): its assignees, the customer's coordinators, the Leaders and the admins.
 
 **Risk alerts** (`alert_risk`, queued) go to Risk Alerts (else a Leader) and, with **Also Tell the Project Coordinators**, the customer's coordinators. For information only: who approves does not change, and the approver is not told twice. They are sent for a fix in a sensitive area, a data or settings correction, a senior Press or AWS action, Deploy Now pressed by a person, and a fix Copilot gave up on.
 

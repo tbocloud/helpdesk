@@ -151,11 +151,13 @@ def _last_stage(run) -> tuple | None:
 
 def quiet_for_customer(ticket: str) -> bool:
     """Copilot says nothing to the customer until a person replied when the error watch raised
-    the ticket (Phase 9), or when the customer asked for a person in the chat ("Talk to a
-    person"): Copilot still works on it for the team."""
+    the ticket (Phase 9), or when the chat is with a person after Still broken. When the customer
+    pressed Talk to a person, never (testing fixes 2): only the resolve question reaches them."""
     from helpdesk.copilot import conversation, watch
 
     if watch.held(ticket):
+        return True
+    if conversation.asked_for_person(ticket):
         return True
     name = conversation.for_ticket(ticket)
     if (
@@ -495,7 +497,12 @@ def explanation_edited(run, sent: str) -> float | None:
 
 
 def on_customer_message(run):
-    """The customer answered Copilot's question: a follow-up run picks the ticket up again."""
+    """The customer answered Copilot's question: a follow-up run picks the ticket up again; not on
+    a ticket whose customer asked for a person (testing fixes 2): the person answers."""
+    from helpdesk.copilot import conversation
+
+    if conversation.asked_for_person(run.ticket):
+        return
     stage = frappe.db.get_value("HD Ticket", run.ticket, "custom_copilot_stage")
     if run.state == "Answered" and stage == "Waiting for you":
         runs.start_run(run.ticket, kind="followup")
@@ -564,6 +571,9 @@ def decide_resolution(
         "Reopened",
         update_modified=False,
     )
+    # the ticket was read before the line above: saving that copy wrote the old answer back
+    # (found by testing fixes 2)
+    doc.custom_customer_confirmation = "Reopened"
     with as_automation_user():
         _reopen_ticket(doc)
     comment(

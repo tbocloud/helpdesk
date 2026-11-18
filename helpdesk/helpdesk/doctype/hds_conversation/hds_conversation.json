@@ -13,6 +13,7 @@
 		"channel",
 		"column_break_state",
 		"state",
+		"asked_for_person",
 		"ticket",
 		"client_conversation",
 		"chat",
@@ -86,6 +87,14 @@
 			"label": "State",
 			"in_list_view": 1,
 			"in_standard_filter": 1,
+			"read_only": 1
+		},
+		{
+			"default": "0",
+			"description": "The customer pressed Talk to a person: Copilot stays out of the ticket (testing fixes 2)",
+			"fieldname": "asked_for_person",
+			"fieldtype": "Check",
+			"label": "Asked for a Person",
 			"read_only": 1
 		},
 		{
@@ -208,7 +217,7 @@
 	],
 	"in_create": 1,
 	"links": [],
-	"modified": "2026-10-29 11:00:00.000000",
+	"modified": "2026-11-18 18:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Conversation",

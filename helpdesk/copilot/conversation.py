@@ -947,7 +947,7 @@ def _act(doc, action: str, payload: dict):
         )
 
 
-def _raise(doc, transcript_only: bool = False):
+def _raise(doc, transcript_only: bool = False, start_copilot: bool | None = None):
     from helpdesk.ticket_puller import _create_hd_ticket
 
     title = doc.title or (_customer_text(doc) or [_("Support request")])[0][:140]
@@ -960,8 +960,11 @@ def _raise(doc, transcript_only: bool = False):
             "raised_by": doc.site_user,
             "raised_by_name": doc.site_user_name,
         },
-        # "Just connect me" before a word: nothing to investigate, a person asks first
-        start_copilot=bool(_customer_text(doc)),
+        # "Just connect me" before a word: nothing to investigate, a person asks first; a hand-over
+        # never starts Copilot (testing fixes 2)
+        start_copilot=bool(_customer_text(doc))
+        if start_copilot is None
+        else start_copilot,
     )
     doc.db_set(
         {
@@ -1048,14 +1051,23 @@ def _linked(doc, client_ticket: str):
 
 
 def _hand_over(doc, text: str):
-    from helpdesk.copilot import thread
+    """Talk to a person: the ticket is a person's from here on. Copilot does not start on it, an
+    investigation already running stops, and nothing of Copilot's reaches the customer but the
+    resolve question (testing fixes 2); a person on the team may still start Copilot for the team."""
+    from helpdesk.copilot import runs, thread
 
+    doc.db_set("asked_for_person", 1, update_modified=False)
     if not doc.ticket:
-        _raise(doc, transcript_only=True)
+        _raise(doc, transcript_only=True, start_copilot=False)
         doc.reload()
     else:
         doc.db_set("state", "With a person", update_modified=False)
-    # a person is told at once; Copilot says nothing to the customer until one replies
+        run = runs.active_run(str(doc.ticket))
+        if run and run.state in runs.CANCELLABLE:
+            runs.transition(
+                run, "Cancelled", runs.SYSTEM, note="the customer asked for a person"
+            )
+    # a person is told at once
     thread.on_hand_over(doc.ticket, (_customer_text(doc) or [""])[-1])
     text = text or (
         "سيتابع أحد أعضاء فريقنا هذه المحادثة ويرد عليك هنا."
@@ -1257,6 +1269,44 @@ def language_of(ticket: str | None) -> str:
     return (name and frappe.db.get_value(CONVERSATION, name, "language")) or "en"
 
 
+def asked_for_person(ticket: str | None) -> bool:
+    """The customer pressed Talk to a person in the ticket's chat: Copilot stays out (testing fixes 2)."""
+    name = for_ticket(ticket)
+    return bool(name and frappe.db.get_value(CONVERSATION, name, "asked_for_person"))
+
+
+def _asked_if_fixed(name: str) -> bool:
+    """The chat's last message is the resolve question already (not answered, nothing since)."""
+    last = frappe.get_all(
+        MESSAGE,
+        filters={"conversation": name},
+        fields=["kind", "card"],
+        order_by="creation desc",
+        limit=1,
+    )
+    if not last or last[0].kind != "Stage":
+        return False
+    return (frappe.parse_json(last[0].card or "{}") or {}).get("title") == _("Resolved")
+
+
+def on_ticket_update(doc, method=None):
+    """HD Ticket on_update: a person resolved a ticket whose customer asked for a person; with no
+    Copilot run to ask, the chat asks "Is it fixed?" itself, once (testing fixes 2, T5)."""
+    if doc.status != "Resolved" or not doc.has_value_changed("status"):
+        return
+    try:
+        if not asked_for_person(doc.name):
+            return
+        from helpdesk.copilot import customer
+
+        text = customer.render(
+            "Resolved", {"resolution": ""}, language=language_of(doc.name)
+        )
+        tell_stage(frappe._dict(ticket=doc.name, name=None), "Resolved", text)
+    except Exception:
+        frappe.log_error(title=f"Copilot could not ask if ticket {doc.name} is fixed")
+
+
 def tell(
     ticket: str, direction: str, kind: str, text: str, the_card: dict | None = None
 ) -> bool:
@@ -1323,6 +1373,8 @@ def tell_stage(run, stage: str, text: str):
         and frappe.db.get_value(CONVERSATION, name, "channel") == "TBO Chat"
     ):
         return  # the Chatwoot bridge announces the resolution itself
+    if name and stage == "Resolved" and _asked_if_fixed(name):
+        return  # asked already (a person's resolve and a run's at once): once is enough
     actions = []
     if stage == "Resolved":
         actions = [

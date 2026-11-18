@@ -4,7 +4,7 @@ Who does what, what Copilot sends you, and what you press. The full reference is
 
 ## The customer (on their ERP site)
 
-- **Support button:** opens the chat with TBO Copilot. Write what happened in your own words; Copilot answers from TBO's guides, or asks a few questions and raises a ticket. **Talk to a person** hands you to TBO's team at once.
+- **Support button:** opens the chat with TBO Copilot. Write what happened in your own words; Copilot answers from TBO's guides, or asks a few questions and raises a ticket. **Talk to a person** hands you to TBO's team at once: from then on a person answers you in the chat, and when they resolve it the chat asks "Is it fixed?".
 - **After the ticket is raised,** the same chat is the ticket's channel: the team answers there, and what you write reaches them, even while the AI is switched off. If a message cannot be sent, it stays in the box and the chat says so; press Send again.
 - **Stages** show where your ticket stands: Working on it, Waiting for you, With our team, Fix scheduled, Resolved.
 - **Resolved:** press **It's fixed** to close the ticket, or **Still broken** with what is still wrong. The question comes again after every fix.
@@ -29,7 +29,7 @@ Who does what, what Copilot sends you, and what you press. The full reference is
 - **Assign to:** pick a person (the customer's own people come first) and press **Assign**; **Keep** leaves it with whoever has it. The first choice stands; **Change** on the decided card picks again. Assigning the ticket by hand on the ticket page also ends the wait.
 - **When no developer can take a ticket** (none set, or none working today), you are asked to choose. The card comes again at 06:45 on working days.
 - **Every step of your customers' tickets** comes to you too: Copilot's diagnosis, a fix ready, approved or rejected, the deploy, resolved or reopened, failures, and each reply from the customer. **Mute this ticket** on a message stops one ticket.
-- **Talk to a person:** when a customer asks for a person, the coordinator working today joins the ticket and handles the customer.
+- **Talk to a person:** when a customer asks for a person, the coordinator working today joins the ticket and handles the customer. Copilot stays out of that ticket: it does not look into it or write to the customer. Press **Start Copilot** on the ticket if you want its help; it then works for the team only.
 - **You do not approve fixes or press Deploy**: that stays with the developers, fix approvers, Seniors and Leaders, even on a ticket you gave to yourself.
 - You also write in the ticket chats of your customers, and hear risk alerts (with the settings' tick).
 
