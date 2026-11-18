@@ -74,12 +74,19 @@
             </SettingRow>
             <SettingRow :label="__('Country')" v-slot="{ id, labelledby }">
               <Link
+                v-if="canEditCentral"
                 :id="id"
                 :labelledby="labelledby"
                 v-model="form.country"
                 doctype="Country"
                 class="w-full sm:w-64"
-                :disabled="!canEditCentral"
+              />
+              <FormControl
+                v-else
+                :id="id"
+                :model-value="form.country"
+                class="w-full sm:w-64"
+                disabled
               />
             </SettingRow>
             <SettingRow
@@ -101,13 +108,21 @@
               />
             </SettingRow>
             <SettingRow :label="__('Currency')" v-slot="{ id, labelledby }">
+              <!-- Link searches Currency on mount, which division admins can't read -->
               <Link
+                v-if="canEditCentral"
                 :id="id"
                 :labelledby="labelledby"
                 v-model="form.currency"
                 doctype="Currency"
                 class="w-full sm:w-64"
-                :disabled="!canEditCentral"
+              />
+              <FormControl
+                v-else
+                :id="id"
+                :model-value="form.currency"
+                class="w-full sm:w-64"
+                disabled
               />
             </SettingRow>
             <SettingRow :label="__('Time zone')" v-slot="{ id, labelledby }">
@@ -178,13 +193,21 @@
               v-slot="{ id, labelledby }"
             >
               <div class="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+                <!-- Link searches HD CRM Source on mount, which only Super Admins may read -->
                 <Link
+                  v-if="canEditCentral"
                   :id="id"
                   :labelledby="labelledby"
                   v-model="form.crm_source"
                   doctype="HD CRM Source"
                   class="w-full sm:w-64"
-                  :disabled="!canEditCentral"
+                />
+                <FormControl
+                  v-else
+                  :id="id"
+                  :model-value="form.crm_source"
+                  class="w-full sm:w-64"
+                  disabled
                 />
                 <Button
                   v-if="canEditCentral"
