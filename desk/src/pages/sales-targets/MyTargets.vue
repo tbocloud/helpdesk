@@ -80,6 +80,18 @@
                     ? __("1 target")
                     : __("{0} targets", String(target.criteria.length))
                 }}
+                <template v-if="overall?.percent != null">
+                  ·
+                  {{ __("{0}% of the month reached", String(overall.percent)) }}
+                  <template v-if="overall.behind">
+                    ·
+                    {{
+                      overall.behind === 1
+                        ? __("1 behind")
+                        : __("{0} behind", String(overall.behind))
+                    }}
+                  </template>
+                </template>
               </p>
             </div>
             <div class="flex min-w-0 items-center gap-2.5">
@@ -110,6 +122,13 @@
               :key="criterion.criterion"
               :criterion="criterion"
               :currency="mine.data.currency"
+              :progress="progress.data ?? null"
+              :owner="auth.userName"
+              :link="
+                auth.canUseLeads && progress.data
+                  ? leadsLink(criterion, progress.data, auth.userId)
+                  : null
+              "
             />
           </div>
 
@@ -134,10 +153,17 @@
                   criterion.criterion
                 }}</span>
               </dt>
-              <dd
-                class="min-w-0 whitespace-pre-line break-words text-p-base text-ink-gray-9 sm:pt-1"
-              >
-                {{ criterion.target }}
+              <dd class="flex min-w-0 flex-col gap-3 sm:pt-1">
+                <span
+                  class="whitespace-pre-line break-words text-p-base text-ink-gray-9"
+                  >{{ criterion.target }}</span
+                >
+                <KpiStatus
+                  :criterion="criterion"
+                  :month="month"
+                  mode="person"
+                  @changed="mine.data.target = $event"
+                />
               </dd>
             </div>
           </dl>
@@ -162,6 +188,7 @@ import LayoutHeader from "@/components/LayoutHeader.vue";
 import PersonAvatar from "@/components/PersonAvatar.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";
+import { useAuthStore } from "@/stores/auth";
 import { errorText } from "@/utils";
 import { Button, createResource, dayjs } from "frappe-ui";
 import { computed, useId, watch } from "vue";
@@ -171,10 +198,19 @@ import LucideGoal from "~icons/lucide/goal";
 import LucideLock from "~icons/lucide/lock";
 import LucideMessageCircleQuestion from "~icons/lucide/message-circle-question";
 import LucideText from "~icons/lucide/text";
+import KpiStatus from "./KpiStatus.vue";
 import MonthStepper from "./MonthStepper.vue";
-import { monthTitle, monthValue, type MyTargets } from "./salesTargets";
+import {
+  leadsLink,
+  monthTitle,
+  monthValue,
+  overallOf,
+  type MyTargets,
+  type Progress,
+} from "./salesTargets";
 import TargetFigure from "./TargetFigure.vue";
 
+const auth = useAuthStore();
 const route = useRoute();
 const router = useRouter();
 const heading = useId();
@@ -201,6 +237,25 @@ const isRefusal = computed(
 );
 
 const target = computed(() => mine.data?.target ?? null);
+
+// how far they are, counted from their leads; read once the month's targets are in
+const progress = createResource<Progress>({
+  url: "helpdesk.api.sales_targets.get_progress",
+  makeParams: () => ({ month: month.value }),
+});
+watch(
+  () => target.value?.modified,
+  (modified) => {
+    progress.reset();
+    if (modified) progress.reload();
+  },
+  { immediate: true }
+);
+const overall = computed(() =>
+  target.value && progress.data?.state === "counted"
+    ? overallOf(target.value, progress.data, mine.data!.currency)
+    : null
+);
 const setBy = computed(() =>
   target.value ? target.value.assigned_by_name || target.value.assigned_by : ""
 );

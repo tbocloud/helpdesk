@@ -237,8 +237,47 @@
                             )
                       }}
                     </span>
+                    <!-- how far they are this month, once counted -->
                     <span
-                      v-if="headlineAmount(person.target, team.data.currency)"
+                      v-if="overallFor(person)?.percent != null"
+                      class="flex items-center gap-2 text-xs tabular-nums"
+                      :class="
+                        overallFor(person)!.behind
+                          ? 'text-warning'
+                          : 'text-ink-gray-6'
+                      "
+                    >
+                      <span
+                        class="block h-1 w-16 overflow-hidden rounded-full bg-surface-gray-2"
+                        aria-hidden="true"
+                      >
+                        <span
+                          class="block h-full rounded-full"
+                          :class="
+                            overallFor(person)!.behind
+                              ? 'bg-warning'
+                              : 'bg-success'
+                          "
+                          :style="{ width: `${overallFor(person)!.percent}%` }"
+                        />
+                      </span>
+                      {{
+                        overallFor(person)!.behind
+                          ? __(
+                              "{0}% · {1} behind",
+                              String(overallFor(person)!.percent),
+                              String(overallFor(person)!.behind)
+                            )
+                          : __(
+                              "{0}% reached",
+                              String(overallFor(person)!.percent)
+                            )
+                      }}
+                    </span>
+                    <span
+                      v-else-if="
+                        headlineAmount(person.target, team.data.currency)
+                      "
                       class="font-mono text-xs text-ink-gray-6 tabular-nums"
                       >{{
                         headlineAmount(person.target, team.data.currency)
@@ -358,7 +397,10 @@
                 :value-types="team.data.value_types"
                 :start="startCriteria"
                 :people="pickedPeople"
-                @assigned="team.reload()"
+                :measures="team.data.measures"
+                :saved-for="savedOne"
+                :progress="savedOne ? personProgress.data ?? null : null"
+                @assigned="reloadAll"
               />
             </template>
           </section>
@@ -397,6 +439,9 @@ import MonthStepper from "./MonthStepper.vue";
 import TargetCriteriaForm from "./TargetCriteriaForm.vue";
 import {
   headlineAmount,
+  overallOf,
+  type Progress,
+  type TargetPerson,
   monthOptions,
   monthTitle,
   monthValue,
@@ -433,6 +478,28 @@ const team = createResource<TeamTargets>({
   auto: true,
 });
 watch(month, () => team.reload());
+
+// how far each person is, counted from their leads: read after the list, so it shows first
+const teamProgress = createResource<Record<string, Progress>>({
+  url: "helpdesk.api.sales_targets.get_team_progress",
+  makeParams: () => ({ month: month.value }),
+});
+watch(
+  () => team.data,
+  (data) => {
+    if (data?.people.some((p) => p.target)) teamProgress.reload();
+  }
+);
+function overallFor(person: TargetPerson) {
+  const progress = teamProgress.data?.[person.user];
+  return person.target && progress?.state === "counted"
+    ? overallOf(person.target, progress, team.data!.currency)
+    : null;
+}
+function reloadAll() {
+  team.reload();
+  if (savedOne.value) personProgress.reload();
+}
 
 // not a Sales Head: no failure to retry
 const isRefusal = computed(
@@ -560,6 +627,19 @@ const startCriteria = computed<Criterion[]>(() => {
     return savedOne.value.target!.criteria.map((c) => ({ ...c }));
   return (team.data?.defaults ?? []).map((d) => ({ ...d, target: null }));
 });
+// the one person's progress, shown against each target in the form
+const personProgress = createResource<Progress>({
+  url: "helpdesk.api.sales_targets.get_progress",
+  makeParams: () => ({ month: month.value, employee: savedOne.value?.user }),
+});
+watch(
+  () => savedOne.value && `${month.value}|${savedOne.value.user}`,
+  (key) => {
+    personProgress.reset();
+    if (key) personProgress.reload();
+  }
+);
+
 // the form starts again only when what it starts from changes: picking one more person
 // keeps what the head has typed so far
 const formKey = computed(() =>

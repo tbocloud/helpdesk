@@ -116,6 +116,52 @@
               <LucideCircleAlert class="size-3.5 shrink-0" aria-hidden="true" />
               {{ problems[row.key] }}
             </p>
+            <!-- what counts towards it, in words, so the head knows what they ask for -->
+            <div
+              v-if="row.value_type !== 'Text'"
+              class="col-span-3 col-start-2 flex min-w-0 flex-col gap-1.5"
+            >
+              <div class="flex min-w-0 items-center gap-2">
+                <label
+                  :for="measureId(row)"
+                  class="shrink-0 text-xs font-medium text-ink-gray-6"
+                  >{{ __("Counts") }}</label
+                >
+                <FormControl
+                  :id="measureId(row)"
+                  v-model="row.measure"
+                  type="select"
+                  size="sm"
+                  class="min-w-0 flex-1"
+                  :options="measureOptions(row.value_type)"
+                />
+              </div>
+              <p v-if="row.measure" class="text-xs text-ink-gray-6">
+                {{ MEASURE_LOOK[row.measure].counts }}
+              </p>
+              <TargetProgress
+                v-if="rowResult(row)"
+                class="mt-1"
+                :criterion="row"
+                :result="rowResult(row)!"
+                :progress="progress!"
+                :owner="savedFor!.full_name"
+                :link="
+                  auth.canUseLeads
+                    ? leadsLink(row, progress!, savedFor!.user)
+                    : null
+                "
+              />
+            </div>
+            <KpiStatus
+              v-else-if="savedFor && row.kpi_status !== undefined"
+              class="col-span-3 col-start-2"
+              :criterion="row"
+              :month="month"
+              mode="head"
+              :employee="savedFor.user"
+              @changed="emit('assigned')"
+            />
           </li>
         </ol>
       </fieldset>
@@ -201,6 +247,7 @@
 
 <script setup lang="ts">
 import TaskyState from "@/components/TaskyState.vue";
+import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
 import { Button, call, ErrorMessage, FormControl, toast } from "frappe-ui";
@@ -211,11 +258,18 @@ import LucideListPlus from "~icons/lucide/list-plus";
 import LucidePlus from "~icons/lucide/plus";
 import LucideUserCheck from "~icons/lucide/user-check";
 import LucideX from "~icons/lucide/x";
+import KpiStatus from "./KpiStatus.vue";
+import TargetProgress from "./TargetProgress.vue";
 import {
   currencySymbol,
+  leadsLink,
+  MEASURE_LOOK,
   monthTitle,
+  progressOf,
   VALUE_TYPE_LOOK,
   type Criterion,
+  type Measure,
+  type Progress,
   type TargetPerson,
   type ValueType,
 } from "./salesTargets";
@@ -227,6 +281,12 @@ const props = defineProps<{
   /** what the criteria start as: the one person's saved targets, else the defaults */
   start: Criterion[];
   people: TargetPerson[];
+  /** the measures that fit each value type */
+  measures: Record<ValueType, Measure[]>;
+  /** the one person picked, when the form opened on their saved targets */
+  savedFor: TargetPerson | null;
+  /** their progress for the month, counted from their leads (null: none to show) */
+  progress: Progress | null;
 }>();
 const emit = defineEmits<{ assigned: [] }>();
 
@@ -252,7 +312,31 @@ const typeOptions = computed(() =>
   props.valueTypes.map((t) => ({ label: VALUE_TYPE_LOOK[t].label, value: t }))
 );
 
+const auth = useAuthStore();
 const inputId = (row: Row) => `${formId}-target-${row.key}`;
+const measureId = (row: Row) => `${formId}-measure-${row.key}`;
+
+function measureOptions(type: ValueType) {
+  return [
+    { label: __("Nothing: a target only"), value: "" },
+    ...(props.measures[type] ?? []).map((m) => ({
+      label: MEASURE_LOOK[m].label,
+      value: m,
+    })),
+  ];
+}
+
+// what each saved target counted from, so a measure changed in the form shows no stale count
+const savedMeasure = Object.fromEntries(
+  props.start.map((c) => [c.criterion, c.measure || ""])
+);
+/** The row's progress, live against the figure as it is edited. */
+function rowResult(row: Row) {
+  const measured = props.progress?.criteria?.[row.criterion];
+  if (!measured || !row.measure || savedMeasure[row.criterion] !== row.measure)
+    return null;
+  return progressOf(row, measured, props.progress!, props.currency);
+}
 const problemId = (row: Row) => `${formId}-problem-${row.key}`;
 
 function remove(key: number) {
@@ -282,6 +366,7 @@ function add() {
     criterion: name,
     value_type: newType.value,
     target: null,
+    measure: "",
     key: nextKey++,
   };
   criteria.value.push(row);
@@ -354,11 +439,15 @@ async function assign() {
     const result = await call("helpdesk.api.sales_targets.assign_targets", {
       month: props.month,
       employees: props.people.map((p) => p.user),
-      criteria: criteria.value.map(({ criterion, value_type, target }) => ({
-        criterion,
-        value_type,
-        target: value_type === "Text" ? String(target).trim() : Number(target),
-      })),
+      criteria: criteria.value.map(
+        ({ criterion, value_type, target, measure }) => ({
+          criterion,
+          value_type,
+          target:
+            value_type === "Text" ? String(target).trim() : Number(target),
+          measure: value_type === "Text" ? "" : measure || "",
+        })
+      ),
     });
     toast.success(
       result.assigned === 1

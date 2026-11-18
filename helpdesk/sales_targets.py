@@ -7,7 +7,7 @@ One `HD Sales Target` per person per month holds them; the person sees theirs on
 
 import frappe
 from frappe import _
-from frappe.utils import getdate
+from frappe.utils import cint, flt, get_fullname, getdate
 
 from helpdesk.content_team import PRESALES_EXECUTIVE_ROLE, SALES_HEAD_ROLE
 
@@ -19,13 +19,38 @@ TARGET_ROLES = (PRESALES_EXECUTIVE_ROLE, SALES_USER_ROLE)
 ASSIGNER_ROLES = (SALES_HEAD_ROLE, "System Manager")
 
 VALUE_TYPES = ("Amount", "Number", "Percent", "Text")
+# what a target can count from the person's leads on the ERP site, and the value type it
+# gives; blank is a target nobody counts (docs/sales-targets.md, Progress)
+MEASURES = {
+    "won_value": "Amount",
+    "collected": "Amount",
+    "meetings": "Number",
+    "proposals": "Number",
+    "won": "Number",
+    "contacted": "Number",
+    "new_leads": "Number",
+    "meeting_rate": "Percent",
+    "win_rate": "Percent",
+}
+# the measures read straight off the overview's totals (TBO Smart hub-leads-api.md §2.4)
+OVERVIEW_FIGURES = {
+    "won_value": "won_value",
+    "meetings": "meetings",
+    "proposals": "quotations_sent",
+    "won": "won",
+    "contacted": "contacted",
+    "new_leads": "new",
+}
+# a Text target (a KPI) is ticked off by the person and confirmed by a Sales Head
+KPI_DONE = "Done"
+KPI_CONFIRMED = "Confirmed"
 # what a new set of targets starts with; the head can drop any and add their own
 DEFAULT_CRITERIA = (
-    ("Target Amount", "Amount"),
-    ("Quality Target", "Percent"),
-    ("Client Meeting", "Number"),
-    ("Sales KPI", "Text"),
-    ("Proposal Count", "Number"),
+    ("Target Amount", "Amount", "won_value"),
+    ("Quality Target", "Percent", "meeting_rate"),
+    ("Client Meeting", "Number", "meetings"),
+    ("Sales KPI", "Text", ""),
+    ("Proposal Count", "Number", "proposals"),
 )
 MAX_CRITERIA = 30
 # the built-in accounts hold every role but are no salespeople
@@ -115,12 +140,47 @@ def target_people() -> list[dict]:
 
 
 def criteria_of(target) -> list[dict]:
-    """A target's criteria as the pages read them: one `target` that is a number or text."""
+    """A target's criteria as the pages read them: one `target` that is a number or text,
+    what it counts from, and a KPI's state."""
     return [
         {
             "criterion": row.criterion,
             "value_type": row.value_type,
             "target": row.target_text if row.value_type == "Text" else row.target_value,
+            "measure": row.measure or "",
+            "kpi_status": row.kpi_status or "",
+            "kpi_note": row.kpi_note or "",
+            "kpi_done_on": row.kpi_done_on,
+            "kpi_confirmed_by": row.kpi_confirmed_by,
+            "kpi_confirmed_by_name": (
+                get_fullname(row.kpi_confirmed_by) if row.kpi_confirmed_by else None
+            ),
         }
         for row in target.criteria
     ]
+
+
+def measured(measure: str, totals: dict, money: dict) -> dict:
+    """What a person achieved on one measure, from the ERP site's overview totals (and its
+    proposal money for `collected`). A rate carries the two figures it divides, so the page
+    can show the sum; its `achieved` is None while there is nothing to divide by."""
+    if measure in OVERVIEW_FIGURES:
+        return {"achieved": flt(totals.get(OVERVIEW_FIGURES[measure]))}
+    if measure == "collected":
+        return {"achieved": flt(money.get("advances"))}
+    if measure == "meeting_rate":
+        meetings, contacted = cint(totals.get("meetings")), cint(
+            totals.get("contacted")
+        )
+        return {
+            "achieved": rate(meetings, contacted),
+            "parts": {"meetings": meetings, "contacted": contacted},
+        }
+    if measure == "win_rate":
+        won, lost = cint(totals.get("won")), cint(totals.get("lost"))
+        return {"achieved": rate(won, won + lost), "parts": {"won": won, "lost": lost}}
+    return {"achieved": None}
+
+
+def rate(part: int, whole: int) -> float | None:
+    return round(part * 100 / whole, 1) if whole else None
