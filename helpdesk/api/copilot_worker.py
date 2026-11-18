@@ -207,6 +207,10 @@ def submit_result(run: str, lease_token: str, result: dict | str) -> dict:
         doc.reload()
         return {"run": doc.name, "state": doc.state, "fix": doc.fix_status}
     if kind == "investigation":
+        if doc.get("kind") == runs.INFRA:
+            frappe.throw(
+                _("An infrastructure run reports with submit_infra_investigation.")
+            )
         doc = router.route(doc, result)
     elif kind == "failure":
         reason = str(result.get("reason") or "")[:2000]

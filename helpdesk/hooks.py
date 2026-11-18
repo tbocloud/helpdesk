@@ -75,6 +75,8 @@ scheduler_events = {
         "*/5 * * * *": [
             # the watcher's heartbeat: the Infrastructure people hear when it goes quiet (Phase 18)
             "helpdesk.monitor.watch_heartbeats",
+            # Copilot's infrastructure actions: fixed once the alert is healthy, else a Leader (Phase 25)
+            "helpdesk.copilot.infra.check_verifying",
             # Copilot deploys through Press: start, follow, check (helpdesk.copilot.deploy)
             "helpdesk.copilot.deploy.run_due",
             # what did not reach the customer's site (a chat reply, a stage) goes again (Phase 23)

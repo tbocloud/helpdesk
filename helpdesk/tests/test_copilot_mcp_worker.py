@@ -37,6 +37,9 @@ WORKER_TOOLS = {
     "submit_investigation",
     "submit_change",
     "customer_erp_read",
+    # Phase 25: infrastructure runs
+    "submit_infra_investigation",
+    "press_read",
 }
 
 

@@ -85,6 +85,29 @@ TRANSITIONS = {
     ("Verifying", "Applying"): {SYSTEM},
     ("Merged", "Applying"): {AGENT},
 }
+# Copilot on an infrastructure alert (Phase 25, helpdesk.copilot.infra): its proposal waits for a
+# person's approval in HDS Action Approval, runs, and is checked by the watcher's next look
+INFRA = "infra"
+INFRA_TRANSITIONS = {
+    # the same start as every run: claimed, re-queued when its lease lapses, or failed
+    ("Queued", "Investigating"): {WORKER},
+    ("Investigating", "Queued"): {SYSTEM},
+    ("Investigating", "Failed"): {WORKER, SYSTEM},
+    ("Investigating", "Awaiting Approval"): {SYSTEM},
+    ("Investigating", "Handed Over"): {SYSTEM},
+    ("Investigating", "Closed"): {SYSTEM},
+    ("Awaiting Approval", "Approved"): {AGENT},
+    ("Awaiting Approval", "Handed Over"): {SYSTEM},
+    ("Awaiting Approval", "Closed"): {SYSTEM},
+    ("Approved", "Verifying"): {SYSTEM},
+    ("Approved", "Escalated"): {SYSTEM},
+    ("Approved", "Closed"): {SYSTEM},
+    ("Verifying", "Resolved"): {SYSTEM},
+    ("Verifying", "Escalated"): {SYSTEM},
+    ("Resolved", "Closed"): {SYSTEM},
+    ("Handed Over", "Closed"): {SYSTEM},
+    ("Escalated", "Closed"): {SYSTEM},
+}
 # a run reaching one of these is news for the people on its fix (the staff assistant)
 NEWS_STATES = ("Merged", "Resolved", "Closed", "Escalated", "Failed")
 
@@ -220,7 +243,9 @@ def transition(run, to: str, actor: str, note: str = "", **fields):
 
 
 def _move(doc, to: str, actor: str, note: str = "", **fields):
-    allowed = TRANSITIONS.get((doc.state, to), set())
+    infra = doc.get("kind") == INFRA
+    table = INFRA_TRANSITIONS if infra else TRANSITIONS
+    allowed = table.get((doc.state, to), set())
     cancel = to == "Cancelled" and actor in (AGENT, SYSTEM) and doc.state in CANCELLABLE
     if actor not in allowed and not cancel:
         frappe.throw(
@@ -240,13 +265,15 @@ def _move(doc, to: str, actor: str, note: str = "", **fields):
     doc.save(ignore_permissions=True)
     add_event(doc, "state_change", {"from": previous, "to": to, "note": note}, actor)
     update_ticket(doc)
-    from helpdesk.copilot import thread
+    if not infra:
+        # an infrastructure run tells its own steps (helpdesk.copilot.infra), never a customer
+        from helpdesk.copilot import thread
 
-    # the step as one plain message in the ticket's chat; the news ones reach the people on the
-    # ticket in Teams or their Copilot panel (Phase 11, helpdesk.copilot.thread)
-    thread.on_state(doc, previous, to, note)
-    if STAGE_FOR_STATE.get(to):
-        send_stage(doc, STAGE_FOR_STATE[to])
+        # the step as one plain message in the ticket's chat; the news ones reach the people on
+        # the ticket in Teams or their Copilot panel (Phase 11, helpdesk.copilot.thread)
+        thread.on_state(doc, previous, to, note)
+        if STAGE_FOR_STATE.get(to):
+            send_stage(doc, STAGE_FOR_STATE[to])
     publish_run(doc)
     return doc
 
@@ -318,6 +345,9 @@ def claim(worker_id: str, capabilities: str = "", run: str | None = None):
     filters = {"state": "Queued"}
     if run:
         filters["name"] = run
+    if INFRA not in re.split(r"[\s,]+", (capabilities or "").lower()):
+        # only a worker that says it can investigate infrastructure gets an alert (Phase 25)
+        filters["kind"] = ["!=", INFRA]
     candidates = frappe.get_all(
         "HDS Copilot Run",
         filters=filters,
@@ -570,6 +600,10 @@ def run_context(run) -> dict:
 
     Never credentials: the worker reaches the customer site only through the hub.
     """
+    if run.get("kind") == INFRA:
+        from helpdesk.copilot import infra
+
+        return infra.context(run)
     ticket = frappe.get_doc("HD Ticket", run.ticket)
     registry = (
         frappe.get_doc("HDS Site Registry", run.registry) if run.registry else None

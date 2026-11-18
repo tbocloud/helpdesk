@@ -42,6 +42,7 @@ Who does what, what Copilot sends you, and what you press. The full reference is
 - **Leaders** are the last resort: escalations, approvals nobody else could take, "Copilot needs a person", failed deploys, the AI budget, the weekly pilot email. With no Leader set, the Agent Managers get these, and the settings page warns.
 - **Leaders also see everything** in TBO Support's notifications (the bell), never in Teams: each new ticket of every customer, and every step of every ticket (the same steps the coordinators get). Teams stays for what you must act on.
 - **Deploy now** on a fix scheduled for tonight moves the same deploy to now.
+- **Leaders** approve risky infrastructure actions when no Infrastructure Senior is working (a deploy, restore or new site; later: rollback, reboot, MariaDB), and take an alert when Copilot's action did not fix it.
 
 ## An admin (System Manager)
 
@@ -52,7 +53,8 @@ Who does what, what Copilot sends you, and what you press. The full reference is
 
 ## DevOps (Infrastructure people)
 
-- **Press, AWS and repair actions** come to the Infrastructure people as cards; a heavy one goes to Infrastructure Senior (else a Leader). Nobody approves their own request.
+- **Press, AWS and repair actions** come to the Infrastructure people as cards; a risky one goes to Infrastructure Senior (else a Leader). Nobody approves their own request.
+- **Copilot on alerts (Phase 25):** when the watcher opens an alert, the TBO Copilot bot tells you ("Alert: …"), Copilot looks into it and posts what it found. When one of its listed actions (back up, restart a bench, migrate or update a site) would help on a place it may change, you get an **Approve / Reject** card; nothing runs before that. Otherwise its card says what a person should do. Reply in Teams to ask it why. After an approved action, the watcher's next checks decide: healthy is "Fixed by Copilot"; still failing after 30 minutes goes to a Leader.
 - **The watcher's alert tickets** go to the internal customer's ticket owner (else the backup, else the internal project's team); its **follow-up tasks** (a disk filling, a certificate expiring) go to the Infrastructure person working today, else a Leader, with a comment saying why. "pause auto-repair: <why>" and "resume auto-repair" in Teams work for you and the Leaders.
 - **HDS Hub Settings → Monitoring** shows **Watcher last seen**; "Quiet" means no heartbeat for the quiet time.
 - **Deploy notices:** one per Press deploy (started, live, failed), naming every release in the night's train.

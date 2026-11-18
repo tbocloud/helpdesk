@@ -65,6 +65,11 @@ def submit_investigation(
             _("This is a fix job; report the change with submit_change."),
             frappe.ValidationError,
         )
+    if _run(caller).kind == runs.INFRA:
+        frappe.throw(
+            _("This is an infrastructure run; report with submit_infra_investigation."),
+            frappe.ValidationError,
+        )
     doc = router.route(
         caller.run,
         {
@@ -84,6 +89,57 @@ def submit_investigation(
     _log_usage(doc.name, cost, "investigate", 1)
     # the lease ends with the investigation: this token stops working now
     return {"run": doc.name, "state": doc.state, "root_cause": doc.root_cause_category}
+
+
+def submit_infra_investigation(
+    caller,
+    summary: str,
+    confidence: float,
+    cause: str = "",
+    evidence: list | None = None,
+    proposal: dict | None = None,
+    person_steps: str = "",
+    cost: dict | None = None,
+) -> dict:
+    """Phase 25: what the worker found on an infrastructure alert, and at most one action."""
+    from helpdesk.copilot import infra
+
+    run = _run(caller)
+    if run.kind != runs.INFRA:
+        frappe.throw(
+            _("Only an infrastructure run reports this way; use submit_investigation."),
+            frappe.ValidationError,
+        )
+    doc = infra.on_report(
+        run.name,
+        {
+            "summary": summary,
+            "confidence": confidence,
+            "cause": cause,
+            "evidence": evidence or [],
+            "proposal": proposal or {},
+            "person_steps": person_steps,
+        },
+    )
+    _log_usage(doc.name, cost, "investigate", 1)
+    proposal_doc = frappe.parse_json(doc.proposal or "{}") or {}
+    return {
+        "run": doc.name,
+        "state": doc.state,
+        "decision": proposal_doc.get("decision"),
+        "why_not": proposal_doc.get("why_not") or None,
+    }
+
+
+def press_read(
+    caller, what: str, site: str = "", bench: str = "", job: str = "", hours: int = 6
+):
+    """Phase 25: one more read of Press for an infrastructure run (secrets taken out)."""
+    from helpdesk.copilot import infra
+
+    return infra.press_read(
+        _run(caller), what, site=site, bench=bench, job=job, hours=int(hours or 6)
+    )
 
 
 def _log_usage(run: str, cost: dict | None, job: str, attempt: int):
@@ -264,4 +320,52 @@ register_tool(
     },
     required=["tool"],
     open_world=True,
+)
+register_tool(
+    "submit_infra_investigation",
+    kind=WORKER_TOOL,
+    description="For an infrastructure run: what you found and at most one action from the run "
+    "context's `actions`, with a target from `may_target`. The hub checks the action, the target and "
+    "where Copilot may act; nothing runs before a person approves. Ends this run's investigation.",
+    handler=submit_infra_investigation,
+    properties={
+        "summary": {"type": "string", "maxLength": 4000},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "cause": {"type": "string", "maxLength": 500},
+        "evidence": {
+            "type": "array",
+            "items": {"type": "string", "maxLength": 500},
+            "maxItems": 20,
+        },
+        "proposal": {
+            "type": "object",
+            "description": "{action, target, why, expected}; leave it out when no listed action helps.",
+        },
+        "person_steps": {
+            "type": "string",
+            "maxLength": 2000,
+            "description": "What a person should check or do when no listed action fits.",
+        },
+        "cost": {"type": "object"},
+    },
+    required=["summary", "confidence"],
+    read_only=False,
+)
+register_tool(
+    "press_read",
+    kind=WORKER_TOOL,
+    description="For an infrastructure run, read Press: site_status (site), jobs (site or bench), "
+    "job (job: its steps and output), failed_jobs (hours), site_logs (site). Read only.",
+    handler=press_read,
+    properties={
+        "what": {
+            "type": "string",
+            "enum": ["site_status", "jobs", "job", "failed_jobs", "site_logs"],
+        },
+        "site": {"type": "string", "maxLength": 200},
+        "bench": {"type": "string", "maxLength": 200},
+        "job": {"type": "string", "maxLength": 140},
+        "hours": {"type": "integer", "minimum": 1, "maximum": 72},
+    },
+    required=["what"],
 )

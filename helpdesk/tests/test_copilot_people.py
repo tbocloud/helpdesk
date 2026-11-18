@@ -663,6 +663,7 @@ class TestCopilotPeople(FrappeTestCase):
             ]
         )
         self.assertEqual(actions.deciders("normal"), [INFRA[0]])
+        # the owner, 18 Nov 2026: a risky action, Infrastructure Senior first, else a Leader
         self.assertEqual(actions.deciders("senior"), [INFRA_SENIOR[0]])
         approval = frappe._dict(requested_by=OTHER[0], risk="senior")
         self.assertIn(
@@ -671,6 +672,10 @@ class TestCopilotPeople(FrappeTestCase):
         )
         self.assertIsNone(actions.may_decide(approval, INFRA_SENIOR[0]))
         self.assertIsNone(actions.may_decide(approval, LEAD[0]))
+        # a normal one goes to Infrastructure (else a Leader); a senior may decide it too
+        normal = frappe._dict(requested_by=OTHER[0], risk="normal")
+        for person in (INFRA[0], INFRA_SENIOR[0], LEAD[0]):
+            self.assertIsNone(actions.may_decide(normal, person), person)
         self.assertIn(
             "Only the Infrastructure people",
             actions.may_decide(

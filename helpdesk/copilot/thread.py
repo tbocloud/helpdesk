@@ -257,6 +257,15 @@ def on_ticket(ticket: str) -> list[str]:
     people.update(
         copilot_people.working(copilot_people.coordinators(customer), acting=False)
     )
+    # an infrastructure alert (Phase 25): the Infrastructure people working today are on it too
+    from helpdesk.consts import ALERT_TICKET_TYPE
+
+    if frappe.db.get_value("HD Ticket", ticket, "ticket_type") == ALERT_TICKET_TYPE:
+        people.update(
+            copilot_people.resolve(
+                copilot_people.INFRA, steps=((copilot_people.INFRA, "common"),)
+            )["users"]
+        )
     people.update(
         frappe.get_all(
             "HDS Copilot Approval",

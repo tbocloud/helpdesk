@@ -597,11 +597,13 @@ approved is the exact payload (the method and its arguments, or the AWS command)
 runs is what the approver saw.
 
 - `actions.request(kind, title, details, payload, risk, user, via, ticket)`: a Pending record,
-  assigned to the least loaded approver (a senior for `risk="senior"`), never the requester; the
+  assigned to the least loaded approver (`actions._steps`, the owner's rule of 18 Nov 2026: a normal
+  action, the Infrastructure people, else a Leader; a risky one, `risk="senior"`, Infrastructure
+  Senior, else a Leader; Infrastructure Senior may also decide normal ones), never the requester; the
   same ask twice returns the live request. The card goes out like a fix's card: Teams when the bot
   can reach the approver, else the panel plus the usual notification.
 - `actions.decide(name, user, approve, note, via)`: first decision wins; the requester may not decide
-  their own; a senior action refuses a plain approver; an expired request is refused and marked
+  their own; a risky action refuses anyone but Infrastructure Senior and the Leaders; an expired request is refused and marked
   Expired. Buttons `action_approve` / `action_reject` in the assistant's `_press`; the panel calls
   `api.copilot_actions.decide_action` (a reason is needed to reject).
 - The caller runs the action after Approve: `actions.approved_for(kind, payload, user)` finds the
@@ -613,6 +615,44 @@ runs is what the approver saw.
   `get_action_approval`, `approved_action`, `decide_action`, `mark_action_executed`.
 - Every decision is in HDS Copilot Call Log (`decide_action`); HDS Copilot Chat Message links the
   card to the record (`action_approval`).
+
+## Copilot on infrastructure alerts (Phase 25: `copilot/infra.py`; worker job kind `infra`)
+
+Every alert the watcher opens is investigated by Copilot, told through the TBO Copilot bot, and
+fixed only with a person's approval. Settings → **Copilot on Infrastructure**: **Investigate
+Infrastructure Alerts**, **Propose Infrastructure Actions**, **Dollar Cap per Infrastructure
+Diagnosis**, **Copilot May Change** (one bench, group or site per line; the patch
+`v16_0_3.copilot_infra_defaults` sets the demo bench and its sites).
+
+1. **The alert opens** (`monitor.open_alert` → `infra.on_alert_opened`, in the background): a card
+   "Alert: …" in the alert's chat, delivered by the bot to the people on it (its owner, and the
+   Infrastructure people working today, `thread.on_ticket`; the Leaders in the bell). Copilot starts a
+   run of kind `infra` (never shadow; the alert stays "no Copilot run" for the customer flow).
+2. **The investigation:** only a worker that claims with capability `infra` gets it (`runs.claim`).
+   Its context (`infra.context`) is the alert, its monitor updates, Press (site status, recent and
+   failed jobs), the hub's health for hub alerts, earlier repairs, the action list, `may_target` and
+   `may_change`, with **secrets taken out** (`infra.redact`: passwords, tokens, keys, credentials in
+   URLs, private keys). The worker may read more with the MCP tool `press_read` and reports with
+   `submit_infra_investigation` (summary, confidence, cause, evidence, at most one proposal, or what a
+   person should do). `submit_investigation` and the REST `submit_result` refuse infra runs.
+3. **The proposal check** (`infra.check_proposal`): the action must be one of `infra.ACTIONS`
+   (backup, restart_bench, migrate_site, update_site), the target one the alert is about (its site, the
+   site's bench or group), proposals on and auto-repair not paused, and the target in **Copilot May
+   Change**. Then an HDS Action Approval of kind Press is asked by the automation user, with
+   `copilot_run` in the payload (a backup too, which a person would run at once); the run waits in
+   Awaiting Approval. Otherwise the run is Handed Over and the card says what a person should run.
+4. **The decision** (`actions.decide` / `expire` / `mark_executed` → `infra.on_action`): approved →
+   Approved, the hub runs it through Press (`press_tools.execute_approved`); rejected or lapsed →
+   Handed Over; ran → Verifying; failed → Escalated, and the Leaders are told in Teams.
+5. **The check after** (`infra.on_alert_resolved`, `infra.check_verifying` every 5 minutes): the
+   watcher resolving the alert makes it **Fixed by Copilot** (a comment on the ticket, a card);
+   still open 30 minutes after the action, a Leader takes it and Copilot does not try again. An alert
+   that resolves while its request waits withdraws the request (Expired) and closes the run.
+
+People reply to the alert's messages in Teams, and Copilot answers from the ticket's chat (the
+diagnosis card carries the summary, cause and evidence). Stage 2 (next): the watcher's own repair
+steps (re-run a failed job, certificates, rollback) and server steps through SSM, and follow-up
+tasks, once the watcher can run a repair Copilot asks for (tbocloud-infra, Arun's review).
 
 ## Monitor intake (Phase 18: `monitor.py`, `api/monitor.py`)
 
@@ -738,7 +778,7 @@ A customer's own table holds only Developer, Fix Approver and Project Coordinato
 | Project Coordinator | every new ticket, choosing a person when no developer can take a ticket, "Talk to a person", risk alerts, writing in the ticket chat |
 | Senior | sensitive fixes, corrections, releases that need a senior, Deploy Now, letting a release through without green CI |
 | Leader | the last resort for everything: escalations, approvals nobody else can take, "Copilot needs a person", failed deploys, the AI budget and worker alerts, the weekly pilot email. With no Leader set, the Agent Managers (the settings page warns) |
-| Infrastructure, Infrastructure Senior | Press, AWS and repair actions (a heavy one: Infrastructure Senior), the watcher's tickets and alerts, pausing auto-repair |
+| Infrastructure, Infrastructure Senior | Press, AWS and repair actions (normal: Infrastructure, else a Leader; risky: Infrastructure Senior, else a Leader), Copilot's infrastructure alerts, the watcher's follow-ups, pausing auto-repair |
 | Risk Alerts, Deploy Notices | news only: everyone in the role is told |
 
 **The fallback order** (`people.CHAINS`, `people.resolve`). For each role Copilot looks at the customer's rows (Main, then Fallback 1, 2, 3), then the common rows, then the next role, and takes the first group with someone **working today** (TBO Support's rule, `ticket_assignment.working_today`: an active agent, not on approved leave, not Unavailable). Several people at one level: the least busy takes single work (a fix approval, a ticket), and all of them hear news. With nobody working anywhere, the first group with anybody at all, so work is never lost.

@@ -82,13 +82,39 @@ def _role(risk: str) -> str:
     return people.INFRA_SENIOR if risk == "senior" else people.INFRA
 
 
-def deciders(risk: str, exclude: set[str] | None = None) -> list[str]:
-    """Who approves an action of this risk (Phase 23, Copilot People): the Infrastructure people
-    working today (a senior action: Infrastructure Senior), else the next in the chain
-    (Infrastructure Senior, then a Leader); with nobody working, whoever is set."""
+def _steps(risk: str) -> tuple:
+    """Who is asked (the owner, 18 Nov 2026): a normal action, the Infrastructure people (Main,
+    then the fallbacks), else a Leader; a risky one, Infrastructure Senior first, else a Leader."""
     from helpdesk.copilot import people
 
-    return people.resolve(_role(risk), exclude=exclude or ())["users"]
+    if risk == "senior":
+        return ((people.INFRA_SENIOR, "common"), (people.LEADER, "common"))
+    return ((people.INFRA, "common"), (people.LEADER, "common"))
+
+
+def _may_steps(risk: str) -> tuple:
+    """Who may decide: a risky action, Infrastructure Senior and the Leaders; a normal one, also
+    the Infrastructure people (a senior may approve what a junior may)."""
+    from helpdesk.copilot import people
+
+    if risk == "senior":
+        return _steps(risk)
+    return (
+        (people.INFRA, "common"),
+        (people.INFRA_SENIOR, "common"),
+        (people.LEADER, "common"),
+    )
+
+
+def deciders(risk: str, exclude: set[str] | None = None) -> list[str]:
+    """Who approves an action of this risk (Copilot People, `_steps`): the Infrastructure people
+    working today, else a Leader (a risky action: Infrastructure Senior, else a Leader); with nobody
+    working, whoever is set."""
+    from helpdesk.copilot import people
+
+    return people.resolve(_role(risk), exclude=exclude or (), steps=_steps(risk))[
+        "users"
+    ]
 
 
 def pick_approver(risk: str, exclude: set[str] | None = None) -> str | None:
@@ -174,19 +200,37 @@ def request(
 
 
 def may_decide(approval, user: str) -> str | None:
-    """Why `user` may not decide `approval`, or None when they may: everyone the chain may put on
-    it (Infrastructure, Infrastructure Senior, the Leaders), never the requester."""
+    """Why `user` may not decide `approval`, or None when they may: everyone `_may_steps` names
+    (a normal action: Infrastructure, Infrastructure Senior and the Leaders; a risky one:
+    Infrastructure Senior and the Leaders), never the requester."""
     from helpdesk.copilot import people
 
     if user == approval.requested_by:
         return _("You asked for this action, so someone else must approve it.")
-    if user in people.in_chain(_role(approval.risk)):
+    allowed = {
+        u
+        for group in people.chain_groups(
+            _role(approval.risk), steps=_may_steps(approval.risk)
+        )
+        for u in group["users"]
+    }
+    if user in allowed:
         return None
     if approval.risk == "senior":
         return _(
             "This action is a heavy one; only Infrastructure Senior people or a Leader may approve it."
         )
     return _("Only the Infrastructure people or a Leader may decide actions.")
+
+
+def _follow_up(approval):
+    """A run of Copilot's on an infrastructure alert moves with its action (Phase 25)."""
+    try:
+        from helpdesk.copilot import infra
+
+        infra.on_action(approval)
+    except Exception:
+        frappe.log_error(title=f"Copilot could not follow the action {approval.name}")
 
 
 def decide(name: str, user: str, approve: bool, note: str = "", via: str = "Web"):
@@ -223,6 +267,7 @@ def decide(name: str, user: str, approve: bool, note: str = "", via: str = "Web"
         update_modified=False,
     )
     refresh_cards(name)
+    _follow_up(approval)
     if approve and approval.kind in EXECUTORS:
         frappe.enqueue(
             EXECUTORS[approval.kind],
@@ -239,6 +284,7 @@ def expire(approval):
         update_modified=False,
     )
     refresh_cards(approval.name)
+    _follow_up(approval)
 
 
 # --- executing ---------------------------------------------------------------------------
@@ -280,6 +326,7 @@ def mark_executed(name: str, ok: bool, log: str = ""):
         update_modified=False,
     )
     refresh_cards(name)
+    _follow_up(approval)
     return approval
 
 

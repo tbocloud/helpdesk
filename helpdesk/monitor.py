@@ -190,6 +190,7 @@ def open_alert(
             True  # an infrastructure alert, not a customer's problem
         )
         ticket.insert(ignore_permissions=True)  # after_insert announces the alert
+    _copilot("on_alert_opened", ticket.name)
     return {"ticket": ticket.name, "action": "opened"}
 
 
@@ -203,7 +204,23 @@ def resolve_alert(key: str, text: str = "", evidence=None) -> dict:
     doc.status = intake.resolved_status()
     intake.save_as_automation(doc)
     intake.announce(existing, _("Alert resolved: {0}").format(doc.subject))
+    _copilot("on_alert_resolved", existing)
     return {"ticket": existing, "action": "resolved"}
+
+
+def _copilot(fn: str, ticket: str):
+    """Copilot on the alert (Phase 25, helpdesk.copilot.infra): in the background after the commit,
+    so the watcher's call never waits for it or fails with it."""
+    try:
+        frappe.enqueue(
+            f"helpdesk.copilot.infra.{fn}",
+            queue="short",
+            ticket=ticket,
+            enqueue_after_commit=True,
+            now=frappe.flags.in_test,
+        )
+    except Exception:
+        frappe.log_error(title=f"Copilot not told of alert {ticket}")
 
 
 def alert(
