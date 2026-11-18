@@ -161,6 +161,18 @@
             :status="m.status === 'Done' ? __('Done') : null"
             @press="(a, values) => press(a, values, m.name)"
           />
+          <Button
+            v-if="customerChat && isDraft(m) && m.status !== 'Done'"
+            class="mt-1.5"
+            size="sm"
+            variant="subtle"
+            :aria-label="
+              __('Edit this reply before sending it to the customer')
+            "
+            @click="editDraft(m)"
+          >
+            {{ __("Edit") }}
+          </Button>
           <div v-else class="text-base text-ink-gray-8">{{ m.text }}</div>
         </div>
       </template>
@@ -185,7 +197,37 @@
       class="border-t border-outline-gray-1"
       :class="wide ? 'px-5 py-3' : 'p-3'"
     >
-      <div v-if="files.length" class="mb-2 flex flex-wrap gap-1">
+      <div v-if="customerChat" class="mb-2 flex flex-wrap items-center gap-2">
+        <div
+          class="inline-flex rounded border border-outline-gray-2 p-0.5"
+          role="group"
+          :aria-label="__('Write to')"
+        >
+          <button
+            v-for="opt in boxOptions"
+            :key="opt.value"
+            type="button"
+            class="rounded px-2.5 py-0.5 text-sm"
+            :class="
+              mode === opt.value
+                ? 'bg-surface-gray-3 font-medium text-ink-gray-9'
+                : 'text-ink-gray-6 hover:text-ink-gray-8'
+            "
+            :aria-pressed="mode === opt.value"
+            @click="mode = opt.value"
+          >
+            {{ opt.label }}
+          </button>
+        </div>
+        <span v-if="toCustomer" class="text-xs text-ink-gray-6">
+          {{
+            draftFrom
+              ? __("Copilot's draft: change it, then send it as your reply.")
+              : __("Goes to the customer's chat as your reply.")
+          }}
+        </span>
+      </div>
+      <div v-if="files.length && !toCustomer" class="mb-2 flex flex-wrap gap-1">
         <span
           v-for="f in files"
           :key="f.name"
@@ -195,16 +237,25 @@
         </span>
       </div>
       <textarea
+        ref="box"
         v-model="draft"
         rows="2"
-        :placeholder="__('Ask Copilot or tell it what to do')"
-        :aria-label="__('Ask Copilot or tell it what to do')"
+        :placeholder="
+          toCustomer
+            ? __('Write to the customer')
+            : __('Ask Copilot or tell it what to do')
+        "
+        :aria-label="
+          toCustomer
+            ? __('Write to the customer')
+            : __('Ask Copilot or tell it what to do')
+        "
         class="w-full resize-none rounded border-outline-gray-2 text-base"
         @keydown.enter.exact.prevent="send"
       />
       <div class="mt-1.5 flex items-center justify-between">
         <FileUploader
-          v-if="thread.data?.chat"
+          v-if="thread.data?.chat && !toCustomer"
           :upload-args="{
             docname: thread.data.chat,
             method: 'helpdesk.api.copilot_chat.attach',
@@ -226,13 +277,16 @@
           </template>
         </FileUploader>
         <Button
+          class="ms-auto"
           variant="solid"
           size="sm"
           :loading="busy"
-          :disabled="!draft.trim() && !files.length"
+          :disabled="
+            toCustomer ? !draft.trim() : !draft.trim() && !files.length
+          "
           @click="send"
         >
-          {{ __("Send") }}
+          {{ toCustomer ? __("Send to customer") : __("Send") }}
         </Button>
       </div>
     </footer>
@@ -292,6 +346,7 @@ import {
   ref,
   watch,
 } from "vue";
+import { useStorage } from "@vueuse/core";
 import LucideEllipsis from "~icons/lucide/ellipsis";
 import LucidePaperclip from "~icons/lucide/paperclip";
 
@@ -403,7 +458,67 @@ async function call(method: string, params: Record<string, unknown>) {
   }
 }
 
+// testing fixes 1 (F2, F4): on a ticket with a customer chat the box writes to Copilot or to the
+// customer; the choice is kept per ticket. Copilot's draft card's Edit fills the Customer side.
+const boxModes = useStorage<Record<string, "copilot" | "customer">>(
+  "helpdesk:copilot-box-mode",
+  {}
+);
+const customerChat = computed(
+  () => Boolean(thread.data?.customer_chat) && now.value?.can_write !== false
+);
+const mode = computed<"copilot" | "customer">({
+  get: () => boxModes.value[String(props.ticket)] || "copilot",
+  set: (value) => {
+    boxModes.value = { ...boxModes.value, [String(props.ticket)]: value };
+  },
+});
+const toCustomer = computed(
+  () => customerChat.value && mode.value === "customer"
+);
+const boxOptions = [
+  { value: "copilot" as const, label: __("Copilot") },
+  { value: "customer" as const, label: __("Customer") },
+];
+const box = ref<HTMLTextAreaElement | null>(null);
+/** Copilot's draft card the Customer box began from: sending marks it sent */
+const draftFrom = ref<string | null>(null);
+watch(draft, (value) => {
+  if (!value.trim()) draftFrom.value = null;
+});
+function isDraft(m: ThreadMessage) {
+  return Boolean((m.card as { draft?: string } | null)?.draft);
+}
+function editDraft(m: ThreadMessage) {
+  mode.value = "customer";
+  draft.value = (m.card?.lines || []).join("\n\n");
+  draftFrom.value = m.name;
+  nextTick(() => box.value?.focus());
+}
+async function sendToCustomer() {
+  const text = draft.value.trim();
+  if (!text) return;
+  busy.value = true;
+  try {
+    await createResource({ url: `${API}.reply_to_customer` }).submit({
+      ticket: props.ticket,
+      text,
+      draft: draftFrom.value || "",
+    });
+    // the words leave the box only once the reply is saved
+    draft.value = "";
+    draftFrom.value = null;
+    toast.success(__("Sent to the customer"));
+  } catch (error) {
+    toast.error(errorText(error) || __("The reply could not be sent"));
+  } finally {
+    busy.value = false;
+    thread.reload();
+  }
+}
+
 async function send() {
+  if (toCustomer.value) return sendToCustomer();
   if (!draft.value.trim() && !files.value.length) return;
   const text = draft.value;
   const names = files.value.map((f) => f.name);

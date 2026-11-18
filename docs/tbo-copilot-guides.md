@@ -14,6 +14,10 @@ Who does what, what Copilot sends you, and what you press. The full reference is
 ## An agent (TBO Support)
 
 - **The ticket's Copilot chat** (on the ticket page) shows what Copilot found, its draft reply and its buttons. Copilot never sends anything to the customer by itself: you read the draft and send it.
+- **Writing to the customer in the chat:** on a ticket the customer raised from their chat, switch the box above
+  **Send** from **Copilot** to **Customer** and write as in a chat; your words reach the customer's chat at once as
+  your reply. **Edit** on Copilot's draft puts it in that box to change first. Your replies (from here or the
+  Customer tab) show in the chat as "<your name> to the customer".
 - **Buttons that ask for a reason** (Reject…, Undo…) open a box. A button that is refused says why in a message at the top.
 - **The paperclip** attaches files to the chat (the panel and the ticket chat).
 - **"What is waiting for me?"** in the Copilot panel or Teams lists your fix approvals, release and action approvals, and tickets waiting for you to choose who takes them. The same list comes at 09:00 each working day.

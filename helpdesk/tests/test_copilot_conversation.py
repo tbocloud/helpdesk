@@ -1076,3 +1076,261 @@ class TestPhase23Linking(ChatCase):
             frappe.db.get_value("HD Ticket", ticket, "custom_client_ticket"),
             "SUP-2026-00777",
         )
+
+
+class TestTestingFixes1(ChatCase):
+    """Found on the demo hub (ticket #0018, 18 Nov 2026): a person's reply reaches the customer's
+    chat as what they wrote; people write to the customer from the ticket's Chat tab; the Chat tab
+    shows their replies; a coordinator on the ticket is called a coordinator."""
+
+    # niranjana's reply as the ticket page's e-mail editor saved it (Reply quotes the message)
+    QUOTED = (
+        '<p>hi</p><p></p><p class="reply-to-content"></p><blockquote>'
+        "<p><b>From the customer site</b></p><ul><li>Page: Form/User/Administrator</li>"
+        "<li>Record: User Administrator</li></ul><details><summary>The chat with TBO Copilot"
+        "</summary><p><b>TBO Copilot:</b> Hi Administrator</p></details></blockquote>"
+    )
+
+    def setUp(self):
+        super().setUp()
+        self.agent = create_agent("fixes.agent@example.com", "Nira", "Tester").name
+        self.other = create_agent("fixes.other@example.com", "Other", "Agent").name
+        patcher = patch("helpdesk.copilot.assistant.send")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        # the reply is saved and reaches the chat without a mail account (as on the demo hub)
+        frappe.db.set_single_value(
+            "HD Settings",
+            {"skip_email_workflow": 0, "enable_reply_email_via_agent": 1},
+        )
+        patcher = patch(
+            "helpdesk.helpdesk.doctype.hd_ticket.hd_ticket.HDTicket._resolve_sender_email",
+            return_value=(None, None),
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def raised(self, assigned=True):
+        from helpdesk.test_utils import make_assignment
+
+        self.gathered()
+        ticket = self.say(action="raise")["ticket"]
+        if assigned:
+            make_assignment("HD Ticket", ticket, self.agent)
+        return ticket
+
+    def sent_by(self, sender, ticket, content):
+        frappe.get_doc(
+            {
+                "doctype": "Communication",
+                "communication_type": "Communication",
+                "communication_medium": "Email",
+                "sent_or_received": "Sent",
+                "sender": sender,
+                "subject": "Re: hi",
+                "content": content,
+                "reference_doctype": "HD Ticket",
+                "reference_name": ticket,
+            }
+        ).insert(ignore_permissions=True)
+
+    def lines(self, ticket, title):
+        from helpdesk.copilot import thread
+
+        return [
+            m["card"].get("lines")
+            for m in thread.history(ticket)
+            if (m["card"] or {}).get("title") == title
+        ]
+
+    def draft(self, ticket, text):
+        from helpdesk.copilot import thread
+
+        thread.on_explanation(frappe._dict(ticket=ticket, name=None), text)
+        return next(
+            m
+            for m in thread.history(ticket)
+            if (m["card"] or {}).get("title") == "Reply for the customer (draft)"
+        )
+
+    # F1
+    def test_a_reply_with_the_editors_quote_reaches_the_chat_as_what_was_written(self):
+        ticket = self.raised()
+        self.sent_by(self.agent, ticket, self.QUOTED)
+        method, payload = self.pushed[-1]
+        self.assertEqual((method, payload["text"]), ("post_message", "hi"))
+        self.assertEqual(json.loads(payload["card"])["lines"], ["hi"])
+
+    def test_mail_quotes_and_markdown_marks_never_reach_the_chat(self):
+        self.assertEqual(
+            conversation.reply_text(
+                "<p>Please <b>check</b>:</p><ul><li>the item</li><li>the price &amp; tax"
+                "</li></ul><p>Line one<br>Line two</p><div class='gmail_quote'>On Mon, X wrote:"
+                "<blockquote>the old mail</blockquote></div>"
+            ),
+            "Please check:\n\n• the item\n• the price & tax\n\nLine one\nLine two",
+        )
+        self.assertEqual(
+            conversation.reply_text(
+                '<p>Thanks</p><div id="appendonsend"></div><hr>'
+                '<div id="divRplyFwdMsg">From: Ali</div><div>the old mail</div>'
+            ),
+            "Thanks",
+        )
+        self.assertEqual(conversation.reply_text("plain words"), "plain words")
+
+    # F2
+    def test_a_person_writes_to_the_customer_from_the_chat_tab(self):
+        from helpdesk.copilot import thread
+
+        ticket = self.raised()
+        frappe.set_user(self.agent)
+        thread.reply_to_customer(self.agent, ticket, "Please send the invoice number.")
+        frappe.set_user("Administrator")
+
+        sent = frappe.get_all(
+            "Communication",
+            filters={"reference_name": ticket, "sent_or_received": "Sent"},
+            fields=["sender", "content", "custom_ai_drafted"],
+        )
+        self.assertEqual(
+            [(s.sender, s.content, s.custom_ai_drafted) for s in sent],
+            [(self.agent, "<p>Please send the invoice number.</p>", 0)],
+        )
+        posted = [p for m, p in self.pushed if m == "post_message"]
+        self.assertEqual(posted[-1]["text"], "Please send the invoice number.")
+        self.assertEqual(posted[-1]["direction"], "Agent")
+        # F3: the Chat tab shows it
+        self.assertEqual(
+            self.lines(ticket, "Nira Tester to the customer"),
+            [["Please send the invoice number."]],
+        )
+
+    def test_only_people_who_may_write_and_only_on_a_chat_ticket(self):
+        from helpdesk.copilot import thread
+
+        ticket = self.raised()
+        frappe.set_user(self.other)
+        with self.assertRaises(frappe.PermissionError):
+            thread.reply_to_customer(self.other, ticket, "hello")
+        frappe.set_user("Administrator")
+        with self.assertRaisesRegex(frappe.ValidationError, "Write something"):
+            thread.reply_to_customer(self.agent, ticket, "   ")
+        mail_ticket = make_ticket(raised_by="ali@chat-trading.example").name
+        with self.assertRaisesRegex(
+            frappe.ValidationError, "no chat with the customer"
+        ):
+            thread.reply_to_customer("Administrator", mail_ticket, "hello")
+        self.assertFalse(
+            frappe.db.exists(
+                "Communication",
+                {"reference_name": ticket, "sent_or_received": "Sent"},
+            )
+        )
+
+    def test_the_box_offers_the_customer_only_on_a_ticket_with_a_chat(self):
+        from helpdesk.api import copilot_thread
+
+        ticket = self.raised()
+        mail_ticket = make_ticket(raised_by="ali@chat-trading.example").name
+        self.assertTrue(copilot_thread.history(ticket)["customer_chat"])
+        self.assertFalse(copilot_thread.history(mail_ticket)["customer_chat"])
+
+    # F3
+    def test_the_chat_tab_shows_a_reply_from_the_customer_tab_without_its_quote(self):
+        ticket = self.raised()
+        self.sent_by(self.agent, ticket, self.QUOTED)
+        self.assertEqual(self.lines(ticket, "Nira Tester to the customer"), [["hi"]])
+
+    def test_copilots_own_mails_are_not_shown_as_a_persons_reply(self):
+        from helpdesk.copilot import thread
+
+        ticket = self.raised()
+        self.sent_by("notices@example.com", ticket, "<p>Your ticket was merged.</p>")
+        titles = [(m["card"] or {}).get("title", "") for m in thread.history(ticket)]
+        self.assertFalse([t for t in titles if t.endswith("to the customer")])
+
+    # F4
+    def test_the_draft_sent_unchanged_shows_once(self):
+        from helpdesk.copilot import thread
+
+        ticket = self.raised()
+        card = self.draft(ticket, "We need the invoice number to look further.")
+        frappe.set_user(self.agent)
+        thread.press(
+            self.agent, ticket, "send_reply", card["card"]["actions"][0]["data"]
+        )
+        frappe.set_user("Administrator")
+        self.assertEqual(self.lines(ticket, "Nira Tester to the customer"), [])
+        self.assertEqual(
+            frappe.db.get_value(assistant_message(), card["name"], "action_status"),
+            "Done",
+        )
+
+    def test_an_edited_draft_is_sent_as_the_persons_words_and_marked_edited(self):
+        from helpdesk.copilot import thread
+
+        ticket = self.raised()
+        card = self.draft(ticket, "We need the invoice number to look further.")
+        frappe.set_user(self.agent)
+        thread.reply_to_customer(
+            self.agent,
+            ticket,
+            "We need the invoice number (SINV-…) to look further.",
+            draft=card["name"],
+        )
+        frappe.set_user("Administrator")
+        status, result = frappe.db.get_value(
+            assistant_message(), card["name"], ["action_status", "result"]
+        )
+        self.assertEqual((status, result), ("Done", "Sent by Nira Tester, edited"))
+        self.assertEqual(
+            frappe.db.get_value(
+                "Communication",
+                {"reference_name": ticket, "sent_or_received": "Sent"},
+                "custom_ai_drafted",
+            ),
+            1,
+        )
+        self.assertEqual(
+            self.lines(ticket, "Nira Tester to the customer"),
+            [["We need the invoice number (SINV-…) to look further."]],
+        )
+        with self.assertRaisesRegex(frappe.ValidationError, "sent already"):
+            thread.reply_to_customer(self.agent, ticket, "again", draft=card["name"])
+
+    def test_the_draft_sent_unchanged_from_the_box_is_not_marked_edited(self):
+        from helpdesk.copilot import thread
+
+        ticket = self.raised()
+        card = self.draft(ticket, "We need the invoice number to look further.")
+        frappe.set_user(self.agent)
+        thread.reply_to_customer(
+            self.agent,
+            ticket,
+            "We need the invoice number to look further.",
+            draft=card["name"],
+        )
+        frappe.set_user("Administrator")
+        self.assertEqual(
+            frappe.db.get_value(assistant_message(), card["name"], "result"),
+            "Sent by Nira Tester",
+        )
+        self.assertEqual(self.lines(ticket, "Nira Tester to the customer"), [])
+
+    # F5
+    def test_a_coordinator_on_the_ticket_is_called_a_coordinator(self):
+        from helpdesk.copilot import thread
+
+        ticket = self.raised()
+        with patch("helpdesk.copilot.people.coordinators", return_value=[self.agent]):
+            roles = {p["user"]: p["role"] for p in thread.people(ticket)}
+        self.assertEqual(roles[self.agent], "coordinator")
+        roles = {p["user"]: p["role"] for p in thread.people(ticket)}
+        self.assertEqual(roles[self.agent], "developer")
+
+
+def assistant_message():
+    from helpdesk.copilot import assistant
+
+    return assistant.MESSAGE

@@ -418,6 +418,16 @@ def on_communication_insert(doc, method=None):
             frappe.log_error(
                 title=f"Copilot could not pass on the reply on {doc.reference_name}"
             )
+    if doc.sent_or_received == "Sent":
+        # testing fixes 1, F3: the person's reply shows in the ticket's chat
+        try:
+            from helpdesk.copilot import thread
+
+            thread.on_person_replied(doc.reference_name, doc.sender, doc.content or "")
+        except Exception:
+            frappe.log_error(
+                title=f"Copilot could not show the reply on {doc.reference_name} in its chat"
+            )
     run = latest_run(doc.reference_name)
     if not run:
         return

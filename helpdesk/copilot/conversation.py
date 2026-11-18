@@ -1332,6 +1332,55 @@ def tell_stage(run, stage: str, text: str):
     tell(run.ticket, "System", "Stage", text, card(_(stage), [text], actions=actions))
 
 
+# what an e-mail reply carries under the person's own words: the ticket page's editor marks its
+# quote with p.reply-to-content (desk EmailEditor.vue); mail programs quote the thread their way
+_QUOTE_STARTS = ("p.reply-to-content", "div#divRplyFwdMsg", "div#appendonsend")
+_QUOTES = ("div.gmail_quote", "blockquote[type=cite]")
+_BLOCKS = (
+    "p",
+    "div",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "tr",
+    "pre",
+    "blockquote",
+    "ul",
+    "ol",
+)
+
+
+def reply_text(html: str) -> str:
+    """What a person wrote in a reply, as the customer's chat shows it: plain text (no `**`, `>`
+    or `*` marks; list items as "• ", line breaks kept), without the earlier message quoted under it
+    (testing fixes 1, F1)."""
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(html or "", "html.parser")
+    for selector in _QUOTE_STARTS:
+        start = soup.select_one(selector)
+        if start:
+            # the quote is the marker and everything after it at its level
+            for later in list(start.find_next_siblings()):
+                later.decompose()
+            start.decompose()
+    for selector in _QUOTES:
+        for quote in soup.select(selector):
+            quote.decompose()
+    for br in soup.find_all("br"):
+        br.replace_with("\n")
+    for item in soup.find_all("li"):
+        item.insert(0, "• ")
+        item.append("\n")
+    for block in soup.find_all(_BLOCKS):
+        block.append("\n\n")
+    lines = [" ".join(line.split()) for line in soup.get_text().splitlines()]
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
+
+
 def on_communication_insert(doc, method=None):
     """An agent's reply on a ticket with a chat goes to the chat at once (the site sync also keeps it)."""
     name = (
@@ -1345,9 +1394,7 @@ def on_communication_insert(doc, method=None):
         or frappe.db.get_value(CONVERSATION, name, "channel") == "TBO Chat"
     ):
         return
-    from frappe.core.utils import html2text
-
-    text = html2text(doc.content or "", wrap=False).strip()
+    text = reply_text(doc.content or "")
     tell(
         doc.reference_name,
         "Agent",

@@ -399,17 +399,18 @@ def may_write(user: str, ticket: str) -> bool:
 
 def people(ticket: str) -> list[dict]:
     """Who writes in the chat besides Copilot and the admins: the assignees, then the
-    customer's project coordinators; [{user, name, role: developer or coordinator}]."""
+    customer's project coordinators; [{user, name, role: developer or coordinator}]. A coordinator
+    the ticket is assigned to (a hand-over, Phase 23) is still a coordinator (testing fixes 1, F5)."""
     customer = frappe.db.get_value("HD Ticket", str(ticket), "customer")
-    found = [(user, "developer") for user in assignees(ticket)]
-    taken = {user for user, _role in found}
     from helpdesk.copilot import people as copilot_people
 
-    found += [
-        (user, "coordinator")
-        for user in copilot_people.coordinators(customer)
-        if user not in taken
+    coordinators = copilot_people.coordinators(customer)
+    found = [
+        (user, "coordinator" if user in coordinators else "developer")
+        for user in assignees(ticket)
     ]
+    taken = {user for user, _role in found}
+    found += [(user, "coordinator") for user in coordinators if user not in taken]
     return [
         {"user": user, "name": get_fullname(user), "role": role} for user, role in found
     ]
@@ -881,9 +882,9 @@ def _kb(user, ticket, data, inputs):
     )
 
 
-def _send_reply(user, ticket, data, inputs):
-    """The explanation Copilot drafted, sent to the customer by the person as their reply."""
-    message = frappe.get_doc(MESSAGE, data.get("message"))
+def _draft_of(ticket, name):
+    """Copilot's draft card `name` in this ticket's chat, not sent yet, and its draft (html)."""
+    message = frappe.get_doc(MESSAGE, name)
     if ticket_of_chat(message.chat) != str(ticket):
         frappe.throw(_("This draft belongs to another ticket."), frappe.PermissionError)
     draft = (frappe.parse_json(message.card) or {}).get("draft") or ""
@@ -891,7 +892,62 @@ def _send_reply(user, ticket, data, inputs):
         frappe.throw(_("There is no draft to send."))
     if message.action_status == "Done":
         frappe.throw(_("This reply was sent already."))
-    frappe.get_doc("HD Ticket", ticket).reply_via_agent(message=draft, ai_drafted=1)
+    return message, draft
+
+
+def _reply(ticket, html: str, ai_drafted: bool, from_card: bool):
+    """The person's reply on the ticket; `from_card`: Copilot's draft unchanged, whose card says so."""
+    if from_card:
+        frappe.flags[FROM_DRAFT_CARD] = True
+    try:
+        frappe.get_doc("HD Ticket", ticket).reply_via_agent(
+            message=html, ai_drafted=1 if ai_drafted else 0
+        )
+    finally:
+        frappe.flags.pop(FROM_DRAFT_CARD, None)
+
+
+def reply_to_customer(user: str, ticket: str, text: str, draft: str | None = None):
+    """A person's own words to the customer from the Chat tab's Customer box (testing fixes 1, F2):
+    their reply on the ticket, which reaches the customer's chat at once. `draft`: Copilot's draft
+    card the words began from (Edit, F4), marked sent."""
+    from helpdesk.copilot import conversation
+    from helpdesk.copilot.customer import as_html
+
+    if not may_write(user, ticket):
+        frappe.throw(write_refused(), frappe.PermissionError)
+    if not conversation.for_ticket(ticket):
+        frappe.throw(
+            _("This ticket has no chat with the customer: reply from the Customer tab.")
+        )
+    words = (text or "").strip()
+    if not words:
+        frappe.throw(_("Write something to send to the customer."))
+    message = drafted = None
+    if draft:
+        message, drafted = _draft_of(ticket, draft)
+    same = bool(message) and " ".join(
+        conversation.reply_text(drafted).split()
+    ) == " ".join(words.split())
+    _reply(ticket, as_html(words), ai_drafted=bool(message), from_card=same)
+    if message:
+        message.db_set(
+            {
+                "action_status": "Done",
+                "result": (
+                    _("Sent by {0}") if same else _("Sent by {0}, edited")
+                ).format(get_fullname(user)),
+            },
+            update_modified=False,
+        )
+        _publish(ticket)
+    return {"ok": True}
+
+
+def _send_reply(user, ticket, data, inputs):
+    """The explanation Copilot drafted, sent to the customer by the person as their reply."""
+    message, draft = _draft_of(ticket, data.get("message"))
+    _reply(ticket, draft, ai_drafted=True, from_card=True)
     message.db_set(
         {
             "action_status": "Done",
@@ -1412,6 +1468,32 @@ def on_customer_reply(ticket: str, text: str = ""):
         ticket,
         _card(_("The customer replied"), [words] if words else []),
         status=True,
+    )
+
+
+# a reply sent from Copilot's draft card unchanged: the card itself says "Sent by …"
+FROM_DRAFT_CARD = "copilot_reply_from_draft_card"
+
+
+def on_person_replied(ticket: str, sender: str, html: str = ""):
+    """A person replied to the customer (the Chat tab's Customer box, the Customer tab, the draft
+    card edited): the line shows in the chat, so it reads as the conversation (testing fixes 1, F3).
+    Only in the chat: the people on the ticket hear of the customer's replies, not their own."""
+    if frappe.flags.get(FROM_DRAFT_CARD):
+        return
+    if not frappe.db.exists("HD Agent", {"user": sender, "is_active": 1}):
+        return  # Copilot's own notices, the system's mails
+    from helpdesk.copilot.conversation import reply_text
+
+    words = reply_text(html)
+    if len(words) > 1000:
+        words = words[:997] + "…"
+    post(
+        ticket,
+        _card(
+            _("{0} to the customer").format(get_fullname(sender)),
+            [words] if words else [],
+        ),
     )
 
 

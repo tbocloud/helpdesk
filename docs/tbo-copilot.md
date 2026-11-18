@@ -296,6 +296,10 @@ The Support button in a customer's ERP opens a chat with TBO Copilot instead of 
 - **Raise the ticket** on the summary creates the HD Ticket, as the ticket pull does (`via_customer_portal`, the connection). The description has the fields, the page context the import never read before (page, record, roles, recent errors) and the chat transcript.
   - The site then makes its own Support Ticket for it, Open with the hub's number, so the pull never imports it again. It sends **linked**, and the hub fetches the chat's files from that ticket (`import_files`).
   - From then on the chat is the ticket's channel: the customer's messages become Received Communications (a Copilot run waiting for an answer gets it, as from email), and no AI runs. The site's call runs as Guest, so the message is saved as the automation user: it reopens the ticket, and Guest may not save a ticket. Until 31 Oct 2026 every such message failed with "That did not reach TBO Support".
+  - An agent's reply reaches the chat as what they wrote (`conversation.reply_text`, testing fixes 1): plain text,
+    list items as "• ", without the earlier message the ticket page's editor quotes under a **Reply**
+    (`p.reply-to-content`) or a mail program quotes (Gmail, Outlook). Before 18 Nov 2026 the chat got the quote too,
+    with raw `**` and `>` marks.
   - An agent's reply reaches the chat even when the hub has no outgoing email account. A ticket the customer follows in a chat (this one or TBO Chat) or on their own site skips the email instead of failing (`HDTicket.reaches_customer_without_email`). Any other ticket refuses the reply before anything is saved or sent. Before, the reply failed after its chat copy had gone, so the customer saw a reply the ticket did not keep.
   - **Talk to a person** raises the ticket with the transcript at any point. When the customer has not said anything yet, the chat first asks "Sure. In one line, what is it about?" (state **Before a person**). Their line becomes the ticket's subject, or **Just connect me** raises it at once.
   - On a hand-over, the people on the ticket (else a Leader) are told at once in Teams or their Copilot panel (`thread.on_hand_over`).
@@ -458,7 +462,14 @@ Lines in the chat that are notes, not Copilot speaking (`tone` "note"), show cen
 - **The chat below:**
   - Copilot's messages, cards with at most two buttons;
   - people's messages, with name, time and "in Teams";
-  - a box: "Ask Copilot or tell it what to do", with files.
+  - a box: "Ask Copilot or tell it what to do", with files;
+  - on a ticket with a customer chat (testing fixes 1), a **Copilot / Customer** switch above the box, kept per ticket.
+    On **Customer** the words go to the customer as the person's reply (`copilot_thread.reply_to_customer` →
+    `reply_via_agent`, no To/CC, no quote) and reach the customer's chat at once; files stay Copilot's. Only people
+    who may write in the ticket's chat get it;
+  - each reply a person sends the customer (this box, the Customer tab, an edited draft) as a line "<name> to the
+    customer" (`thread.on_person_replied`, from the Communication hook; not Copilot's own mails, not the draft card's
+    unchanged **Send to customer**, whose card says "Sent by …").
 - It refreshes on `helpdesk:copilot-thread` and `helpdesk:copilot-run` in the ticket's room. The old Copilot dialog (form script) is gone.
 - Copilot's ⋯ button is labelled "More Copilot actions", apart from the header's "More actions".
 
@@ -466,7 +477,9 @@ Lines in the chat that are notes, not Copilot speaking (`tone` "note"), show cen
 
 - **looking into it;**
 - **the diagnosis** ("Found it (90% sure)", the summary, and what happens next: "I am fixing it now", **May Copilot fix this?** with the reason, or who takes it);
-- **the reply for the customer (draft)** with **Send to customer** (the person sends it as their reply; never sent by itself);
+- **the reply for the customer (draft)** with **Send to customer** (the person sends it as their reply; never sent by itself)
+  and, on a ticket with a customer chat, **Edit**: the draft goes into the box on **Customer** to change and send; the
+  card then says "Sent by X, edited" (testing fixes 1);
 - **fix ready** (the pull request's title, checks, risk, who approves, Approve or Ask for a change with a box);
 - **correction ready;**
 - **approved, rejected, merged;**

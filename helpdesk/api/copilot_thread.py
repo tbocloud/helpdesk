@@ -31,12 +31,29 @@ def _readable(ticket: str):
 def history(ticket: str | int) -> dict:
     """The ticket's chat, oldest first, and what this person may do now."""
     _readable(ticket)
+    from helpdesk.copilot import conversation
+
     return {
         "messages": thread.history(str(ticket)),
         "now": thread.now(str(ticket), frappe.session.user),
         "chat": thread.thread_for(str(ticket)).name,
         "people": thread.people(str(ticket)),
+        # the box's Customer side (testing fixes 1, F2): only a ticket with a customer chat
+        "customer_chat": bool(conversation.for_ticket(str(ticket))),
     }
+
+
+@frappe.whitelist(methods=["POST"])
+@agent_only
+def reply_to_customer(
+    ticket: str | int, text: str = "", draft: str | None = None
+) -> dict:
+    """Your own words to the customer, from the Chat tab's Customer box (testing fixes 1, F2);
+    `draft`: Copilot's draft card the words began from (F4)."""
+    _readable(ticket)
+    return thread.reply_to_customer(
+        frappe.session.user, str(ticket), text, draft or None
+    )
 
 
 @frappe.whitelist(methods=["POST"])
