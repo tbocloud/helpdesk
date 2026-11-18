@@ -55,10 +55,11 @@
       </NavPanelCollapsed>
     </div>
   </div>
-  <!-- the palette finds tickets and articles, none of which a salesperson opens -->
+  <!-- the palette finds pages, tasks, projects and tickets, none of which a salesperson opens -->
   <CP
     v-if="!mobile && !authStore.isSalesEmployee"
     v-model="showCommandPalette"
+    :areas="areas"
   />
   <ViewModal
     v-if="viewDialogConfig.show"
