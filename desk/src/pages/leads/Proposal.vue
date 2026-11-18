@@ -2,6 +2,17 @@
   <div class="flex h-full flex-col">
     <LayoutHeader>
       <template #left-header>
+        <Button
+          class="mr-2 shrink-0"
+          variant="ghost"
+          :label="__('Back')"
+          :tooltip="__('Back')"
+          @click="goBack"
+        >
+          <template #icon>
+            <LucideArrowLeft class="size-4" aria-hidden="true" />
+          </template>
+        </Button>
         <nav
           class="flex min-w-0 items-center gap-1.5 text-lg-medium"
           :aria-label="__('Breadcrumb')"
@@ -65,10 +76,9 @@
           :loading="revisionResource.loading"
           @click="revisionResource.submit({ name: proposalId })"
         />
-        <!-- a draft is marked ready (its numbers fixed) before it can go out -->
+        <!-- a draft is marked ready (its numbers fixed) before it goes out; Send does both -->
         <Button
           v-if="editable && canSendStatus"
-          variant="solid"
           size="md"
           :label="__('Mark ready')"
           :disabled="!!proposal.share_blockers.length || dirty"
@@ -81,11 +91,14 @@
           </template>
         </Button>
         <Button
-          v-else-if="proposal.can_write && canSendStatus"
+          v-if="proposal.can_write && canSendStatus"
           variant="solid"
           size="md"
           :label="proposal.status === 'Draft' ? __('Send') : __('Send again')"
-          :disabled="!!proposal.send_blockers.length || dirty"
+          :disabled="
+            !!(editable ? proposal.share_blockers : proposal.send_blockers)
+              .length || dirty
+          "
           :tooltip="sendTooltip"
           @click="openSend"
         >
@@ -170,6 +183,16 @@
                 <span v-for="(reason, i) in proposal.send_blockers" :key="i">{{
                   reason
                 }}</span>
+                <!-- the commonest reason, fixed from here: the same dialog as the Investment's -->
+                <div
+                  v-if="editable && proposal.can_price && !proposal.quotation"
+                  class="mt-1"
+                >
+                  <Button
+                    :label="__('Price the proposal')"
+                    @click="showPricing = true"
+                  />
+                </div>
               </div>
             </div>
             <p
@@ -554,11 +577,24 @@
           v-model="sendForm.recipients"
           type="email"
           :label="__('To')"
+          :placeholder="__('client@example.com')"
           :description="
-            __('The client gets an email with the link, from the ERP site.')
+            __(
+              'Type one or more addresses, separated by commas. The client gets an email with the link, from the ERP site.'
+            )
           "
           required
         />
+        <p
+          v-if="editable"
+          class="rounded-lg bg-surface-gray-2 px-3 py-2 text-p-sm text-ink-gray-7"
+        >
+          {{
+            __(
+              "Sending marks it ready first: the content and the numbers are fixed. Create a revision to change it after."
+            )
+          }}
+        </p>
         <FormControl
           v-model="sendForm.message"
           type="textarea"
@@ -592,7 +628,6 @@
       </template>
     </Dialog>
 
-    <!-- one confirm for the actions that can't be undone or write over edits -->
     <Dialog
       v-model:open="templateDialog.open"
       :title="__('Change template')"
@@ -641,6 +676,7 @@
       </template>
     </Dialog>
 
+    <!-- one confirm for the actions that can't be undone or write over edits -->
     <Dialog v-model:open="confirm.open" :title="confirm.title" size="md">
       <p class="text-p-base text-ink-gray-7">{{ confirm.message }}</p>
       <template #actions="{ close }">
@@ -667,6 +703,7 @@ import { __ } from "@/translation";
 import { errorText } from "@/utils";
 import {
   Button,
+  call,
   createResource,
   Dialog,
   Dropdown,
@@ -676,6 +713,7 @@ import {
 } from "frappe-ui";
 import { computed, reactive, ref, useId, watch } from "vue";
 import { useRouter } from "vue-router";
+import LucideArrowLeft from "~icons/lucide/arrow-left";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleCheck from "~icons/lucide/circle-check";
@@ -801,8 +839,18 @@ const canSendStatus = computed(
 );
 const sendTooltip = computed(() => {
   if (dirty.value) return __("Save your changes first");
-  return proposal.value?.send_blockers[0] || "";
+  return (
+    (editable.value
+      ? proposal.value?.share_blockers[0]
+      : proposal.value?.send_blockers[0]) || ""
+  );
 });
+
+/** To where they came from; straight to the lead when the page was opened from a link. */
+function goBack() {
+  if (window.history.state?.back) router.back();
+  else router.push({ name: "Lead", params: { leadId: props.leadId } });
+}
 const readyTooltip = computed(() => {
   if (dirty.value) return __("Save your changes first");
   return (
@@ -1260,9 +1308,30 @@ const sendResource = createResource({
   },
 });
 
-function send() {
-  if (sendResource.loading) return;
+async function send() {
+  if (sendResource.loading || readyResource.loading) return;
   sendError.value = "";
+  if (!sendForm.recipients.trim()) {
+    sendError.value = __("Type the client's email address.");
+    return;
+  }
+  // a draft is marked ready on the way out (the ERP site sends only a ready one)
+  if (editable.value) {
+    try {
+      setProposal(
+        await call("helpdesk.api.proposals.finalise_proposal", {
+          name: props.proposalId,
+          ready: 1,
+        })
+      );
+    } catch (e) {
+      sendError.value = errorText(
+        e,
+        __("Couldn't mark it ready. Check your connection and try again.")
+      );
+      return;
+    }
+  }
   sendResource.submit({
     name: props.proposalId,
     recipients: sendForm.recipients,

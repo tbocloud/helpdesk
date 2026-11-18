@@ -2,6 +2,17 @@
   <div class="flex h-full flex-col">
     <LayoutHeader>
       <template #left-header>
+        <Button
+          class="mr-2 shrink-0"
+          variant="ghost"
+          :label="__('Back')"
+          :tooltip="__('Back')"
+          @click="goBack"
+        >
+          <template #icon>
+            <LucideArrowLeft class="size-4" aria-hidden="true" />
+          </template>
+        </Button>
         <nav
           class="flex min-w-0 items-center gap-1.5 text-lg-medium"
           :aria-label="__('Breadcrumb')"
@@ -260,6 +271,7 @@ import { errorText } from "@/utils";
 import { Button, call, createResource, FormControl, toast } from "frappe-ui";
 import { computed, reactive, ref, useId, watch } from "vue";
 import { useRouter } from "vue-router";
+import LucideArrowLeft from "~icons/lucide/arrow-left";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideFileText from "~icons/lucide/file-text";
@@ -301,6 +313,12 @@ loadProposalOptions();
 const options = computed(
   () => proposalOptions.data as ProposalOptions | undefined
 );
+
+/** To where they came from; straight to the lead when the page was opened from a link. */
+function goBack() {
+  if (window.history.state?.back) router.back();
+  else router.push({ name: "Lead", params: { leadId: props.leadId } });
+}
 
 /** One state for the chat and the summary: whichever presales uses, the other follows. */
 const state = reactive<ChatState>({

@@ -902,9 +902,9 @@ function words(text: string) {
 }
 
 /**
- * About how many A4 pages the PDF runs to: the cover and the contents, then the words (about
- * 380 a page) and the table rows (about 22 a page) of the sections that are on. A guide, not a
- * promise: the PDF itself is the count.
+ * About how many A4 pages the PDF runs to: the cover with the contents (one page), then the
+ * words (about 450 a page in the compact layout) and the table rows (about 26 a page) of the
+ * sections that are on. A guide, not a promise: the PDF itself is the count.
  */
 export function estimatePages(sections: ProposalSection[]): number {
   let text = 0;
@@ -922,5 +922,5 @@ export function estimatePages(sections: ProposalSection[]): number {
     if (s.section_type === "Investment") rows += 10;
     if (s.section_type === "Acceptance") text += 150;
   }
-  return 2 + Math.max(1, Math.ceil(text / 380 + rows / 22));
+  return 1 + Math.max(1, Math.ceil(text / 450 + rows / 26));
 }

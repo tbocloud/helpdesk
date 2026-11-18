@@ -280,11 +280,17 @@ lead's first proposal with a website (the summary is kept on the lead); none wit
 
 ### Builder (`/helpdesk/leads/<lead>/proposals/<name>`, `Proposal.vue`)
 
-- **Header:** breadcrumb, status, **Share** (Copy link, Download PDF, Print, Preview link),
-  **Save changes** ("Saved" and off until something changes) or **Create revision** once sent,
-  and one primary action: on a draft **Mark ready** (off with unsaved edits and while the ERP
-  site gives share blockers, the first as its tooltip); once marked, **Reopen** and **Send**
-  (**Send again** once sent). Send is off while the ERP site gives reasons.
+- **Header:** a **Back** button (←: to the page before, or to the lead when the page was opened
+  from a link; the New proposal page has the same), breadcrumb, status, **Share** (Copy link,
+  Download PDF, Print, Preview link), **Save changes** ("Saved" and off until something changes)
+  or **Create revision** once sent, and **Send** as the one primary action (**Send again** once
+  sent). On a draft **Mark ready** sits beside it as a secondary button; once marked, **Reopen**.
+  Send is off with unsaved edits and while the ERP site gives reasons (a draft's share blockers,
+  a marked one's send blockers), the first as its tooltip.
+- **Send dialog:** **To** typed by hand (the lead's email, or whom it was last sent to, filled
+  in; several addresses separated by commas), a message and *Attach the PDF too*. On a draft it
+  says that sending marks it ready first, and Send marks it ready (`finalise_proposal`) and then
+  sends; if marking fails nothing is sent and the reason shows in the dialog.
 - **Mark ready** fixes the draft's content and numbers (the form turns read-only, with "Ready to
   send. The content and the numbers are fixed; Reopen to change them."); **Reopen** makes it
   editable again. The ERP site refuses any change while it is marked.
@@ -298,7 +304,9 @@ lead's first proposal with a website (the summary is kept on the lead); none wit
   nothing.
 - **Download PDF** (the ERP site's A4 PDF, a draft's through its preview) and **Print** (the
   client's page with the print dialog).
-- **Can't send yet:** every reason in the ERP site's words. **With the client**
+- **Can't send yet:** every reason in the ERP site's words; while a draft has no quotation (and
+  the person may price it), a **Price the proposal** button there opens the pricing dialog, the
+  same as the Investment section's. **With the client**
   (`ProposalTracking.vue`) once sent.
 - **Change template** (a proposal, while it is a draft and not marked ready; off with unsaved
   edits): the Details show **Template: <name>** and the button, which opens the start page's
