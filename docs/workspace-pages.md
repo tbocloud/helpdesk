@@ -649,7 +649,10 @@ board (`pages/tasky/Kanban.vue`, route `MyBoard`, no `projectId`) showing the cu
 tasks from every project they're assigned in, by status: Open, In progress, In review, On hold,
 Completed, Cancelled. `get_kanban_tasks()` without `project` returns tasks assigned to
 the user (through `frappe.get_list`, so permissions and department walls apply), with finished
-and cancelled ones only if changed in the last 30 days. Each card names its project. Dragging,
+and cancelled ones only if changed in the last 30 days. Each card names its project.
+Every column lists the newest-created task first, except Completed, which lists the last
+finished first (`completed_on`, a date, so same-day ties go by last change); this ordering
+applies to project boards too. Dragging,
 the timer, hold/resume, complete, edit, ask for help and hand over work as on a project board,
 each using the task's own project; project-level actions (Plan, Approve/Send back, Make
 recurring) stay on the project's board.
