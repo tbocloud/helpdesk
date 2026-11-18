@@ -42,9 +42,17 @@
           class="col-span-3 flex min-w-0 items-center gap-2.5 md:col-span-1"
         >
           <PersonAvatar :name="p.user_name" size="md" />
-          <span class="truncate text-[13px] font-semibold text-ink-gray-9">{{
-            p.user_name
-          }}</span>
+          <!-- one row per person per department, so someone in two shows twice: name it -->
+          <span class="flex min-w-0 flex-col">
+            <span class="truncate text-[13px] font-semibold text-ink-gray-9">{{
+              p.user_name
+            }}</span>
+            <span
+              v-if="p.department"
+              class="truncate text-p-xs text-ink-gray-6"
+              >{{ p.department }}</span
+            >
+          </span>
         </span>
         <span class="col-span-3 text-p-sm text-ink-gray-7 md:col-span-1">{{
           batchText(p)
