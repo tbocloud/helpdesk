@@ -10,7 +10,7 @@ sees their own on **Sales targets**.
 
 | Role | What they get |
 | --- | --- |
-| `Sales Head` (or System Manager) | **Assign Sales targets** (Sales → Team): picks people and assigns the month's targets. |
+| `Sales Head` (or System Manager) | **Assign sales targets** (Sales → Team): picks people and assigns the month's targets. |
 | `Presales Executive`, `Sales User` | **Sales targets** (Sales): their own targets as cards, month by month, read-only. |
 
 `Sales Head` and `Presales Executive` are created on migrate (`ensure_role` in
@@ -38,22 +38,31 @@ Proposal Count (Number). The head can remove any of them and add their own, up t
 - Assigning to several people checks everyone first and saves nobody's if one can't be given
   targets.
 
-## Assign Sales targets page (`/helpdesk/sales-targets`)
+## Assign sales targets page (`/helpdesk/sales-targets`)
 
-`desk/src/pages/sales-targets/SalesTargets.vue`. The month is in the URL (`?month=2026-12`),
-from three months ahead to a year back.
+`desk/src/pages/sales-targets/SalesTargets.vue`, redesigned 2026-11-18. The month is in the URL
+(`?month=2026-12`), from three months ahead to a year back, picked with `MonthStepper.vue` (a
+month select with an earlier and a later step either side; both pages share it).
 
-- **People** (left): everyone with a target role, filtered by role (All, Presales Executive,
-  Sales User) and by search. **Select all** picks everyone shown. A click on a row picks only
-  that person, and a checkbox adds or drops one. Each row says whether the person has targets
-  for the month.
-- **Targets** (right, `TargetCriteriaForm.vue`): the criteria, numbered, filled in one by one.
-  Amounts show the currency sign and percents a % sign. **Add a criterion** takes a name and a
-  value type. **Assign to N employees** saves them. One person with targets opens on their
-  saved targets. Anyone else starts from the five defaults, and the panel says whose targets
-  will be replaced.
+- **Team** (left card): "4 of 6 have targets for November 2026" over a green meter. **Pick the
+  N without targets** picks everyone still without them, the usual job. The filter bar holds
+  search, a role select (All roles, Presales Executive, Sales User) and a Not set / Set
+  toggle. Then a table: a select-everyone-shown box in the heading row, and one row a person
+  (avatar, name, roles in plain text, and for the month either "5 targets" with a check and
+  their first Amount target, or "Not set"). A click on a row picks only that person, and a
+  checkbox adds or drops one. The footer says how many are shown and picked, with Clear.
+- **Targets** (right, sticky, `TargetCriteriaForm.vue`): "Assigning to" with the person's face
+  (or the first three overlapping and "+N") and a clear button. The criteria are a numbered
+  list, one row each: name and kind (with its icon) on the left, the figure right-aligned on
+  the right (amounts with the currency sign, percents with %), a remove button; a Text target
+  takes a text box under its name. A problem shows on its own line under the row, in red with
+  an icon, and the field gets a red border. **Add a target** takes a name, a kind and Add. The
+  list scrolls; **Assign to N people** stays at the foot of the panel. One person with targets
+  opens on their saved targets. Anyone else starts from the five defaults, and the panel says
+  whose targets will be replaced.
 - States: loading, load error with Try again, not a Sales Head, no one with a target role,
-  no one matching the filter, nobody picked.
+  no one matching the filters (with Show everyone; filtered to Not set and none left says
+  everyone shown has targets), nobody picked.
 
 The currency is the CRM dashboards' reporting currency (`HD CRM Settings.dashboard_currency`),
 else the site default, else INR.
@@ -61,14 +70,16 @@ else the site default, else INR.
 ## Sales targets page, for the people given targets (`/helpdesk/my-targets`)
 
 `desk/src/pages/sales-targets/MyTargets.vue` (the file and route keep the earlier name *My
-targets*; the sidebar and the page say **Sales targets**, 2026-11-17). Only Presales Executives
-and Sales Users see it. *Your targets for November 2026* and the count head a grid of cards
-(`TargetCard.vue`), one per criterion in the order the Sales Head set them: *Target 1*, the
-criterion's name, its type's icon, the target (amounts with the currency sign, percents with
-%) and the type. A Text target is a card too, its text as written; a long one takes two
-columns. The footer says who set them and when. The month picker offers this month and every
-month the person has targets in. A month with no targets says so and links to the newest month
-that has some.
+targets*; the sidebar says **Sales targets** and the page **Your sales targets**). Only
+Presales Executives and Sales Users see it. One card a month: its heading is the month and the
+count, with who set them (avatar, "Set by …", "Last changed …") on the right. Under it the
+figures sit in a hairline grid (`TargetFigure.vue`), one cell per numeric target in the order
+the Sales Head set them: a neutral icon for its kind, its name and the figure (amounts with the
+currency sign, percents with %). Text targets follow as a list, name on the left and the text as
+written on the right. The card's foot says to ask the Sales Head about a target. No colour per
+target: the figures are what matter (docs/ui-guidelines.md §8). The month stepper offers this
+month and every month the person has targets in. A month with no targets says so and links to
+the newest month that has some.
 
 ## API (`helpdesk.api.sales_targets`)
 

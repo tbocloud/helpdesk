@@ -374,7 +374,7 @@ export const agentNavAreas: NavArea[] = [
           // each month's targets for the presales and sales people (docs/sales-targets.md)
           {
             id: "sales-targets",
-            label: __("Assign Sales targets"),
+            label: __("Assign sales targets"),
             icon: LucideTarget,
             to: "SalesTargets",
             salesHeadOnly: true,

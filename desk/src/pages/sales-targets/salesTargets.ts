@@ -70,6 +70,12 @@ export function targetText(criterion: Criterion, currency: string) {
   return value_type === "Percent" ? `${number}%` : number;
 }
 
+/** The first amount in a person's targets, e.g. "₹5,00,000": the figure a team list leads with. */
+export function headlineAmount(target: Target, currency: string) {
+  const amount = target.criteria.find((c) => c.value_type === "Amount");
+  return amount ? targetText(amount, currency) : "";
+}
+
 /** The months a Sales Head may set targets for: three ahead and a year back. */
 export function monthOptions(ahead = 3, back = 12) {
   return Array.from({ length: ahead + back + 1 }, (_v, i) => {
