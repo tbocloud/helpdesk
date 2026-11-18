@@ -47,8 +47,10 @@ leads or any money except your own.
    Bank)**. Defaults: India 2%, UAE 3%, KSA 3%, cap 25,000 per lead.
 4. **Departments per region.** India goes to the department called **TBO** until you pick another.
    Make the **UAE** and **KSA** departments in Settings → CRM → Lead departments when those teams
-   exist, then pick them in the same Referral card. Until then those leads wait in a list on the
-   Team page and the Sales Managers and TBO Management are notified.
+   exist, then pick them in the same Referral card. In a division with its own ERP site, its
+   Division Admin does both in Settings → Central administration → **Lead setup**. Until then
+   those leads wait in a list on the Team page and the Sales Managers and TBO Management are
+   notified.
 5. **Managers' dashboard:** Lead Bank → Team (Sales Manager, System Manager, TBO Management).
 6. **Statements:** Leads → Commission → Generate drafts as usual; referral lines appear in the
    collector's statement.

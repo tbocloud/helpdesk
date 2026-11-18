@@ -107,6 +107,14 @@ export const useAuthStore = defineStore("auth", () => {
   const canManageDivisions: ComputedRef<boolean> = computed(
     () => !!user__.value.can_manage_divisions
   );
+  // a Division Admin of the active division is a Sales Manager on its ERP site
+  // (divisions.ERP_SALES_ROLES), so they set up its lead departments; a Group Admin isn't
+  const isActiveDivisionAdmin: ComputedRef<boolean> = computed(
+    () =>
+      canUseLeads.value &&
+      divisions.value.find((d) => d.name === activeDivision.value)?.role ===
+        "Division Admin"
+  );
   const canViewDivisionOverview: ComputedRef<boolean> = computed(
     () => !!user__.value.can_view_division_overview
   );
@@ -230,6 +238,7 @@ export const useAuthStore = defineStore("auth", () => {
     activeDivision,
     isSuperAdmin,
     canManageDivisions,
+    isActiveDivisionAdmin,
     canViewDivisionOverview,
     canAssignSalesTargets,
     hasSalesTargets,
