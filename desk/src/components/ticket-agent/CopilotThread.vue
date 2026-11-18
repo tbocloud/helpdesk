@@ -405,6 +405,8 @@ const OPEN_VERBS = new Set([
   "release_approve",
   "release_now",
   "release_reject",
+  "action_approve",
+  "action_reject",
   "mute",
   "unmute",
 ]);

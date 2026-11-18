@@ -356,7 +356,14 @@ def keep(chat, replies: list[dict]) -> list[dict]:
             links = {}
             for action in reply.get("actions") or []:
                 if action.get("data", {}).get("approval"):
-                    links["approval"] = action["data"]["approval"]
+                    # an action's buttons name its HDS Action Approval under the same key as a
+                    # fix's name its HDS Copilot Approval (round 4)
+                    field = (
+                        "action_approval"
+                        if str(action.get("verb") or "").startswith("action_")
+                        else "approval"
+                    )
+                    links[field] = action["data"]["approval"]
                     break
             reply["message"] = record(
                 chat, "Out", reply.get("title") or "", reply, **links
@@ -395,41 +402,214 @@ def open_items(user: str) -> list[dict]:
     return items
 
 
+def decisions_waiting(user: str, ticket: str | None = None) -> list[dict]:
+    """What waits for `user` to decide (round 4): fixes, Press/AWS/repair actions, releases and
+    developers' pull requests asked of them; on a ticket, what waits on that ticket that they may
+    decide. [{kind, name, ticket, title}], oldest first."""
+    from helpdesk.copilot import actions, pulls, releases
+
+    items = []
+    fixes = {
+        "status": "Pending",
+        **({"ticket": ticket} if ticket else {"assigned_to": user}),
+    }
+    for row in frappe.get_all(
+        "HDS Copilot Approval",
+        filters=fixes,
+        fields=["name", "ticket"],
+        order_by="creation asc",
+        limit=10,
+    ):
+        items.append(
+            {
+                "kind": "fix",
+                "name": row.name,
+                "ticket": row.ticket,
+                "title": _("The fix for ticket {0}").format(row.ticket),
+            }
+        )
+    waiting = {
+        "status": actions.PENDING,
+        **({"ticket": ticket} if ticket else {"assigned_to": user}),
+    }
+    for row in frappe.get_all(
+        actions.ACTION,
+        filters=waiting,
+        fields=["name", "ticket", "title"],
+        order_by="creation asc",
+        limit=10,
+    ):
+        if ticket and actions.may_decide(
+            frappe.get_doc(actions.ACTION, row.name), user
+        ):
+            continue  # on a ticket: only what this person may decide
+        items.append(
+            {
+                "kind": "action",
+                "name": row.name,
+                "ticket": row.ticket,
+                "title": row.title,
+            }
+        )
+    if ticket:
+        return items
+    for row in frappe.get_all(
+        releases.DEPLOY,
+        filters={"status": "Waiting for approval", "assigned_to": user},
+        fields=["name", "repository", "branch"],
+        order_by="creation asc",
+        limit=10,
+    ):
+        items.append(
+            {
+                "kind": "release",
+                "name": row.name,
+                "ticket": None,
+                "title": _("The release of {0} {1}").format(row.repository, row.branch),
+            }
+        )
+    for row in frappe.get_all(
+        pulls.PR,
+        filters={"state": "Ready for approval", "assigned_to": user},
+        fields=["name", "repo", "number"],
+        order_by="creation asc",
+        limit=10,
+    ):
+        items.append(
+            {
+                "kind": "pull",
+                "name": row.name,
+                "ticket": None,
+                "title": _("Pull request {0}#{1}").format(row.repo, row.number),
+            }
+        )
+    return items
+
+
+def decision_card(item: dict, user: str) -> dict:
+    """The item's own card, with its buttons."""
+    from helpdesk.copilot import actions, pulls, releases
+
+    if item["kind"] == "fix":
+        return fix_card(frappe.get_doc("HDS Copilot Approval", item["name"]))
+    if item["kind"] == "action":
+        return actions.card(item["name"])
+    if item["kind"] == "release":
+        return releases.release_card(item["name"], viewer=user)
+    return pulls.card(frappe.get_doc(pulls.PR, item["name"]))
+
+
+def _just_shown(chat, items: list[dict]) -> dict | None:
+    """The item a recent card of Copilot's in this chat was about (its last 10 messages)."""
+    known = {(item["kind"], item["name"]): item for item in items}
+    for row in frappe.get_all(
+        MESSAGE,
+        filters={"chat": chat.name, "direction": "Out"},
+        fields=["approval", "release", "action_approval", "card"],
+        order_by="creation desc",
+        limit=10,
+    ):
+        for kind, name in (
+            ("action", row.action_approval),
+            ("fix", row.approval),
+            ("release", row.release),
+        ):
+            if name and (kind, name) in known:
+                return known[(kind, name)]
+        for button_ in (frappe.parse_json(row.card or "{}") or {}).get("actions") or []:
+            data = button_.get("data") or {}
+            for kind, key in (
+                ("action", "approval"),
+                ("pull", "pull_request"),
+                ("release", "release"),
+            ):
+                if data.get(key) and (kind, data[key]) in known:
+                    return known[(kind, data[key])]
+    return None
+
+
+def decision_cards(user: str, chat, intent: dict) -> list[dict] | None:
+    """A typed "approve" or "reject" (round 4): the card of what it means, with its buttons; the
+    decision is a button press, never the typed word. The item is the one on the ticket named (or
+    the ticket's own chat), else the one Copilot just showed, else the only one waiting; with
+    several, each card. None: a fix alone, or nothing at all, goes the fix's own way."""
+    items = decisions_waiting(user, ticket_name(intent.get("ticket")))
+    if not items:
+        return None
+    shown = _just_shown(chat, items)
+    picked = [shown] if shown else items[:5]
+    if len(picked) == 1 and picked[0]["kind"] == "fix":
+        return None  # the fix's own flow: its card, a reason, a change
+    cards = [decision_card(item, user) for item in picked]
+    if len(picked) > 1:
+        cards.insert(
+            0,
+            text_card(
+                _(
+                    "{0} things wait for your decision. Press the buttons on the one you mean."
+                ).format(len(picked))
+            ),
+        )
+    return cards
+
+
+def _earlier_line(m) -> str:
+    """One earlier message for the reading: the words, or a card's title and first line."""
+    who = "Engineer" if m.direction == "In" else "Copilot"
+    words = m.text or ""
+    card_ = frappe.parse_json(m.card or "{}") if m.card else {}
+    if card_:
+        first = next((line for line in card_.get("lines") or [] if line), "")
+        words = " · ".join(
+            part for part in (card_.get("title") or words, first) if part
+        )
+    return f"{who}: {words[:400]}" if words else ""
+
+
+# a bare yes or no to what was just shown, even when the model reads it as nothing (round 4)
+APPROVE_RE = re.compile(
+    r"^\s*(yes,?\s*)?(approve|approved|approve it|go ahead and approve)\s*[.!]*\s*$",
+    re.I,
+)
+REJECT_RE = re.compile(r"^\s*(reject|rejected|reject it)\b", re.I)
+
+
 def read_intent(
     user: str, text: str, chat, has_files: bool = False
 ) -> tuple[dict, float]:
-    """The model's reading of the message, checked: an unknown intent becomes `unclear`."""
+    """The model's reading of the message, checked: an unknown intent becomes `unclear`. It reads
+    the message with the chat's last messages (cards with their first line) and everything waiting
+    for the person's decision (round 4)."""
     from helpdesk.ai_engine import call_haiku
 
     items = open_items(user)
-    listed = (
-        "\n".join(
-            f"- fix for ticket {i['ticket']} ({i.get('task') or 'no task'}): {(i.get('summary') or '')[:160]}"
-            for i in items
-        )
-        or "- none"
+    listed = "\n".join(
+        f"- fix for ticket {i['ticket']} ({i.get('task') or 'no task'}): {(i.get('summary') or '')[:160]}"
+        for i in items
     )
+    others = "\n".join(
+        f"- {item['kind']} on ticket {item['ticket'] or '-'}: {item['title'][:160]}"
+        for item in decisions_waiting(user)
+        if item["kind"] != "fix"
+    )
+    listed = "\n".join(part for part in (listed, others) if part) or "- none"
     last = frappe.get_all(
         MESSAGE,
         filters={"chat": chat.name},
-        fields=["direction", "text"],
+        fields=["direction", "text", "card"],
         order_by="creation desc",
-        limit=5,
+        limit=6,
         start=1,  # the message being read is already recorded
     )
     earlier = (
-        "\n".join(
-            f"{'Engineer' if m.direction == 'In' else 'Copilot'}: {(m.text or '')[:300]}"
-            for m in reversed(last)
-            if m.text
-        )
+        "\n".join(line for line in (_earlier_line(m) for m in reversed(last)) if line)
         or "(none)"
     )
     note = "\nThey attached files to this message." if has_files else ""
     try:
         result = call_haiku(
             INTENT_PROMPT,
-            f"Fixes waiting for them:\n{listed}\n\nEarlier in this chat:\n{earlier}{note}\n\nThe message:\n<<<\n{text[:4000]}\n>>>",
+            f"Waiting for their decision (fixes, actions, releases, pull requests):\n{listed}\n\nEarlier in this chat:\n{earlier}{note}\n\nThe message:\n<<<\n{text[:4000]}\n>>>",
             job="chat",
         )
     except Exception:
@@ -438,6 +618,11 @@ def read_intent(
     intent = result.get("response") if isinstance(result.get("response"), dict) else {}
     if intent.get("intent") not in INTENTS:
         intent["intent"] = "unclear"
+    if intent["intent"] == "unclear":
+        if APPROVE_RE.match(text or ""):
+            intent["intent"] = "approve"
+        elif REJECT_RE.match(text or ""):
+            intent["intent"] = "reject"
     # a ticket or task written in the message counts even when the model missed it
     if not intent.get("task") and (found := TASK_RE.search(text)):
         intent["task"] = found.group(0).upper()
@@ -463,8 +648,17 @@ def handle(
         return [help_card()]
     if kind == "report_problem":
         return [report_problem(user, channel, intent)]
+    if kind in ("approve", "reject"):
+        picked = decision_cards(user, chat, intent)
+        if picked is not None:
+            return picked
     if kind == "waiting":
-        return [waiting_card(user)]
+        # round 4, R5: every action, release and pull request with its own buttons, after the list
+        return [waiting_card(user)] + [
+            decision_card(item, user)
+            for item in decisions_waiting(user)
+            if item["kind"] != "fix"
+        ][:5]
     if kind == "new_work" or (files and kind == "unclear"):
         return propose_new_work(user, channel, chat, intent, text, files)
     if kind in ("repair_pause", "repair_resume"):
@@ -572,7 +766,7 @@ def resolve(user: str, intent: dict, kind: str):
                     None,
                     text_card(
                         _(
-                            "No fix is waiting for your approval. Which ticket or task do you mean?"
+                            "Nothing is waiting for your approval. Which ticket or task do you mean?"
                         )
                     ),
                 )

@@ -20,7 +20,8 @@ Who does what, what Copilot sends you, and what you press. The full reference is
   Customer tab) show in the chat as "<your name> to the customer".
 - **Buttons that ask for a reason** (Reject…, Undo…) open a box. A button that is refused says why in a message at the top.
 - **The paperclip** attaches files to the chat (the panel and the ticket chat).
-- **"What is waiting for me?"** in the Copilot panel or Teams lists your fix approvals, release and action approvals, and tickets waiting for you to choose who takes them. The same list comes at 09:00 each working day.
+- **"What is waiting for me?"** in the Copilot panel or Teams lists your fix approvals, release and action approvals, and tickets waiting for you to choose who takes them, then each approval's card with its buttons. The same list comes at 09:00 each working day.
+- **Answering in words:** "approve" or "reject" brings the card of what you mean, with its buttons, to press: the one Copilot just showed you, or the one on the ticket you are on. A typed word never approves anything by itself.
 - **A task's "Open in TBO Copilot"** opens the task in the desktop app with its project's folders. Without the app, the notice offers **Install**.
 
 ## A project coordinator
@@ -58,7 +59,7 @@ Who does what, what Copilot sends you, and what you press. The full reference is
 
 ## DevOps (Infrastructure people)
 
-- **Press, AWS and repair actions** come to the Infrastructure people as cards; a risky one goes to Infrastructure Senior (else a Leader). Nobody approves their own request.
+- **Press, AWS and repair actions** come to the Infrastructure people as cards; a risky one goes to Infrastructure Senior (else a Leader). Nobody approves their own request. The same card is in Teams and in your TBO Copilot panel, and the ticket's Chat tab shows **Approve** / **Reject…** at the top for you; decide in any of them, once.
 - **Copilot on alerts (Phase 25):** when the watcher opens an alert, the TBO Copilot bot tells you ("Alert: …"), Copilot looks into it and posts what it found. When one of its listed actions (back up, restart a bench, migrate or update a site) would help on a place it may change, you get an **Approve / Reject** card; nothing runs before that. Otherwise its card says what a person should do. Reply in Teams to ask it why. After an approved action, the watcher's next checks decide: healthy is "Fixed by Copilot"; still failing after 30 minutes goes to a Leader.
 - **The watcher's alert tickets** go to the internal customer's ticket owner (else the backup, else the internal project's team); its **follow-up tasks** (a disk filling, a certificate expiring) go to the Infrastructure person working today, else a Leader, with a comment saying why. "pause auto-repair: <why>" and "resume auto-repair" in Teams work for you and the Leaders.
 - **HDS Hub Settings → Monitoring** shows **Watcher last seen**; "Quiet" means no heartbeat for the quiet time.

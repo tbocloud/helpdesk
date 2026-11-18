@@ -365,6 +365,9 @@ OPEN_VERBS = {
     "release_approve",
     "release_now",
     "release_reject",
+    # round 4: an action's approver decides it here too; actions.may_decide still says who may
+    "action_approve",
+    "action_reject",
     "mute",
     "unmute",
 }
@@ -577,7 +580,7 @@ def now(ticket: str, user: str) -> dict:
     """The ticket's state for this person: one line, the buttons for the step it is at, and the
     rest of what they may do in a menu. Someone who may only read the chat keeps the buttons
     anyone may press (OPEN_VERBS)."""
-    state = _now(ticket, user)
+    state = _with_actions(_now(ticket, user), ticket, user)
     state["can_write"] = may_write(user, ticket)
     if not state["can_write"]:
         state["actions"] = [a for a in state["actions"] if a["verb"] in OPEN_VERBS]
@@ -681,6 +684,46 @@ def _now(ticket: str, user: str) -> dict:
         "muted": muted(ticket, user),
         "categories": info.get("categories") or [],
     }
+
+
+def _with_actions(state: dict, ticket: str, user: str) -> dict:
+    """An action waiting on the ticket (Copilot's infra proposal, a person's Press or AWS request):
+    the line says who it waits for, and the person who may decide it gets Approve and Reject here,
+    as in Teams and the panel (round 4)."""
+    from helpdesk.copilot import actions
+
+    waiting = frappe.get_all(
+        actions.ACTION,
+        filters={"ticket": str(ticket), "status": actions.PENDING},
+        fields=["name", "title", "assigned_to"],
+        order_by="creation asc",
+        limit=5,
+    )
+    if not waiting:
+        return state
+    first = waiting[0]
+    who = get_fullname(first.assigned_to) if first.assigned_to else _("an approver")
+    state["line"] = _("Waiting for {0}: {1}").format(who, first.title) + (
+        " " + _("({0} more waiting)").format(len(waiting) - 1)
+        if len(waiting) > 1
+        else ""
+    )
+    if not actions.may_decide(frappe.get_doc(actions.ACTION, first.name), user):
+        b = assistant.button
+        buttons = [
+            b(_("Approve"), "action_approve", "positive", approval=first.name),
+            # the strip has no box of its own: the button asks for the reason
+            b(
+                _("Reject…"),
+                "action_reject",
+                "destructive",
+                approval=first.name,
+                needs="reason",
+            ),
+        ]
+        state["more"] = state["actions"] + state["more"]
+        state["actions"] = buttons
+    return state
 
 
 def state_line(info: dict) -> str:

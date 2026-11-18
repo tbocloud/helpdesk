@@ -1091,3 +1091,202 @@ class TestTheTeamsLink(TeamsCase):
             teams.answer_message(self.activity(type="message", text="hi"))
 
         self.assertTrue(kept and kept[0])  # saved before the answer was tried
+
+
+class TestRound4(AssistantCase):
+    """The same cards everywhere, and chats that remember (testing fixes 4, DevOps's Test 1 on the
+    demo hub): a typed "approve" brings the card of what it means with its buttons, the ticket's
+    chat offers its approver Approve and Reject, the waiting list carries the buttons."""
+
+    def setUp(self):
+        super().setUp()
+        self.asker = create_agent("round4.asker@example.com").name
+        make_copilot_settings(
+            enabled=1,
+            copilot_people=[
+                {
+                    "role": "Infrastructure",
+                    "person": self.dev,
+                    "level": "Main",
+                    "active": 1,
+                }
+            ],
+        )
+        self.ticket = make_ticket(
+            subject="Site down: demo-beta", customer=self.customer
+        ).name
+
+    def action(self, ticket=None, title="Copilot: Restart bench-0015-000052-f1"):
+        return frappe.get_doc(
+            {
+                "doctype": "HDS Action Approval",
+                "kind": "Press",
+                "title": title,
+                "details": "press.api.bench.restart name=bench-0015-000052-f1",
+                "payload": json.dumps(
+                    {
+                        "method": "press.api.bench.restart",
+                        "args": {"name": "bench-0015-000052-f1"},
+                    }
+                ),
+                "status": "Pending",
+                "risk": "normal",
+                "requested_by": self.asker,
+                "requested_via": "Copilot",
+                "ticket": ticket or self.ticket,
+                "assigned_to": self.dev,
+                "assigned_at": now_datetime(),
+                "expires_at": add_to_date(now_datetime(), minutes=60),
+            }
+        ).insert(ignore_permissions=True)
+
+    def buttons(self, reply):
+        return [
+            (a["verb"], (a.get("data") or {}).get("approval"))
+            for a in reply.get("actions") or []
+        ]
+
+    def test_typed_approve_brings_the_actions_card_and_decides_nothing(self):
+        approval = self.action()
+        replies = self.say("approve")
+        self.assertEqual(
+            self.buttons(replies[-1]),
+            [
+                ("action_approve", approval.name),
+                ("action_reject", approval.name),
+            ],
+        )
+        self.assertEqual(
+            frappe.db.get_value("HDS Action Approval", approval.name, "status"),
+            "Pending",
+        )
+
+    def test_with_two_waiting_the_one_just_shown_is_meant(self):
+        self.action(title="Copilot: Restart bench-0015-000052-f1")
+        second = self.action(title="Copilot: Back up demo-alpha")
+        chat = assistant.chat_for(self.dev, "Web")
+        assistant.record(
+            chat,
+            "Out",
+            second.title,
+            {"title": second.title, "lines": [], "actions": []},
+            action_approval=second.name,
+        )
+        replies = self.say("approve")
+        self.assertEqual(len(replies), 1)
+        self.assertEqual(self.buttons(replies[0])[0], ("action_approve", second.name))
+
+    def test_with_two_waiting_and_none_shown_each_card_comes(self):
+        first = self.action()
+        second = self.action(title="Copilot: Back up demo-alpha")
+        replies = self.say("approve")
+        self.assertIn("2 things wait for your decision", replies[0]["lines"][0])
+        self.assertEqual(
+            [self.buttons(r)[0] for r in replies[1:]],
+            [("action_approve", first.name), ("action_approve", second.name)],
+        )
+
+    def test_in_a_tickets_chat_approve_means_that_tickets_action(self):
+        from helpdesk.copilot import thread
+        from helpdesk.test_utils import make_assignment
+
+        other = make_ticket(
+            subject="Site down: demo-alpha", customer=self.customer
+        ).name
+        here = self.action()
+        self.action(ticket=other, title="Copilot: Restart bench-0099")
+        make_assignment("HD Ticket", self.ticket, self.dev)
+
+        replies = thread.receive(self.dev, self.ticket, "approve")
+
+        self.assertEqual(
+            [self.buttons(r)[0] for r in replies if self.buttons(r)],
+            [("action_approve", here.name)],
+        )
+
+    def test_the_tickets_strip_offers_approve_to_the_approver_only(self):
+        from helpdesk.copilot import thread
+
+        approval = self.action()
+        mine = thread.now(self.ticket, self.dev)
+        self.assertTrue(mine["line"].startswith("Waiting for"), mine["line"])
+        self.assertIn(approval.title, mine["line"])
+        self.assertEqual(
+            [a["verb"] for a in mine["actions"]], ["action_approve", "action_reject"]
+        )
+        theirs = thread.now(self.ticket, self.asker)  # who asked never decides
+        self.assertNotIn("action_approve", [a["verb"] for a in theirs["actions"]])
+
+    def test_approve_on_the_tickets_strip_decides_it(self):
+        from helpdesk.copilot import thread
+
+        approval = self.action()
+        thread.press(
+            self.dev, self.ticket, "action_approve", {"approval": approval.name}
+        )
+        self.assertEqual(
+            frappe.db.get_value(
+                "HDS Action Approval", approval.name, ["status", "decided_by"]
+            ),
+            ("Approved", self.dev),
+        )
+
+    def test_what_is_waiting_brings_each_actions_card(self):
+        approval = self.action()
+        replies = self.say("what is waiting for me?", {"intent": "waiting"})
+        self.assertIn(approval.title, json.dumps(replies[0]))
+        self.assertEqual(self.buttons(replies[1])[0], ("action_approve", approval.name))
+
+    def test_a_card_sent_to_teams_shows_in_the_panel_and_decides_once(self):
+        # R1, as built since Phase 11: the panel shows the Teams chat; deciding updates both copies
+        from helpdesk.copilot import actions
+
+        approval = self.action()
+        with patch.object(teams, "reachable", return_value=True), patch.object(
+            teams, "send_card", return_value="activity-1"
+        ):
+            self.assertEqual(actions.send_card(self.dev, approval), "Teams")
+        frappe.set_user(self.dev)
+        panel = copilot_chat.history()["messages"]
+        shown = [m for m in panel if m["via"] == "Teams" and m["card"]]
+        self.assertEqual(
+            self.buttons(shown[-1]["card"])[0], ("action_approve", approval.name)
+        )
+        with patch.object(teams, "enabled", return_value=True), patch.object(
+            teams, "update_card"
+        ) as updated:
+            copilot_chat.press("action_approve", {"approval": approval.name})
+        frappe.set_user("Administrator")
+        updated.assert_called_once()
+        self.assertIn(
+            "approved",
+            json.dumps(
+                frappe.parse_json(
+                    frappe.db.get_value(
+                        assistant.MESSAGE, {"action_approval": approval.name}, "card"
+                    )
+                )
+            ).lower(),
+        )
+
+    def test_the_reading_sees_whats_waiting_and_the_cards_above(self):
+        approval = self.action()
+        chat = assistant.chat_for(self.dev, "Web")
+        assistant.record(
+            chat,
+            "Out",
+            "What Copilot found",
+            {
+                "title": "What Copilot found",
+                "lines": ["demo-beta answers 502; Copilot proposes a restart."],
+            },
+        )
+        seen = []
+        with patch(
+            "helpdesk.ai_engine.call_haiku",
+            side_effect=lambda system, message, **kw: seen.append(message)
+            or {"response": {"intent": "unclear"}, "cost": 0},
+        ):
+            assistant.receive(self.dev, "Web", "what about that one?")
+        self.assertIn(approval.title, seen[0])
+        self.assertIn("demo-beta answers 502", seen[0])
