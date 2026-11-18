@@ -1,18 +1,14 @@
 <template>
   <div class="flex h-full flex-col">
     <LayoutHeader
-      :title="__('Sales targets')"
+      :title="__('Your sales targets')"
       :subtitle="__('What your Sales Head set for you, month by month.')"
     >
       <template #right-header>
-        <FormControl
+        <MonthStepper
           :model-value="month"
-          type="select"
-          size="md"
-          class="w-44"
-          :aria-label="__('Month')"
           :options="monthChoices"
-          @update:model-value="pickMonth(String($event))"
+          @update:model-value="pickMonth"
         />
       </template>
     </LayoutHeader>
@@ -26,7 +22,7 @@
           :icon="isRefusal ? LucideLock : LucideCircleAlert"
           :title="
             isRefusal
-              ? __('Sales targets isn\'t available to you')
+              ? __('Sales targets aren\'t open to you')
               : __('Couldn\'t load your targets')
           "
           :message="
@@ -42,16 +38,10 @@
 
         <div
           v-else-if="!mine.data || mine.loading"
-          class="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4"
+          class="h-72 animate-pulse rounded-xl bg-surface-gray-3"
           aria-busy="true"
           :aria-label="__('Loading')"
-        >
-          <div
-            v-for="i in 4"
-            :key="i"
-            class="h-28 animate-pulse rounded-xl bg-surface-gray-3"
-          />
-        </div>
+        />
 
         <TaskyState
           v-else-if="!target"
@@ -71,46 +61,123 @@
           />
         </TaskyState>
 
-        <template v-else>
-          <section class="flex flex-col gap-3" :aria-labelledby="cardsHeading">
-            <div class="flex flex-wrap items-baseline justify-between gap-2">
-              <h2
-                :id="cardsHeading"
-                class="text-base font-semibold text-ink-gray-9"
-              >
-                {{ __("Your targets for {0}", monthTitle(month)) }}
+        <section
+          v-else
+          class="min-w-0 overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
+          :aria-labelledby="heading"
+        >
+          <!-- the month, and who set its targets -->
+          <header
+            class="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b border-outline-gray-2 px-4 py-4 md:px-5"
+          >
+            <div class="flex min-w-0 flex-col gap-0.5">
+              <h2 :id="heading" class="text-base font-semibold text-ink-gray-9">
+                {{ monthTitle(month) }}
               </h2>
-              <span class="text-sm tabular-nums text-ink-gray-6">
+              <p class="text-sm text-ink-gray-6 tabular-nums">
                 {{
                   target.criteria.length === 1
                     ? __("1 target")
                     : __("{0} targets", String(target.criteria.length))
                 }}
-              </span>
+                <template v-if="overall?.percent != null">
+                  ·
+                  {{ __("{0}% of the month reached", String(overall.percent)) }}
+                  <template v-if="overall.behind">
+                    ·
+                    {{
+                      overall.behind === 1
+                        ? __("1 behind")
+                        : __("{0} behind", String(overall.behind))
+                    }}
+                  </template>
+                </template>
+              </p>
             </div>
-            <div
-              class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4"
-            >
-              <TargetCard
-                v-for="(criterion, i) in target.criteria"
-                :key="criterion.criterion"
-                :criterion="criterion"
-                :position="i + 1"
-                :currency="mine.data.currency"
-              />
+            <div class="flex min-w-0 items-center gap-2.5">
+              <PersonAvatar :name="setBy" size="lg" />
+              <div class="flex min-w-0 flex-col">
+                <span class="truncate text-sm font-medium text-ink-gray-8">
+                  {{ __("Set by {0}", setBy) }}
+                </span>
+                <span class="text-xs text-ink-gray-6 tabular-nums">
+                  {{
+                    __(
+                      "Last changed {0}",
+                      dayjs(target.modified).format("D MMM YYYY, h:mm a")
+                    )
+                  }}
+                </span>
+              </div>
             </div>
-          </section>
+          </header>
 
-          <p class="text-xs text-ink-gray-6">
-            {{
-              __(
-                "Set by {0} · last changed {1}",
-                target.assigned_by_name || target.assigned_by,
-                dayjs(target.modified).format("D MMM YYYY, h:mm a")
-              )
-            }}
+          <!-- the figures; each cell draws its right and bottom hairline, the outer ones clipped -->
+          <div
+            v-if="figures.length"
+            class="-mb-px -mr-px grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4"
+          >
+            <TargetFigure
+              v-for="criterion in figures"
+              :key="criterion.criterion"
+              :criterion="criterion"
+              :currency="mine.data.currency"
+              :progress="progress.data ?? null"
+              :owner="auth.userName"
+              :link="
+                auth.canUseLeads && progress.data
+                  ? leadsLink(criterion, progress.data, auth.userId)
+                  : null
+              "
+            />
+          </div>
+
+          <!-- targets written in words, as the Sales Head wrote them -->
+          <dl
+            v-if="written.length"
+            class="divide-y divide-outline-gray-1 border-t border-outline-gray-2"
+          >
+            <div
+              v-for="criterion in written"
+              :key="criterion.criterion"
+              class="grid gap-1 px-4 py-4 sm:grid-cols-[14rem_minmax(0,1fr)] sm:gap-4 md:px-5"
+            >
+              <dt class="flex min-w-0 items-center gap-2 self-start">
+                <span
+                  class="grid size-7 shrink-0 place-items-center rounded-lg bg-surface-gray-2 text-ink-gray-7"
+                  aria-hidden="true"
+                >
+                  <LucideText class="size-3.5" />
+                </span>
+                <span class="min-w-0 text-sm font-medium text-ink-gray-7">{{
+                  criterion.criterion
+                }}</span>
+              </dt>
+              <dd class="flex min-w-0 flex-col gap-3 sm:pt-1">
+                <span
+                  class="whitespace-pre-line break-words text-p-base text-ink-gray-9"
+                  >{{ criterion.target }}</span
+                >
+                <KpiStatus
+                  :criterion="criterion"
+                  :month="month"
+                  mode="person"
+                  @changed="mine.data.target = $event"
+                />
+              </dd>
+            </div>
+          </dl>
+
+          <p
+            class="flex items-center gap-2 border-t border-outline-gray-2 bg-surface-gray-1 px-4 py-3 text-xs text-ink-gray-6 md:px-5"
+          >
+            <LucideMessageCircleQuestion
+              class="size-3.5 shrink-0"
+              aria-hidden="true"
+            />
+            {{ __("Questions about a target? Ask {0}.", setBy) }}
           </p>
-        </template>
+        </section>
       </div>
     </div>
   </div>
@@ -118,21 +185,35 @@
 
 <script setup lang="ts">
 import LayoutHeader from "@/components/LayoutHeader.vue";
+import PersonAvatar from "@/components/PersonAvatar.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";
+import { useAuthStore } from "@/stores/auth";
 import { errorText } from "@/utils";
-import { Button, createResource, dayjs, FormControl } from "frappe-ui";
+import { Button, createResource, dayjs } from "frappe-ui";
 import { computed, useId, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideGoal from "~icons/lucide/goal";
 import LucideLock from "~icons/lucide/lock";
-import { monthTitle, monthValue, type MyTargets } from "./salesTargets";
-import TargetCard from "./TargetCard.vue";
+import LucideMessageCircleQuestion from "~icons/lucide/message-circle-question";
+import LucideText from "~icons/lucide/text";
+import KpiStatus from "./KpiStatus.vue";
+import MonthStepper from "./MonthStepper.vue";
+import {
+  leadsLink,
+  monthTitle,
+  monthValue,
+  overallOf,
+  type MyTargets,
+  type Progress,
+} from "./salesTargets";
+import TargetFigure from "./TargetFigure.vue";
 
+const auth = useAuthStore();
 const route = useRoute();
 const router = useRouter();
-const cardsHeading = useId();
+const heading = useId();
 
 // the month is in the URL, so a link or a reload opens the same one
 const month = computed(() =>
@@ -156,6 +237,35 @@ const isRefusal = computed(
 );
 
 const target = computed(() => mine.data?.target ?? null);
+
+// how far they are, counted from their leads; read once the month's targets are in
+const progress = createResource<Progress>({
+  url: "helpdesk.api.sales_targets.get_progress",
+  makeParams: () => ({ month: month.value }),
+});
+watch(
+  () => target.value?.modified,
+  (modified) => {
+    progress.reset();
+    if (modified) progress.reload();
+  },
+  { immediate: true }
+);
+const overall = computed(() =>
+  target.value && progress.data?.state === "counted"
+    ? overallOf(target.value, progress.data, mine.data!.currency)
+    : null
+);
+const setBy = computed(() =>
+  target.value ? target.value.assigned_by_name || target.value.assigned_by : ""
+);
+// figures go in the grid, written targets in a list under it; each keeps the head's order
+const figures = computed(
+  () => target.value?.criteria.filter((c) => c.value_type !== "Text") ?? []
+);
+const written = computed(
+  () => target.value?.criteria.filter((c) => c.value_type === "Text") ?? []
+);
 
 /** This month, the one open, and every month they have targets in, newest first. */
 const monthChoices = computed(() =>

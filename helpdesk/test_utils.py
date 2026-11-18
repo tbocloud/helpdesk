@@ -735,6 +735,30 @@ def make_sales_employee(email: str, full_name: str, *roles: str):
     return make_tasky_user(email, full_name, roles=(SALES_EMPLOYEE_ROLE, *roles))
 
 
+def make_sales_head(email: str, full_name: str):
+    """Creates an agent with the Sales Head role, who assigns monthly sales targets."""
+    from helpdesk.content_team import SALES_HEAD_ROLE, ensure_role
+
+    ensure_role()
+    return make_tasky_user(email, full_name, roles=(SALES_HEAD_ROLE,))
+
+
+def make_presales_executive(email: str, full_name: str):
+    """Creates an agent with the Presales Executive role, who is given sales targets."""
+    from helpdesk.content_team import PRESALES_EXECUTIVE_ROLE, ensure_role
+
+    ensure_role()
+    return make_tasky_user(email, full_name, roles=(PRESALES_EXECUTIVE_ROLE,))
+
+
+def make_sales_target(employee: str, month: str, criteria: list[dict]):
+    """Assigns `criteria` ({criterion, value_type, target, measure?}) to `employee` for
+    `month` ("2026-11") the way the Assign page does, as the current user (a Sales Head)."""
+    from helpdesk.api.sales_targets import assign_targets
+
+    return assign_targets(month, [employee], criteria)
+
+
 def attach_file(doctype: str, name: str, file_name: str = "draft.png"):
     """Attaches a small private file to a document as the current user, the way the
     upload button does (it needs write permission on the document)."""
