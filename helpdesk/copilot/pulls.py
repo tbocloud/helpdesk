@@ -683,7 +683,18 @@ def result(name: str, token: str, outcome: dict):
         },
         update_modified=False,
     )
-    lines = [_("Fixed {0} of {1}.").format(len(fixed), len(findings))]
+    tests = outcome.get("tests") or {}
+    if tests.get("ran") and tests.get("passed"):
+        tested = _("Copilot's tests passed on the sandbox.")
+    elif tests.get("ran"):
+        tested = _("Copilot's tests did not pass: {0}").format(
+            str(tests.get("detail") or "")[:300]
+        )
+    else:
+        tested = _("Not tested on the sandbox: {0}").format(
+            str(tests.get("detail") or _("no sandbox"))[:300]
+        )
+    lines = [_("Fixed {0} of {1}.").format(len(fixed), len(findings)), tested]
     lines += [
         f"- {findings[f['id']]['title']}: {f.get('note') or ''}" for f in fixed[:5]
     ]
@@ -1188,11 +1199,13 @@ def refresh():
                 and row.lease_expires
                 and get_datetime(row.lease_expires) < now
             ):
-                # a worker that went away: the round is offered again
+                # a worker that went away (or pushed without reporting): a fresh look at the
+                # pull request as it now stands, never the old head handed out again
                 frappe.db.set_value(
                     PR,
                     row.name,
                     {
+                        "state": "Reviewing",
                         "lease_token_hash": None,
                         "lease_expires": None,
                         "worker_id": None,

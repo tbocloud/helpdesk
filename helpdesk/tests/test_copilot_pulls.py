@@ -352,6 +352,9 @@ class TestFixRounds(PullCase):
         self.assertTrue(self.gh.replies[0][1].startswith("Fixed by TBO Copilot"))
         self.assertIn("@coderabbitai review", self.gh.comments)
         self.assertTrue(any("Round 1 pushed" in t for t in self.told(self.developer)))
+        self.assertTrue(
+            any("Not tested on the sandbox" in t for t in self.told(self.developer))
+        )
 
     def test_a_round_that_changed_nothing_goes_back_to_the_developer(self):
         rec = self.fixing()
@@ -390,6 +393,25 @@ class TestFixRounds(PullCase):
             pulls.heartbeat(rec.name, job["lease_token"])["action"], "cancel"
         )
         self.assertEqual(frappe.db.get_value(pulls.PR, rec.name, "state"), "Reviewing")
+
+    def test_a_lapsed_round_takes_a_fresh_look_never_the_old_head_again(self):
+        rec = self.fixing()
+        pulls.claim("w1")
+        # the worker pushed but its report never came; its lease lapses
+        new = "e" * 40
+        self.gh.pulls[7]["head"]["sha"] = new
+        self.gh.green(new)
+        self.gh.threads.clear()
+        self.gh.reviewed(new)
+        frappe.db.set_value(
+            pulls.PR, rec.name, "lease_expires", add_to_date(now_datetime(), minutes=-1)
+        )
+        pulls.refresh()  # the lapsed round goes back to Reviewing
+        pulls.evaluate(rec.name)  # and the look sees the pull request as it stands
+        self.assertEqual(
+            frappe.db.get_value(pulls.PR, rec.name, ["state", "head_sha"]),
+            ("Ready for approval", new),
+        )
 
     def test_a_wrong_lease_is_refused(self):
         rec = self.fixing()
