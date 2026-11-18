@@ -1101,6 +1101,7 @@ class TestRound4(AssistantCase):
     def setUp(self):
         super().setUp()
         self.asker = create_agent("round4.asker@example.com").name
+        self.leader = create_agent("round4.leader@example.com").name
         make_copilot_settings(
             enabled=1,
             copilot_people=[
@@ -1109,7 +1110,13 @@ class TestRound4(AssistantCase):
                     "person": self.dev,
                     "level": "Main",
                     "active": 1,
-                }
+                },
+                {
+                    "role": "Leader",
+                    "person": self.leader,
+                    "level": "Main",
+                    "active": 1,
+                },
             ],
         )
         self.ticket = make_ticket(
@@ -1216,6 +1223,23 @@ class TestRound4(AssistantCase):
         )
         theirs = thread.now(self.ticket, self.asker)  # who asked never decides
         self.assertNotIn("action_approve", [a["verb"] for a in theirs["actions"]])
+        # a Leader may decide, but it is Arun's while he works (the owner, 18 Nov 2026)
+        leader = thread.now(self.ticket, self.leader)
+        self.assertIn("Waiting for", leader["line"])
+        self.assertNotIn("action_approve", [a["verb"] for a in leader["actions"]])
+
+    def test_in_a_tickets_chat_approve_from_someone_else_brings_no_card(self):
+        from helpdesk.copilot import thread
+
+        self.action()
+        replies = thread.receive(self.leader, self.ticket, "approve")
+        self.assertFalse(
+            [
+                r
+                for r in replies
+                if "action_approve" in json.dumps(r.get("actions") or [])
+            ]
+        )
 
     def test_approve_on_the_tickets_strip_decides_it(self):
         from helpdesk.copilot import thread

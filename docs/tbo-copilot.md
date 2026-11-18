@@ -461,7 +461,7 @@ On a phone the tabs are Chat, Customer, Activity and Details.
 
 Lines in the chat that are notes, not Copilot speaking (`tone` "note"), show centered: who the ticket was assigned to and why, moves while someone is on leave, and the coordinators asked when nobody is free.
 
-- **The top card:** where the work stands, in a few words (`thread.now`). It shows at most two buttons for this step, for this person (Approve and Reject for the approver, Let Copilot fix it, Build with Copilot, Deploy tonight or now, Start Copilot). An action waiting on the ticket (Copilot's infra proposal, a person's Press or AWS request) leads it: "Waiting for Arun P S: Copilot: Restart bench-0015-000052-f1", and **Approve** / **Reject…** for whoever may decide it (`thread._with_actions`, testing fixes 4); the buttons are open to the approver even when they may not write in the chat. The **⋯** menu holds everything else they may do:
+- **The top card:** where the work stands, in a few words (`thread.now`). It shows at most two buttons for this step, for this person (Approve and Reject for the approver, Let Copilot fix it, Build with Copilot, Deploy tonight or now, Start Copilot). An action waiting on the ticket (Copilot's infra proposal, a person's Press or AWS request) leads it: "Waiting for Arun P S: Copilot: Restart bench-0015-000052-f1", and **Approve** / **Reject…** for the person it is assigned to (`thread._with_actions`, testing fixes 4; the owner: Arun, and a Leader only when it is assigned to her because Arun is away); everyone else reads who it waits for. The buttons are open to that approver even when they may not write in the chat. The **⋯** menu holds everything else they may do:
   - cancel the deploy, mark deployed, read the pull request again;
   - create the fix task, undo the fix (a reason), prepare the correction, undo the correction (a reason);
   - rate the diagnosis (Wrong asks for the right root cause), draft a KB article;
@@ -537,7 +537,8 @@ card with its title and first line) and everything waiting for the person's deci
 actions, releases, developers' pull requests (`assistant.decisions_waiting`). A typed "approve" or "reject" (also
 a bare "approve" the model reads as nothing) brings the card it means, with its buttons, right there
 (`assistant.decision_cards`): on a ticket named (or in the ticket's own chat) that ticket's; else the one Copilot
-just showed in this chat; else the only one waiting; with several, each card. The decision is the button press,
+just showed in this chat; else the only one waiting; with several, each card. An action counts only for the person
+it is assigned to, on a ticket too. The decision is the button press,
 never the typed word; a fix alone keeps its own way (its card, a reason, a change). "What is waiting for me?" adds
 each action's, release's and pull request's card with its buttons under the list.
 

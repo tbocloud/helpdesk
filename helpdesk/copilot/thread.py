@@ -688,7 +688,7 @@ def _now(ticket: str, user: str) -> dict:
 
 def _with_actions(state: dict, ticket: str, user: str) -> dict:
     """An action waiting on the ticket (Copilot's infra proposal, a person's Press or AWS request):
-    the line says who it waits for, and the person who may decide it gets Approve and Reject here,
+    the line says who it waits for, and the person it is assigned to gets Approve and Reject here,
     as in Teams and the panel (round 4)."""
     from helpdesk.copilot import actions
 
@@ -708,7 +708,11 @@ def _with_actions(state: dict, ticket: str, user: str) -> dict:
         if len(waiting) > 1
         else ""
     )
-    if not actions.may_decide(frappe.get_doc(actions.ACTION, first.name), user):
+    # the person it is assigned to decides (the owner: Arun, and a Leader only when he is away and
+    # it is assigned to her); everyone else reads who it waits for
+    if first.assigned_to == user and not actions.may_decide(
+        frappe.get_doc(actions.ACTION, first.name), user
+    ):
         b = assistant.button
         buttons = [
             b(_("Approve"), "action_approve", "positive", approval=first.name),

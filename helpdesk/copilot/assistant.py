@@ -404,8 +404,8 @@ def open_items(user: str) -> list[dict]:
 
 def decisions_waiting(user: str, ticket: str | None = None) -> list[dict]:
     """What waits for `user` to decide (round 4): fixes, Press/AWS/repair actions, releases and
-    developers' pull requests asked of them; on a ticket, what waits on that ticket that they may
-    decide. [{kind, name, ticket, title}], oldest first."""
+    developers' pull requests asked of them; on a ticket, what waits on that ticket for them.
+    [{kind, name, ticket, title}], oldest first."""
     from helpdesk.copilot import actions, pulls, releases
 
     items = []
@@ -428,9 +428,12 @@ def decisions_waiting(user: str, ticket: str | None = None) -> list[dict]:
                 "title": _("The fix for ticket {0}").format(row.ticket),
             }
         )
+    # only what is assigned to them: the approver it was sent to (a Leader when the Infrastructure
+    # person is away), on a ticket too
     waiting = {
         "status": actions.PENDING,
-        **({"ticket": ticket} if ticket else {"assigned_to": user}),
+        "assigned_to": user,
+        **({"ticket": ticket} if ticket else {}),
     }
     for row in frappe.get_all(
         actions.ACTION,
@@ -439,10 +442,6 @@ def decisions_waiting(user: str, ticket: str | None = None) -> list[dict]:
         order_by="creation asc",
         limit=10,
     ):
-        if ticket and actions.may_decide(
-            frappe.get_doc(actions.ACTION, row.name), user
-        ):
-            continue  # on a ticket: only what this person may decide
         items.append(
             {
                 "kind": "action",
