@@ -492,8 +492,11 @@ and nothing left to call. The queue is read again every minute and when the tab 
 call made through MyOperator or the Log call dialog counts without a tap. It is never cached.
 
 **The Daily report.** For managers and department heads, the team view of the Daily report ends
-with a *Call batches* table: per person, the batches (slot called/size), called, connected and
-overdue. `get_call_batches_report`; it stays out for anyone else and for an older ERP site. The 6 pm
+with a *Call batches* table: per person and department (the department under the name, since
+someone in two departments has two rows), the batches (slot called/size), called, connected and
+overdue. Its *called* takes in leads moved by hand as well as logged calls, while the report's
+*Calls* column counts only logged calls (TBO Calls), so the two differ when people move leads
+instead of logging calls. `get_call_batches_report`; it stays out for anyone else and for an older ERP site. The 6 pm
 message lists the same, one line per person and a total, when the ERP site has it.
 
 **Settings.** The department dialog has a *Daily call batches* box: the switch, the slots (name,
@@ -1476,7 +1479,8 @@ positive lead, a new quotation and a new lead are) is in TBO Smart's `docs/hub-l
   (`team_empty`).
 - **Team view** (a manager, nobody picked): one row per salesperson: calls (and how many
   connected), fresh, follow-up, positive, quotations (count and value), new leads and the
-  pace chips; a row opens that person's card. A salesperson, or anyone who picks a person,
+  pace chips (the *This week* column is left out when every target is 0: nothing to measure
+  against); a row opens that person's card. A salesperson, or anyone who picks a person,
   gets the **person card** in the owner's template order: header "Daily sales performance ·
   date · name"; Daily call performance (Total calls made, Fresh leads, Follow-up leads,
   Positive leads with names, New quotations with count, value and items, each opening the

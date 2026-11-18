@@ -143,17 +143,22 @@
             )
           }}
         </h2>
-        <div class="row row-head hidden md:grid" aria-hidden="true">
+        <div
+          class="row row-head hidden md:grid"
+          :class="{ 'no-week': !hasTargets }"
+          aria-hidden="true"
+        >
           <span>{{ __("Salesperson") }}</span>
           <span v-for="col in COLUMNS" :key="col.key" class="text-right">{{
             col.label
           }}</span>
-          <span>{{ __("This week") }}</span>
+          <span v-if="hasTargets">{{ __("This week") }}</span>
         </div>
         <ul role="list" class="divide-y divide-outline-gray-1">
           <li v-for="p in people" :key="p.user">
             <button
               type="button"
+              :class="{ 'no-week': !hasTargets }"
               class="row w-full text-left transition-colors hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-highlight"
               :aria-label="__('Open {0}\'s report', p.full_name)"
               @click="person = p.user"
@@ -186,9 +191,13 @@
                   >{{ col.sub(p) }}</span
                 >
               </span>
-              <span class="col-span-2 flex flex-wrap gap-1 md:col-span-1">
+              <!-- no targets set: nothing to measure the week against, so no column -->
+              <span
+                v-if="hasTargets"
+                class="col-span-2 flex flex-wrap gap-1 md:col-span-1"
+              >
                 <span
-                  v-if="p.on_track && hasTargets"
+                  v-if="p.on_track"
                   class="chip"
                   :class="TONE_CLASSES.success"
                 >
@@ -475,6 +484,9 @@ async function copy(text: string, done: string) {
     grid-template-columns:
       minmax(9rem, 1.6fr) repeat(6, minmax(3.5rem, 1fr))
       minmax(10rem, 1.8fr);
+  }
+  .row.no-week {
+    grid-template-columns: minmax(9rem, 1.6fr) repeat(6, minmax(3.5rem, 1fr));
   }
 }
 </style>
