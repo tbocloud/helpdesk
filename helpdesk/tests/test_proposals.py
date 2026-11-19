@@ -185,6 +185,33 @@ class TestProposals(FrappeTestCase):
         with self.assertRaises(frappe.ValidationError):
             proposals_api.extract_requirements("CRM-LEAD-1", "  ")
 
+    def test_an_erp_message_keeps_its_line_breaks(self):
+        from helpdesk.integrations.crm.client import plain_message
+
+        self.assertEqual(
+            plain_message(
+                "Rows with duplicate due dates in other rows were found: <br>2026-11-18 in row 2"
+                "<br>2026-11-18 in row 3"
+            ),
+            "Rows with duplicate due dates in other rows were found: 2026-11-18 in row 2; "
+            "2026-11-18 in row 3",
+        )
+        self.assertEqual(plain_message("<b>Price</b> it first."), "Price it first.")
+
+    def test_change_template_goes_to_the_erp_site(self):
+        proposals_api.change_template(
+            "PROP-2026-00001",
+            "  ERPNext + Flutter Mobile App ",
+            '{"modules": ["Accounts"], "mobile_app": 1}',
+        )
+        calls = {name: (post, params) for name, post, params in self.crm.lead_calls}
+        post, params = calls["change_template"]
+        self.assertTrue(post)
+        self.assertEqual(params["template"], "ERPNext + Flutter Mobile App")
+        self.assertEqual(params["scoping"], {"modules": ["Accounts"], "mobile_app": 1})
+        with self.assertRaises(frappe.ValidationError):
+            proposals_api.change_template("PROP-2026-00001", " ")
+
     def test_regenerate_share_and_libraries_go_to_the_erp_site(self):
         proposals_api.regenerate_section("PROP-2026-00001", "3", "1")
         proposals_api.regenerate_proposal("PROP-2026-00001")

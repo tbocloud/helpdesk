@@ -259,6 +259,7 @@ export const QUESTIONS = [
   "integrations",
   "data_migration",
   "users",
+  "branches",
   "hosting",
   "amc",
   "timeline_weeks",
@@ -275,6 +276,7 @@ export const QUESTION_LABELS: Record<Question, string> = {
   integrations: __("Integrations"),
   data_migration: __("Data migration"),
   users: __("Number of users"),
+  branches: __("Additional branches"),
   hosting: __("Hosting"),
   amc: __("AMC"),
   timeline_weeks: __("Target timeline"),
@@ -287,6 +289,8 @@ export interface Customisation {
   days: number;
   /** what the AI wrote about it, editable */
   detail?: string | null;
+  /** a price set by hand; blank: priced by its days at the ERP site's day rate */
+  price?: number | null;
 }
 
 export interface Scoping {
@@ -300,6 +304,10 @@ export interface Scoping {
   /** a number (0: not said) or "Unlimited" */
   users: number | "Unlimited";
   companies: number | "Unlimited";
+  /** branches rolled out beyond the head office and the first one, each priced at the branch rate */
+  branches: number;
+  /** a price per branch set on the proposal; blank: the ERP site's branch rate */
+  branch_rate?: number | null;
   hosting: string | null;
   amc: boolean;
   timeline_weeks: number;
@@ -349,6 +357,8 @@ export function emptyScoping(): Scoping {
     data_migration: false,
     users: 0,
     companies: 0,
+    branches: 0,
+    branch_rate: null,
     hosting: null,
     amc: false,
     timeline_weeks: 0,
@@ -381,6 +391,121 @@ export function suggestTimeline(
   const sorted = [...timelines].sort((a, b) => a.days - b.days);
   return (sorted.find((t) => t.days >= needed) || sorted[sorted.length - 1])
     .title;
+}
+
+/**
+ * The start page's implementation type (docs/proposals.md "Implementation type"): ERP is always
+ * ERPNext, with any mix of a mobile app, a website and customisations; Digital is the Digital
+ * Marketing strategy. Each maps onto the templates and catalogue modules the ERP site seeds.
+ */
+export type Implementation = "ERP" | "Digital";
+export type ErpAddon = "mobile" | "website" | "customisation";
+export const IMPLEMENTATION_LABELS: Record<Implementation, string> = {
+  ERP: __("ERP"),
+  Digital: __("Digital Marketing"),
+};
+export const ERP_ADDONS: { label: string; value: ErpAddon }[] = [
+  { label: __("Mobile app"), value: "mobile" },
+  { label: __("Website"), value: "website" },
+  { label: __("ERPNext customisation"), value: "customisation" },
+];
+
+const ERP_SOLUTION = "ERPNext Implementation";
+const ERP_MOBILE_SOLUTION = "ERPNext + Flutter Mobile App";
+const DIGITAL_SOLUTION = "Digital Marketing";
+export const MOBILE_MODULE = "Flutter Mobile App";
+export const WEBSITE_MODULE = "Website & Portal";
+
+export function implementationOf(
+  solution?: string | null
+): Implementation | null {
+  if (solution === ERP_SOLUTION || solution === ERP_MOBILE_SOLUTION)
+    return "ERP";
+  if (solution?.startsWith(DIGITAL_SOLUTION)) return "Digital";
+  return null;
+}
+
+function templateFor(
+  templates: ProposalTemplate[],
+  kind: Implementation,
+  mobile = false
+): ProposalTemplate | undefined {
+  if (kind === "Digital")
+    return templates.find((t) => implementationOf(t.solution_type) === kind);
+  const wanted = mobile ? ERP_MOBILE_SOLUTION : ERP_SOLUTION;
+  return (
+    templates.find((t) => t.solution_type === wanted) ||
+    templates.find((t) => t.solution_type === ERP_SOLUTION)
+  );
+}
+
+/** The implementation types the enabled templates allow, in the picker's order. */
+export function implementations(
+  templates: ProposalTemplate[]
+): Implementation[] {
+  return (["ERP", "Digital"] as const).filter((k) => templateFor(templates, k));
+}
+
+export function erpAddons(scoping: Scoping): ErpAddon[] {
+  const on: ErpAddon[] = [];
+  if (scoping.mobile_app || scoping.modules.includes(MOBILE_MODULE))
+    on.push("mobile");
+  if (scoping.modules.includes(WEBSITE_MODULE)) on.push("website");
+  if (scoping.customisation || scoping.customisations.length)
+    on.push("customisation");
+  return on;
+}
+
+export type ImplementationChoice = { template: string; scoping: Scoping };
+
+/** Another implementation type: its template, with that template's default modules. */
+export function withImplementation(
+  kind: Implementation,
+  scoping: Scoping,
+  templates: ProposalTemplate[]
+): ImplementationChoice | null {
+  const template = templateFor(templates, kind);
+  if (!template) return null;
+  return {
+    template: template.name,
+    scoping: {
+      ...scoping,
+      modules: [...template.default_modules],
+      mobile_app: false,
+      customisation: false,
+      customisations: [],
+    },
+  };
+}
+
+/** An ERP add-on on or off: the mobile app also moves between the two ERPNext templates. */
+export function withAddon(
+  addon: ErpAddon,
+  on: boolean,
+  current: ImplementationChoice,
+  templates: ProposalTemplate[]
+): ImplementationChoice {
+  const scoping = { ...current.scoping };
+  const toggle = (name: string) => {
+    const rest = scoping.modules.filter((m) => m !== name);
+    scoping.modules = on ? [...rest, name] : rest;
+  };
+  let template = current.template;
+  if (addon === "mobile") {
+    scoping.mobile_app = on;
+    toggle(MOBILE_MODULE);
+    template = templateFor(templates, "ERP", on)?.name || template;
+  } else if (addon === "website") {
+    toggle(WEBSITE_MODULE);
+  } else {
+    scoping.customisation = on;
+    scoping.customisations = on
+      ? scoping.customisations.length
+        ? scoping.customisations
+        : [{ item: "", days: 1 }]
+      : [];
+  }
+  return { template, scoping };
 }
 
 /** A module in the catalogue, written once and assembled into every proposal. */
@@ -436,6 +561,10 @@ export interface ProposalOptions {
   payment_terms?: string[];
   amc_plans?: string[];
   catalogue?: CatalogueModule[];
+  /** the ERP site's default currency (older sites don't send it: INR) */
+  currency?: string | null;
+  /** TBO Smart Settings' branch rate (0 or missing: not set) */
+  branch_rate?: number | null;
   images?: LibraryImage[];
   letter_heads?: { name: string; is_default: number }[];
   /** what a proposal without its own pick uses; null: the site has none */
@@ -773,9 +902,9 @@ function words(text: string) {
 }
 
 /**
- * About how many A4 pages the PDF runs to: the cover and the contents, then the words (about
- * 380 a page) and the table rows (about 22 a page) of the sections that are on. A guide, not a
- * promise: the PDF itself is the count.
+ * About how many A4 pages the PDF runs to: the cover with the contents (one page), then the
+ * words (about 450 a page in the compact layout) and the table rows (about 26 a page) of the
+ * sections that are on. A guide, not a promise: the PDF itself is the count.
  */
 export function estimatePages(sections: ProposalSection[]): number {
   let text = 0;
@@ -793,5 +922,5 @@ export function estimatePages(sections: ProposalSection[]): number {
     if (s.section_type === "Investment") rows += 10;
     if (s.section_type === "Acceptance") text += 150;
   }
-  return 2 + Math.max(1, Math.ceil(text / 380 + rows / 22));
+  return 1 + Math.max(1, Math.ceil(text / 450 + rows / 26));
 }

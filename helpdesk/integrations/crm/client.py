@@ -1,6 +1,7 @@
 """A small REST client for the TBO CRM site, using the key and secret in HD CRM Settings."""
 
 import json
+import re
 from urllib.parse import quote
 
 import frappe
@@ -533,6 +534,14 @@ class CRMClient:
         )
 
 
+def plain_message(message: str) -> str:
+    """An ERP message as plain text: its line breaks (ERPNext lists rows with <br>) become "; "
+    rather than vanishing, so "row 2<br>2026-11-18 in row 3" doesn't read "row 22026-11-18"."""
+    text = re.sub(r":\s*<br\s*/?>", ": ", message or "", flags=re.I)
+    text = re.sub(r"(\s*<br\s*/?>\s*)+", "; ", text, flags=re.I)
+    return frappe.utils.strip_html(text).strip("; ")[:200]
+
+
 def error_text(response, messages_only: bool = False) -> str:
     """The CRM site's error: its message, else (unless `messages_only`) the exception
     or the start of the body."""
@@ -546,7 +555,7 @@ def error_text(response, messages_only: bool = False) -> str:
     if messages:
         try:
             first = json.loads(json.loads(messages)[0])
-            return frappe.utils.strip_html(first.get("message", ""))[:200]
+            return plain_message(first.get("message", ""))
         except (ValueError, TypeError, IndexError, AttributeError):
             pass
     if messages_only:

@@ -154,9 +154,18 @@ import LucideCheck from "~icons/lucide/check";
 import VoiceButton from "./VoiceButton.vue";
 import {
   emptyScoping,
+  ERP_ADDONS,
+  erpAddons,
+  IMPLEMENTATION_LABELS,
+  implementationOf,
+  implementations,
   suggestTimeline,
   suits,
+  withAddon,
+  withImplementation,
   type ClientProfile,
+  type Implementation,
+  type ImplementationChoice,
   type ProposalOptions,
   type Scoping,
 } from "./proposals";
@@ -219,7 +228,16 @@ const template = computed(() =>
   props.options.templates?.find((t) => t.name === props.state.template)
 );
 const solution = computed(() => template.value?.solution_type);
+const kind = computed(() => implementationOf(solution.value));
+const enabledTemplates = computed(() =>
+  (props.options.templates ?? []).filter((t) => t.enabled)
+);
 const sc = () => props.state.scoping;
+function choose(next: ImplementationChoice | null) {
+  if (!next) return;
+  props.state.template = next.template;
+  props.state.scoping = next.scoping;
+}
 function setScoping(patch: Partial<Scoping>) {
   Object.assign(props.state.scoping, patch);
 }
@@ -347,6 +365,50 @@ const STEPS: Step[] = [
     onText: (text) => takeNeeds(text, true),
   },
   {
+    key: "implementation",
+    ask: () => __("Is it an ERP implementation or Digital Marketing?"),
+    chips: () =>
+      implementations(enabledTemplates.value).map((k) => ({
+        label: IMPLEMENTATION_LABELS[k],
+        value: k,
+      })),
+    when: () => implementations(enabledTemplates.value).length > 1,
+    onChip: (value) => {
+      if (value !== kind.value)
+        choose(
+          withImplementation(
+            value as Implementation,
+            sc(),
+            enabledTemplates.value
+          )
+        );
+    },
+  },
+  {
+    key: "addons",
+    ask: () =>
+      __(
+        "ERPNext with any of these? Pick a mix, or none for ERPNext on its own."
+      ),
+    multi: true,
+    chips: () => ERP_ADDONS,
+    when: () => kind.value === "ERP",
+    onDone: (values) => {
+      let next: ImplementationChoice = {
+        template: props.state.template,
+        scoping: sc(),
+      };
+      for (const a of ERP_ADDONS)
+        next = withAddon(
+          a.value,
+          values.includes(a.value),
+          next,
+          enabledTemplates.value
+        );
+      choose(next);
+    },
+  },
+  {
     key: "modules",
     ask: () =>
       __("Which modules? The usual ones for this kind of project are picked."),
@@ -365,6 +427,9 @@ const STEPS: Step[] = [
       ),
     input: "textarea",
     chips: () => [{ label: __("None"), value: "none" }],
+    // on ERP, asked when the customisation add-on was picked
+    when: () =>
+      kind.value !== "ERP" || erpAddons(sc()).includes("customisation"),
     onChip: () => setScoping({ customisation: false, customisations: [] }),
     onText: (text) => {
       const items = text
@@ -372,7 +437,7 @@ const STEPS: Step[] = [
         .map((l) => l.replace(/^[-•\d.)\s]+/, "").trim())
         .filter(Boolean);
       const list = [
-        ...sc().customisations,
+        ...sc().customisations.filter((c) => c.item.trim()),
         ...items.map((item) => ({ item, days: 1 })),
       ];
       setScoping({ customisation: list.length > 0, customisations: list });
@@ -383,7 +448,10 @@ const STEPS: Step[] = [
     ask: () => __("Does it include any of these?"),
     multi: true,
     chips: () => [
-      { label: __("Mobile app"), value: "mobile_app" },
+      // on ERP the add-ons question asked it
+      ...(kind.value === "ERP"
+        ? []
+        : [{ label: __("Mobile app"), value: "mobile_app" }]),
       { label: __("Data migration"), value: "data_migration" },
       { label: __("Integrations"), value: "integrations" },
       { label: __("Source code handed over"), value: "source_code" },
@@ -434,6 +502,25 @@ const STEPS: Step[] = [
     onText: (text) => {
       if (!/^\s*\d+\s*$/.test(text)) return false;
       setScoping({ companies: parseInt(text, 10) });
+    },
+  },
+  {
+    key: "branches",
+    ask: () =>
+      __(
+        "How many more branches will it roll out to, beyond the head office and the first branch?"
+      ),
+    input: "number",
+    chips: () => ["0", "5", "10"].map((n) => ({ label: n, value: n })),
+    // the ERPNext templates ask it (a template with no questions asks everything)
+    when: () =>
+      kind.value === "ERP" &&
+      (!template.value?.questions?.length ||
+        template.value.questions.includes("branches")),
+    onChip: (n) => setScoping({ branches: Number(n) }),
+    onText: (text) => {
+      if (!/^\s*\d+\s*$/.test(text)) return false;
+      setScoping({ branches: Math.min(parseInt(text, 10), 1000) });
     },
   },
   {
@@ -683,6 +770,8 @@ function ask() {
   picked.value =
     current.value.key === "modules"
       ? [...sc().modules]
+      : current.value.key === "addons"
+      ? erpAddons(sc())
       : current.value.key === "extras"
       ? (["mobile_app", "data_migration", "source_code"] as const)
           .filter((k) => sc()[k])

@@ -574,6 +574,30 @@ def regenerate_proposal(name: str, force: int | str = 0) -> dict:
 
 
 @frappe.whitelist(methods=["POST"])
+def change_template(
+    name: str, template: str, scoping: dict | str | None = None
+) -> dict:
+    """A draft proposal moved to another template on the ERP site, with the scoping it brings."""
+    require_leads()
+    template = (template or "").strip()
+    if not template:
+        frappe.throw(_("Pick the template to change to."))
+    result = (
+        proposals(
+            "change_template",
+            post=True,
+            name=name,
+            template=template,
+            scoping=as_json_value(scoping) if scoping else None,
+        )
+        or {}
+    )
+    if result.get("proposal"):
+        clean_letter_head(result["proposal"])
+    return result
+
+
+@frappe.whitelist(methods=["POST"])
 def chat_edit(name: str, message: str) -> dict:
     """The assistant: a change in words, read on the ERP site into structured changes."""
     require_leads()

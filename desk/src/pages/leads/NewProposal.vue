@@ -2,6 +2,17 @@
   <div class="flex h-full flex-col">
     <LayoutHeader>
       <template #left-header>
+        <Button
+          class="mr-2 shrink-0"
+          variant="ghost"
+          :label="__('Back')"
+          :tooltip="__('Back')"
+          @click="goBack"
+        >
+          <template #icon>
+            <LucideArrowLeft class="size-4" aria-hidden="true" />
+          </template>
+        </Button>
         <nav
           class="flex min-w-0 items-center gap-1.5 text-lg-medium"
           :aria-label="__('Breadcrumb')"
@@ -41,7 +52,7 @@
           variant="solid"
           size="md"
           :label="__('Generate proposal')"
-          :loading="create.loading"
+          :loading="busy"
           :disabled="!options?.enabled"
           @click="generate"
         >
@@ -78,7 +89,7 @@
               :lead="leadId"
               :options="options"
               :missing="missing.map((m) => m.label)"
-              :generating="create.loading"
+              :generating="busy"
               :ready="profileLoaded"
               @skip="chatOpen = false"
               @generate="generate"
@@ -135,6 +146,12 @@
               <h2 :id="formId" class="text-base font-semibold text-ink-gray-9">
                 {{ __("What the proposal covers") }}
               </h2>
+              <ProposalImplementation
+                :template="state.template"
+                :scoping="state.scoping"
+                :templates="templates"
+                @change="choose"
+              />
               <FormControl
                 :model-value="state.template"
                 type="select"
@@ -149,6 +166,8 @@
                 :catalogue="options.catalogue || []"
                 :solution-type="chosen?.solution_type"
                 :hosting="options.hosting || []"
+                :hidden="pickerAsks"
+                :branch-rate="options.branch_rate"
               />
               <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <FormControl
@@ -208,6 +227,28 @@
                 }}
               </p>
             </section>
+
+            <section
+              v-if="
+                state.scoping.modules.length ||
+                state.scoping.customisations.length ||
+                state.scoping.branches
+              "
+              class="flex flex-col gap-3 rounded-xl border border-outline-gray-2 bg-surface-base p-4"
+              :aria-labelledby="priceId"
+            >
+              <h2 :id="priceId" class="text-base font-semibold text-ink-gray-9">
+                {{ __("Price") }}
+              </h2>
+              <ProposalPriceEstimate
+                v-model:prices="prices"
+                :scoping="state.scoping"
+                :catalogue="options.catalogue || []"
+                :main-label="mainLabel"
+                :currency="options.currency || 'INR'"
+                :branch-rate="options.branch_rate"
+              />
+            </section>
           </div>
         </div>
         <div
@@ -227,9 +268,10 @@ import { useScreenSize } from "@/composables/screen";
 import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
-import { Button, createResource, FormControl, toast } from "frappe-ui";
+import { Button, call, createResource, FormControl, toast } from "frappe-ui";
 import { computed, reactive, ref, useId, watch } from "vue";
 import { useRouter } from "vue-router";
+import LucideArrowLeft from "~icons/lucide/arrow-left";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideFileText from "~icons/lucide/file-text";
@@ -238,15 +280,21 @@ import ProposalChat, {
   type ChatLine,
   type ChatState,
 } from "./ProposalChat.vue";
+import ProposalImplementation from "./ProposalImplementation.vue";
+import ProposalPriceEstimate from "./ProposalPriceEstimate.vue";
 import ProposalScopingForm from "./ProposalScopingForm.vue";
 import {
   emptyProfile,
   emptyScoping,
+  erpAddons,
+  implementationOf,
   loadProposalOptions,
   proposalOptions,
   suggestTimeline,
   type ClientProfile,
+  type ImplementationChoice,
   type Proposal,
+  type Question,
   type ProposalOptions,
   type Scoping,
 } from "./proposals";
@@ -259,11 +307,18 @@ const router = useRouter();
 const reqId = `new-proposal-req-${useId()}`;
 const formId = `new-proposal-form-${useId()}`;
 const profileId = `new-proposal-profile-${useId()}`;
+const priceId = `new-proposal-price-${useId()}`;
 
 loadProposalOptions();
 const options = computed(
   () => proposalOptions.data as ProposalOptions | undefined
 );
+
+/** To where they came from; straight to the lead when the page was opened from a link. */
+function goBack() {
+  if (window.history.state?.back) router.back();
+  else router.push({ name: "Lead", params: { leadId: props.leadId } });
+}
 
 /** One state for the chat and the summary: whichever presales uses, the other follows. */
 const state = reactive<ChatState>({
@@ -273,6 +328,22 @@ const state = reactive<ChatState>({
   scoping: emptyScoping(),
 });
 const chatLog = reactive<ChatLine[]>([]);
+/** module prices typed on the Price card, set on the proposal once it is made */
+const prices = ref<Record<string, number>>({});
+// a module taken off loses its typed price, so adding it back starts from the list price
+watch(
+  () => state.scoping.modules,
+  (modules) => {
+    const kept = Object.entries(prices.value).filter(([m]) =>
+      modules.includes(m)
+    );
+    if (kept.length !== Object.keys(prices.value).length)
+      prices.value = Object.fromEntries(kept);
+  },
+  { deep: true }
+);
+const keeping = ref(false);
+const busy = computed(() => create.loading || keeping.value);
 const chatOpen = ref(true);
 const aiDraft = ref(true);
 const error = ref("");
@@ -321,7 +392,7 @@ function focusMissing() {
   box?.focus({ preventScroll: true });
 }
 const ready = computed(
-  () => !!options.value?.enabled && profileFilled.value && !create.loading
+  () => !!options.value?.enabled && profileFilled.value && !busy.value
 );
 
 const suggested = computed(() =>
@@ -342,6 +413,28 @@ const amcOptions = computed(() => [
   { label: __("None"), value: "" },
   ...(options.value?.amc_plans ?? []).map((p) => ({ label: p, value: p })),
 ]);
+
+const kind = computed(() => implementationOf(chosen.value?.solution_type));
+const mainLabel = computed(() =>
+  kind.value === "ERP"
+    ? __("ERPNext")
+    : kind.value === "Digital"
+    ? __("Digital Marketing")
+    : __("Modules")
+);
+/** On ERP the picker owns the mobile app, and customisations show once picked there. */
+const pickerAsks = computed<Question[]>(() =>
+  kind.value !== "ERP"
+    ? []
+    : erpAddons(state.scoping).includes("customisation")
+    ? ["mobile_app"]
+    : ["mobile_app", "customisation"]
+);
+
+function choose(next: ImplementationChoice) {
+  state.template = next.template;
+  state.scoping = next.scoping;
+}
 
 /** A template brings its default modules, unless the person already picked their own. */
 function pickTemplate(name: string) {
@@ -397,8 +490,9 @@ function nonEmpty(profile: ClientProfile): Partial<ClientProfile> {
 const create = createResource({
   url: "helpdesk.api.proposals.create_proposal",
   method: "POST",
-  onSuccess(data: { proposal: Proposal; warnings: string[] }) {
+  async onSuccess(data: { proposal: Proposal; warnings: string[] }) {
     for (const warning of data.warnings ?? []) toast.warning(warning);
+    await keepPrices(data.proposal);
     router.replace({
       name: "LeadProposal",
       params: { leadId: props.leadId, proposalId: data.proposal.name },
@@ -411,6 +505,36 @@ const create = createResource({
     );
   },
 });
+
+/** The prices typed on the Price card, set by hand on the new proposal's modules. */
+async function keepPrices(proposal: Proposal) {
+  const typed = prices.value;
+  if (!proposal.modules.some((m) => m.module_name in typed)) return;
+  keeping.value = true;
+  try {
+    await call("helpdesk.api.proposals.save_proposal", {
+      name: proposal.name,
+      data: {
+        modules: proposal.modules.map((m) =>
+          m.module_name in typed
+            ? { ...m, rate: typed[m.module_name], rate_overridden: 1 }
+            : m
+        ),
+      },
+    });
+  } catch (e) {
+    toast.warning(
+      errorText(
+        e,
+        __(
+          "The proposal is made, but the prices you typed weren't saved. Set them in its Modules."
+        )
+      )
+    );
+  } finally {
+    keeping.value = false;
+  }
+}
 
 function generate() {
   if (!profileFilled.value) {

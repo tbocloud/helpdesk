@@ -2,6 +2,17 @@
   <div class="flex h-full flex-col">
     <LayoutHeader>
       <template #left-header>
+        <Button
+          class="mr-2 shrink-0"
+          variant="ghost"
+          :label="__('Back')"
+          :tooltip="__('Back')"
+          @click="goBack"
+        >
+          <template #icon>
+            <LucideArrowLeft class="size-4" aria-hidden="true" />
+          </template>
+        </Button>
         <nav
           class="flex min-w-0 items-center gap-1.5 text-lg-medium"
           :aria-label="__('Breadcrumb')"
@@ -65,10 +76,9 @@
           :loading="revisionResource.loading"
           @click="revisionResource.submit({ name: proposalId })"
         />
-        <!-- a draft is marked ready (its numbers fixed) before it can go out -->
+        <!-- a draft is marked ready (its numbers fixed) before it goes out; Send does both -->
         <Button
           v-if="editable && canSendStatus"
-          variant="solid"
           size="md"
           :label="__('Mark ready')"
           :disabled="!!proposal.share_blockers.length || dirty"
@@ -81,11 +91,14 @@
           </template>
         </Button>
         <Button
-          v-else-if="proposal.can_write && canSendStatus"
+          v-if="proposal.can_write && canSendStatus"
           variant="solid"
           size="md"
           :label="proposal.status === 'Draft' ? __('Send') : __('Send again')"
-          :disabled="!!proposal.send_blockers.length || dirty"
+          :disabled="
+            !!(editable ? proposal.share_blockers : proposal.send_blockers)
+              .length || dirty
+          "
           :tooltip="sendTooltip"
           @click="openSend"
         >
@@ -170,6 +183,16 @@
                 <span v-for="(reason, i) in proposal.send_blockers" :key="i">{{
                   reason
                 }}</span>
+                <!-- the commonest reason, fixed from here: the same dialog as the Investment's -->
+                <div
+                  v-if="editable && proposal.can_price && !proposal.quotation"
+                  class="mt-1"
+                >
+                  <Button
+                    :label="__('Price the proposal')"
+                    @click="showPricing = true"
+                  />
+                </div>
               </div>
             </div>
             <p
@@ -268,6 +291,27 @@
                   )
                 }}
               </p>
+              <!-- the template can change while the proposal is a draft (same number) -->
+              <div
+                v-if="isProposal"
+                class="flex flex-wrap items-center gap-x-3 gap-y-2"
+              >
+                <span class="text-p-sm text-ink-gray-7">
+                  {{
+                    __(
+                      "Template: {0}",
+                      template?.template_name || proposal.template || __("none")
+                    )
+                  }}
+                </span>
+                <Button
+                  v-if="editable"
+                  :label="__('Change template')"
+                  :disabled="dirty"
+                  :tooltip="dirty ? __('Save your changes first') : ''"
+                  @click="openTemplateDialog"
+                />
+              </div>
               <p class="text-p-sm tabular-nums text-ink-gray-6">
                 {{ __("About {0} pages", String(pages)) }}
                 <template v-if="isProposal && proposal.page_guide">
@@ -354,6 +398,7 @@
                   :catalogue="options?.catalogue || []"
                   :solution-type="proposal.solution_type"
                   :hosting="options?.hosting || []"
+                  :branch-rate="options?.branch_rate"
                   :disabled="!editable"
                 />
                 <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -532,11 +577,24 @@
           v-model="sendForm.recipients"
           type="email"
           :label="__('To')"
+          :placeholder="__('client@example.com')"
           :description="
-            __('The client gets an email with the link, from the ERP site.')
+            __(
+              'Type one or more addresses, separated by commas. The client gets an email with the link, from the ERP site.'
+            )
           "
           required
         />
+        <p
+          v-if="editable"
+          class="rounded-lg bg-surface-gray-2 px-3 py-2 text-p-sm text-ink-gray-7"
+        >
+          {{
+            __(
+              "Sending marks it ready first: the content and the numbers are fixed. Create a revision to change it after."
+            )
+          }}
+        </p>
         <FormControl
           v-model="sendForm.message"
           type="textarea"
@@ -570,6 +628,54 @@
       </template>
     </Dialog>
 
+    <Dialog
+      v-model:open="templateDialog.open"
+      :title="__('Change template')"
+      size="lg"
+    >
+      <div class="flex flex-col gap-4">
+        <ProposalImplementation
+          :template="templateDialog.template"
+          :scoping="templateDialog.scoping"
+          :templates="enabledTemplates"
+          @change="takeTemplateChoice"
+        />
+        <FormControl
+          :model-value="templateDialog.template"
+          type="select"
+          :label="__('Template')"
+          :options="templateOptions"
+          @update:model-value="pickDialogTemplate"
+        />
+        <p class="text-p-sm text-ink-gray-6">
+          {{
+            __(
+              "The sections follow the new template, in its order. Sections you edited and the AI's text are kept; the timeline and payment terms go back to its defaults. The proposal keeps its number and is priced again."
+            )
+          }}
+        </p>
+        <p
+          v-if="templateDialog.error"
+          role="alert"
+          class="text-p-sm text-danger"
+        >
+          {{ templateDialog.error }}
+        </p>
+      </div>
+      <template #actions="{ close }">
+        <div class="flex justify-end gap-2">
+          <Button :label="__('Cancel')" @click="close" />
+          <Button
+            variant="solid"
+            :label="__('Change template')"
+            :loading="changeTemplate.loading"
+            :disabled="!templateChanged"
+            @click="submitTemplate"
+          />
+        </div>
+      </template>
+    </Dialog>
+
     <!-- one confirm for the actions that can't be undone or write over edits -->
     <Dialog v-model:open="confirm.open" :title="confirm.title" size="md">
       <p class="text-p-base text-ink-gray-7">{{ confirm.message }}</p>
@@ -597,6 +703,7 @@ import { __ } from "@/translation";
 import { errorText } from "@/utils";
 import {
   Button,
+  call,
   createResource,
   Dialog,
   Dropdown,
@@ -606,6 +713,7 @@ import {
 } from "frappe-ui";
 import { computed, reactive, ref, useId, watch } from "vue";
 import { useRouter } from "vue-router";
+import LucideArrowLeft from "~icons/lucide/arrow-left";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleCheck from "~icons/lucide/circle-check";
@@ -618,6 +726,7 @@ import ClientProfileForm from "./ClientProfileForm.vue";
 import DocumentQuestionnaire from "./DocumentQuestionnaire.vue";
 import ProposalAssistant from "./ProposalAssistant.vue";
 import ProposalBlocks from "./ProposalBlocks.vue";
+import ProposalImplementation from "./ProposalImplementation.vue";
 import ProposalModules from "./ProposalModules.vue";
 import ProposalPreview from "./ProposalPreview.vue";
 import ProposalPricingDialog from "./ProposalPricingDialog.vue";
@@ -635,6 +744,7 @@ import {
   type ClientProfile,
   type Proposal,
   type ProposalModule,
+  type ImplementationChoice,
   type ProposalOptions,
   type ProposalSection,
   type Scoping,
@@ -729,8 +839,18 @@ const canSendStatus = computed(
 );
 const sendTooltip = computed(() => {
   if (dirty.value) return __("Save your changes first");
-  return proposal.value?.send_blockers[0] || "";
+  return (
+    (editable.value
+      ? proposal.value?.share_blockers[0]
+      : proposal.value?.send_blockers[0]) || ""
+  );
 });
+
+/** To where they came from; straight to the lead when the page was opened from a link. */
+function goBack() {
+  if (window.history.state?.back) router.back();
+  else router.push({ name: "Lead", params: { leadId: props.leadId } });
+}
 const readyTooltip = computed(() => {
   if (dirty.value) return __("Save your changes first");
   return (
@@ -1032,6 +1152,86 @@ function regenerateSection(index: number, force: boolean) {
   regenerateOne.submit({ name: props.proposalId, index, force: force ? 1 : 0 });
 }
 
+// --- change template (a draft keeps its number; the ERP site carries the edits over) ---
+const enabledTemplates = computed(() =>
+  (options.value?.templates ?? []).filter((t) => t.enabled)
+);
+const templateOptions = computed(() =>
+  enabledTemplates.value.map((t) => ({ label: t.template_name, value: t.name }))
+);
+const templateDialog = reactive({
+  open: false,
+  template: "",
+  scoping: emptyScoping() as Scoping,
+  error: "",
+});
+
+function openTemplateDialog() {
+  templateDialog.template = proposal.value?.template || "";
+  templateDialog.scoping = {
+    ...form.scoping,
+    modules: form.modules.map((m) => m.module_name),
+  };
+  templateDialog.error = "";
+  templateDialog.open = true;
+}
+
+function takeTemplateChoice(choice: ImplementationChoice) {
+  templateDialog.template = choice.template;
+  templateDialog.scoping = choice.scoping;
+}
+
+/** Another template from the list brings its default modules. */
+function pickDialogTemplate(name: string) {
+  const next = enabledTemplates.value.find((t) => t.name === name);
+  templateDialog.template = name;
+  templateDialog.scoping = {
+    ...templateDialog.scoping,
+    modules: [...(next?.default_modules ?? [])],
+  };
+}
+
+const templateChanged = computed(
+  () =>
+    !!templateDialog.template &&
+    (templateDialog.template !== proposal.value?.template ||
+      JSON.stringify(templateDialog.scoping.modules) !==
+        JSON.stringify(form.modules.map((m) => m.module_name)))
+);
+
+const changeTemplate = createResource({
+  url: "helpdesk.api.proposals.change_template",
+  method: "POST",
+  onSuccess(d: { proposal: Proposal; warnings?: string[]; kept?: string[] }) {
+    setProposal(d.proposal);
+    templateDialog.open = false;
+    showWarnings(d.warnings);
+    if (d.kept?.length)
+      toast.info(__("Kept your edits in: {0}", d.kept.join(", ")));
+    toast.success(__("Template changed"));
+  },
+  onError(e: unknown) {
+    templateDialog.error = errorText(
+      e,
+      __("Couldn't change the template. Check your connection and try again.")
+    );
+  },
+});
+
+function submitTemplate() {
+  templateDialog.error = "";
+  changeTemplate.submit({
+    name: props.proposalId,
+    template: templateDialog.template,
+    scoping: {
+      ...templateDialog.scoping,
+      customisations: templateDialog.scoping.customisations.filter((c) =>
+        c.item.trim()
+      ),
+    },
+  });
+}
+
 const regenerateAll = createResource({
   url: "helpdesk.api.proposals.regenerate_proposal",
   method: "POST",
@@ -1096,21 +1296,61 @@ const sendResource = createResource({
   url: "helpdesk.api.proposals.send_proposal",
   method: "POST",
   onSuccess(p: Proposal) {
+    markedForSend.value = false;
     setProposal(p);
     showSend.value = false;
     toast.success(__("Sent to {0}", p.tracking.sent_to || ""));
   },
-  onError(e: unknown) {
+  async onError(e: unknown) {
     sendError.value = errorText(
       e,
       __("Couldn't send it. Check your connection and try again.")
     );
+    // a draft this Send marked ready goes back to a draft, so a refused send leaves nothing to undo
+    if (!markedForSend.value) return;
+    markedForSend.value = false;
+    try {
+      setProposal(
+        await call("helpdesk.api.proposals.finalise_proposal", {
+          name: props.proposalId,
+          ready: 0,
+        })
+      );
+    } catch {
+      sendError.value +=
+        " " + __("It is still marked ready; Reopen to edit it.");
+    }
   },
 });
+/** Send marked the draft ready on the way out (undone if the send fails) */
+const markedForSend = ref(false);
 
-function send() {
-  if (sendResource.loading) return;
+async function send() {
+  if (sendResource.loading || readyResource.loading) return;
   sendError.value = "";
+  markedForSend.value = false;
+  if (!sendForm.recipients.trim()) {
+    sendError.value = __("Type the client's email address.");
+    return;
+  }
+  // a draft is marked ready on the way out (the ERP site sends only a ready one)
+  if (editable.value) {
+    try {
+      setProposal(
+        await call("helpdesk.api.proposals.finalise_proposal", {
+          name: props.proposalId,
+          ready: 1,
+        })
+      );
+      markedForSend.value = true;
+    } catch (e) {
+      sendError.value = errorText(
+        e,
+        __("Couldn't mark it ready. Check your connection and try again.")
+      );
+      return;
+    }
+  }
   sendResource.submit({
     name: props.proposalId,
     recipients: sendForm.recipients,
