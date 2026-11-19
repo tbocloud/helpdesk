@@ -160,7 +160,8 @@ Mobile App* template, `mobile_app` and the *Flutter Mobile App* module; off is E
 one), **Website** (the *Website & Portal* module) and **ERPNext customisation** (the
 Customisations list, which shows once picked). Digital Marketing is the *Digital Marketing –
 6-month strategy* template. Switching type takes that template's default modules and clears the
-add-ons; a type whose template is off on the ERP site isn't offered. The Template select stays
+add-ons; when customisations are already listed it asks first, inline (**Keep them** / **Switch**),
+since they would be lost; a type whose template is off on the ERP site isn't offered. The Template select stays
 for the other templates (HRMS, Helpdesk, CRM…); on one of those the control shows no type and
 says so. On ERP the scoping form doesn't ask the mobile app again (`hidden`). The helpers
 (`implementationOf`, `withImplementation`, `withAddon`, `erpAddons`) are in `proposals.ts`, shared
@@ -169,7 +170,8 @@ with the chat.
 **Price** (`ProposalPriceEstimate.vue`, under the summary once there is a module or a
 customisation): the modules by app (**ERPNext** or **Digital Marketing**, **Mobile app**,
 **Website**), each with its price (the catalogue's list price until one is typed; **Use the list
-price** undoes it) and a subtotal, then **ERPNext customisation** (each customisation's own
+price** undoes it, as does emptying the box; a module taken off loses its typed price) and a
+subtotal, then **ERPNext customisation** (each customisation's own
 price, or its days at the day rate), **Branch rollout** (the additional branches × the price per
 branch, or the ERP site's branch rate, `options.branch_rate`; with neither it says to set one and
 adds nothing), and the **Total before GST** in the ERP site's currency
@@ -290,7 +292,9 @@ lead's first proposal with a website (the summary is kept on the lead); none wit
 - **Send dialog:** **To** typed by hand (the lead's email, or whom it was last sent to, filled
   in; several addresses separated by commas), a message and *Attach the PDF too*. On a draft it
   says that sending marks it ready first, and Send marks it ready (`finalise_proposal`) and then
-  sends; if marking fails nothing is sent and the reason shows in the dialog.
+  sends; if marking fails nothing is sent and the reason shows in the dialog. If the send itself
+  fails, a draft this Send marked ready is reopened, so it is a draft again; should that reopen
+  fail too, the dialog says it is still marked ready.
 - **Mark ready** fixes the draft's content and numbers (the form turns read-only, with "Ready to
   send. The content and the numbers are fixed; Reopen to change them."); **Reopen** makes it
   editable again. The ERP site refuses any change while it is marked.

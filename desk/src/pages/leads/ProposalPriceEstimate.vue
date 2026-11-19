@@ -237,7 +237,9 @@ const footnote = computed(() =>
     .join(" ")
 );
 
-function setPrice(name: string, value: string | number) {
+function setPrice(name: string, value: string | number | null) {
+  // an emptied box is the list price again, not a price of 0
+  if (value === "" || value === null) return unset(name);
   const amount = Math.max(Number(value) || 0, 0);
   emit("update:prices", { ...props.prices, [name]: amount });
 }

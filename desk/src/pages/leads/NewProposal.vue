@@ -330,6 +330,18 @@ const state = reactive<ChatState>({
 const chatLog = reactive<ChatLine[]>([]);
 /** module prices typed on the Price card, set on the proposal once it is made */
 const prices = ref<Record<string, number>>({});
+// a module taken off loses its typed price, so adding it back starts from the list price
+watch(
+  () => state.scoping.modules,
+  (modules) => {
+    const kept = Object.entries(prices.value).filter(([m]) =>
+      modules.includes(m)
+    );
+    if (kept.length !== Object.keys(prices.value).length)
+      prices.value = Object.fromEntries(kept);
+  },
+  { deep: true }
+);
 const keeping = ref(false);
 const busy = computed(() => create.loading || keeping.value);
 const chatOpen = ref(true);

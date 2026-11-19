@@ -1296,21 +1296,39 @@ const sendResource = createResource({
   url: "helpdesk.api.proposals.send_proposal",
   method: "POST",
   onSuccess(p: Proposal) {
+    markedForSend.value = false;
     setProposal(p);
     showSend.value = false;
     toast.success(__("Sent to {0}", p.tracking.sent_to || ""));
   },
-  onError(e: unknown) {
+  async onError(e: unknown) {
     sendError.value = errorText(
       e,
       __("Couldn't send it. Check your connection and try again.")
     );
+    // a draft this Send marked ready goes back to a draft, so a refused send leaves nothing to undo
+    if (!markedForSend.value) return;
+    markedForSend.value = false;
+    try {
+      setProposal(
+        await call("helpdesk.api.proposals.finalise_proposal", {
+          name: props.proposalId,
+          ready: 0,
+        })
+      );
+    } catch {
+      sendError.value +=
+        " " + __("It is still marked ready; Reopen to edit it.");
+    }
   },
 });
+/** Send marked the draft ready on the way out (undone if the send fails) */
+const markedForSend = ref(false);
 
 async function send() {
   if (sendResource.loading || readyResource.loading) return;
   sendError.value = "";
+  markedForSend.value = false;
   if (!sendForm.recipients.trim()) {
     sendError.value = __("Type the client's email address.");
     return;
@@ -1324,6 +1342,7 @@ async function send() {
           ready: 1,
         })
       );
+      markedForSend.value = true;
     } catch (e) {
       sendError.value = errorText(
         e,

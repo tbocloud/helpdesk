@@ -13,7 +13,34 @@
         :options="kindOptions"
         @update:model-value="pickKind"
       />
-      <p v-if="!kind" class="text-p-sm text-ink-gray-6">
+      <div
+        v-if="pending"
+        role="alert"
+        class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg bg-warning-soft px-3 py-2"
+      >
+        <LucideTriangleAlert
+          class="size-4 shrink-0 text-warning"
+          aria-hidden="true"
+        />
+        <span class="min-w-0 flex-1 text-p-sm text-ink-gray-8">
+          {{
+            __(
+              "Switching to {0} removes the customisations you listed ({1}).",
+              IMPLEMENTATION_LABELS[pending],
+              String(listed)
+            )
+          }}
+        </span>
+        <div class="flex gap-2">
+          <Button :label="__('Keep them')" @click="pending = null" />
+          <Button
+            variant="solid"
+            :label="__('Switch')"
+            @click="switchTo(pending)"
+          />
+        </div>
+      </div>
+      <p v-else-if="!kind" class="text-p-sm text-ink-gray-6">
         {{
           __(
             "This template is neither ERP nor Digital Marketing. Pick one to switch to it."
@@ -59,9 +86,10 @@
 
 <script setup lang="ts">
 import { __ } from "@/translation";
-import { TabButtons } from "frappe-ui";
-import { computed, useId } from "vue";
+import { Button, TabButtons } from "frappe-ui";
+import { computed, ref, useId } from "vue";
 import LucideCheck from "~icons/lucide/check";
+import LucideTriangleAlert from "~icons/lucide/triangle-alert";
 import {
   ERP_ADDONS,
   erpAddons,
@@ -103,8 +131,21 @@ const kind = computed(() =>
 
 const addons = computed(() => erpAddons(props.scoping));
 
+/** customisations with something written in them, which another type clears */
+const listed = computed(
+  () => props.scoping.customisations.filter((c) => c.item.trim()).length
+);
+/** the type waiting on "Switch" because switching would lose those */
+const pending = ref<Implementation | null>(null);
+
 function pickKind(value: Implementation) {
-  if (value === kind.value) return;
+  if (value === kind.value) return (pending.value = null);
+  if (listed.value) pending.value = value;
+  else switchTo(value);
+}
+
+function switchTo(value: Implementation) {
+  pending.value = null;
   const next = withImplementation(value, props.scoping, props.templates);
   if (next) emit("change", next);
 }
