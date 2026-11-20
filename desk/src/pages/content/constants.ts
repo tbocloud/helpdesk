@@ -81,6 +81,8 @@ export interface ContentPost {
   // a paid boost is or was running (Boost this post)
   meta_boosted?: number;
   caption?: string;
+  /** for the team: an example or source to follow */
+  reference_link?: string;
   brief?: string;
   writer?: string;
   designer?: string;

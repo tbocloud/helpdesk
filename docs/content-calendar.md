@@ -393,6 +393,7 @@ same labels and fields:
 | Platforms | `platforms`, `channel` | Chips; one post can go out on several. The first is `channel`. |
 | Post type | `format` | Chips, one per post. |
 | Sub Copy | `caption` | The post's text; Draft with AI fills it. In the post dialog the caption box sits right under the Sub Copy label, and the **Brief for AI** box (what to tell the AI, never saved) comes after it with its own label: it used to sit first, looked like the Sub Copy, and text typed there was lost on save (owner's report, 2026-10-14). |
+| Reference link (optional) | `reference_link` | Under the Sub Copy in both dialogs (owner's request, 2026-11-20): an example, a source or the brand's drive folder for the team to follow. A Data field with the URL option, so the site refuses anything that isn't a link. The post dialog shows **Open the link** under it once it is an http(s) link. Add entry sets it on every post it makes (`ENTRY_FIELDS` in `api/content_board.py`). Not shown to the client. |
 | Description | `brief` | For the creative team; never shown to the client. |
 | Writer / Designer / Video editor / Digital marketer | role fields + `extra_team` | Several people per role. |
 | Est. hours (next to each role) | `writer_hours`, `designer_hours`, `video_editor_hours`, `marketer_hours` | Optional; see below. |
