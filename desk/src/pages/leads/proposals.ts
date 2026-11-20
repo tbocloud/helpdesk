@@ -3,7 +3,7 @@
 // hub-proposals-api.md).
 import type { Tone } from "@/components/tone";
 import { __ } from "@/translation";
-import { createResource } from "frappe-ui";
+import { createResource, toast } from "frappe-ui";
 
 export type ProposalStatus =
   | "Draft"
@@ -315,8 +315,24 @@ export interface Scoping {
   architecture: "Simple" | "Detailed";
   /** the templates picked at the start (blank: suggested timeline, first payment terms) */
   timeline_template?: string | null;
+  /** a custom period in calendar days, over the template (0: none) */
+  timeline_days: number;
   payment_terms?: string | null;
+  /** this proposal's own milestones (adding up to 100%), over the template; none: the template */
+  payment_milestones: PaymentMilestone[];
   amc_plan?: string | null;
+  /** how the quotation prices the modules (the Price card): a line each, per app, or one */
+  price_basis: PriceBasis;
+  /** by App, the price per app; an app not in it is its modules' prices added up */
+  app_prices: Partial<Record<PriceGroup, number>>;
+  /** by Custom, the one price for all the modules; null is their prices added up */
+  custom_price: number | null;
+}
+
+export interface PaymentMilestone {
+  label: string;
+  /** in %, the milestones adding up to 100 */
+  share: number;
 }
 
 /** Who the client is: presales confirms it before a proposal is generated. */
@@ -365,8 +381,13 @@ export function emptyScoping(): Scoping {
     source_code: false,
     architecture: "Simple",
     timeline_template: null,
+    timeline_days: 0,
     payment_terms: null,
+    payment_milestones: [],
     amc_plan: null,
+    price_basis: "Module",
+    app_prices: {},
+    custom_price: null,
   };
 }
 
@@ -532,6 +553,70 @@ export interface ProposalModule {
   rate: number;
   rate_overridden: number;
   item?: string | null;
+}
+
+/**
+ * How the quotation prices the modules (kept in the scoping, priced by the ERP site): a line per
+ * module, a line per app (ERPNext, Mobile app, Website), or one line for them all.
+ */
+export type PriceBasis = "Module" | "App" | "Custom";
+export type PriceGroup = "main" | "mobile" | "website";
+
+/** The modules by app, in the Price card's order (as the ERP site groups them); an app with none is left out. */
+export function priceGroups(modules: string[]) {
+  return (
+    [
+      {
+        key: "main",
+        names: modules.filter(
+          (m) => m !== MOBILE_MODULE && m !== WEBSITE_MODULE
+        ),
+      },
+      { key: "mobile", names: modules.filter((m) => m === MOBILE_MODULE) },
+      { key: "website", names: modules.filter((m) => m === WEBSITE_MODULE) },
+    ] as { key: PriceGroup; names: string[] }[]
+  ).filter((g) => g.names.length);
+}
+
+/** What the Price card calls the main app: the modules other than the mobile app and the website. */
+export function mainAppLabel(solution?: string | null) {
+  const kind = implementationOf(solution);
+  return kind === "ERP"
+    ? __("ERPNext")
+    : kind === "Digital"
+    ? __("Digital Marketing")
+    : __("Modules");
+}
+
+/**
+ * Says so when the ERP site didn't keep a choice sent in the scoping (the price by app or one
+ * price, a custom timeline period, custom payment milestones): it runs a TBO Smart without them
+ * and drops what it doesn't know, so the proposal falls back to module prices and the templates.
+ */
+export function warnDropped(sent: Scoping, kept?: Partial<Scoping> | null) {
+  const k = kept || {};
+  const dropped = [
+    sent.price_basis !== "Module" && k.price_basis !== sent.price_basis
+      ? __("the price by app or custom price")
+      : "",
+    sent.timeline_days && !k.timeline_days
+      ? __("the custom timeline period")
+      : "",
+    sent.payment_milestones?.length && !k.payment_milestones?.length
+      ? __("the custom payment milestones")
+      : "",
+  ].filter(Boolean);
+  if (dropped.length)
+    toast.warning(
+      __(
+        "The ERP site didn't keep {0}: it needs the TBO Smart update. Until then the proposal uses the module prices and the templates.",
+        dropped.join(", ")
+      )
+    );
+}
+
+export function listPrice(catalogue: CatalogueModule[], name: string) {
+  return catalogue.find((m) => m.module_name === name)?.default_price || 0;
 }
 
 export interface LibraryImage {

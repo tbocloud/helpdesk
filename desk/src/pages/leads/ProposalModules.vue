@@ -27,19 +27,12 @@
             <span class="truncate text-base-medium text-ink-gray-8">{{
               m.module_name
             }}</span>
-            <span v-if="m.rate_overridden" class="text-xs text-ink-gray-5">{{
-              __("Price set by hand")
-            }}</span>
+            <span
+              v-if="byModule && m.rate_overridden"
+              class="text-xs text-ink-gray-5"
+              >{{ __("Price set by hand") }}</span
+            >
           </div>
-          <FormControl
-            class="w-32"
-            :model-value="m.fit"
-            type="select"
-            :label="__('Fit')"
-            :options="fitOptions"
-            :disabled="!editable"
-            @update:model-value="update(i, { fit: $event })"
-          />
           <FormControl
             class="w-24"
             :model-value="m.effort_days"
@@ -53,6 +46,7 @@
             "
           />
           <FormControl
+            v-if="byModule"
             class="w-36"
             :model-value="m.rate"
             type="number"
@@ -116,7 +110,7 @@
               </template>
             </Button>
             <Button
-              v-if="m.rate_overridden"
+              v-if="byModule && m.rate_overridden"
               :label="__('Use the list price')"
               @click="update(i, { rate_overridden: 0 })"
             />
@@ -124,6 +118,55 @@
         </div>
       </li>
     </ul>
+    <!-- by App or Custom the quotation has a line per app or one line, so the price is that -->
+    <div
+      v-if="!byModule && modules.length"
+      class="flex flex-col gap-1 border-t border-outline-gray-1 pt-3"
+    >
+      <h3 class="text-sm font-medium text-ink-gray-8">
+        {{
+          scoping.price_basis === "App"
+            ? __("Price by app")
+            : __("Price for all the modules")
+        }}
+      </h3>
+      <fieldset :disabled="!editable" class="contents">
+        <ul class="flex flex-col divide-y divide-outline-gray-1" role="list">
+          <template v-if="scoping.price_basis === 'App'">
+            <ProposalPriceRow
+              v-for="g in groups"
+              :key="g.key"
+              :label="g.label"
+              :detail="g.names.join(', ')"
+              :price="scoping.app_prices[g.key] ?? addedUp(g.names)"
+              :set="g.key in scoping.app_prices"
+              several
+              @price="setApp(g.key, $event)"
+            />
+          </template>
+          <ProposalPriceRow
+            v-else
+            :label="__('All modules')"
+            :detail="modules.map((m) => m.module_name).join(', ')"
+            :price="
+              scoping.custom_price ?? addedUp(modules.map((m) => m.module_name))
+            "
+            :set="scoping.custom_price !== null"
+            several
+            @price="
+              emit('update:scoping', { ...scoping, custom_price: $event })
+            "
+          />
+        </ul>
+      </fieldset>
+      <p class="text-p-xs text-ink-gray-6">
+        {{
+          __(
+            "To price it by module, app or as one price, go Back to the first page."
+          )
+        }}
+      </p>
+    </div>
     <div
       v-if="editable && addable.length"
       class="flex flex-wrap items-end gap-2"
@@ -159,25 +202,61 @@ import LucidePencil from "~icons/lucide/pencil";
 import LucidePlus from "~icons/lucide/plus";
 import LucideRotateCcw from "~icons/lucide/rotate-ccw";
 import LucideTrash2 from "~icons/lucide/trash-2";
-import { suits, type CatalogueModule, type ProposalModule } from "./proposals";
+import ProposalPriceRow from "./ProposalPriceRow.vue";
+import {
+  mainAppLabel,
+  priceGroups,
+  suits,
+  type CatalogueModule,
+  type PriceGroup,
+  type ProposalModule,
+  type Scoping,
+} from "./proposals";
 
 const props = defineProps<{
   modules: ProposalModule[];
+  /** its price basis and prices: by App or Custom the modules show no price of their own */
+  scoping: Scoping;
   catalogue: CatalogueModule[];
   solutionType?: string | null;
   editable: boolean;
 }>();
 const emit = defineEmits<{
   (e: "update:modules", value: ProposalModule[]): void;
+  (e: "update:scoping", value: Scoping): void;
 }>();
 
 const headingId = `proposal-modules-${useId()}`;
 const open = ref<number | null>(null);
 const adding = ref("");
-const fitOptions = ["Standard", "Configured", "Customised"].map((f) => ({
-  label: __(f),
-  value: f,
-}));
+
+const byModule = computed(() => props.scoping.price_basis === "Module");
+const groups = computed(() => {
+  const labels: Record<PriceGroup, string> = {
+    main: mainAppLabel(props.solutionType),
+    mobile: __("Mobile app"),
+    website: __("Website"),
+  };
+  return priceGroups(props.modules.map((m) => m.module_name)).map((g) => ({
+    ...g,
+    label: labels[g.key],
+  }));
+});
+
+/** What the ERP site prices an app or all the modules at with no price typed: theirs added up. */
+function addedUp(names: string[]) {
+  return props.modules
+    .filter((m) => names.includes(m.module_name))
+    .reduce((sum, m) => sum + (Number(m.rate) || 0), 0);
+}
+
+function setApp(key: PriceGroup, price: number | null) {
+  const { [key]: _gone, ...rest } = props.scoping.app_prices || {};
+  emit("update:scoping", {
+    ...props.scoping,
+    app_prices: price === null ? rest : { ...rest, [key]: price },
+  });
+}
 
 const totalEffort = computed(() =>
   props.modules.reduce((sum, m) => sum + (Number(m.effort_days) || 0), 0)

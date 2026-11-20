@@ -20,6 +20,7 @@ const LEADS_ROUTES = new Set([
   "Lead",
   "LeadProposal",
   "LeadNewProposal",
+  "LeadProposalSetup",
   "AssignLeads",
   "MemberCalls",
 ]);
@@ -192,6 +193,13 @@ const portalRoutes = [
   {
     path: "/leads/:leadId/proposals/new",
     name: "LeadNewProposal",
+    component: () => import("@/pages/leads/NewProposal.vue"),
+    props: true,
+  },
+  // the first page again for a draft proposal: its Update saves and regenerates it
+  {
+    path: "/leads/:leadId/proposals/:proposalId/setup",
+    name: "LeadProposalSetup",
     component: () => import("@/pages/leads/NewProposal.vue"),
     props: true,
   },

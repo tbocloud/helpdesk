@@ -46,6 +46,19 @@
           :label="statusLabel"
           :tone="proposalTone(proposal.status)"
         />
+        <Button
+          v-if="isDraft && proposal.can_write"
+          size="md"
+          variant="ghost"
+          :label="__('Delete draft')"
+          :tooltip="__('Delete draft')"
+          :loading="deleteResource.loading"
+          @click="askDelete"
+        >
+          <template #icon>
+            <LucideTrash2 class="size-4" aria-hidden="true" />
+          </template>
+        </Button>
         <Dropdown :options="shareOptions">
           <Button size="md" :label="__('Share')">
             <template #prefix>
@@ -402,23 +415,19 @@
                   :disabled="!editable"
                 />
                 <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  <FormControl
-                    :model-value="form.scoping.timeline_template || ''"
-                    type="select"
-                    :label="__('Timeline')"
-                    :options="timelineOptions"
+                  <ProposalTimelineField
+                    :template="form.scoping.timeline_template"
+                    :days="form.scoping.timeline_days || 0"
+                    :timelines="options?.timelines || []"
                     :disabled="!editable"
-                    @update:model-value="
-                      form.scoping.timeline_template = $event
-                    "
+                    @update="Object.assign(form.scoping, $event)"
                   />
-                  <FormControl
-                    :model-value="form.scoping.payment_terms || ''"
-                    type="select"
-                    :label="__('Payment terms')"
-                    :options="paymentOptions"
+                  <ProposalPaymentTermsField
+                    :terms="form.scoping.payment_terms"
+                    :milestones="form.scoping.payment_milestones || []"
+                    :templates="options?.payment_terms || []"
                     :disabled="!editable"
-                    @update:model-value="form.scoping.payment_terms = $event"
+                    @update="Object.assign(form.scoping, $event)"
                   />
                   <FormControl
                     :model-value="form.scoping.amc_plan || ''"
@@ -453,6 +462,7 @@
             <ProposalModules
               v-if="isProposal"
               v-model:modules="form.modules"
+              v-model:scoping="form.scoping"
               :catalogue="options?.catalogue || []"
               :solution-type="proposal.solution_type"
               :editable="editable"
@@ -552,6 +562,7 @@
                 :pricing-mode="form.pricing_mode"
                 :modules="form.modules"
                 :letter-head="letterHeadPreview"
+                :amc-plan="form.scoping.amc_plan"
               />
             </div>
           </div>
@@ -684,6 +695,7 @@
           <Button :label="__('Cancel')" @click="close" />
           <Button
             variant="solid"
+            :theme="confirm.danger ? 'red' : 'gray'"
             :label="confirm.action"
             @click="runConfirmed"
           />
@@ -721,6 +733,7 @@ import LucideMessageSquareText from "~icons/lucide/message-square-text";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideSend from "~icons/lucide/send";
 import LucideShare2 from "~icons/lucide/share-2";
+import LucideTrash2 from "~icons/lucide/trash-2";
 import LucideTriangleAlert from "~icons/lucide/triangle-alert";
 import ClientProfileForm from "./ClientProfileForm.vue";
 import DocumentQuestionnaire from "./DocumentQuestionnaire.vue";
@@ -728,10 +741,12 @@ import ProposalAssistant from "./ProposalAssistant.vue";
 import ProposalBlocks from "./ProposalBlocks.vue";
 import ProposalImplementation from "./ProposalImplementation.vue";
 import ProposalModules from "./ProposalModules.vue";
+import ProposalPaymentTermsField from "./ProposalPaymentTermsField.vue";
 import ProposalPreview from "./ProposalPreview.vue";
 import ProposalPricingDialog from "./ProposalPricingDialog.vue";
 import ProposalPricingSummary from "./ProposalPricingSummary.vue";
 import ProposalScopingForm from "./ProposalScopingForm.vue";
+import ProposalTimelineField from "./ProposalTimelineField.vue";
 import ProposalTracking from "./ProposalTracking.vue";
 import {
   documentType,
@@ -741,6 +756,7 @@ import {
   loadProposalOptions,
   proposalOptions,
   proposalTone,
+  warnDropped,
   type ClientProfile,
   type Proposal,
   type ProposalModule,
@@ -846,8 +862,27 @@ const sendTooltip = computed(() => {
   );
 });
 
-/** To where they came from; straight to the lead when the page was opened from a link. */
+/**
+ * A draft proposal goes back to its first page (client, scoping, price) to change and update;
+ * anything else to where they came from, or to the lead when opened from a link.
+ */
 function goBack() {
+  if (isProposal.value && editable.value) {
+    const toSetup = () =>
+      router.push({
+        name: "LeadProposalSetup",
+        params: { leadId: props.leadId, proposalId: props.proposalId },
+      });
+    if (!dirty.value) return toSetup();
+    return ask(
+      __("Leave without saving?"),
+      __(
+        "Your changes here aren't saved. The first page shows the proposal as last saved."
+      ),
+      __("Leave"),
+      toSetup
+    );
+  }
   if (window.history.state?.back) router.back();
   else router.push({ name: "Lead", params: { leadId: props.leadId } });
 }
@@ -873,15 +908,6 @@ const guidance = computed(() =>
   )
 );
 
-const timelineOptions = computed(() =>
-  (options.value?.timelines ?? []).map((t) => ({
-    label: t.title,
-    value: t.title,
-  }))
-);
-const paymentOptions = computed(() =>
-  (options.value?.payment_terms ?? []).map((t) => ({ label: t, value: t }))
-);
 const amcOptions = computed(() => [
   { label: __("None"), value: "" },
   ...(options.value?.amc_plans ?? []).map((p) => ({ label: p, value: p })),
@@ -1014,11 +1040,50 @@ const confirm = reactive({
   title: "",
   message: "",
   action: "",
+  /** the action can't be undone (a delete): its button is red */
+  danger: false,
   run: null as null | (() => void),
 });
 
-function ask(title: string, message: string, action: string, run: () => void) {
-  Object.assign(confirm, { open: true, title, message, action, run });
+function ask(
+  title: string,
+  message: string,
+  action: string,
+  run: () => void,
+  danger = false
+) {
+  Object.assign(confirm, { open: true, title, message, action, run, danger });
+}
+
+// --- delete ---
+
+const deleteResource = createResource({
+  url: "helpdesk.api.proposals.delete_proposal",
+  method: "POST",
+  onSuccess() {
+    toast.success(__("Draft deleted"));
+    router.replace({ name: "Lead", params: { leadId: props.leadId } });
+  },
+  onError(e: unknown) {
+    toast.error(errorText(e, __("Couldn't delete it. Try again.")));
+  },
+});
+
+/** A draft only; one that went out stays on the lead's record (the ERP site refuses it too). */
+function askDelete() {
+  ask(
+    __("Delete this draft?"),
+    proposal.value?.revision_no
+      ? __(
+          "This version is deleted for good, with its draft quotation. The version before it stays."
+        )
+      : __(
+          "The proposal is deleted for good, with its draft quotation. This can't be undone."
+        ),
+    __("Delete"),
+    () => deleteResource.submit({ name: props.proposalId }),
+    true
+  );
 }
 
 function runConfirmed() {
@@ -1032,6 +1097,7 @@ const saveResource = createResource({
   url: "helpdesk.api.proposals.save_proposal",
   method: "POST",
   onSuccess(p: Proposal) {
+    if (isProposal.value) warnDropped(sentScoping, p.scoping);
     setProposal(p);
     toast.success(__("Saved"));
     showWarnings(p.warnings);
@@ -1043,8 +1109,12 @@ const saveResource = createResource({
   },
 });
 
+/** the scoping the last save sent, to tell what the ERP site didn't keep */
+let sentScoping: Scoping = emptyScoping();
+
 function save() {
   if (saveResource.loading || !dirty.value) return;
+  sentScoping = JSON.parse(JSON.stringify(form.scoping));
   saveResource.submit({
     name: props.proposalId,
     data: {

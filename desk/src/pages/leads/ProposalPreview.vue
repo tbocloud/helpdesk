@@ -120,6 +120,81 @@
           </li>
         </ul>
 
+        <!-- the AMC plans, after the note above them (as on the client's page) -->
+        <template v-if="b.plans.length">
+          <template v-for="(part, j) in b.parts" :key="`n${j}`">
+            <p
+              v-if="part.kind === 'text'"
+              class="mb-3 whitespace-pre-line text-p-sm text-ink-gray-7"
+            >
+              {{ part.lines.join("\n") }}
+            </p>
+          </template>
+          <ul
+            class="mb-3 mt-4 grid grid-cols-1 gap-3 sm:grid-cols-[repeat(auto-fit,minmax(10rem,1fr))]"
+            role="list"
+            :aria-label="__('AMC plans')"
+          >
+            <li
+              v-for="(plan, k) in b.plans"
+              :key="k"
+              class="relative rounded-lg border p-4 pt-5"
+              :class="
+                plan.recommended
+                  ? 'border-2 border-brand'
+                  : 'border-outline-gray-2'
+              "
+            >
+              <span
+                v-if="plan.recommended"
+                class="absolute -top-2.5 left-3 rounded-full bg-brand px-2 py-0.5 text-2xs font-semibold text-brand-on"
+                >{{ __("Recommended") }}</span
+              >
+              <p class="text-base font-semibold text-ink-gray-9">
+                {{ plan.name }}
+              </p>
+              <template v-if="plan.fee">
+                <p
+                  class="mt-2 font-mono text-xl font-semibold tabular-nums text-ink-gray-9"
+                >
+                  {{ plan.fee }}
+                </p>
+                <p class="text-xs text-ink-gray-6">{{ __("a year") }}</p>
+              </template>
+              <ul
+                class="mt-3 flex flex-col gap-1.5 border-t border-outline-gray-2 pt-3 text-p-xs"
+              >
+                <li
+                  v-for="(f, m) in plan.features"
+                  :key="m"
+                  class="flex gap-2"
+                  :class="f.on ? 'text-ink-gray-8' : 'text-ink-gray-5'"
+                >
+                  <LucideCheck
+                    v-if="f.on"
+                    class="mt-0.5 size-3.5 shrink-0 text-brand-ink"
+                    aria-hidden="true"
+                  />
+                  <LucideMinus
+                    v-else
+                    class="mt-0.5 size-3.5 shrink-0"
+                    aria-hidden="true"
+                  />
+                  <span>
+                    <span class="sr-only">{{
+                      f.on ? __("Included:") : __("Not included:")
+                    }}</span>
+                    {{ f.label }}
+                    <span v-if="f.detail" class="block text-ink-gray-6">{{
+                      f.detail
+                    }}</span>
+                  </span>
+                </li>
+              </ul>
+            </li>
+          </ul>
+        </template>
+
         <!-- the timeline bar -->
         <div v-if="b.bars.length" class="mb-3 flex flex-col gap-1.5">
           <div
@@ -140,7 +215,7 @@
           </div>
         </div>
 
-        <template v-for="(part, j) in b.parts" :key="j">
+        <template v-for="(part, j) in b.plans.length ? [] : b.parts" :key="j">
           <h4
             v-if="part.kind === 'heading'"
             class="mb-1 mt-3 text-sm font-semibold text-ink-gray-9"
@@ -365,6 +440,8 @@ import { __ } from "@/translation";
 import { dayjs } from "frappe-ui";
 import { computed } from "vue";
 import LucideArrowRight from "~icons/lucide/arrow-right";
+import LucideCheck from "~icons/lucide/check";
+import LucideMinus from "~icons/lucide/minus";
 import LetterHeadPart from "./LetterHeadPart.vue";
 import {
   NO_IMAGE,
@@ -398,7 +475,45 @@ const props = defineProps<{
   pricingMode: "Itemised" | "Consolidated";
   modules: ProposalModule[];
   letterHead?: LetterHeadPreview | null;
+  /** the AMC plan recommended (its title), marked on its card */
+  amcPlan?: string | null;
 }>();
+
+type AmcPlan = {
+  name: string;
+  fee: string;
+  recommended: boolean;
+  features: { label: string; on: boolean; detail: string }[];
+};
+const INCLUDED = ["yes", "✓", "included"];
+
+/**
+ * The AMC table ("what you get | plan…", the yearly fee its last row) as a card a plan, as the
+ * ERP site draws it: "–" not included, "Yes" included with no detail.
+ */
+function amcPlans(table: { header: string[]; rows: string[][] }): AmcPlan[] {
+  const rows = table.rows;
+  const last = rows[rows.length - 1];
+  const fees =
+    last && [__("Yearly fee"), "Yearly fee"].includes((last[0] || "").trim())
+      ? last
+      : null;
+  const features = fees ? rows.slice(0, -1) : rows;
+  return table.header.slice(1).map((name, i) => ({
+    name,
+    fee: fees?.[i + 1]?.trim() || "",
+    recommended: !!props.amcPlan && name === props.amcPlan,
+    features: features.map((r) => {
+      const value = (r[i + 1] || "").trim();
+      const on = !["", "–", "-"].includes(value);
+      return {
+        label: r[0],
+        on,
+        detail: on && !INCLUDED.includes(value.toLowerCase()) ? value : "",
+      };
+    }),
+  }));
+}
 
 /** The tax lines; an older ERP site sends only the total, shown as one "Taxes" line. */
 const taxLines = computed(() => {
@@ -503,6 +618,9 @@ const blocks = computed(() => {
         });
       }
     }
+    let plans: AmcPlan[] = [];
+    if (table && section.section_type === "AMC" && table.header.length > 1)
+      plans = amcPlans(table);
     if (table && section.section_type === "Payment Terms" && props.quotation) {
       const q = props.quotation;
       table.amounts = true;
@@ -528,6 +646,7 @@ const blocks = computed(() => {
       parts,
       cards,
       bars,
+      plans,
     });
   });
   return shown;

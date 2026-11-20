@@ -26,7 +26,9 @@
             class="size-4 shrink-0 text-ink-gray-4"
             aria-hidden="true"
           />
-          <h1 class="truncate text-ink-gray-9">{{ __("New proposal") }}</h1>
+          <h1 class="truncate text-ink-gray-9">
+            {{ proposalId ? __("Edit proposal") : __("New proposal") }}
+          </h1>
         </nav>
       </template>
       <template #right-header>
@@ -51,7 +53,7 @@
         <Button
           variant="solid"
           size="md"
-          :label="__('Generate proposal')"
+          :label="proposalId ? __('Update proposal') : __('Generate proposal')"
           :loading="busy"
           :disabled="!options?.enabled"
           @click="generate"
@@ -74,7 +76,7 @@
           :message="__('Switch on Proposals in TBO Smart Settings there.')"
         />
         <div
-          v-else-if="options"
+          v-else-if="options && (!proposalId || existing.data)"
           class="grid grid-cols-1 gap-5"
           :class="chatOpen ? 'lg:grid-cols-2' : ''"
         >
@@ -170,34 +172,18 @@
                 :branch-rate="options.branch_rate"
               />
               <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <FormControl
-                  :model-value="
-                    state.scoping.timeline_template || suggested || ''
-                  "
-                  type="select"
-                  :label="__('Timeline')"
-                  :options="timelineOptions"
-                  @update:model-value="
-                    setScoping({ timeline_template: $event || null })
-                  "
+                <ProposalTimelineField
+                  :template="state.scoping.timeline_template"
+                  :days="state.scoping.timeline_days || 0"
+                  :timelines="options.timelines || []"
+                  :suggested="suggested"
+                  @update="setScoping"
                 />
-                <FormControl
-                  :model-value="
-                    state.scoping.payment_terms ||
-                    options.payment_terms?.[0] ||
-                    ''
-                  "
-                  type="select"
-                  :label="__('Payment terms')"
-                  :options="
-                    (options.payment_terms || []).map((t) => ({
-                      label: t,
-                      value: t,
-                    }))
-                  "
-                  @update:model-value="
-                    setScoping({ payment_terms: $event || null })
-                  "
+                <ProposalPaymentTermsField
+                  :terms="state.scoping.payment_terms"
+                  :milestones="state.scoping.payment_milestones || []"
+                  :templates="options.payment_terms || []"
+                  @update="setScoping"
                 />
                 <FormControl
                   :model-value="state.scoping.amc_plan || ''"
@@ -210,7 +196,7 @@
                 />
               </div>
               <FormControl
-                v-if="options.ai"
+                v-if="options.ai && !proposalId"
                 v-model="aiDraft"
                 type="checkbox"
                 :label="
@@ -241,6 +227,7 @@
                 {{ __("Price") }}
               </h2>
               <ProposalPriceEstimate
+                v-model:scoping="state.scoping"
                 v-model:prices="prices"
                 :scoping="state.scoping"
                 :catalogue="options.catalogue || []"
@@ -281,25 +268,34 @@ import ProposalChat, {
   type ChatState,
 } from "./ProposalChat.vue";
 import ProposalImplementation from "./ProposalImplementation.vue";
+import ProposalPaymentTermsField from "./ProposalPaymentTermsField.vue";
 import ProposalPriceEstimate from "./ProposalPriceEstimate.vue";
 import ProposalScopingForm from "./ProposalScopingForm.vue";
+import ProposalTimelineField from "./ProposalTimelineField.vue";
 import {
   emptyProfile,
   emptyScoping,
   erpAddons,
   implementationOf,
   loadProposalOptions,
+  mainAppLabel,
+  warnDropped,
   proposalOptions,
   suggestTimeline,
   type ClientProfile,
   type ImplementationChoice,
+  type ProposalModule,
   type Proposal,
   type Question,
   type ProposalOptions,
   type Scoping,
 } from "./proposals";
 
-const props = defineProps<{ leadId: string }>();
+const props = defineProps<{
+  leadId: string;
+  /** a draft proposal to edit here; none makes a new one */
+  proposalId?: string;
+}>();
 const MAIN_TEMPLATE = "ERPNext Implementation";
 const { isMobileView } = useScreenSize();
 const iconSlot = computed(() => (isMobileView.value ? "icon" : "prefix"));
@@ -328,7 +324,10 @@ const state = reactive<ChatState>({
   scoping: emptyScoping(),
 });
 const chatLog = reactive<ChatLine[]>([]);
-/** module prices typed on the Price card, set on the proposal once it is made */
+/**
+ * By Module, the prices typed on the Price card, set on the proposal's modules by hand (by App
+ * or Custom the prices are in the scoping)
+ */
 const prices = ref<Record<string, number>>({});
 // a module taken off loses its typed price, so adding it back starts from the list price
 watch(
@@ -344,7 +343,8 @@ watch(
 );
 const keeping = ref(false);
 const busy = computed(() => create.loading || keeping.value);
-const chatOpen = ref(true);
+// editing, the assistant stays shut so it doesn't ask again what the proposal already has
+const chatOpen = ref(!props.proposalId);
 const aiDraft = ref(true);
 const error = ref("");
 
@@ -358,9 +358,12 @@ const templates = computed(() =>
 const chosen = computed(() =>
   templates.value.find((t) => t.name === state.template)
 );
+// a proposal changes template, it can't go blank
 const templateOptions = computed(() => [
   ...templates.value.map((t) => ({ label: t.template_name, value: t.name })),
-  { label: __("Blank (every section, no template)"), value: "" },
+  ...(props.proposalId
+    ? []
+    : [{ label: __("Blank (every section, no template)"), value: "" }]),
 ]);
 
 const PROFILE_LABELS: Record<string, string> = {
@@ -402,26 +405,13 @@ const suggested = computed(() =>
     options.value?.catalogue ?? []
   )
 );
-const timelineOptions = computed(() =>
-  (options.value?.timelines ?? []).map((t) => ({
-    label:
-      t.title === suggested.value ? __("{0} (suggested)", t.title) : t.title,
-    value: t.title,
-  }))
-);
 const amcOptions = computed(() => [
   { label: __("None"), value: "" },
   ...(options.value?.amc_plans ?? []).map((p) => ({ label: p, value: p })),
 ]);
 
 const kind = computed(() => implementationOf(chosen.value?.solution_type));
-const mainLabel = computed(() =>
-  kind.value === "ERP"
-    ? __("ERPNext")
-    : kind.value === "Digital"
-    ? __("Digital Marketing")
-    : __("Modules")
-);
+const mainLabel = computed(() => mainAppLabel(chosen.value?.solution_type));
 /** On ERP the picker owns the mobile app, and customisations show once picked there. */
 const pickerAsks = computed<Question[]>(() =>
   kind.value !== "ERP"
@@ -451,7 +441,7 @@ watch(
   templates,
   (list) => {
     // TBO's main line first; the requirements read can pick another
-    if (list.length && !state.template)
+    if (list.length && !state.template && !props.proposalId)
       pickTemplate(
         (list.find((t) => t.name === MAIN_TEMPLATE) || list[0]).name
       );
@@ -469,7 +459,8 @@ const profileLoaded = ref(false);
 createResource({
   url: "helpdesk.api.proposals.get_client_profile",
   makeParams: () => ({ lead: props.leadId }),
-  auto: true,
+  // editing, the proposal's own profile is the one
+  auto: !props.proposalId,
   onSuccess(d: { profile?: Partial<ClientProfile> }) {
     state.profile = {
       ...emptyProfile(),
@@ -487,11 +478,44 @@ function nonEmpty(profile: ClientProfile): Partial<ClientProfile> {
   return Object.fromEntries(Object.entries(profile).filter(([, v]) => v));
 }
 
+/** The proposal being edited, its scoping, profile and prices in the form. */
+const existing = createResource({
+  url: "helpdesk.api.proposals.get_proposal",
+  makeParams: () => ({ name: props.proposalId }),
+  auto: !!props.proposalId,
+  onSuccess(p: Proposal) {
+    state.template = p.template || "";
+    state.profile = { ...emptyProfile(), ...(p.client_profile || {}) };
+    state.requirements = p.requirements || "";
+    // its modules as they are now, which the builder may have changed since
+    state.scoping = {
+      ...emptyScoping(),
+      ...(p.scoping || {}),
+      modules: p.modules.map((m) => m.module_name),
+    };
+    chatLog.splice(
+      0,
+      chatLog.length,
+      ...(p.chat || []).map(({ role, text }) => ({ role, text }))
+    );
+    prices.value = Object.fromEntries(
+      p.modules
+        .filter((m) => m.rate_overridden)
+        .map((m) => [m.module_name, m.rate])
+    );
+    profileLoaded.value = true;
+  },
+  onError(e: unknown) {
+    error.value = errorText(e, __("Couldn't load the proposal."));
+  },
+});
+
 const create = createResource({
   url: "helpdesk.api.proposals.create_proposal",
   method: "POST",
   async onSuccess(data: { proposal: Proposal; warnings: string[] }) {
     for (const warning of data.warnings ?? []) toast.warning(warning);
+    warnDropped(scopingToSend(), data.proposal.scoping);
     await keepPrices(data.proposal);
     router.replace({
       name: "LeadProposal",
@@ -506,21 +530,30 @@ const create = createResource({
   },
 });
 
-/** The prices typed on the Price card, set by hand on the new proposal's modules. */
-async function keepPrices(proposal: Proposal) {
+/**
+ * By Module, the proposal's modules at the Price card's prices: a priced one set by hand, the
+ * others back on their list price. By App or Custom the modules' own prices don't price the
+ * quotation, so they stay as they are.
+ */
+function pricedModules(modules: ProposalModule[]): ProposalModule[] {
+  if (state.scoping.price_basis !== "Module") return modules;
   const typed = prices.value;
-  if (!proposal.modules.some((m) => m.module_name in typed)) return;
+  return modules.map((m) =>
+    m.module_name in typed
+      ? { ...m, rate: typed[m.module_name], rate_overridden: 1 }
+      : { ...m, rate_overridden: 0 }
+  );
+}
+
+/** The Price card's prices, set by hand on the new proposal's modules. */
+async function keepPrices(proposal: Proposal) {
+  const modules = pricedModules(proposal.modules);
+  if (!modules.some((m) => m.rate_overridden)) return;
   keeping.value = true;
   try {
     await call("helpdesk.api.proposals.save_proposal", {
       name: proposal.name,
-      data: {
-        modules: proposal.modules.map((m) =>
-          m.module_name in typed
-            ? { ...m, rate: typed[m.module_name], rate_overridden: 1 }
-            : m
-        ),
-      },
+      data: { modules },
     });
   } catch (e) {
     toast.warning(
@@ -536,6 +569,84 @@ async function keepPrices(proposal: Proposal) {
   }
 }
 
+/**
+ * The edited proposal brought up to this page: a new template or other modules first (the ERP
+ * site rebuilds its modules), then the profile, scoping and prices, then its sections rebuilt
+ * (those edited by hand are kept). Back to the builder after.
+ */
+async function update() {
+  const before = existing.data as Proposal;
+  const name = before.name;
+  const scoping = scopingToSend();
+  keeping.value = true;
+  try {
+    let current = before;
+    const warnings: string[] = [];
+    const sameModules =
+      JSON.stringify(scoping.modules) ===
+      JSON.stringify(before.modules.map((m) => m.module_name));
+    if (
+      state.template &&
+      (state.template !== before.template || !sameModules)
+    ) {
+      const d = await call("helpdesk.api.proposals.change_template", {
+        name,
+        template: state.template,
+        scoping,
+      });
+      current = d.proposal;
+      warnings.push(...(d.warnings ?? []));
+    }
+    const saved = await call("helpdesk.api.proposals.save_proposal", {
+      name,
+      data: {
+        requirements: state.requirements,
+        client_profile: state.profile,
+        scoping,
+        modules: pricedModules(current.modules),
+      },
+    });
+    warnDropped(scoping, saved?.scoping);
+    const r = await call("helpdesk.api.proposals.regenerate_proposal", {
+      name,
+      force: 0,
+    });
+    warnings.push(...(r.warnings ?? []));
+    for (const warning of warnings) toast.warning(warning);
+    if (r.kept?.length)
+      toast.info(__("Kept your edits in: {0}", r.kept.join(", ")));
+    else toast.success(__("Proposal updated"));
+    backToBuilder();
+  } catch (e) {
+    error.value = errorText(
+      e,
+      __("Couldn't update the proposal. Check your connection and try again.")
+    );
+  } finally {
+    keeping.value = false;
+  }
+}
+
+/** To the builder it came from, else to it fresh, so Back there isn't this page again. */
+function backToBuilder() {
+  if (window.history.state?.back) router.back();
+  else
+    router.replace({
+      name: "LeadProposal",
+      params: { leadId: props.leadId, proposalId: props.proposalId },
+    });
+}
+
+function scopingToSend(): Scoping {
+  const s = state.scoping;
+  return {
+    ...s,
+    integrations: s.integrations.trim(),
+    timeline_template: s.timeline_template || suggested.value,
+    customisations: s.customisations.filter((c) => c.item.trim()),
+  };
+}
+
 function generate() {
   if (!profileFilled.value) {
     error.value = __(
@@ -547,17 +658,13 @@ function generate() {
   }
   if (!ready.value) return;
   error.value = "";
+  if (props.proposalId) return update();
   const s = state;
   create.submit({
     lead: props.leadId,
     template: s.template || null,
     ai_draft: options.value?.ai && aiDraft.value ? 1 : 0,
-    scoping: {
-      ...s.scoping,
-      integrations: s.scoping.integrations.trim(),
-      timeline_template: s.scoping.timeline_template || suggested.value,
-      customisations: s.scoping.customisations.filter((c) => c.item.trim()),
-    },
+    scoping: scopingToSend(),
     requirements: s.requirements,
     client_profile: s.profile,
     chat: chatLog,
