@@ -42,6 +42,8 @@ export const LEAD_BANK_ROUTES = new Set([
 // added later stays out of their way until someone decides it's a sales page. Every
 // other route goes to Leads, Home included: Home is their tasks and tickets.
 export const SALES_EMPLOYEE_ROUTES = new Set([
+  "SalesDashboard",
+  "SalesTeamDashboard",
   "Leads",
   "Lead",
   "LeadProposal",
