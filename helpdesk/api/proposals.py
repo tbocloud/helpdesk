@@ -471,6 +471,14 @@ def save_proposal(name: str, data: dict | str) -> dict:
     return proposal("save_proposal", post=True, name=name, data=as_json_value(data))
 
 
+@frappe.whitelist(methods=["POST"])
+def delete_proposal(name: str) -> dict:
+    """A draft deleted for good on the ERP site, with its draft quotation; one that went out is
+    refused there."""
+    require_leads()
+    return proposals("delete_proposal", post=True, name=name) or {}
+
+
 @frappe.whitelist()
 def get_client_profile(lead: str) -> dict:
     """What the lead says about the client, and the website summary read earlier."""
@@ -608,12 +616,6 @@ def chat_edit(name: str, message: str) -> dict:
     if result.get("proposal"):
         clean_letter_head(result["proposal"])
     return result
-
-
-@frappe.whitelist(methods=["POST"])
-def price_from_modules(name: str) -> dict:
-    require_leads()
-    return proposal("price_from_modules", post=True, name=name)
 
 
 @frappe.whitelist(methods=["POST"])

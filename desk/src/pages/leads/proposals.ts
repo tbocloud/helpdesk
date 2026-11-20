@@ -3,7 +3,7 @@
 // hub-proposals-api.md).
 import type { Tone } from "@/components/tone";
 import { __ } from "@/translation";
-import { createResource } from "frappe-ui";
+import { createResource, toast } from "frappe-ui";
 
 export type ProposalStatus =
   | "Draft"
@@ -315,8 +315,62 @@ export interface Scoping {
   architecture: "Simple" | "Detailed";
   /** the templates picked at the start (blank: suggested timeline, first payment terms) */
   timeline_template?: string | null;
+  /** a custom period in calendar days, over the template (0: none) */
+  timeline_days: number;
   payment_terms?: string | null;
+  /** this proposal's own milestones (adding up to 100%), over the template; none: the template */
+  payment_milestones: PaymentMilestone[];
   amc_plan?: string | null;
+  /** how the quotation prices the modules (the Price card): a line each, per app, or one */
+  price_basis: PriceBasis;
+  /** by App, the price per app; an app not in it is its modules' prices added up */
+  app_prices: Partial<Record<PriceGroup, number>>;
+  /** by Custom, the one price for all the modules; null is their prices added up */
+  custom_price: number | null;
+}
+
+export interface PaymentMilestone {
+  label: string;
+  /** in %, the milestones adding up to 100 */
+  share: number;
+}
+
+/** As many milestones as the ERP site keeps. */
+export const MAX_MILESTONES = 12;
+
+export function milestoneTotal(milestones: PaymentMilestone[]) {
+  return (
+    Math.round(
+      milestones.reduce((sum, m) => sum + (Number(m.share) || 0), 0) * 100
+    ) / 100
+  );
+}
+
+export function addsUp(milestones: PaymentMilestone[]) {
+  return milestoneTotal(milestones) === 100;
+}
+
+/** A payment terms template's text ("Milestone | 30" a line) as milestones, and back. */
+export function parseMilestones(body?: string | null): PaymentMilestone[] {
+  return (
+    (body || "")
+      .split("\n")
+      .map((l) => l.split("|"))
+      .map(([label, share]) => ({
+        label: (label || "").trim(),
+        share: Number(
+          String(share ?? "")
+            .replace("%", "")
+            .trim()
+        ),
+      }))
+      // a header row ("Milestone | Share") has no number
+      .filter((m) => m.label && Number.isFinite(m.share) && m.share > 0)
+  );
+}
+
+export function milestonesBody(milestones: PaymentMilestone[]) {
+  return milestones.map((m) => `${m.label.trim()} | ${m.share}`).join("\n");
 }
 
 /** Who the client is: presales confirms it before a proposal is generated. */
@@ -365,8 +419,13 @@ export function emptyScoping(): Scoping {
     source_code: false,
     architecture: "Simple",
     timeline_template: null,
+    timeline_days: 0,
     payment_terms: null,
+    payment_milestones: [],
     amc_plan: null,
+    price_basis: "Module",
+    app_prices: {},
+    custom_price: null,
   };
 }
 
@@ -532,6 +591,70 @@ export interface ProposalModule {
   rate: number;
   rate_overridden: number;
   item?: string | null;
+}
+
+/**
+ * How the quotation prices the modules (kept in the scoping, priced by the ERP site): a line per
+ * module, a line per app (ERPNext, Mobile app, Website), or one line for them all.
+ */
+export type PriceBasis = "Module" | "App" | "Custom";
+export type PriceGroup = "main" | "mobile" | "website";
+
+/** The modules by app, in the Price card's order (as the ERP site groups them); an app with none is left out. */
+export function priceGroups(modules: string[]) {
+  return (
+    [
+      {
+        key: "main",
+        names: modules.filter(
+          (m) => m !== MOBILE_MODULE && m !== WEBSITE_MODULE
+        ),
+      },
+      { key: "mobile", names: modules.filter((m) => m === MOBILE_MODULE) },
+      { key: "website", names: modules.filter((m) => m === WEBSITE_MODULE) },
+    ] as { key: PriceGroup; names: string[] }[]
+  ).filter((g) => g.names.length);
+}
+
+/** What the Price card calls the main app: the modules other than the mobile app and the website. */
+export function mainAppLabel(solution?: string | null) {
+  const kind = implementationOf(solution);
+  return kind === "ERP"
+    ? __("ERPNext")
+    : kind === "Digital"
+    ? __("Digital Marketing")
+    : __("Modules");
+}
+
+/**
+ * Says so when the ERP site didn't keep a choice sent in the scoping (the price by app or one
+ * price, a custom timeline period, custom payment milestones): it runs a TBO Smart without them
+ * and drops what it doesn't know, so the proposal falls back to module prices and the templates.
+ */
+export function warnDropped(sent: Scoping, kept?: Partial<Scoping> | null) {
+  const k = kept || {};
+  const dropped = [
+    sent.price_basis !== "Module" && k.price_basis !== sent.price_basis
+      ? __("the price by app or custom price")
+      : "",
+    sent.timeline_days && !k.timeline_days
+      ? __("the custom timeline period")
+      : "",
+    sent.payment_milestones?.length && !k.payment_milestones?.length
+      ? __("the custom payment milestones")
+      : "",
+  ].filter(Boolean);
+  if (dropped.length)
+    toast.warning(
+      __(
+        "The ERP site didn't keep {0}: it needs the TBO Smart update. Until then the proposal uses the module prices and the templates.",
+        dropped.join(", ")
+      )
+    );
+}
+
+export function listPrice(catalogue: CatalogueModule[], name: string) {
+  return catalogue.find((m) => m.module_name === name)?.default_price || 0;
 }
 
 export interface LibraryImage {
@@ -862,12 +985,14 @@ export type TextPart =
   | { kind: "list"; items: string[] }
   | { kind: "heading"; text: string }
   | { kind: "table"; header: string[]; rows: string[][] }
-  | { kind: "chain"; steps: string[] };
+  | { kind: "chain"; steps: string[] }
+  | { kind: "callout"; title: string; tag: string; lines: string[] };
 
 /**
  * Plain text as the client's page lays it out (TBO Smart's text_parts): a blank line starts a
  * part; "## " a subheading; lines starting "- " a list; lines with " | " a table (the first its
- * header); a line with " → " a chain of steps; anything else a paragraph.
+ * header); a line with " → " a chain of steps; lines starting "> " a highlight (its first line
+ * the title, "title | tag" for a tag); anything else a paragraph.
  */
 export function textParts(body?: string | null): TextPart[] {
   const parts: TextPart[] = [];
@@ -879,7 +1004,16 @@ export function textParts(body?: string | null): TextPart[] {
     while (lines.length && lines[0].startsWith("## "))
       parts.push({ kind: "heading", text: lines.shift()!.slice(3).trim() });
     if (!lines.length) continue;
-    if (lines.every((l) => l.startsWith("- ") || l.startsWith("• ")))
+    if (lines.every((l) => l.startsWith(">"))) {
+      const said = lines.map((l) => l.replace(/^>\s*/, ""));
+      const [title, ...tag] = said[0].split(" | ");
+      parts.push({
+        kind: "callout",
+        title: title.trim(),
+        tag: tag.join(" | ").trim(),
+        lines: said.slice(1),
+      });
+    } else if (lines.every((l) => l.startsWith("- ") || l.startsWith("• ")))
       parts.push({ kind: "list", items: lines.map((l) => l.slice(2).trim()) });
     else if (lines.length > 1 && lines.every((l) => l.includes(" | "))) {
       const rows = lines.map((l) => l.split(" | ").map((c) => c.trim()));
@@ -895,6 +1029,109 @@ export function textParts(body?: string | null): TextPart[] {
     else parts.push({ kind: "text", lines });
   }
   return parts;
+}
+
+/** The client document's accents in turn (TBO Smart's .t0–.t3): teal, green, orange, red. */
+export const DOC_TONES = ["#3a748d", "#0b7d6b", "#e8962a", "#c4452f"];
+/** Each accent dark enough for text on white (4.5:1). */
+export const DOC_TONE_INK = ["#2c5d72", "#0b7d6b", "#a85a0c", "#b03a26"];
+
+type Toned = { tone: number };
+export type DrawnPart =
+  | TextPart
+  | {
+      kind: "stats";
+      items: ({ figure: string; label: string; detail: string } & Toned)[];
+    }
+  | { kind: "cards"; items: ({ title: string; text: string } & Toned)[] }
+  | {
+      kind: "numbered";
+      items: { number: number; title: string; text: string }[];
+    };
+
+const SHORT_TEXT = 240;
+
+function leadAndText(item: string) {
+  const at = item.indexOf(": ");
+  return at > 0 && at <= 60
+    ? { title: item.slice(0, at).trim(), text: item.slice(at + 2).trim() }
+    : { title: item, text: "" };
+}
+
+/**
+ * As TBO Smart's draw_parts: a "Figure | label | detail" table as big-number tiles; two or more
+ * short subsections in a row as cards; the deliverables as cards; out of scope and assumptions as
+ * numbered rows with their lead words in bold.
+ */
+export function drawParts(parts: TextPart[], sectionType: string): DrawnPart[] {
+  const short = (i: number) => {
+    const head = parts[i];
+    const body = parts[i + 1];
+    return (
+      head?.kind === "heading" &&
+      body?.kind === "text" &&
+      body.lines.join(" ").length <= SHORT_TEXT &&
+      (i + 2 >= parts.length || parts[i + 2].kind === "heading")
+    );
+  };
+  const drawn: DrawnPart[] = [];
+  let i = 0;
+  while (i < parts.length) {
+    const part = parts[i];
+    if (
+      part.kind === "table" &&
+      ["Figure", __("Figure")].includes(part.header[0]?.trim())
+    ) {
+      drawn.push({
+        kind: "stats",
+        items: part.rows
+          .filter((r) => r[0])
+          .map((r, k) => ({
+            figure: r[0],
+            label: r[1] || "",
+            detail: r[2] || "",
+            tone: k % DOC_TONES.length,
+          })),
+      });
+    } else if (short(i)) {
+      const cards: { title: string; text: string }[] = [];
+      const from = i;
+      while (short(i)) {
+        const head = parts[i] as { text: string };
+        const body = parts[i + 1] as { lines: string[] };
+        cards.push({ title: head.text, text: body.lines.join(" ") });
+        i += 2;
+      }
+      if (cards.length > 1)
+        drawn.push({
+          kind: "cards",
+          items: cards.map((c, k) => ({ ...c, tone: k % DOC_TONES.length })),
+        });
+      else drawn.push(...parts.slice(from, i));
+      continue;
+    } else if (part.kind === "list" && sectionType === "Deliverables") {
+      drawn.push({
+        kind: "cards",
+        items: part.items.map((item, k) => ({
+          ...leadAndText(item),
+          tone: k % DOC_TONES.length,
+        })),
+      });
+    } else if (
+      part.kind === "list" &&
+      ["Out of Scope", "Assumptions"].includes(sectionType)
+    ) {
+      drawn.push({
+        kind: "numbered",
+        items: part.items.map((item, k) => ({
+          number: k + 1,
+          ...leadAndText(item),
+        })),
+      });
+    } else drawn.push(part);
+    i++;
+  }
+  return drawn;
 }
 
 function words(text: string) {
@@ -917,6 +1154,8 @@ export function estimatePages(sections: ProposalSection[]): number {
       else if (part.kind === "list")
         text += words(part.items.join(" ")) + 4 * part.items.length;
       else if (part.kind === "text") text += words(part.lines.join(" "));
+      else if (part.kind === "callout")
+        text += words([part.title, ...part.lines].join(" "));
       else text += 12;
     }
     if (s.section_type === "Investment") rows += 10;

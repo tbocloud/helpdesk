@@ -212,10 +212,25 @@ class TestProposals(FrappeTestCase):
         with self.assertRaises(frappe.ValidationError):
             proposals_api.change_template("PROP-2026-00001", " ")
 
+    def test_delete_goes_to_the_erp_site(self):
+        self.crm.lead_answers["delete_proposal"] = {"deleted": "PROP-2026-00001"}
+        self.assertEqual(
+            proposals_api.delete_proposal("PROP-2026-00001"),
+            {"deleted": "PROP-2026-00001"},
+        )
+        calls = {name: (post, params) for name, post, params in self.crm.lead_calls}
+        post, params = calls["delete_proposal"]
+        self.assertTrue(post)
+        self.assertEqual(
+            (params["name"], params["acting_user"]), ("PROP-2026-00001", BDE)
+        )
+        frappe.set_user(SUPPORT)
+        with self.assertRaises(frappe.PermissionError):
+            proposals_api.delete_proposal("PROP-2026-00001")
+
     def test_regenerate_share_and_libraries_go_to_the_erp_site(self):
         proposals_api.regenerate_section("PROP-2026-00001", "3", "1")
         proposals_api.regenerate_proposal("PROP-2026-00001")
-        proposals_api.price_from_modules("PROP-2026-00001")
         proposals_api.share_proposal("PROP-2026-00001")
         proposals_api.use_library_image("PROP-2026-00001", "IMG-1")
         proposals_api.get_proposal_library()
@@ -245,7 +260,6 @@ class TestProposals(FrappeTestCase):
                 for n in (
                     "regenerate_section",
                     "regenerate_proposal",
-                    "price_from_modules",
                     "share_proposal",
                     "use_library_image",
                     "save_library_record",
