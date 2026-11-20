@@ -186,3 +186,81 @@ class TestSalesKPI(FrappeTestCase):
         make_sales_target(PERSON, THIS_MONTH, reworded)
         mine = api.targets_for(getdate(f"{THIS_MONTH}-01"), [PERSON])[PERSON]
         self.assertEqual(self.kpi(mine)["kpi_status"], "")
+
+
+INFO = [
+    {
+        "criterion": "Industry",
+        "value_type": "Text",
+        "target": "Solar, Hospitality",
+        "info_only": 1,
+    },
+    {
+        "criterion": "Location",
+        "value_type": "Text",
+        "target": "Ernakulam",
+        "info_only": 1,
+    },
+]
+
+
+class TestInformationOnlyTargets(FrappeTestCase):
+    def setUp(self):
+        hold_commits(self)
+        self.addCleanup(frappe.set_user, "Administrator")
+        make_sales_head(HEAD, "Hana Head")
+        make_presales_executive(PERSON, "Priya Presales")
+        frappe.set_user(HEAD)
+
+    def saved(self):
+        target = api.targets_for(getdate(f"{THIS_MONTH}-01"), [PERSON])[PERSON]
+        return {c["criterion"]: c for c in target["criteria"]}
+
+    def test_new_targets_start_with_industry_and_location_as_information(self):
+        defaults = {d["criterion"]: d for d in api.get_team(THIS_MONTH)["defaults"]}
+        self.assertEqual(
+            list(defaults),
+            [
+                "Target Amount",
+                "Quality Target",
+                "Client Meeting",
+                "Sales KPI",
+                "Proposal Count",
+                "Industry",
+                "Location",
+            ],
+        )
+        for name in ("Industry", "Location"):
+            self.assertEqual(
+                (defaults[name]["value_type"], defaults[name]["info_only"]),
+                ("Text", 1),
+            )
+        self.assertEqual(defaults["Sales KPI"]["info_only"], 0)
+
+    def test_information_is_kept_and_is_nothing_to_tick_off(self):
+        make_sales_target(PERSON, THIS_MONTH, [*CRITERIA, *INFO])
+        saved = self.saved()
+        self.assertEqual(saved["Industry"]["target"], "Solar, Hospitality")
+        self.assertEqual(saved["Industry"]["info_only"], 1)
+        self.assertEqual(saved["Sales KPI"]["info_only"], 0)
+        frappe.set_user(PERSON)
+        with self.assertRaises(frappe.ValidationError):
+            api.mark_kpi_done(THIS_MONTH, "Industry", 1)
+        # the KPI beside it is still ticked off as before
+        api.mark_kpi_done(THIS_MONTH, "Sales KPI", 1)
+        frappe.set_user(HEAD)
+        self.assertEqual(self.saved()["Industry"]["kpi_status"], "")
+
+    def test_a_figure_is_never_information_only(self):
+        make_sales_target(PERSON, THIS_MONTH, [{**CRITERIA[2], "info_only": 1}])
+        self.assertEqual(self.saved()["Client Meeting"]["info_only"], 0)
+
+    def test_the_person_gets_the_standard_targets_to_show_as_0_when_none_assigned(self):
+        frappe.set_user(PERSON)
+        mine = api.get_my_targets(THIS_MONTH)
+        self.assertIsNone(mine["target"])
+        self.assertEqual(
+            [d["criterion"] for d in mine["defaults"]],
+            [d["criterion"] for d in api.default_criteria()],
+        )
+        self.assertNotIn("target", mine["defaults"][0])

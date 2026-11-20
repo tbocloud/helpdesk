@@ -54,14 +54,6 @@
                 :title="row.criterion"
                 >{{ row.criterion }}</span
               >
-              <span class="flex items-center gap-1 text-xs text-ink-gray-6">
-                <component
-                  :is="VALUE_TYPE_LOOK[row.value_type].icon"
-                  class="size-3"
-                  aria-hidden="true"
-                />
-                {{ VALUE_TYPE_LOOK[row.value_type].label }}
-              </span>
             </label>
             <FormControl
               v-if="row.value_type !== 'Text'"
@@ -104,7 +96,7 @@
               :rows="2"
               class="col-span-2 col-start-2"
               :class="problems[row.key] && '[&_textarea]:!border-danger'"
-              :placeholder="__('e.g. 3 case studies published')"
+              :placeholder="textPlaceholder(row)"
               :aria-invalid="!!problems[row.key]"
               :aria-describedby="problems[row.key] ? problemId(row) : undefined"
             />
@@ -136,9 +128,6 @@
                   :options="measureOptions(row.value_type)"
                 />
               </div>
-              <p v-if="row.measure" class="text-xs text-ink-gray-6">
-                {{ MEASURE_LOOK[row.measure].counts }}
-              </p>
               <TargetProgress
                 v-if="rowResult(row)"
                 class="mt-1"
@@ -154,7 +143,7 @@
               />
             </div>
             <KpiStatus
-              v-else-if="savedFor && row.kpi_status !== undefined"
+              v-else-if="savedFor && isKpi(row) && row.kpi_status !== undefined"
               class="col-span-3 col-start-2"
               :criterion="row"
               :month="month"
@@ -262,6 +251,7 @@ import KpiStatus from "./KpiStatus.vue";
 import TargetProgress from "./TargetProgress.vue";
 import {
   currencySymbol,
+  isKpi,
   leadsLink,
   MEASURE_LOOK,
   monthTitle,
@@ -298,6 +288,15 @@ const PLACEHOLDERS: Record<ValueType, string> = {
   Percent: "90",
   Text: "",
 };
+// what an information-only target usually holds, by its name
+const INFO_PLACEHOLDERS: Record<string, string> = {
+  industry: __("e.g. Solar, Hospitality"),
+  location: __("e.g. Ernakulam, Thrissur"),
+};
+function textPlaceholder(row: Row) {
+  if (!row.info_only) return __("e.g. 3 case studies published");
+  return INFO_PLACEHOLDERS[row.criterion.toLowerCase()] ?? "";
+}
 
 type Row = Criterion & { key: number };
 
@@ -308,9 +307,13 @@ let nextKey = 0;
 const criteria = ref<Row[]>(props.start.map((c) => ({ ...c, key: nextKey++ })));
 const problems = reactive<Record<number, string>>({});
 const symbol = computed(() => currencySymbol(props.currency));
-const typeOptions = computed(() =>
-  props.valueTypes.map((t) => ({ label: VALUE_TYPE_LOOK[t].label, value: t }))
-);
+const typeOptions = computed(() => [
+  ...props.valueTypes.map((t) => ({
+    label: VALUE_TYPE_LOOK[t].label,
+    value: t,
+  })),
+  { label: __("Text, info only"), value: "Info" },
+]);
 
 const auth = useAuthStore();
 const inputId = (row: Row) => `${formId}-target-${row.key}`;
@@ -347,7 +350,8 @@ function remove(key: number) {
 // ---------- adding a target ----------
 
 const newName = ref("");
-const newType = ref<ValueType>("Number");
+// "Info" is a Text target that is information only
+const newType = ref<ValueType | "Info">("Number");
 const addProblem = ref("");
 
 function add() {
@@ -362,11 +366,13 @@ function add() {
     addProblem.value = __("{0} is already on the list.", name);
     return;
   }
+  const info = newType.value === "Info";
   const row: Row = {
     criterion: name,
-    value_type: newType.value,
+    value_type: info ? "Text" : (newType.value as ValueType),
     target: null,
     measure: "",
+    info_only: info ? 1 : 0,
     key: nextKey++,
   };
   criteria.value.push(row);
@@ -440,12 +446,13 @@ async function assign() {
       month: props.month,
       employees: props.people.map((p) => p.user),
       criteria: criteria.value.map(
-        ({ criterion, value_type, target, measure }) => ({
+        ({ criterion, value_type, target, measure, info_only }) => ({
           criterion,
           value_type,
           target:
             value_type === "Text" ? String(target).trim() : Number(target),
           measure: value_type === "Text" ? "" : measure || "",
+          info_only: value_type === "Text" && info_only ? 1 : 0,
         })
       ),
     });

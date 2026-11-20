@@ -24,13 +24,14 @@ Administrator and Guest are never listed.
 | DocType | What it is |
 | --- | --- |
 | `HD Sales Target` | One person's targets for one month: employee (User), month (the 1st), assigned by, criteria. Named `<user>::<YYYY-MM>`, so there is only ever one per person per month. Tracks changes. |
-| `HD Sales Target Criterion` | Child: criterion name, value type (Amount, Number, Percent or Text), the target (`target_value` for numbers, `target_text` for text), what it counts from (`measure`, numbers only; blank: not counted) and, for a Text target, the KPI's state (`kpi_status` blank / Done / Confirmed, `kpi_note`, `kpi_done_on`, `kpi_confirmed_by`). |
+| `HD Sales Target Criterion` | Child: criterion name, value type (Amount, Number, Percent or Text), the target (`target_value` for numbers, `target_text` for text), what it counts from (`measure`, numbers only; blank: not counted) , for a Text target, whether it is information only (`info_only`) and, when it isn't, the KPI's state (`kpi_status` blank / Done / Confirmed, `kpi_note`, `kpi_done_on`, `kpi_confirmed_by`). |
 
-New targets start with five criteria (`DEFAULT_CRITERIA` in `helpdesk/sales_targets.py`):
+New targets start with seven criteria (`DEFAULT_CRITERIA` in `helpdesk/sales_targets.py`):
 Target Amount (Amount, counts won value), Quality Target (Percent, counts the meeting rate),
-Client Meeting (Number, counts meetings held), Sales KPI (Text, ticked off) and Proposal Count
-(Number, counts proposals sent). The head can remove any of them, add their own (up to 30) and
-change what each counts.
+Client Meeting (Number, counts meetings held), Sales KPI (Text, ticked off), Proposal Count
+(Number, counts proposals sent), and Industry and Location (Text, information only; added
+2026-11-19). The head can remove any of them, add their own (up to 30) and change what each
+counts.
 
 ### Validation (on save)
 
@@ -57,17 +58,21 @@ month select with an earlier and a later step either side; both pages share it).
   checkbox adds or drops one. The footer says how many are shown and picked, with Clear.
 - **Progress** on the Team list: each person with targets shows the month overall (a small
   bar and "62% reached", or "62% · 2 behind" in warning) once their progress is read.
-- **Targets** (right, sticky, `TargetCriteriaForm.vue`): under each numeric target a **Counts**
-  picker (its measures, or *Nothing: a target only*) with what it counts in words; with one
+- **Targets** (right, sticky, `TargetCriteriaForm.vue`; 30rem wide, 38rem from `xl`,
+  44rem from `2xl`, 2026-11-19): under each numeric target a **Counts** picker (its measures, or
+  *Nothing: a target only*), with no explanation under it (the owner asked for the panel
+  without it, 2026-11-19; the person's page still explains what each counts); with one
   person picked who has targets, their progress against each target (live as the figure is
-  edited) and their KPI with **Confirm it's done** / **Reopen**. "Assigning to" with the person's face
+  edited) and their KPI with **Confirm it's done** / **Reopen**. "Assigning to" with the person's face (and, for one person without targets, *No targets
+  for … yet*; who set them isn't shown, 2026-11-19)
   (or the first three overlapping and "+N") and a clear button. The criteria are a numbered
-  list, one row each: name and kind (with its icon) on the left, the figure right-aligned on
+  list, one row each: the name on the left (no kind under it, 2026-11-19), the figure right-aligned on
   the right (amounts with the currency sign, percents with %), a remove button; a Text target
   takes a text box under its name. A problem shows on its own line under the row, in red with
-  an icon, and the field gets a red border. **Add a target** takes a name, a kind and Add. The
+  an icon, and the field gets a red border. **Add a target** takes a name, a kind (Amount, Number,
+  Percent, Text, or *Text, info only*) and Add. The
   list scrolls; **Assign to N people** stays at the foot of the panel. One person with targets
-  opens on their saved targets. Anyone else starts from the five defaults, and the panel says
+  opens on their saved targets. Anyone else starts from the seven defaults, and the panel says
   whose targets will be replaced.
 - States: loading, load error with Try again, not a Sales Head, no one with a target role,
   no one matching the filters (with Show everyone; filtered to Not set and none left says
@@ -80,18 +85,29 @@ else the site default, else INR.
 
 `desk/src/pages/sales-targets/MyTargets.vue` (the file and route keep the earlier name *My
 targets*; the sidebar says **Sales targets** and the page **Your sales targets**). Only
-Presales Executives and Sales Users see it. One card a month: its heading is the month and the
-count, with who set them (avatar, "Set by …", "Last changed …") on the right. Under it the
-figures sit in a hairline grid (`TargetFigure.vue`), one cell per numeric target in the order
-the Sales Head set them: a neutral icon for its kind, its name and the figure (amounts with the
-currency sign, percents with %). Text targets follow as a list, name on the left and the text as
-written on the right. The card's foot says to ask the Sales Head about a target. A counted target
-shows what they achieved *of* the target, the bar with the pace marker, where they stand and
-**How it's counted**; a target not counted says so. Each KPI shows its state and **Mark as done**
-(with what they did) or **Not done after all**. The heading adds the month overall. No colour per
-target: the figures are what matter (docs/ui-guidelines.md §8). The month stepper offers this
-month and every month the person has targets in. A month with no targets says so and links to
-the newest month that has some.
+Presales Executives and Sales Users see it. A card for the month on top: the month and the
+count, with who set them (avatar, "Set by …", "Last changed …") on the right. Under it **every
+target is its own card** (`StatTile`, the Team dashboard's stat card; 2026-11-20, the owner
+asked for cards like *Tasks finished*), in a grid of cards at least 220px wide, in the order the
+Sales Head set them: the numeric ones first (`TargetFigure.vue`), then the written ones. A card
+has the name top left, its kind's icon top right on a coloured circle (amounts green, percents
+blue, counts the brand teal, written targets amber; `VALUE_TYPE_LOOK`, 2026-11-20), the figure (amounts with the
+currency sign, percents with %; a written target's text) and a line under it. A counted target
+shows what they achieved, *of* the target under it, the bar with the pace marker, where they
+stand and **How it's counted**; a target not counted says so. Each KPI shows its state and
+**Mark as done** (with what they did) or **Not done after all**. Under the cards a line says to
+ask the Sales Head about a target. The heading adds the month overall. No colour per target:
+the figures are what matter (docs/ui-guidelines.md §8). The month stepper offers this
+month and every month the person has targets in.
+
+**Not assigned shows as 0 (2026-11-19).** Every standard target (`default_criteria()`, sent as
+`defaults` by `get_my_targets`) is always on the page. One the Sales Head didn't assign for the
+month comes after the assigned ones as a card at 0 (*₹0*, *0%*, *0*) with *Not assigned yet*
+under it; a written one says *Not assigned yet*, with no Mark as done. Nothing is counted for
+them and they don't change the month overall (`withUnassigned` in `salesTargets.ts`). A month
+with nothing assigned shows the same card with every standard target at 0, the heading *Your
+Sales Head hasn't assigned targets yet.* and a **See {month}** button for the newest month that
+has targets; the foot asks them to ask their Sales Head.
 
 ## Progress: counted from the leads (2026-11-18)
 
@@ -144,13 +160,22 @@ by the person. Ticking off and confirming don't change who assigned the targets.
 re-assigns, a KPI with the same name and wording keeps its state; reworded, it starts again.
 Only a confirmed KPI counts towards the month overall.
 
+### Information only: Industry and Location
+
+A Text target can be **information only** (`info_only`): it says where to focus, like the
+industry (*Solar, Hospitality*) or the location (*Ernakulam, Thrissur*). The person reads it
+on their Sales targets page with the other written targets, without **Mark as done**; nobody
+confirms it, it never counts towards the month overall, and `mark_kpi_done` / `confirm_kpi`
+refuse it. Industry and Location start as information only; the head adds their own with the
+kind *Text, info only*. A number target is never information only.
+
 ## API (`helpdesk.api.sales_targets`)
 
 - `get_team(month)`: Sales Heads only. Returns the people, their targets for the month, the
   defaults and the currency.
 - `assign_targets(month, employees, criteria)` (POST): Sales Heads only. Replaces each
   person's targets for the month.
-- `get_my_targets(month)`: Presales Executives and Sales Users. Returns their own targets and
+- `get_my_targets(month)`: Presales Executives and Sales Users. Returns the standard criteria (`defaults`), their own targets and
   the months they have targets in.
 - `get_progress(month, employee=None, fresh=0)`: the person's own progress, or anyone's for a
   Sales Head. `{state: counted | not_started | unavailable | no_targets, reason, from_date,
@@ -181,4 +206,6 @@ here was never committed): each measure's figure and the rates' sums, a person's
 as them for their own leads over the month so far, money collected read only when counted, a
 month not begun, an ERP refusal shown instead of raised, who may read whose progress, a measure
 that doesn't fit its value type, and the KPI: marked done and confirmed, only a done KPI
-confirmed, a confirmed one not taken back, and kept or reset on re-assigning.
+confirmed, a confirmed one not taken back, and kept or reset on re-assigning; the seven
+defaults with Industry and Location information only, information kept and never ticked off,
+and a number target never information only.

@@ -10,6 +10,7 @@
 		"measure",
 		"target_value",
 		"target_text",
+		"info_only",
 		"kpi_status",
 		"kpi_note",
 		"kpi_done_on",
@@ -55,7 +56,15 @@
 			"label": "Target (Text)"
 		},
 		{
+			"default": "0",
 			"depends_on": "eval:doc.value_type == 'Text'",
+			"description": "Only says where to focus (e.g. Industry, Location): nobody marks it done, and it doesn't count in the month's progress",
+			"fieldname": "info_only",
+			"fieldtype": "Check",
+			"label": "Information Only"
+		},
+		{
+			"depends_on": "eval:doc.value_type == 'Text' && !doc.info_only",
 			"fieldname": "kpi_status",
 			"fieldtype": "Select",
 			"label": "KPI Status",
@@ -88,7 +97,7 @@
 	"index_web_pages_for_search": 0,
 	"istable": 1,
 	"links": [],
-	"modified": "2026-11-18 12:00:00.000000",
+	"modified": "2026-11-19 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Sales Target Criterion",

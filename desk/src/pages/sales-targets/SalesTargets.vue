@@ -42,7 +42,7 @@
 
         <div
           v-else-if="!team.data"
-          class="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_26rem]"
+          class="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_30rem] xl:grid-cols-[minmax(0,1fr)_38rem] 2xl:grid-cols-[minmax(0,1fr)_44rem]"
           aria-busy="true"
           :aria-label="__('Loading')"
         >
@@ -64,7 +64,7 @@
 
         <div
           v-else
-          class="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_26rem] lg:items-start 2xl:grid-cols-[minmax(0,1fr)_28rem]"
+          class="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_30rem] lg:items-start xl:grid-cols-[minmax(0,1fr)_38rem] 2xl:grid-cols-[minmax(0,1fr)_44rem]"
         >
           <!-- the team, and who still needs targets for the month -->
           <section
@@ -374,6 +374,7 @@
                     }}
                   </h2>
                   <p
+                    v-if="pickedLine"
                     class="truncate text-xs text-ink-gray-6"
                     :title="pickedLine"
                   >
@@ -607,13 +608,10 @@ const pickedPeople = computed(() =>
 const pickedLine = computed(() => {
   const list = pickedPeople.value;
   if (list.length !== 1) return list.map((p) => p.full_name).join(", ");
-  const person = list[0];
-  if (!person.target)
-    return __("No targets for {0} yet", monthTitle(month.value));
-  return __(
-    "Set by {0}",
-    person.target.assigned_by_name || person.target.assigned_by
-  );
+  // one person: only whether they have targets yet, not who set them
+  return list[0].target
+    ? ""
+    : __("No targets for {0} yet", monthTitle(month.value));
 });
 
 /** One person with targets opens on theirs; anyone else on the five defaults, to fill in. */

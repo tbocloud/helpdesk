@@ -1,4 +1,5 @@
 import { money } from "@/components/invoicing/invoices";
+import type { Tone } from "@/components/tone";
 import { __ } from "@/translation";
 import { dayjs } from "frappe-ui";
 import type { Component } from "vue";
@@ -35,6 +36,9 @@ export interface Criterion {
   /** a number, or text for a Text criterion; null while not filled in */
   target: number | string | null;
   measure?: Measure | "";
+  /** a Text target that only says where to focus (Industry, Location): no tick-off, and
+   * left out of the month's progress */
+  info_only?: number | boolean;
   kpi_status?: KpiStatus;
   kpi_note?: string;
   kpi_done_on?: string | null;
@@ -76,17 +80,52 @@ export interface MyTargets {
   currency: string;
   months: string[];
   target: Target | null;
+  /** the standard criteria; each one not assigned for the month shows as 0 */
+  defaults?: Omit<Criterion, "target">[];
 }
 
+/** A criterion on a person's page: assigned, or a standard one not assigned (shown as 0). */
+export type ShownCriterion = Criterion & { unassigned?: boolean };
+
+/**
+ * The month's criteria as the person sees them: what was assigned, in the head's order, then
+ * every standard criterion that wasn't, at 0 (a Text one blank), so nothing reads as missing.
+ */
+export function withUnassigned(
+  target: Target | null,
+  defaults: Omit<Criterion, "target">[]
+): ShownCriterion[] {
+  const assigned = target?.criteria ?? [];
+  const names = new Set(assigned.map((c) => c.criterion.toLowerCase()));
+  return [
+    ...assigned,
+    ...defaults
+      .filter((d) => !names.has(d.criterion.toLowerCase()))
+      .map((d) => ({
+        ...d,
+        target: d.value_type === "Text" ? null : 0,
+        unassigned: true,
+      })),
+  ];
+}
+
+/** Each kind's icon, and the colour of its circle on a person's target cards, so a kind
+ * reads at a glance: money green, rates blue, counts the brand teal, written targets amber
+ * (the owner's ask, 2026-11-20). */
 export const VALUE_TYPE_LOOK: Record<
   ValueType,
-  { label: string; icon: Component }
+  { label: string; icon: Component; tone: Tone | "brand" }
 > = {
-  Amount: { label: __("Amount"), icon: LucideBanknote },
-  Number: { label: __("Number"), icon: LucideHash },
-  Percent: { label: __("Percent"), icon: LucidePercent },
-  Text: { label: __("Text"), icon: LucideText },
+  Amount: { label: __("Amount"), icon: LucideBanknote, tone: "success" },
+  Number: { label: __("Number"), icon: LucideHash, tone: "brand" },
+  Percent: { label: __("Percent"), icon: LucidePercent, tone: "info" },
+  Text: { label: __("Text"), icon: LucideText, tone: "warning" },
 };
+
+/** A Text target that is a KPI to tick off, not information only. */
+export function isKpi(criterion: Criterion) {
+  return criterion.value_type === "Text" && !criterion.info_only;
+}
 
 /** "₹5,00,000", "90%", "20", or the text itself. */
 export function targetText(criterion: Criterion, currency: string) {
@@ -378,7 +417,8 @@ export function leadsLink(
 
 /**
  * The month overall, for the team list: each counted target's share reached (capped at
- * 100%) and each KPI (confirmed 100%, else 0), averaged; and how many are behind.
+ * 100%) and each KPI (confirmed 100%, else 0), averaged; and how many are behind. Targets
+ * that are information only (Industry, Location) are left out.
  */
 export function overallOf(
   target: Target,
@@ -389,7 +429,8 @@ export function overallOf(
   let behind = 0;
   for (const criterion of target.criteria) {
     if (criterion.value_type === "Text") {
-      shares.push(criterion.kpi_status === "Confirmed" ? 100 : 0);
+      if (isKpi(criterion))
+        shares.push(criterion.kpi_status === "Confirmed" ? 100 : 0);
       continue;
     }
     const measured =

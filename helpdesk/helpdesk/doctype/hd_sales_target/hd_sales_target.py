@@ -54,20 +54,23 @@ class HDSalesTarget(Document):
 
     def clean_criteria(self):
         """Trims names and keeps only the fields the value type uses: a measure for a
-        figure, the KPI state for a Text target."""
+        figure, the KPI state for a Text target that isn't information only."""
         for row in self.criteria:
             row.criterion = str(row.criterion or "").strip()
             if row.value_type == "Text":
                 row.target_text = str(row.target_text or "").strip()
                 row.target_value = None
                 row.measure = ""
+                row.info_only = 1 if row.info_only else 0
+                if row.info_only:
+                    clear_kpi(row)
             else:
                 row.target_text = None
+                row.info_only = 0
                 blank = row.target_value is None or row.target_value == ""
                 row.target_value = None if blank else flt(row.target_value)
                 row.measure = row.measure or ""
-                row.kpi_status = row.kpi_note = ""
-                row.kpi_done_on = row.kpi_confirmed_by = None
+                clear_kpi(row)
 
     def validate_criteria(self):
         if not self.criteria:
@@ -118,9 +121,14 @@ class HDSalesTarget(Document):
     # ---------- a KPI (a Text target): ticked off by the person, confirmed by a head ----------
 
     def kpi_row(self, criterion: str):
-        """The Text target named `criterion`, or an error the page can show."""
+        """The Text target named `criterion` (not one that is information only), or an
+        error the page can show."""
         for row in self.criteria:
-            if row.value_type == "Text" and row.criterion == criterion:
+            if (
+                row.value_type == "Text"
+                and not row.info_only
+                and row.criterion == criterion
+            ):
                 return row
         frappe.throw(
             _("{0} isn't a KPI on these targets.").format(frappe.bold(criterion))
@@ -170,3 +178,8 @@ class HDSalesTarget(Document):
                 row.kpi_note = old.kpi_note
                 row.kpi_done_on = old.kpi_done_on
                 row.kpi_confirmed_by = old.kpi_confirmed_by
+
+
+def clear_kpi(row):
+    row.kpi_status = row.kpi_note = ""
+    row.kpi_done_on = row.kpi_confirmed_by = None
