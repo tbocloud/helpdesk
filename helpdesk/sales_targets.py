@@ -41,16 +41,20 @@ OVERVIEW_FIGURES = {
     "contacted": "contacted",
     "new_leads": "new",
 }
-# a Text target (a KPI) is ticked off by the person and confirmed by a Sales Head
+# a Text target (a KPI) is ticked off by the person and confirmed by a Sales Head, unless it is
+# information only (where to focus: an industry, a place), which nobody ticks off or counts
 KPI_DONE = "Done"
 KPI_CONFIRMED = "Confirmed"
-# what a new set of targets starts with; the head can drop any and add their own
+# what a new set of targets starts with: (name, value type, measure, information only); the
+# head can drop any and add their own
 DEFAULT_CRITERIA = (
-    ("Target Amount", "Amount", "won_value"),
-    ("Quality Target", "Percent", "meeting_rate"),
-    ("Client Meeting", "Number", "meetings"),
-    ("Sales KPI", "Text", ""),
-    ("Proposal Count", "Number", "proposals"),
+    ("Target Amount", "Amount", "won_value", False),
+    ("Quality Target", "Percent", "meeting_rate", False),
+    ("Client Meeting", "Number", "meetings", False),
+    ("Sales KPI", "Text", "", False),
+    ("Proposal Count", "Number", "proposals", False),
+    ("Industry", "Text", "", True),
+    ("Location", "Text", "", True),
 )
 MAX_CRITERIA = 30
 # the built-in accounts hold every role but are no salespeople
@@ -139,15 +143,30 @@ def target_people() -> list[dict]:
     return sorted(people.values(), key=lambda p: p["full_name"].lower())
 
 
+def default_criteria() -> list[dict]:
+    """The criteria new targets start with, as the pages read them (without a target): the
+    Assign page fills them in, and a person's page shows each one not assigned as 0."""
+    return [
+        {
+            "criterion": name,
+            "value_type": kind,
+            "measure": measure,
+            "info_only": cint(info_only),
+        }
+        for name, kind, measure, info_only in DEFAULT_CRITERIA
+    ]
+
+
 def criteria_of(target) -> list[dict]:
     """A target's criteria as the pages read them: one `target` that is a number or text,
-    what it counts from, and a KPI's state."""
+    what it counts from, whether it is information only, and a KPI's state."""
     return [
         {
             "criterion": row.criterion,
             "value_type": row.value_type,
             "target": row.target_text if row.value_type == "Text" else row.target_value,
             "measure": row.measure or "",
+            "info_only": cint(row.info_only),
             "kpi_status": row.kpi_status or "",
             "kpi_note": row.kpi_note or "",
             "kpi_done_on": row.kpi_done_on,

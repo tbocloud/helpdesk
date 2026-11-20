@@ -8,11 +8,11 @@ from frappe.utils import add_days, add_months, cint, get_fullname, getdate, nowd
 from helpdesk.api.leads import READ_TTL, cached_read
 from helpdesk.integrations.crm.leads import LeadsError, call
 from helpdesk.sales_targets import (
-    DEFAULT_CRITERIA,
     MEASURES,
     VALUE_TYPES,
     SalesTargetsForbiddenError,
     criteria_of,
+    default_criteria,
     has_own_targets,
     measured,
     month_start,
@@ -37,10 +37,7 @@ def get_team(month: str) -> dict:
         "month": start.strftime("%Y-%m"),
         "currency": currency(),
         "value_types": list(VALUE_TYPES),
-        "defaults": [
-            {"criterion": name, "value_type": kind, "measure": measure}
-            for name, kind, measure in DEFAULT_CRITERIA
-        ],
+        "defaults": default_criteria(),
         # which measures fit each value type; the page holds their words and formulas
         "measures": {
             kind: [m for m, of in MEASURES.items() if of == kind]
@@ -77,8 +74,8 @@ def assign_targets(month: str, employees, criteria) -> dict:
 
 @frappe.whitelist()
 def get_my_targets(month: str | None = None) -> dict:
-    """A Presales Executive or Sales User: their own targets for the month, and the months
-    they have targets in."""
+    """A Presales Executive or Sales User: their own targets for the month, the months they
+    have targets in, and the standard criteria, which the page shows as 0 when not assigned."""
     user = frappe.session.user
     if not has_own_targets(user):
         frappe.throw(
@@ -98,6 +95,7 @@ def get_my_targets(month: str | None = None) -> dict:
         "currency": currency(),
         "months": [m.strftime("%Y-%m") for m in months],
         "target": targets_for(start, [user]).get(user),
+        "defaults": default_criteria(),
     }
 
 
@@ -269,6 +267,7 @@ def save_target(employee: str, start, criteria: list[dict]):
                 "criterion": row.get("criterion"),
                 "value_type": kind,
                 "measure": row.get("measure") or "",
+                "info_only": cint(row.get("info_only")) if kind == "Text" else 0,
                 "target_text": value if kind == "Text" else None,
                 "target_value": None if kind == "Text" else value,
             },
