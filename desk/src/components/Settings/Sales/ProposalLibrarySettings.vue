@@ -36,11 +36,20 @@
     </SettingsList>
   </SettingsSection>
 
+  <PaymentTermsSettings
+    :items="data?.items ?? []"
+    :can-edit="canEdit"
+    :loading="library.loading && !data"
+    :error="library.error"
+    @saved="library.setData($event)"
+    @retry="library.reload()"
+  />
+
   <SettingsSection
     :title="__('Section libraries')"
     :description="
       __(
-        'The company overview, terms, warranty, AMC plans, payment terms, timelines, scope, roles, assumptions, out of scope, risks, architecture and workflows that proposals are built from.'
+        'The company overview, terms, warranty, AMC plans, timelines, scope, roles, assumptions, out of scope, risks, architecture and workflows that proposals are built from.'
       )
     "
   >
@@ -51,7 +60,9 @@
         class="w-56"
         :aria-label="__('Library')"
         :options="
-          (data?.libraries || []).map((l) => ({ label: __(l), value: l }))
+          (data?.libraries || [])
+            .filter((l) => l !== 'Payment Terms')
+            .map((l) => ({ label: __(l), value: l }))
         "
       />
       <Button v-if="canEdit" :label="__('New item')" @click="editItem(null)">
@@ -397,6 +408,7 @@ import LucideLibrary from "~icons/lucide/library";
 import LucidePlus from "~icons/lucide/plus";
 import LucideSparkles from "~icons/lucide/sparkles";
 import LucideUpload from "~icons/lucide/upload";
+import PaymentTermsSettings from "./PaymentTermsSettings.vue";
 import SettingsList from "../SettingsList.vue";
 import SettingsListItem from "../SettingsListItem.vue";
 import SettingsSection from "../SettingsSection.vue";
@@ -455,9 +467,6 @@ const HELP: Record<string, string> = {
     "A team role and its responsibilities; “Large project” roles show on big projects."
   ),
   "Investment Note": __("A note above the price, e.g. on taxes or licences."),
-  "Payment Terms": __(
-    "A payment template: “Milestone | 30” a line, adding up to 100."
-  ),
   Warranty: __("The warranty text."),
   "AMC Plan": __("A plan: “Feature | value” a line, and its yearly price."),
   Assumption: __("An assumption; modules add their own."),

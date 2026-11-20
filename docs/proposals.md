@@ -495,13 +495,21 @@ For everyone who sees Leads; read only for people who may not change it on the E
 - **Proposal templates** (`ProposalTemplateEditor.vue`): name, solution type, description, length
   guide, the **scoping questions** it asks, its **default modules**, the default packages and the
   sections (on or off, with each one's guidance).
+- **Payment terms templates** (`PaymentTermsSettings.vue`): the ERP site's Payment Terms library
+  items as their own list (each with its milestones in words and a small split bar), and a
+  dialog to add or edit one: its name (as the proposal's Payment terms list shows it), its
+  milestones (`PaymentMilestonesEditor.vue`, the same rows as a proposal's Custom milestones:
+  a label and a share each, up to 12, Save only when they add up to 100%), solution types, order
+  and enabled; Delete asks once. Saved as the library item's text, "Milestone | 30" a line
+  (`milestonesBody` / `parseMilestones` in `proposals.ts`, a header row skipped). Payment Terms
+  is left out of the Section libraries list, so it is managed in one place.
 - **Module catalogue**, **Section libraries** and **Proposal images**
   (`ProposalLibrarySettings.vue`): each record edits in a dialog. A module: name, usual fit,
   effort, default price, Item, image tag, what it covers, key features, scope ("Subsection |
   line"), deliverables, assumptions, out of scope, workflow, solution types, enabled, and **Draft
   with AI** (fills the text once for review; nothing is saved until Save). A library item: its
   library (company overview, solution components, scope, workflows, architecture, deliverables,
-  phases, timeline templates, roles, investment notes, payment terms templates, warranty, AMC
+  phases, timeline templates, roles, investment notes, warranty, AMC
   plans, assumptions, out of scope, risks, terms, agreement clauses), title, text, subsection (an
   agreement clause: its section), days, yearly price,
   condition, order, solution types, enabled. An image: upload (PNG, JPEG, WebP up to 5 MB),

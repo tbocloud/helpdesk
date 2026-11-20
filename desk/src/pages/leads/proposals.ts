@@ -335,6 +335,44 @@ export interface PaymentMilestone {
   share: number;
 }
 
+/** As many milestones as the ERP site keeps. */
+export const MAX_MILESTONES = 12;
+
+export function milestoneTotal(milestones: PaymentMilestone[]) {
+  return (
+    Math.round(
+      milestones.reduce((sum, m) => sum + (Number(m.share) || 0), 0) * 100
+    ) / 100
+  );
+}
+
+export function addsUp(milestones: PaymentMilestone[]) {
+  return milestoneTotal(milestones) === 100;
+}
+
+/** A payment terms template's text ("Milestone | 30" a line) as milestones, and back. */
+export function parseMilestones(body?: string | null): PaymentMilestone[] {
+  return (
+    (body || "")
+      .split("\n")
+      .map((l) => l.split("|"))
+      .map(([label, share]) => ({
+        label: (label || "").trim(),
+        share: Number(
+          String(share ?? "")
+            .replace("%", "")
+            .trim()
+        ),
+      }))
+      // a header row ("Milestone | Share") has no number
+      .filter((m) => m.label && Number.isFinite(m.share) && m.share > 0)
+  );
+}
+
+export function milestonesBody(milestones: PaymentMilestone[]) {
+  return milestones.map((m) => `${m.label.trim()} | ${m.share}`).join("\n");
+}
+
 /** Who the client is: presales confirms it before a proposal is generated. */
 export interface ClientProfile {
   name: string;
