@@ -69,6 +69,8 @@ export interface NavItem {
   salesHeadOnly?: boolean;
   /** Sales targets (their own): Presales Executives and Sales Users */
   ownTargetsOnly?: boolean;
+  /** the team's sales figures: anyone with Leads but a BD */
+  salesManagersOnly?: boolean;
 }
 
 /** A page in the tree under a parent item (a saved view). */
@@ -300,6 +302,14 @@ export const agentNavAreas: NavArea[] = [
     groups: [
       {
         items: [
+          // their own day: calls, leads, targets and follow-ups (docs/sales-dashboard.md)
+          {
+            id: "sales-dashboard",
+            label: __("Dashboard"),
+            icon: LucideGauge,
+            to: "SalesDashboard",
+            leadsOnly: true,
+          },
           // their own targets for the month, set by a Sales Head (docs/sales-targets.md)
           {
             id: "my-targets",
@@ -364,6 +374,15 @@ export const agentNavAreas: NavArea[] = [
       {
         label: __("Team"),
         items: [
+          // the team's calls, pipeline and targets in one page (docs/sales-dashboard.md)
+          {
+            id: "sales-team-dashboard",
+            label: __("Team dashboard"),
+            icon: LucideGauge,
+            to: "SalesTeamDashboard",
+            leadsOnly: true,
+            salesManagersOnly: true,
+          },
           {
             id: "leads-overview",
             label: __("Overview"),

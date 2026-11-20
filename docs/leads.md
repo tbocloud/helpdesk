@@ -1196,6 +1196,9 @@ doesn't show without its fields. The hub can be deployed before TBO Smart.
 
 ## The pages
 
+The salesperson's own **Dashboard** and the **Team dashboard** sit beside these pages, built from
+the same reads: [sales-dashboard.md](sales-dashboard.md).
+
 - **Overview** (the first tab, where `/helpdesk/leads` opens; `LeadsOverview.vue`): one calm
   page for the person's leads (their own, their team's or everyone's, as the ERP site's sales
   rules give them). Its job: see where the pipeline stands and what needs a person now.

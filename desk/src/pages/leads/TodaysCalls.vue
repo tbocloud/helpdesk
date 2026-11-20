@@ -352,8 +352,10 @@
                   v-for="row in slot.stages"
                   :key="row.stage"
                   class="h-full"
-                  :class="stageFill(row.stage)"
-                  :style="{ width: `${share(row.count, slot.of)}%` }"
+                  :style="{
+                    ...stageFill(row.stage),
+                    width: `${share(row.count, slot.of)}%`,
+                  }"
                 />
               </div>
               <ul
@@ -367,7 +369,7 @@
                 >
                   <span
                     class="size-2 shrink-0 rounded-full"
-                    :class="stageFill(row.stage)"
+                    :style="stageFill(row.stage)"
                     aria-hidden="true"
                   />
                   <b class="font-semibold tabular-nums text-ink-gray-9">{{
@@ -684,6 +686,7 @@ import {
   type MyCalls,
   type QueueCall,
   type SlotTotals,
+  stageColors,
 } from "./callBatches";
 import { queueChanged } from "./pendingCalls";
 
@@ -833,32 +836,15 @@ const SLOT_ICONS: [RegExp, Component][] = [
 const slotIcon = (name: string) =>
   SLOT_ICONS.find(([pattern]) => pattern.test(name))?.[1] ?? LucideClock;
 
-// where the called leads went: the call stages keep their meaning (contacted green, not
-// interested red); any other stage takes the next colour in page order, so a stage looks
-// the same in every slot. The legend always names it beside the colour.
-const STAGE_FILL: Record<string, string> = {
-  Contacted: "bg-success",
-  "Not Responding": "bg-warm-fill",
-  "Not Interested": "bg-danger",
-  "Wrong Number": "bg-violet",
-};
-const OTHER_FILLS = [
-  "bg-info",
-  "bg-brand",
-  "bg-hot-fill",
-  "bg-person-4",
-  "bg-person-6",
-];
-const otherStages = computed(() => [
-  ...new Set(
-    slots.value
-      .flatMap((slot) => slot.stages.map((row) => row.stage))
-      .filter((stage) => !(stage in STAGE_FILL))
-  ),
-]);
-const stageFill = (stage: string) =>
-  STAGE_FILL[stage] ??
-  OTHER_FILLS[otherStages.value.indexOf(stage) % OTHER_FILLS.length];
+// where the called leads went, one colour per stage across the page (callBatches.stageColors)
+const stageColor = computed(() =>
+  stageColors(
+    slots.value.flatMap((slot) => slot.stages.map((row) => row.stage))
+  )
+);
+const stageFill = (stage: string) => ({
+  background: `var(${stageColor.value(stage)})`,
+});
 const share = (count: number, of: number) =>
   of ? Math.min((count / of) * 100, 100) : 0;
 const allCalled = computed(

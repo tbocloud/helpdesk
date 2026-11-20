@@ -51,7 +51,9 @@ export function useNavigation() {
   const isBd = computed(() => leadOptions.data?.is_bd ?? authStore.isSalesBd);
   const hasBatches = computed(() => batchesOn(leadOptions.data));
   // Today's calls: for members of a department with call batches, but not Presales Executives
-  const todaysCalls = computed(() => hasBatches.value && !authStore.hideTodaysCalls);
+  const todaysCalls = computed(
+    () => hasBatches.value && !authStore.hideTodaysCalls
+  );
   // the ERP site decides who may plan (a Sales Manager, a head); a BD never does
   // a department's viewer watches Assign leads even as a BD
   const canPlanCalls = computed(
@@ -92,7 +94,9 @@ export function useNavigation() {
       if (todaysCalls.value) return "today";
       return hasBatches.value ? "mine" : "call_today";
     }
-    return authStore.isSalesEmployee && todaysCalls.value ? "today" : "overview";
+    return authStore.isSalesEmployee && todaysCalls.value
+      ? "today"
+      : "overview";
   }
 
   function isItemVisible(item: NavItem) {
@@ -115,6 +119,7 @@ export function useNavigation() {
       (!item.divisionOverviewOnly || authStore.canViewDivisionOverview) &&
       (!item.salesHeadOnly || authStore.canAssignSalesTargets) &&
       (!item.ownTargetsOnly || authStore.hasSalesTargets) &&
+      (!item.salesManagersOnly || !isBd.value) &&
       (!authStore.isContentTeam || CONTENT_TEAM_ROUTES.has(to))
     );
   }
