@@ -32,6 +32,7 @@
 		"marketer_hours",
 		"content_section",
 		"caption",
+		"reference_link",
 		"hashtags",
 		"brief",
 		"approval_section",
@@ -157,6 +158,13 @@
 			"fieldname": "caption",
 			"fieldtype": "Text Editor",
 			"label": "Sub Copy"
+		},
+		{
+			"description": "For the team: an example, a source or the brand's drive folder to follow.",
+			"fieldname": "reference_link",
+			"fieldtype": "Data",
+			"label": "Reference Link",
+			"options": "URL"
 		},
 		{
 			"fieldname": "hashtags",
@@ -430,7 +438,7 @@
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-11-13 12:00:00.000000",
+	"modified": "2026-11-20 18:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Content Post",

@@ -175,6 +175,17 @@
         </div>
 
         <FormControl
+          v-model="form.reference_link"
+          type="url"
+          inputmode="url"
+          :label="__('Reference link')"
+          :placeholder="__('https://…')"
+          :description="
+            __('An example, a source or the drive folder to follow.')
+          "
+        />
+
+        <FormControl
           v-model="form.brief"
           type="textarea"
           :rows="2"
@@ -289,6 +300,7 @@ const EMPTY = {
   format: "Post",
   title: "",
   caption: "",
+  reference_link: "",
   brief: "",
   hashtags: "",
   task_mode: "One task per person",
@@ -401,6 +413,7 @@ async function save(addNext: boolean) {
         status: "Drafting",
         publish_on: `${form.date} ${form.time}:00`,
         caption: textToHtml(form.caption),
+        reference_link: form.reference_link.trim(),
         brief: form.brief,
         hashtags: form.hashtags,
         task_mode: form.task_mode,
@@ -421,7 +434,13 @@ async function save(addNext: boolean) {
       return;
     }
     // keep customer, date, platforms, team and hours; clear what is specific to one post
-    Object.assign(form, { title: "", caption: "", brief: "", hashtags: "" });
+    Object.assign(form, {
+      title: "",
+      caption: "",
+      reference_link: "",
+      brief: "",
+      hashtags: "",
+    });
     await nextTick();
     titleInput.value?.$el?.querySelector("textarea")?.focus();
   } catch (e: any) {
