@@ -267,19 +267,6 @@
                   "
                   :disabled="!editable"
                 />
-                <div v-if="proposal.can_price" class="flex flex-col gap-1.5">
-                  <span :id="priceLabelId" class="text-xs text-ink-gray-5">{{
-                    __("Price shown")
-                  }}</span>
-                  <TabButtons
-                    :model-value="form.pricing_mode"
-                    :aria-labelledby="priceLabelId"
-                    :options="pricingModeOptions"
-                    @update:model-value="
-                      editable && (form.pricing_mode = $event)
-                    "
-                  />
-                </div>
               </div>
               <FormControl
                 v-if="letterHeadOptions.length > 1"
@@ -304,27 +291,14 @@
                   )
                 }}
               </p>
-              <!-- the template can change while the proposal is a draft (same number) -->
-              <div
-                v-if="isProposal"
-                class="flex flex-wrap items-center gap-x-3 gap-y-2"
-              >
-                <span class="text-p-sm text-ink-gray-7">
-                  {{
-                    __(
-                      "Template: {0}",
-                      template?.template_name || proposal.template || __("none")
-                    )
-                  }}
-                </span>
-                <Button
-                  v-if="editable"
-                  :label="__('Change template')"
-                  :disabled="dirty"
-                  :tooltip="dirty ? __('Save your changes first') : ''"
-                  @click="openTemplateDialog"
-                />
-              </div>
+              <p v-if="isProposal" class="text-p-sm text-ink-gray-7">
+                {{
+                  __(
+                    "Template: {0}",
+                    template?.template_name || proposal.template || __("none")
+                  )
+                }}
+              </p>
               <p class="text-p-sm tabular-nums text-ink-gray-6">
                 {{ __("About {0} pages", String(pages)) }}
                 <template v-if="isProposal && proposal.page_guide">
@@ -459,26 +433,29 @@
               </div>
             </details>
 
-            <ProposalModules
+            <!-- the same Price card as the first page; Save reprices the quotation from it -->
+            <section
               v-if="isProposal"
-              v-model:modules="form.modules"
-              v-model:scoping="form.scoping"
-              :catalogue="options?.catalogue || []"
-              :solution-type="proposal.solution_type"
-              :editable="editable"
+              class="flex flex-col gap-3 rounded-xl border border-outline-gray-2 bg-surface-base p-4"
+              :aria-labelledby="priceTitleId"
             >
-              <template #actions>
-                <Button
-                  v-if="editable"
-                  class="ml-auto"
-                  :label="__('Price from modules')"
-                  :disabled="dirty || !form.modules.length"
-                  :tooltip="dirty ? __('Save your changes first') : ''"
-                  :loading="priceModules.loading"
-                  @click="priceModules.submit({ name: proposalId })"
+              <h2 :id="priceTitleId" class="text-base font-semibold text-ink-gray-9">
+                {{ __("Price") }}
+              </h2>
+              <fieldset
+                :disabled="!editable || !proposal.can_price"
+                class="min-w-0"
+              >
+                <ProposalPriceEstimate
+                  v-model:scoping="form.scoping"
+                  v-model:prices="modulePrices"
+                  :catalogue="priceCatalogue"
+                  :main-label="mainAppLabel(proposal.solution_type)"
+                  :currency="options?.currency || 'INR'"
+                  :branch-rate="options?.branch_rate"
                 />
-              </template>
-            </ProposalModules>
+              </fieldset>
+            </section>
 
             <ProposalBlocks
               v-model:sections="form.sections"
@@ -559,7 +536,7 @@
                 :valid-till="form.valid_till"
                 :sections="form.sections"
                 :quotation="proposal.quotation"
-                :pricing-mode="form.pricing_mode"
+                :pricing-mode="proposal.pricing_mode || 'Itemised'"
                 :modules="form.modules"
                 :letter-head="letterHeadPreview"
                 :amc-plan="form.scoping.amc_plan"
@@ -639,54 +616,6 @@
       </template>
     </Dialog>
 
-    <Dialog
-      v-model:open="templateDialog.open"
-      :title="__('Change template')"
-      size="lg"
-    >
-      <div class="flex flex-col gap-4">
-        <ProposalImplementation
-          :template="templateDialog.template"
-          :scoping="templateDialog.scoping"
-          :templates="enabledTemplates"
-          @change="takeTemplateChoice"
-        />
-        <FormControl
-          :model-value="templateDialog.template"
-          type="select"
-          :label="__('Template')"
-          :options="templateOptions"
-          @update:model-value="pickDialogTemplate"
-        />
-        <p class="text-p-sm text-ink-gray-6">
-          {{
-            __(
-              "The sections follow the new template, in its order. Sections you edited and the AI's text are kept; the timeline and payment terms go back to its defaults. The proposal keeps its number and is priced again."
-            )
-          }}
-        </p>
-        <p
-          v-if="templateDialog.error"
-          role="alert"
-          class="text-p-sm text-danger"
-        >
-          {{ templateDialog.error }}
-        </p>
-      </div>
-      <template #actions="{ close }">
-        <div class="flex justify-end gap-2">
-          <Button :label="__('Cancel')" @click="close" />
-          <Button
-            variant="solid"
-            :label="__('Change template')"
-            :loading="changeTemplate.loading"
-            :disabled="!templateChanged"
-            @click="submitTemplate"
-          />
-        </div>
-      </template>
-    </Dialog>
-
     <!-- one confirm for the actions that can't be undone or write over edits -->
     <Dialog v-model:open="confirm.open" :title="confirm.title" size="md">
       <p class="text-p-base text-ink-gray-7">{{ confirm.message }}</p>
@@ -720,7 +649,6 @@ import {
   Dialog,
   Dropdown,
   FormControl,
-  TabButtons,
   toast,
 } from "frappe-ui";
 import { computed, reactive, ref, useId, watch } from "vue";
@@ -739,9 +667,8 @@ import ClientProfileForm from "./ClientProfileForm.vue";
 import DocumentQuestionnaire from "./DocumentQuestionnaire.vue";
 import ProposalAssistant from "./ProposalAssistant.vue";
 import ProposalBlocks from "./ProposalBlocks.vue";
-import ProposalImplementation from "./ProposalImplementation.vue";
-import ProposalModules from "./ProposalModules.vue";
 import ProposalPaymentTermsField from "./ProposalPaymentTermsField.vue";
+import ProposalPriceEstimate from "./ProposalPriceEstimate.vue";
 import ProposalPreview from "./ProposalPreview.vue";
 import ProposalPricingDialog from "./ProposalPricingDialog.vue";
 import ProposalPricingSummary from "./ProposalPricingSummary.vue";
@@ -753,14 +680,15 @@ import {
   emptyProfile,
   emptyScoping,
   estimatePages,
+  mainAppLabel,
   loadProposalOptions,
   proposalOptions,
   proposalTone,
   warnDropped,
+  type CatalogueModule,
   type ClientProfile,
   type Proposal,
   type ProposalModule,
-  type ImplementationChoice,
   type ProposalOptions,
   type ProposalSection,
   type Scoping,
@@ -769,24 +697,19 @@ import {
 const props = defineProps<{ leadId: string; proposalId: string }>();
 const router = useRouter();
 const { isMobileView } = useScreenSize();
-const priceLabelId = `proposal-price-${useId()}`;
 const sendFormId = `proposal-send-${useId()}`;
+const priceTitleId = `proposal-price-${useId()}`;
 
 loadProposalOptions();
 const options = computed(
   () => proposalOptions.data as ProposalOptions | undefined
 );
-const pricingModeOptions = [
-  { label: __("Itemised"), value: "Itemised" },
-  { label: __("Consolidated"), value: "Consolidated" },
-];
 
 const proposal = ref<Proposal>();
 const form = reactive({
   title: "",
   /** "": the default letter head */
   letter_head: "",
-  pricing_mode: "Itemised" as Proposal["pricing_mode"],
   valid_till: "" as string | null,
   start_date: "" as string | null,
   requirements: "",
@@ -797,6 +720,35 @@ const form = reactive({
 });
 const saved = ref("");
 
+/** The catalogue with each module's price as the proposal has it (an Item's rate, say). */
+const priceCatalogue = computed(() =>
+  form.modules.map((m) => ({
+    ...options.value?.catalogue?.find((c) => c.module_name === m.module_name),
+    module_name: m.module_name,
+    default_price: m.rate_overridden
+      ? options.value?.catalogue?.find((c) => c.module_name === m.module_name)
+          ?.default_price || 0
+      : m.rate || 0,
+  })) as CatalogueModule[]
+);
+
+/** The module prices set by hand, by name; the Price card writes them back onto the modules. */
+const modulePrices = computed({
+  get: () =>
+    Object.fromEntries(
+      form.modules
+        .filter((m) => m.rate_overridden)
+        .map((m) => [m.module_name, m.rate])
+    ),
+  set(typed: Record<string, number>) {
+    form.modules = form.modules.map((m) =>
+      m.module_name in typed
+        ? { ...m, rate: typed[m.module_name], rate_overridden: 1 }
+        : { ...m, rate_overridden: 0 }
+    );
+  },
+});
+
 function snapshot() {
   return JSON.stringify(form);
 }
@@ -805,7 +757,6 @@ function setProposal(p: Proposal) {
   proposal.value = p;
   form.title = p.title;
   form.letter_head = p.letter_head || "";
-  form.pricing_mode = p.pricing_mode || "Itemised";
   form.valid_till = p.valid_till || "";
   form.start_date = p.start_date || "";
   form.requirements = p.requirements || "";
@@ -1120,7 +1071,6 @@ function save() {
     data: {
       title: form.title,
       letter_head: form.letter_head || null,
-      pricing_mode: form.pricing_mode,
       valid_till: form.valid_till || null,
       sections: form.sections,
       ...(proposal.value?.dated ? { start_date: form.start_date || null } : {}),
@@ -1148,18 +1098,6 @@ function onPriced(p: Proposal) {
   takePricing(p);
   toast.success(__("Pricing saved"));
 }
-
-const priceModules = createResource({
-  url: "helpdesk.api.proposals.price_from_modules",
-  method: "POST",
-  onSuccess(p: Proposal) {
-    takePricing(p);
-    toast.success(__("Priced from the modules"));
-  },
-  onError(e: unknown) {
-    toast.error(errorText(e, __("Couldn't price it from the modules.")));
-  },
-});
 
 // --- mark ready / reopen ---
 
@@ -1220,86 +1158,6 @@ function regenerateSection(index: number, force: boolean) {
   }
   regenerating.value = index;
   regenerateOne.submit({ name: props.proposalId, index, force: force ? 1 : 0 });
-}
-
-// --- change template (a draft keeps its number; the ERP site carries the edits over) ---
-const enabledTemplates = computed(() =>
-  (options.value?.templates ?? []).filter((t) => t.enabled)
-);
-const templateOptions = computed(() =>
-  enabledTemplates.value.map((t) => ({ label: t.template_name, value: t.name }))
-);
-const templateDialog = reactive({
-  open: false,
-  template: "",
-  scoping: emptyScoping() as Scoping,
-  error: "",
-});
-
-function openTemplateDialog() {
-  templateDialog.template = proposal.value?.template || "";
-  templateDialog.scoping = {
-    ...form.scoping,
-    modules: form.modules.map((m) => m.module_name),
-  };
-  templateDialog.error = "";
-  templateDialog.open = true;
-}
-
-function takeTemplateChoice(choice: ImplementationChoice) {
-  templateDialog.template = choice.template;
-  templateDialog.scoping = choice.scoping;
-}
-
-/** Another template from the list brings its default modules. */
-function pickDialogTemplate(name: string) {
-  const next = enabledTemplates.value.find((t) => t.name === name);
-  templateDialog.template = name;
-  templateDialog.scoping = {
-    ...templateDialog.scoping,
-    modules: [...(next?.default_modules ?? [])],
-  };
-}
-
-const templateChanged = computed(
-  () =>
-    !!templateDialog.template &&
-    (templateDialog.template !== proposal.value?.template ||
-      JSON.stringify(templateDialog.scoping.modules) !==
-        JSON.stringify(form.modules.map((m) => m.module_name)))
-);
-
-const changeTemplate = createResource({
-  url: "helpdesk.api.proposals.change_template",
-  method: "POST",
-  onSuccess(d: { proposal: Proposal; warnings?: string[]; kept?: string[] }) {
-    setProposal(d.proposal);
-    templateDialog.open = false;
-    showWarnings(d.warnings);
-    if (d.kept?.length)
-      toast.info(__("Kept your edits in: {0}", d.kept.join(", ")));
-    toast.success(__("Template changed"));
-  },
-  onError(e: unknown) {
-    templateDialog.error = errorText(
-      e,
-      __("Couldn't change the template. Check your connection and try again.")
-    );
-  },
-});
-
-function submitTemplate() {
-  templateDialog.error = "";
-  changeTemplate.submit({
-    name: props.proposalId,
-    template: templateDialog.template,
-    scoping: {
-      ...templateDialog.scoping,
-      customisations: templateDialog.scoping.customisations.filter((c) =>
-        c.item.trim()
-      ),
-    },
-  });
 }
 
 const regenerateAll = createResource({

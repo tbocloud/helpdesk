@@ -131,55 +131,95 @@
             </p>
           </template>
           <ul
-            class="mb-3 mt-4 grid grid-cols-1 gap-3 sm:grid-cols-[repeat(auto-fit,minmax(10rem,1fr))]"
+            class="mb-3 mt-4 grid grid-cols-1 items-start gap-4 sm:grid-cols-[repeat(auto-fit,minmax(11rem,1fr))]"
             role="list"
             :aria-label="__('AMC plans')"
           >
             <li
               v-for="(plan, k) in b.plans"
               :key="k"
-              class="relative rounded-lg border p-4 pt-5"
+              class="relative flex flex-col overflow-hidden rounded-xl border bg-surface-base"
               :class="
                 plan.recommended
-                  ? 'border-2 border-brand'
+                  ? 'border-brand shadow-md'
                   : 'border-outline-gray-2'
               "
             >
-              <span
-                v-if="plan.recommended"
-                class="absolute -top-2.5 left-3 rounded-full bg-brand px-2 py-0.5 text-2xs font-semibold text-brand-on"
-                >{{ __("Recommended") }}</span
+              <!-- the header band: the plan and its yearly fee -->
+              <div
+                class="px-4 pb-4 pt-3.5"
+                :class="
+                  plan.recommended
+                    ? 'bg-brand text-brand-on'
+                    : 'bg-surface-gray-1 text-ink-gray-9'
+                "
               >
-              <p class="text-base font-semibold text-ink-gray-9">
-                {{ plan.name }}
-              </p>
-              <template v-if="plan.fee">
+                <div class="flex items-center justify-between gap-2">
+                  <p class="text-base font-semibold">{{ plan.name }}</p>
+                  <span
+                    v-if="plan.recommended"
+                    class="shrink-0 rounded-full border border-current px-2 py-0.5 text-2xs font-semibold uppercase tracking-wide"
+                    >{{ __("Recommended") }}</span
+                  >
+                </div>
                 <p
-                  class="mt-2 font-mono text-xl font-semibold tabular-nums text-ink-gray-9"
+                  v-if="plan.fee"
+                  class="mt-2 flex items-baseline gap-1.5 font-mono tabular-nums"
                 >
-                  {{ plan.fee }}
+                  <span class="text-2xl font-semibold">{{ plan.fee }}</span>
+                  <span
+                    class="font-sans text-xs"
+                    :class="plan.recommended ? 'opacity-80' : 'text-ink-gray-6'"
+                    >{{ __("a year") }}</span
+                  >
                 </p>
-                <p class="text-xs text-ink-gray-6">{{ __("a year") }}</p>
-              </template>
-              <ul
-                class="mt-3 flex flex-col gap-1.5 border-t border-outline-gray-2 pt-3 text-p-xs"
-              >
+              </div>
+
+              <!-- how much of the support it covers -->
+              <div class="px-4 pt-3">
+                <div
+                  class="flex items-baseline justify-between text-xs text-ink-gray-6"
+                >
+                  <span>{{ __("Coverage") }}</span>
+                  <span class="font-mono tabular-nums text-ink-gray-8">{{
+                    __("{0} of {1}", String(plan.included), String(plan.features.length))
+                  }}</span>
+                </div>
+                <div
+                  class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-surface-gray-2"
+                  role="img"
+                  :aria-label="
+                    __(
+                      '{0} of {1} services included',
+                      String(plan.included),
+                      String(plan.features.length)
+                    )
+                  "
+                >
+                  <div
+                    class="h-full rounded-full bg-brand"
+                    :style="{
+                      width: `${plan.features.length ? (plan.included / plan.features.length) * 100 : 0}%`,
+                    }"
+                  />
+                </div>
+              </div>
+
+              <ul class="flex flex-col gap-2 px-4 pb-4 pt-3 text-p-xs">
                 <li
                   v-for="(f, m) in plan.features"
                   :key="m"
                   class="flex gap-2"
                   :class="f.on ? 'text-ink-gray-8' : 'text-ink-gray-5'"
                 >
-                  <LucideCheck
-                    v-if="f.on"
-                    class="mt-0.5 size-3.5 shrink-0 text-brand-ink"
+                  <span
+                    class="mt-px flex size-4 shrink-0 items-center justify-center rounded-full"
+                    :class="f.on ? 'bg-brand-soft text-brand-ink' : 'bg-surface-gray-2'"
                     aria-hidden="true"
-                  />
-                  <LucideMinus
-                    v-else
-                    class="mt-0.5 size-3.5 shrink-0"
-                    aria-hidden="true"
-                  />
+                  >
+                    <LucideCheck v-if="f.on" class="size-3" />
+                    <LucideMinus v-else class="size-3" />
+                  </span>
                   <span>
                     <span class="sr-only">{{
                       f.on ? __("Included:") : __("Not included:")
@@ -483,6 +523,8 @@ type AmcPlan = {
   name: string;
   fee: string;
   recommended: boolean;
+  /** how many of the features it includes */
+  included: number;
   features: { label: string; on: boolean; detail: string }[];
 };
 const INCLUDED = ["yes", "✓", "included"];
@@ -499,11 +541,8 @@ function amcPlans(table: { header: string[]; rows: string[][] }): AmcPlan[] {
       ? last
       : null;
   const features = fees ? rows.slice(0, -1) : rows;
-  return table.header.slice(1).map((name, i) => ({
-    name,
-    fee: fees?.[i + 1]?.trim() || "",
-    recommended: !!props.amcPlan && name === props.amcPlan,
-    features: features.map((r) => {
+  return table.header.slice(1).map((name, i) => {
+    const list = features.map((r) => {
       const value = (r[i + 1] || "").trim();
       const on = !["", "–", "-"].includes(value);
       return {
@@ -511,8 +550,15 @@ function amcPlans(table: { header: string[]; rows: string[][] }): AmcPlan[] {
         on,
         detail: on && !INCLUDED.includes(value.toLowerCase()) ? value : "",
       };
-    }),
-  }));
+    });
+    return {
+      name,
+      fee: fees?.[i + 1]?.trim() || "",
+      recommended: !!props.amcPlan && name === props.amcPlan,
+      included: list.filter((f) => f.on).length,
+      features: list,
+    };
+  });
 }
 
 /** The tax lines; an older ERP site sends only the total, shown as one "Taxes" line. */

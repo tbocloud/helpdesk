@@ -271,7 +271,7 @@ const footnote = computed(() =>
         )
       : "",
     __(
-      "List prices are the module catalogue's; a module linked to an Item takes the client segment's rate. The proposal's quotation, made when you generate it, has the final figures with GST."
+      "List prices are the module catalogue's; a module linked to an Item takes the client segment's rate. The proposal's quotation has the final figures with GST."
     ),
   ]
     .filter(Boolean)

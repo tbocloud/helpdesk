@@ -619,12 +619,6 @@ def chat_edit(name: str, message: str) -> dict:
 
 
 @frappe.whitelist(methods=["POST"])
-def price_from_modules(name: str) -> dict:
-    require_leads()
-    return proposal("price_from_modules", post=True, name=name)
-
-
-@frappe.whitelist(methods=["POST"])
 def finalise_proposal(name: str, ready: int | str = 1) -> dict:
     """Mark the draft ready to send (its content and numbers fixed), or reopen it."""
     require_leads()

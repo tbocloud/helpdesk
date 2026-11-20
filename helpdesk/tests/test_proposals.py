@@ -231,7 +231,6 @@ class TestProposals(FrappeTestCase):
     def test_regenerate_share_and_libraries_go_to_the_erp_site(self):
         proposals_api.regenerate_section("PROP-2026-00001", "3", "1")
         proposals_api.regenerate_proposal("PROP-2026-00001")
-        proposals_api.price_from_modules("PROP-2026-00001")
         proposals_api.share_proposal("PROP-2026-00001")
         proposals_api.use_library_image("PROP-2026-00001", "IMG-1")
         proposals_api.get_proposal_library()
@@ -261,7 +260,6 @@ class TestProposals(FrappeTestCase):
                 for n in (
                     "regenerate_section",
                     "regenerate_proposal",
-                    "price_from_modules",
                     "share_proposal",
                     "use_library_image",
                     "save_library_record",

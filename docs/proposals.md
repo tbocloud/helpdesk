@@ -65,7 +65,7 @@ sending `acting_user`; each maps 1:1 to `tbo_smart.api.hub_proposals.<same name>
 | `finalise_proposal(name, ready)` | 1: Mark ready, 0: Reopen |
 | `change_template(name, template, scoping)` | A draft moved to another template, same number; a blank template is refused here |
 | `regenerate_section(name, index, force)`, `regenerate_proposal(name, force)`, `chat_edit(name, message)` | `chat_edit` refuses a blank message and caps it at 1,000 characters |
-| `price_from_modules(name)`, `get_pricing_form(name)`, `save_pricing(name, values)`, `request_approval(name, reason)` | A reason is required here too |
+| `get_pricing_form(name)`, `save_pricing(name, values)`, `request_approval(name, reason)` | A reason is required here too |
 | `delete_proposal(name)` | A draft only (the ERP site refuses one that went out); its draft quotation goes with it |
 | `share_proposal(name)`, `send_proposal(name, recipients, message, attach_pdf)`, `create_revision(name)` | |
 | `save_questions(name, questions)`, `share_questionnaire(name)`, `send_questionnaire(name, recipients, message)`, `apply_answers(name)` | A BRD's client questionnaire (the questions as a list; blank recipients and message trimmed) |
@@ -357,15 +357,10 @@ shows inline and stays on the page.
   the person may price it), a **Price the proposal** button there opens the pricing dialog, the
   same as the Investment section's. **With the client**
   (`ProposalTracking.vue`) once sent.
-- **Change template** (a proposal, while it is a draft and not marked ready; off with unsaved
-  edits): the Details show **Template: <name>** and the button, which opens the start page's
-  **Implementation type** picker (ERP with its add-ons, or Digital Marketing) and the Template
-  list (another template brings its default modules). The ERP site moves the proposal to it in
-  place (`change_template`): same number; the new template's sections in its order; sections
-  edited by hand and the AI's text kept (a toast names the kept ones); the timeline and payment
-  terms back to the new template's defaults; repriced. Off until the template or the modules
-  differ.
-- **Details:** title, valid till, **Price shown** (Itemised / Consolidated), **Letter head**
+- **Template:** the Details show **Template: <name>**. The builder has no Change template
+  button; to change the template or the modules, go **Back** to the edit page (Update proposal
+  calls `change_template` when either changed).
+- **Details:** title, valid till, **Letter head**
   (Default (<name>) or any Letter Head; editors see a warning when the ERP site has none), about
   how many pages against the template's length guide, and for editors the AI on this proposal
   (runs, tokens, estimated cost, and about how many tokens a full regenerate costs).
@@ -376,14 +371,13 @@ shows inline and stays on the page.
 - **Client, requirements and scoping** (collapsed): the profile, the requirements, the scoping
   form and the template picks, and **Regenerate proposal** (every section again; sections edited
   by hand are kept, and a dialog offers to rebuild them too).
-- **Modules** (`ProposalModules.vue`): each module's days and, by Module, its price (starting
-  from the Price card's on Generate; a price typed is "set by hand"; **Use the list price** undoes
-  it). By App or Custom the modules show no price; under them **Price by app** (a price per app)
-  or **Price for all the modules** (one price), saved with the scoping, and a note that the basis
-  is changed on the first page (Back). There is no Fit control: a module keeps the catalogue's
-  fit, which the ERP site's sections still use; its text (what it covers, key features: this
-  proposal's copy only) with **Reset to library**, **Add a module** from the catalogue, and
-  **Price from modules** (the quotation's lines).
+- **Price** (`ProposalPriceEstimate.vue`, the first page's Price card): Module / App / Custom
+  and the prices for the basis picked (a module's price as the proposal has it, an Item's rate
+  say, until one is typed), customisations, branches and the total. Off unless the proposal is
+  an editable draft the person may price. Save sends the scoping and the modules; the ERP site
+  prices the quotation again when the prices or the basis changed. There is no Modules card:
+  the modules and their days are changed on the first page (Back → Edit proposal → Update
+  proposal), and the hub has no `price_from_modules` endpoint.
 - **Sections** (`ProposalBlocks.vue`): the 23 master sections and any Image / Custom ones, each a
   collapsible card (the AI's, custom and image ones open; data ones shut) with an **On** switch,
   "AI" and "Edited" marks, **Regenerate** (AI sections) or **Reset to library** (data sections; a
@@ -400,11 +394,12 @@ shows inline and stays on the page.
   they gave none).
 - **Versions**, the **Send dialog** and **What the client sees** (`ProposalPreview.vue`: the
   cover, the contents with the parts, numbered sections and subsections, tables, workflow
-  chains, the module cards, the timeline bar, the AMC plan cards (a card a plan with its yearly
-  fee and ✓ / – features, the recommended one, `scoping.amc_plan`, outlined in brand with a
-  Recommended tag; the table hidden, as TBO Smart's `amc_plans` draws it), payment amounts (of
+  chains, the module cards, the timeline bar, the AMC plan cards (a card a plan: a header band with
+  its name and yearly fee, brand-filled with a Recommended tag and raised for the recommended
+  one, `scoping.amc_plan`, gray for the others; a Coverage bar, "n of m" features included;
+  then the features with a round ✓ / – mark; the table hidden, as TBO Smart's `amc_plans` draws it), payment amounts (of
   the grand total), the price
-  itemised or consolidated with the net total, each tax line and the grand total, the signature
+  as the proposal's pricing mode says (the builder no longer switches it) with the net total, each tax line and the grand total, the signature
   boxes and the letter head; the ERP site's page and PDF are the
   real thing). It fits its column with no horizontal overflow at 1280, 1440 and 1920 px and at
   phone width: long words (links, emails) wrap, and a letter head's HTML with fixed widths is
@@ -419,7 +414,7 @@ no module editor (they keep what they copied); its sections are its type's (`sec
 agreement's Parties, Purpose, Change Requests, Intellectual Property, Confidentiality and
 Termination added to the block labels); the preview's cover shows the type ("Quotation",
 "Project Agreement"), no part titles, and no contents for a quotation, with the type's default
-headings. A quotation is priced here (the pricing dialog, *Price from modules*, *Request
+headings. A quotation is priced here (the pricing dialog, *Request
 approval*); an agreement shows the accepted quotation's (or, while the proposal is the
 quotation, the accepted proposal's) price read only and has a **Project start
 date** (Send says to set it; saving a new one dates the timeline and the purpose on the ERP site,
