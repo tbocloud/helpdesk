@@ -393,8 +393,23 @@ shows inline and stays on the page.
   asked, when and their words at the top ("No reason given. Ask the client what to change." when
   they gave none).
 - **Versions**, the **Send dialog** and **What the client sees** (`ProposalPreview.vue`: the
-  cover, the contents with the parts, numbered sections and subsections, tables, workflow
-  chains, the module cards, the timeline bar, the AMC plan cards (a card a plan: a header band with
+  cover, the contents with the parts, **At a glance** (tiles before section 1: the modules in
+  scope, the timeline, the investment with taxes, the recommended AMC plan or else the valid-till
+  date; shown when two or more are known), numbered sections and subsections, tables, workflow
+  chains, the module cards (each with its effort days as a bar against the largest module, a
+  "n modules · d days of effort" line above them, and, when the proposal spans more than one
+  app, grouped and labelled by app), the timeline bar, the **investment split** (a stacked bar and legend over the
+  quotation's lines, the largest four and "Other", or the project alone when consolidated, then
+  the taxes; shares of the grand total, line amounts scaled for any discount), and the
+  shapes TBO Smart's `draw_parts` draws (`drawParts` in `proposals.ts`, the same rules): a
+  "Figure | label | detail" table as big-number tiles, two or more short subsections in a row
+  as cards, Deliverables as cards, Out of Scope and Assumptions as numbered rows with the lead
+  words ("Extra integrations: …") in bold, and "> " lines as a highlight ("title | tag"); the
+  Implementation Plan's phases as numbered markers on a line; the payment milestones as columns
+  (the amount in a band, darkest first) with the grand total under them; and, when the Warranty
+  & Support text names a free period ("six months", "90 days"), a go-live → optional AMC line
+  above the AMC plans. Cards, tiles and markers take the client document's accents in turn
+  (`DOC_TONES`: teal, green, orange, red; `DOC_TONE_INK` for big numbers), the AMC plan cards (a card a plan: a header band with
   its name and yearly fee, brand-filled with a Recommended tag and raised for the recommended
   one, `scoping.amc_plan`, gray for the others; a Coverage bar, "n of m" features included;
   then the features with a round ✓ / – mark; the table hidden, as TBO Smart's `amc_plans` draws it), payment amounts (of

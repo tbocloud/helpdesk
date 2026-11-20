@@ -947,12 +947,14 @@ export type TextPart =
   | { kind: "list"; items: string[] }
   | { kind: "heading"; text: string }
   | { kind: "table"; header: string[]; rows: string[][] }
-  | { kind: "chain"; steps: string[] };
+  | { kind: "chain"; steps: string[] }
+  | { kind: "callout"; title: string; tag: string; lines: string[] };
 
 /**
  * Plain text as the client's page lays it out (TBO Smart's text_parts): a blank line starts a
  * part; "## " a subheading; lines starting "- " a list; lines with " | " a table (the first its
- * header); a line with " → " a chain of steps; anything else a paragraph.
+ * header); a line with " → " a chain of steps; lines starting "> " a highlight (its first line
+ * the title, "title | tag" for a tag); anything else a paragraph.
  */
 export function textParts(body?: string | null): TextPart[] {
   const parts: TextPart[] = [];
@@ -964,7 +966,16 @@ export function textParts(body?: string | null): TextPart[] {
     while (lines.length && lines[0].startsWith("## "))
       parts.push({ kind: "heading", text: lines.shift()!.slice(3).trim() });
     if (!lines.length) continue;
-    if (lines.every((l) => l.startsWith("- ") || l.startsWith("• ")))
+    if (lines.every((l) => l.startsWith(">"))) {
+      const said = lines.map((l) => l.replace(/^>\s*/, ""));
+      const [title, ...tag] = said[0].split(" | ");
+      parts.push({
+        kind: "callout",
+        title: title.trim(),
+        tag: tag.join(" | ").trim(),
+        lines: said.slice(1),
+      });
+    } else if (lines.every((l) => l.startsWith("- ") || l.startsWith("• ")))
       parts.push({ kind: "list", items: lines.map((l) => l.slice(2).trim()) });
     else if (lines.length > 1 && lines.every((l) => l.includes(" | "))) {
       const rows = lines.map((l) => l.split(" | ").map((c) => c.trim()));
@@ -980,6 +991,109 @@ export function textParts(body?: string | null): TextPart[] {
     else parts.push({ kind: "text", lines });
   }
   return parts;
+}
+
+/** The client document's accents in turn (TBO Smart's .t0–.t3): teal, green, orange, red. */
+export const DOC_TONES = ["#3a748d", "#0b7d6b", "#e8962a", "#c4452f"];
+/** Each accent dark enough for text on white (4.5:1). */
+export const DOC_TONE_INK = ["#2c5d72", "#0b7d6b", "#a85a0c", "#b03a26"];
+
+type Toned = { tone: number };
+export type DrawnPart =
+  | TextPart
+  | {
+      kind: "stats";
+      items: ({ figure: string; label: string; detail: string } & Toned)[];
+    }
+  | { kind: "cards"; items: ({ title: string; text: string } & Toned)[] }
+  | {
+      kind: "numbered";
+      items: { number: number; title: string; text: string }[];
+    };
+
+const SHORT_TEXT = 240;
+
+function leadAndText(item: string) {
+  const at = item.indexOf(": ");
+  return at > 0 && at <= 60
+    ? { title: item.slice(0, at).trim(), text: item.slice(at + 2).trim() }
+    : { title: item, text: "" };
+}
+
+/**
+ * As TBO Smart's draw_parts: a "Figure | label | detail" table as big-number tiles; two or more
+ * short subsections in a row as cards; the deliverables as cards; out of scope and assumptions as
+ * numbered rows with their lead words in bold.
+ */
+export function drawParts(parts: TextPart[], sectionType: string): DrawnPart[] {
+  const short = (i: number) => {
+    const head = parts[i];
+    const body = parts[i + 1];
+    return (
+      head?.kind === "heading" &&
+      body?.kind === "text" &&
+      body.lines.join(" ").length <= SHORT_TEXT &&
+      (i + 2 >= parts.length || parts[i + 2].kind === "heading")
+    );
+  };
+  const drawn: DrawnPart[] = [];
+  let i = 0;
+  while (i < parts.length) {
+    const part = parts[i];
+    if (
+      part.kind === "table" &&
+      ["Figure", __("Figure")].includes(part.header[0]?.trim())
+    ) {
+      drawn.push({
+        kind: "stats",
+        items: part.rows
+          .filter((r) => r[0])
+          .map((r, k) => ({
+            figure: r[0],
+            label: r[1] || "",
+            detail: r[2] || "",
+            tone: k % DOC_TONES.length,
+          })),
+      });
+    } else if (short(i)) {
+      const cards: { title: string; text: string }[] = [];
+      const from = i;
+      while (short(i)) {
+        const head = parts[i] as { text: string };
+        const body = parts[i + 1] as { lines: string[] };
+        cards.push({ title: head.text, text: body.lines.join(" ") });
+        i += 2;
+      }
+      if (cards.length > 1)
+        drawn.push({
+          kind: "cards",
+          items: cards.map((c, k) => ({ ...c, tone: k % DOC_TONES.length })),
+        });
+      else drawn.push(...parts.slice(from, i));
+      continue;
+    } else if (part.kind === "list" && sectionType === "Deliverables") {
+      drawn.push({
+        kind: "cards",
+        items: part.items.map((item, k) => ({
+          ...leadAndText(item),
+          tone: k % DOC_TONES.length,
+        })),
+      });
+    } else if (
+      part.kind === "list" &&
+      ["Out of Scope", "Assumptions"].includes(sectionType)
+    ) {
+      drawn.push({
+        kind: "numbered",
+        items: part.items.map((item, k) => ({
+          number: k + 1,
+          ...leadAndText(item),
+        })),
+      });
+    } else drawn.push(part);
+    i++;
+  }
+  return drawn;
 }
 
 function words(text: string) {
@@ -1002,6 +1116,8 @@ export function estimatePages(sections: ProposalSection[]): number {
       else if (part.kind === "list")
         text += words(part.items.join(" ")) + 4 * part.items.length;
       else if (part.kind === "text") text += words(part.lines.join(" "));
+      else if (part.kind === "callout")
+        text += words([part.title, ...part.lines].join(" "));
       else text += 12;
     }
     if (s.section_type === "Investment") rows += 10;
