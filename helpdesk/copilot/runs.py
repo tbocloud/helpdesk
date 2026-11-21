@@ -96,6 +96,10 @@ INFRA_TRANSITIONS = {
     ("Investigating", "Awaiting Approval"): {SYSTEM},
     ("Investigating", "Handed Over"): {SYSTEM},
     ("Investigating", "Closed"): {SYSTEM},
+    # a second alert joins a request for the same action that is approved, or has just run
+    # (testing fixes 5): it waits for that action's result, or straight for the watcher
+    ("Investigating", "Approved"): {SYSTEM},
+    ("Investigating", "Verifying"): {SYSTEM},
     ("Awaiting Approval", "Approved"): {AGENT},
     ("Awaiting Approval", "Handed Over"): {SYSTEM},
     ("Awaiting Approval", "Closed"): {SYSTEM},

@@ -524,16 +524,17 @@ def announce(
     )
 
 
-def refresh_cards(name: str):
-    """After a decision or the run, every copy of the card shows it."""
+def refresh_cards(name: str, pending: bool = False):
+    """After a decision or the run, every copy of the card shows it; `pending`: a card still
+    waiting is drawn again too (another alert joined it, testing fixes 5)."""
     from helpdesk.copilot import teams
     from helpdesk.copilot.assistant import MESSAGE
 
     try:
         approval = frappe.get_doc(ACTION, name)
-        if approval.status == PENDING:
+        if approval.status == PENDING and not pending:
             return
-        reply = decided_card(approval)
+        reply = card(approval) if approval.status == PENDING else decided_card(approval)
         for row in frappe.get_all(
             MESSAGE,
             filters={

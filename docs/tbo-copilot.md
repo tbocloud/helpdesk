@@ -682,7 +682,16 @@ Diagnosis**, **Copilot May Change** (one bench, group or site per line; the patc
 5. **The check after** (`infra.on_alert_resolved`, `infra.check_verifying` every 5 minutes): the
    watcher resolving the alert makes it **Fixed by Copilot** (a comment on the ticket, a card);
    still open 30 minutes after the action, a Leader takes it and Copilot does not try again. An alert
-   that resolves while its request waits withdraws the request (Expired) and closes the run.
+   that resolves while its request waits withdraws the request (Expired) and closes the run, unless
+   another alert still waits on that request.
+6. **One action for several alerts** (testing fixes 5): before asking, the hub looks for Copilot's own
+   request for the same Press call (method and arguments) that is waiting, approved and not yet run, or
+   ran successfully in the last 30 minutes (`infra._same_request`). A second alert then joins it instead of
+   asking again (`infra._join`; the run's proposal keeps `"joined": 1`): waiting → its chat says it joined,
+   the card gets "Also for alert #…" (its Teams and panel copies drawn again); approved → it runs once for
+   both; just ran → the alert waits for the watcher (Verifying). `infra.on_action` moves every run that
+   waits on the request, and each alert still closes on its own check. A failed, rejected or lapsed
+   request does not count. The joined alert's Chat tab shows the request and Arun's buttons too.
 
 People reply to the alert's messages in Teams, and Copilot answers from the ticket's chat (the
 diagnosis card carries the summary, cause and evidence). Stage 2 (next): the watcher's own repair

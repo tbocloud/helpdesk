@@ -699,6 +699,23 @@ def _with_actions(state: dict, ticket: str, user: str) -> dict:
         order_by="creation asc",
         limit=5,
     )
+    # an alert that joined another alert's request (testing fixes 5) waits on that one too
+    for proposal in frappe.get_all(
+        "HDS Copilot Run",
+        filters={
+            "ticket": str(ticket),
+            "kind": "infra",
+            "state": "Awaiting Approval",
+        },
+        pluck="proposal",
+    ):
+        name = (frappe.parse_json(proposal or "{}") or {}).get("approval")
+        if name and name not in {w.name for w in waiting}:
+            waiting += frappe.get_all(
+                actions.ACTION,
+                filters={"name": name, "status": actions.PENDING},
+                fields=["name", "title", "assigned_to"],
+            )
     if not waiting:
         return state
     first = waiting[0]

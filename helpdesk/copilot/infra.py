@@ -583,6 +583,9 @@ def _ask(run, proposal: dict, found: dict):
     rule = press_tools.spec(action)
     title, details = press_tools.describe(action, target)
     why = proposal.get("why") or ""
+    same = _same_request(rule["method"], press_tools.arguments(action, target))
+    if same:
+        return _join(run, same, _("Copilot: {0}").format(title), found)
     approval = actions.request(
         press_tools.KIND,
         _("Copilot: {0}").format(title),
@@ -627,6 +630,135 @@ def _ask(run, proposal: dict, found: dict):
     )
 
 
+# --- one action for several alerts (testing fixes 5) -------------------------------------------
+
+
+def _same_request(method: str, args: dict):
+    """Copilot's own request for this exact Press call that is waiting, approved and not yet run,
+    or ran successfully in the last VERIFY_MINUTES; None when there is none."""
+    from helpdesk.automation import automation_user
+    from helpdesk.copilot import actions, press_tools
+
+    now = now_datetime()
+    since = add_to_date(now, minutes=-VERIFY_MINUTES)
+    for row in frappe.get_all(
+        actions.ACTION,
+        filters={
+            "kind": press_tools.KIND,
+            "requested_by": automation_user(),
+            "status": ["in", (actions.PENDING, actions.APPROVED, actions.EXECUTED)],
+            "creation": [">", add_to_date(now, hours=-2)],
+        },
+        fields=["name", "status", "payload", "executed_at"],
+        order_by="creation desc",
+        limit=50,
+    ):
+        payload = frappe.parse_json(row.payload or "{}") or {}
+        if payload.get("method") != method or payload.get("args") != args:
+            continue
+        if row.status == actions.EXECUTED:
+            if row.executed_at and get_datetime(row.executed_at) >= since:
+                return frappe.get_doc(actions.ACTION, row.name)
+            continue
+        approval = frappe.get_doc(actions.ACTION, row.name)
+        if row.status == actions.PENDING and actions.is_expired(approval):
+            continue
+        return approval
+    return None
+
+
+def _join(run, approval, title: str, found: dict):
+    """This alert joins another alert's request for the same action instead of asking again: one
+    decision, one run of the action, each alert closed by its own watcher check."""
+    from helpdesk.copilot import actions
+
+    stored = frappe.parse_json(run.proposal or "{}") or {}
+    stored.update({"approval": approval.name, "joined": 1})
+    first = approval.ticket or "-"
+    if approval.status == actions.EXECUTED:
+        stored["verifying_since"] = str(now_datetime())
+        when = frappe.utils.format_datetime(approval.executed_at, "HH:mm")
+        line = _(
+            "{0} ran at {1} for alert {2}: Copilot does not run it again, and waits for the watcher's next checks."
+        ).format(title, when, first)
+        state = "Verifying"
+    elif approval.status == actions.APPROVED:
+        who = get_fullname(approval.decided_by) if approval.decided_by else ""
+        line = _(
+            "Copilot joins {0}, approved by {1} for alert {2}: it runs once for both."
+        ).format(title, who, first)
+        state = "Approved"
+    else:
+        who = (
+            get_fullname(approval.assigned_to)
+            if approval.assigned_to
+            else _("nobody yet")
+        )
+        line = _(
+            "Copilot joins {0}, already waiting for {1} (alert {2}): one decision for both."
+        ).format(title, who, first)
+        state = "Awaiting Approval"
+        _also_for(approval, run.ticket)
+    run.db_set(
+        "proposal", json.dumps(stored, ensure_ascii=False), update_modified=False
+    )
+    found["lines"] = list(found["lines"]) + [line]
+    _post(run.ticket, found, run=run)
+    return runs.transition(
+        run, state, runs.SYSTEM, note=f"joined {approval.name} ({approval.status})"
+    )
+
+
+def _also_for(approval, ticket: str):
+    """The waiting card names every alert it is for; its Teams and panel copies are drawn again."""
+    from helpdesk.copilot import actions
+
+    subject = frappe.db.get_value(TICKET, ticket, "subject") or ""
+    line = _("Also for alert {0}: {1}").format(ticket, subject)
+    approval.db_set(
+        "details",
+        "\n".join(part for part in (approval.details or "", line) if part),
+        update_modified=False,
+    )
+    actions.refresh_cards(approval.name, pending=True)
+
+
+def _runs_of(approval) -> list:
+    """Every alert's run that waits on this action: the one that asked, and those that joined it."""
+    payload = frappe.parse_json(approval.payload or "{}") or {}
+    names = [payload.get("copilot_run")] + frappe.get_all(
+        RUN,
+        filters={
+            "kind": KIND,
+            "proposal": ["like", f'%"{approval.name}"%'],
+            "state": ["not in", runs.FINISHED_STATES],
+        },
+        pluck="name",
+        order_by="creation asc",
+    )
+    found = []
+    for name in dict.fromkeys(n for n in names if n):
+        if frappe.db.exists(RUN, name):
+            run = frappe.get_doc(RUN, name)
+            if run.kind == KIND:
+                found.append(run)
+    return found
+
+
+def _others_waiting(approval_name: str, besides: str) -> list[str]:
+    """The tickets of other alerts' runs still waiting on this request."""
+    return frappe.get_all(
+        RUN,
+        filters={
+            "kind": KIND,
+            "name": ["!=", besides],
+            "proposal": ["like", f'%"{approval_name}"%'],
+            "state": "Awaiting Approval",
+        },
+        pluck="ticket",
+    )
+
+
 # --- the approval, the action, the check after ----------------------------------------------
 
 
@@ -637,16 +769,15 @@ def _leaders() -> list[str]:
 
 
 def on_action(approval):
-    """actions.decide, expire and mark_executed: the run of the alert follows its action."""
+    """actions.decide, expire and mark_executed: the run of the alert follows its action, and so do
+    the runs of the alerts that joined it (testing fixes 5). Returns the asking alert's run."""
+    moved = [_follow(run, approval) for run in _runs_of(approval)]
+    return moved[0] if moved else None
+
+
+def _follow(run, approval):
     from helpdesk.copilot import actions
 
-    payload = frappe.parse_json(approval.payload or "{}") or {}
-    name = payload.get("copilot_run")
-    if not name or not frappe.db.exists(RUN, name):
-        return None
-    run = frappe.get_doc(RUN, name)
-    if run.kind != KIND:
-        return None
     who = get_fullname(approval.decided_by) if approval.decided_by else ""
     status = approval.status
     if status == actions.APPROVED and run.state == "Awaiting Approval":
@@ -762,8 +893,10 @@ def on_alert_resolved(ticket: str):
             run, "Closed", runs.SYSTEM, note="the alert resolved on its own"
         )
         approval = (frappe.parse_json(run.proposal or "{}") or {}).get("approval")
+        others = _others_waiting(approval, run.name) if approval else []
         if (
             approval
+            and not others
             and frappe.db.get_value(actions.ACTION, approval, "status")
             == actions.PENDING
         ):
@@ -774,6 +907,10 @@ def on_alert_resolved(ticket: str):
                 "",
                 [
                     _(
+                        "The alert resolved before anyone decided; the request stays for alert {0}."
+                    ).format(", ".join(others))
+                    if others
+                    else _(
                         "The alert resolved before anyone decided; the request is withdrawn."
                     )
                 ],

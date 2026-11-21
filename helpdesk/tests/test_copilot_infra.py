@@ -390,6 +390,160 @@ class TestBenchNames(InfraCase):
         self.assertEqual(run.state, "Handed Over")
 
 
+class TestOneActionForSeveralAlerts(InfraCase):
+    """Testing fixes 5 (DevOps's Test 1, 18 Nov 2026): two alerts on one bench asked twice and the
+    bench restarted twice. A second alert joins the request for the same action: one decision,
+    one run, each alert closed by its own check."""
+
+    BETA = "site-down:demo-beta.tbocloud.in"
+
+    def approval_of(self, run):
+        return (frappe.parse_json(run.proposal) or {})["approval"]
+
+    def first_alert(self):
+        ticket = self.open_alert()
+        run = self.report(
+            self.claimed(ticket), action="restart_bench", target="bench-0015"
+        )
+        return ticket, run
+
+    def second_alert(self, **proposal):
+        ticket = self.open_alert(key=self.BETA)
+        run = self.report(
+            self.claimed(ticket),
+            **(proposal or {"action": "restart_bench", "target": "bench-0015"}),
+        )
+        return ticket, run
+
+    def asked(self):
+        return frappe.db.count(actions.ACTION, {"requested_by": automation_user()})
+
+    def said_in(self, ticket) -> str:
+        from helpdesk.copilot import thread
+
+        return json.dumps(thread.history(ticket))
+
+    def test_a_second_alert_joins_the_waiting_request(self):
+        _first, run1 = self.first_alert()
+        # Arun's copy of the card in his chat (Teams and the panel show this message)
+        copy = assistant.record(
+            assistant.chat_for(self.devops, "Web"),
+            "Out",
+            "card",
+            actions.card(self.approval_of(run1)),
+            action_approval=self.approval_of(run1),
+        )
+        second, run2 = self.second_alert()
+        self.assertIn(
+            f"Also for alert {second}",
+            frappe.db.get_value(assistant.MESSAGE, copy.name, "card"),
+        )
+        self.assertEqual(run2.state, "Awaiting Approval")
+        self.assertEqual(self.approval_of(run2), self.approval_of(run1))
+        self.assertEqual(self.asked(), 1)
+        self.assertIn(
+            f"Also for alert {second}",
+            frappe.db.get_value(actions.ACTION, self.approval_of(run1), "details"),
+        )
+        self.assertIn("one decision for both", self.said_in(second))
+
+    def test_one_approve_runs_once_and_each_alert_closes_on_its_own_check(self):
+        first, run1 = self.first_alert()
+        second, run2 = self.second_alert()
+        approval = self.approval_of(run1)
+        actions.decide(approval, self.devops, True, via="Teams")
+        self.assertEqual(
+            {
+                frappe.db.get_value("HDS Copilot Run", r.name, "state")
+                for r in (run1, run2)
+            },
+            {"Approved"},
+        )
+        actions.mark_executed(approval, True, "restart bench: job J1 success")
+        self.assertEqual(
+            {
+                frappe.db.get_value("HDS Copilot Run", r.name, "state")
+                for r in (run1, run2)
+            },
+            {"Verifying"},
+        )
+        monitor.alert(KEY, "resolved", "", "answers again")
+        monitor.alert(self.BETA, "resolved", "", "answers again")
+        for ticket, run in ((first, run1), (second, run2)):
+            self.assertEqual(
+                frappe.db.get_value("HDS Copilot Run", run.name, "state"), "Resolved"
+            )
+            notes = frappe.get_all(
+                "HD Ticket Comment",
+                filters={"reference_ticket": ticket},
+                pluck="content",
+            )
+            self.assertTrue(any("Fixed by Copilot" in (n or "") for n in notes))
+
+    def test_a_reject_hands_both_over(self):
+        _first, run1 = self.first_alert()
+        _second, run2 = self.second_alert()
+        actions.decide(self.approval_of(run1), self.devops, False, note="not now")
+        for run in (run1, run2):
+            self.assertEqual(
+                frappe.db.get_value("HDS Copilot Run", run.name, "state"),
+                "Handed Over",
+            )
+
+    def test_an_alert_after_a_restart_that_just_ran_waits_for_the_watcher(self):
+        _first, run1 = self.first_alert()
+        approval = self.approval_of(run1)
+        actions.decide(approval, self.devops, True)
+        actions.mark_executed(approval, True, "restart bench: job J1 success")
+        second, run2 = self.second_alert()
+        self.assertEqual(run2.state, "Verifying")
+        self.assertEqual(self.asked(), 1)
+        self.assertIn("does not run it again", self.said_in(second))
+
+    def test_after_a_failed_restart_it_asks_again(self):
+        _first, run1 = self.first_alert()
+        approval = self.approval_of(run1)
+        actions.decide(approval, self.devops, True)
+        actions.mark_executed(approval, False, "Press refused: bench busy")
+        _second, run2 = self.second_alert()
+        self.assertEqual(run2.state, "Awaiting Approval")
+        self.assertNotEqual(self.approval_of(run2), approval)
+        self.assertEqual(self.asked(), 2)
+
+    def test_the_first_alert_resolving_keeps_the_request_for_the_second(self):
+        _first, run1 = self.first_alert()
+        second, run2 = self.second_alert()
+        monitor.alert(KEY, "resolved", "", "answers again")
+        self.assertEqual(
+            frappe.db.get_value("HDS Copilot Run", run1.name, "state"), "Closed"
+        )
+        self.assertEqual(
+            frappe.db.get_value(actions.ACTION, self.approval_of(run1), "status"),
+            actions.PENDING,
+        )
+        self.assertEqual(
+            frappe.db.get_value("HDS Copilot Run", run2.name, "state"),
+            "Awaiting Approval",
+        )
+
+    def test_a_different_action_asks_separately(self):
+        self.first_alert()
+        _second, run2 = self.second_alert(action="backup", target=SITE)
+        self.assertEqual(self.asked(), 2)
+        self.assertEqual(run2.state, "Awaiting Approval")
+
+    def test_the_second_tickets_chat_offers_the_approver_its_buttons(self):
+        from helpdesk.copilot import thread
+
+        _first, run1 = self.first_alert()
+        second, _run2 = self.second_alert()
+        now = thread.now(second, self.devops)
+        self.assertEqual(
+            [(a["verb"], a["data"].get("approval")) for a in now["actions"]][:1],
+            [("action_approve", self.approval_of(run1))],
+        )
+
+
 class TestAfterTheDecision(InfraCase):
     def asked(self):
         ticket = self.open_alert()
