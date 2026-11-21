@@ -62,7 +62,7 @@ picked explicitly.
 Both pages count calls the way Today's calls does: **called** is a lead on a call list that got
 an answer logged or was moved on by hand; **contacted** is someone answered (Connected, Call back
 or Not interested). These come from the batches, not from the call log, so they match Today's
-calls and the Call batches table. (The ERP site's `get_my_call_counts` counts the call log, which
+calls and the Call batches table. (The ERP site's `get_my_call_counts` counts calls from the call log, which
 misses leads moved without a logged call, so it isn't used here.)
 
 ## Caching

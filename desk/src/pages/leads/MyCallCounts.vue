@@ -3,11 +3,11 @@
   <section
     v-if="counts.data?.available"
     class="flex flex-col gap-3"
-    :aria-label="__('Your calls')"
+    :aria-label="__('Leads you contacted')"
   >
     <div class="flex items-center justify-between gap-2">
       <h2 class="text-base font-semibold text-ink-gray-9">
-        {{ __("Your calls") }}
+        {{ __("Leads you contacted") }}
       </h2>
       <Button
         :label="__('By day')"
@@ -24,10 +24,11 @@
         v-for="period in PERIODS"
         :key="period.key"
         :label="period.label"
-        :value="(counts.data[period.key]?.calls ?? 0).toLocaleString()"
+        :value="contactedIn(counts.data[period.key]).toLocaleString()"
         :sub="
           __(
-            '{0} contacted',
+            '{0} calls · {1} answered',
+            (counts.data[period.key]?.calls ?? 0).toLocaleString(),
             (counts.data[period.key]?.connected ?? 0).toLocaleString()
           )
         "
@@ -38,14 +39,14 @@
   <Dialog
     :open="showDays"
     size="md"
-    :title="__('Your calls by day')"
+    :title="__('Leads you contacted by day')"
     @update:open="(value: boolean) => (showDays = value)"
   >
     <div>
       <p class="mb-3 text-p-sm text-ink-gray-6">
         {{
           __(
-            "Every call you made or took, as the Daily report counts them; contacted are the answered ones. Days without calls are left out."
+            "As the Daily report counts them: a lead counts once a day you call it, move its stage or complete its follow-up, so a lead moved to Contacted without a logged call counts. Calls are every call you made or took; answered are the ones picked up. Days with neither are left out."
           )
         }}
       </p>
@@ -57,10 +58,13 @@
             >
               <th scope="col" class="px-3 first:pl-0">{{ __("Day") }}</th>
               <th scope="col" class="px-3 text-right last:pl-3 last:pr-0">
+                {{ __("Contacted") }}
+              </th>
+              <th scope="col" class="px-3 text-right last:pl-3 last:pr-0">
                 {{ __("Calls") }}
               </th>
               <th scope="col" class="px-3 text-right last:pl-3 last:pr-0">
-                {{ __("Contacted") }}
+                {{ __("Answered") }}
               </th>
             </tr>
           </thead>
@@ -75,6 +79,11 @@
               </td>
               <td
                 class="px-3 py-3 text-right font-mono tabular-nums text-ink-gray-9"
+              >
+                {{ contactedIn(day) }}
+              </td>
+              <td
+                class="px-3 py-3 text-right font-mono tabular-nums text-ink-gray-7"
               >
                 {{ day.calls }}
               </td>
@@ -98,7 +107,8 @@ import { Button, createResource, dayjs, Dialog } from "frappe-ui";
 import { ref } from "vue";
 import LucideCalendarDays from "~icons/lucide/calendar-days";
 
-type Tally = { calls: number; connected: number };
+/** `contacted`: distinct leads reached by a call, a stage move or a completed follow-up */
+type Tally = { calls: number; connected: number; contacted?: number };
 type MyCallCounts = {
   available: boolean;
   today?: Tally;
@@ -106,7 +116,7 @@ type MyCallCounts = {
   month?: Tally;
   all_time?: Tally;
   /** newest first; only days with calls */
-  days?: { date: string; calls: number; connected: number }[];
+  days?: ({ date: string } & Tally)[];
 };
 
 const PERIODS: {
@@ -126,6 +136,11 @@ const counts = createResource<MyCallCounts>({
   auto: true,
   onError() {},
 });
+
+// a TBO Smart older than v1.35 sends no `contacted`; its answered calls are the closest figure
+function contactedIn(tally?: Tally) {
+  return tally?.contacted ?? tally?.connected ?? 0;
+}
 
 function dayLabel(date: string) {
   const day = dayjs(date);
