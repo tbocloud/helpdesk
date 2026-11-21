@@ -469,7 +469,7 @@ move the lead to: **Contacted** (Connected), **Not Responding** (Not answered), 
 call sheet, Log call, the Last call filter and each lead's last-call chip
 (`callBatches.OUTCOMES`). Busy keeps its own name; like Not responding it makes the lead Not
 Responding. Only the labels changed: the values the ERP site takes (Connected, Not answered, Call
-back, Not interested, Wrong number) are the same, so the names in brackets below are those values. The counts say **contacted** for the answered calls too (Today's calls, the Call batches table, the Daily report, Your calls and the Teams summary; the data keeps `connected`), and a lead moved by hand to a stage that means they spoke (for example Not answered, then Move stage to Contacted, or a new lead moved to Small Business) counts as contacted. A new lead moved by hand to Not Responding or Wrong Number counts as called, not contacted, so moving leads instead of logging calls no longer leaves them out of *N of 40 called* (TBO Smart's `call-batches.md` §5).
+back, Not interested, Wrong number) are the same, so the names in brackets below are those values. The counts say **contacted** for the answered calls too (Today's calls, the Call batches table, the Daily report, the answered calls under Leads you contacted, and the Teams summary; the data keeps `connected`), and a lead moved by hand to a stage that means they spoke (for example Not answered, then Move stage to Contacted, or a new lead moved to Small Business) counts as contacted. A new lead moved by hand to Not Responding or Wrong Number counts as called, not contacted, so moving leads instead of logging calls no longer leaves them out of *N of 40 called* (TBO Smart's `call-batches.md` §5).
 
 **What it shows** (`desk/src/pages/leads/TodaysCalls.vue`):
 - the batch header: slot name, time left (a live countdown, a warning icon under 15 minutes),
@@ -773,13 +773,21 @@ as `due_from` and `due_to` of the same day: `helpdesk.api.leads.list_leads` take
 date, the end not before the start) and passes only the sides given to TBO Smart's `list_leads`,
 so an older TBO Smart still answers while the date is empty.
 
-**Your calls on My leads.** At the top of *My leads*, a strip (`MyCallCounts.vue`) shows the
-person's own calls **Today**, **This week** (from Monday), **This month** and **All time**, each
-with how many connected; **By day** opens every day with calls in the last year, newest first
-(day, calls, connected). They are counted as the Daily report counts calls: every call the
-person made or took (Today's calls, Log call, MyOperator), answered ones as connected; calling a
-lead twice is two calls. `helpdesk.api.leads.get_my_call_counts` (cached 60 seconds per person)
-reads TBO Smart's `get_my_call_counts`; the strip stays out while an older TBO Smart can't count.
+**Leads you contacted, on My leads.** At the top of *My leads*, a strip (`MyCallCounts.vue`)
+shows **Today**, **This week** (from Monday), **This month** and **All time**. The big number is
+the **leads the person contacted**: distinct leads they called, moved a stage on (a lead they
+own), or completed a follow-up on, as the Daily report counts its fresh and follow-up leads. Under
+it are their **calls** (every call they made or took: Today's calls, Log call, MyOperator) and how
+many were **answered**. **By day** opens every day with contacts or calls in the last year, newest
+first (day, contacted, calls, answered).
+
+Leads, not calls, are the headline because salespeople often move a lead to Contacted without
+logging the call (WhatsApp, their own phone). The strip used to count only logged calls, so 4
+leads at Contacted could show "1 contacted" (owner, 2026-11-21). A lead reached twice in a period
+counts once; calling a lead twice is still two calls. `helpdesk.api.leads.get_my_call_counts`
+(cached 60 seconds per person) reads TBO Smart's `get_my_call_counts` (`contacted` from its
+v1.35); with an older TBO Smart the big number falls back to the answered calls, and the strip
+stays out while TBO Smart can't count at all.
 
 ## BD view, calling for, and recording results
 
@@ -1159,7 +1167,7 @@ Reads are also kept in Redis (`frappe.cache`), per signed-in person, key
 `hd_leads:<user>:<part>:<params>`: overview, money and intake for 60 s, `get_options` for
 10 minutes. Only successful answers are kept (not an error, not "older ERP site"); the intake's
 daily target is read live. The refresh button and "Try again" send `fresh=1`, which skips the
-copy and renews it; on the list tabs Refresh also renews the Follow-up cards and the *Your calls*
+copy and renews it; on the list tabs Refresh also renews the Follow-up cards and the *Leads you contacted*
 strip. Creating or updating a lead, moving its stage (by hand or the AI's suggestion), and
 creating or sending a proposal clear the signed-in person's copies; other people's age out within
 a minute. A department change also clears everyone's `get_options` copy, as it says who heads a
