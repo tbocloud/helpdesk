@@ -186,6 +186,7 @@ import { useIntervalFn } from "@vueuse/core";
 import { useRouter } from "vue-router";
 import LucideArrowRight from "~icons/lucide/arrow-right";
 import LucideLaptop from "~icons/lucide/laptop";
+import { mayOpenInCopilot, openInCopilot } from "../openInCopilot";
 import LucideCalendarClock from "~icons/lucide/calendar-clock";
 import LucideCheckCheck from "~icons/lucide/check-check";
 import LucideCircleCheck from "~icons/lucide/circle-check";
@@ -496,25 +497,6 @@ const { approve } = useApproveTask(
   { offerRating: false }
 );
 
-// the desktop app takes tbo-copilot:// links; it asks before it does anything with one. The
-// link goes through a hidden frame, so a browser without the app installed stays on this page
-// (Phase 23, A25), and the notice offers the install page
-function openInCopilot(task: string) {
-  const site = encodeURIComponent(window.location.origin);
-  const frame = document.createElement("iframe");
-  frame.style.display = "none";
-  frame.src = `tbo-copilot://task/${encodeURIComponent(task)}?site=${site}`;
-  document.body.appendChild(frame);
-  window.setTimeout(() => frame.remove(), 3000);
-  toast.info(__("Opening TBO Copilot. Nothing opened? Install the app."), {
-    action: {
-      label: __("Install"),
-      onClick: () =>
-        window.open(`${window.location.origin}/copilot-desktop`, "_blank"),
-    },
-  });
-}
-
 const dialogActions = computed(() => {
   const d = detail.value;
   const actions: Record<string, any>[] = [];
@@ -562,8 +544,9 @@ const dialogActions = computed(() => {
       });
     }
   }
-  if (props.mine && open) {
-    // Phase 22: the task in the TBO Copilot desktop app, with the folders linked to it there
+  // Phase 22: the task in the TBO Copilot desktop app, with the folders linked to it there;
+  // testing fixes 7: for everyone who may use the desktop app, on any open task
+  if (open && mayOpenInCopilot.value) {
     actions.push({
       label: __("Open in TBO Copilot"),
       iconLeft: LucideLaptop,
@@ -571,6 +554,8 @@ const dialogActions = computed(() => {
       tooltip: __("Open this task in the TBO Copilot desktop app"),
       onClick: () => openInCopilot(d.name),
     });
+  }
+  if (props.mine && open) {
     // done work goes through the Complete dialog, which logs the hours to a timesheet
     if (!isPendingReview(d) && !d.blocked) {
       actions.push({

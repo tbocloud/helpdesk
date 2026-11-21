@@ -940,7 +940,12 @@ Worker API (Copilot Worker role): `claim_job(..., capabilities="pr_fix")`, `pr_h
 
 ## Going live from a task, and deploy notices (Phase 22: `copilot/go_live.py`, `api/copilot_go_live.py`)
 
-**Open in TBO Copilot.** A task's dialog has this action for the people assigned to it. It opens `tbo-copilot://task/<task>?site=<this site>` in the TBO Copilot desktop app, which asks before it opens the task in its project's folders (tbo-copilot `docs/tbo/projects-and-tasks.md`).
+**Open in TBO Copilot.** Wherever a task opens (testing fixes 7): the task's detail dialog, **Edit task** (the
+all-projects board and the Checklist open a task there), and the Frappe task form (`/app/task/…`, a form script,
+`public/js/task_desktop.js`). It shows on any open task for the people who may use the desktop app
+(`helpdesk.api.copilot_desktop.may_use_desktop`, the desktop sign-in's own rule: TBO Desktop Settings on, an active
+agent, then Allowed People when that list is used, else the role TBO Copilot Desktop; a site without tbo_desktop:
+nobody). Before, only the detail dialog had it, for the people assigned to the task. It opens `tbo-copilot://task/<task>?site=<this site>` in the TBO Copilot desktop app, which asks before it opens the task in its project's folders (tbo-copilot `docs/tbo/projects-and-tasks.md`).
 
 **Where a task's change stands** (`task_release`, for the desktop app):
 - A merge into a branch a customer site runs becomes a release (Releases, above).

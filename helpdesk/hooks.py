@@ -230,6 +230,9 @@ user_invitation = {
     "extra_invite_params": ["customer", "contact"],
 }
 
+# the Frappe task form: "Open in TBO Copilot" (testing fixes 7)
+doctype_js = {"Task": "public/js/task_desktop.js"}
+
 doc_events = {
     # a disabled user keeps no OAuth tokens (helpdesk/offboarding.py) and leaves TBO Chat
     "User": {

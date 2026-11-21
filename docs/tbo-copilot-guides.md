@@ -24,7 +24,7 @@ Who does what, what Copilot sends you, and what you press. The full reference is
 - **Answering in words:** "approve" or "reject" brings the card of what you mean, with its buttons, to press: the one Copilot just showed you, or the one on the ticket you are on. A typed word never approves anything by itself.
 - **Asking about a fix:** after you approve an action, ask "what did you do?" or "what did the restart show?" in Teams or the panel: Copilot answers from what ran (the Press job and its result, who approved, the watcher's check), and the question shows in the ticket's Chat tab too.
 - **The Copilot board's Done column** lists what Copilot finished in the last 30 days and what ended each ("Fixed by Copilot: …", "Fix deployed", "Answered").
-- **A task's "Open in TBO Copilot"** opens the task in the desktop app with its project's folders. Without the app, the notice offers **Install**.
+- **"Open in TBO Copilot"** on a task opens it in the desktop app with its project's folders: in the task's dialog, in **Edit task** (from the project board or the checklist) and on the task's form. It shows for everyone who may use the desktop app, on any open task. Without the app, the notice offers **Install**.
 
 ## A project coordinator
 
