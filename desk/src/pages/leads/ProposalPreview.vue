@@ -51,14 +51,14 @@
     <!-- at a glance: the proposal in four figures -->
     <ul
       v-if="glance.length"
-      class="grid grid-cols-2 gap-3 border-b border-outline-gray-2 px-6 py-5 sm:grid-cols-4"
+      class="grid grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-3 border-b border-outline-gray-2 px-6 py-5"
       role="list"
       :aria-label="__('At a glance')"
     >
       <li
         v-for="tile in glance"
         :key="tile.label"
-        class="rounded-lg border border-outline-gray-2 border-t-4 px-3 py-2.5"
+        class="min-w-0 rounded-lg border border-outline-gray-2 border-t-4 px-3 py-2.5"
         :style="{
           borderTopColor: DOC_TONES[glance.indexOf(tile) % DOC_TONES.length],
         }"
@@ -68,8 +68,10 @@
         >
           {{ tile.label }}
         </p>
+        <!-- one line: the preview pane is narrow, so tiles reflow by width (four across only when
+             each gets 9.5rem) and a value up to "₹1,25,00,000.00" fits at text-base -->
         <p
-          class="mt-1 break-words font-mono text-lg font-semibold tabular-nums text-ink-gray-9"
+          class="mt-1 whitespace-nowrap font-mono text-base font-semibold tabular-nums text-ink-gray-9"
         >
           {{ tile.value }}
         </p>
