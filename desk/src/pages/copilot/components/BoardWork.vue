@@ -48,7 +48,10 @@
                 <span class="font-mono text-sm tabular-nums text-ink-gray-6">
                   #{{ card.ticket }}
                 </span>
-                <span class="text-sm text-ink-gray-5" :title="__('Waited')">
+                <span
+                  class="text-sm text-ink-gray-5"
+                  :title="card.done ? __('Finished') : __('Waited')"
+                >
                   {{ waited(card.waited_hours) }}
                 </span>
               </div>
@@ -77,7 +80,7 @@
                 />
               </div>
               <div class="mt-1 text-sm text-ink-gray-7">
-                {{ __("Waits on {0}", card.waits_on) }}
+                {{ card.done || __("Waits on {0}", card.waits_on) }}
               </div>
             </a>
           </li>

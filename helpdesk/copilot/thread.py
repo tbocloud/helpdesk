@@ -319,9 +319,13 @@ def set_muted(ticket: str, user: str, mute: bool) -> dict:
 
 
 def set_current(user: str, ticket: str):
-    """The ticket a person's next Teams reply without a ticket number belongs to."""
-    name = frappe.db.get_value(assistant.CHAT, {"user": user, "channel": "Teams"})
-    if name:
+    """The ticket a person's next reply without a ticket number belongs to, in Teams or the panel
+    (the panel shows the same chat, testing fixes 6)."""
+    for name in frappe.get_all(
+        assistant.CHAT,
+        filters={"user": user, "channel": ["in", assistant.CHANNELS]},
+        pluck="name",
+    ):
         frappe.db.set_value(
             assistant.CHAT,
             name,
@@ -331,12 +335,18 @@ def set_current(user: str, ticket: str):
 
 
 def current(user: str) -> str | None:
-    row = frappe.db.get_value(
+    rows = frappe.get_all(
         assistant.CHAT,
-        {"user": user, "channel": "Teams"},
-        ["current_ticket", "current_ticket_at"],
-        as_dict=True,
+        filters={
+            "user": user,
+            "channel": ["in", assistant.CHANNELS],
+            "current_ticket": ["is", "set"],
+        },
+        fields=["current_ticket", "current_ticket_at"],
+        order_by="current_ticket_at desc",
+        limit=1,
     )
+    row = rows[0] if rows else None
     if (
         row
         and row.current_ticket

@@ -47,7 +47,8 @@ export function useBoardRefresh(resource: {
 /** "3 h", "2 d", "15 min": how long something has waited. */
 export function waited(hours: number | null | undefined): string {
   if (hours === null || hours === undefined) return "-";
-  if (hours < 1) return __("{0} min", String(Math.max(Math.round(hours * 60), 0)));
+  if (hours < 1)
+    return __("{0} min", String(Math.max(Math.round(hours * 60), 0)));
   if (hours < 48) return __("{0} h", String(Math.round(hours)));
   return __("{0} d", String(Math.round(hours / 24)));
 }
@@ -65,6 +66,8 @@ export type BoardCard = {
   source: string;
   waited_hours: number | null;
   waits_on: string;
+  /** what ended a finished run (the Done column, testing fixes 6); "" elsewhere */
+  done: string;
   url: string;
 };
 

@@ -47,6 +47,8 @@ COLUMNS = (
     ("person", "Needs a person", ("Escalated", "Handed Over", "Failed", "Rejected")),
 )
 DONE = ("Resolved", "Closed")
+# what Copilot finished (testing fixes 6): its last 30 days, with what ended each
+DONE_COLUMN = ("done", "Done", DONE)
 # finished columns keep a run this long; the live ones keep it while it is the ticket's latest
 STALE_DAYS = 30
 RELEASE_PIPELINE = (
@@ -150,30 +152,34 @@ def work(
     customer: str | None = None, mine: bool = False, source: str | None = None
 ) -> dict:
     """Each ticket's latest run, in its column; finished columns only for the last 30 days."""
+    columns_ = COLUMNS + (DONE_COLUMN,)
+    stale = add_days(now_datetime(), -STALE_DAYS)
     states = [state for _key, _label, held in COLUMNS for state in held]
     filters = {"state": ["in", states]}
+    finished = {"state": ["in", DONE], "modified": [">=", stale]}
     if customer:
         filters["customer"] = customer
+        finished["customer"] = customer
+    fields = [
+        "name",
+        "ticket",
+        "customer",
+        "state",
+        "kind",
+        "root_cause_category",
+        "fix_status",
+        "approval",
+        "task",
+        "handed_over_to",
+        "modified",
+        "queued_at",
+        "shadow",
+        "proposal",
+        "finished_at",
+    ]
     runs = frappe.get_all(
-        RUN,
-        filters=filters,
-        fields=[
-            "name",
-            "ticket",
-            "customer",
-            "state",
-            "kind",
-            "root_cause_category",
-            "fix_status",
-            "approval",
-            "task",
-            "handed_over_to",
-            "modified",
-            "queued_at",
-            "shadow",
-        ],
-        order_by="modified desc",
-    )
+        RUN, filters=filters, fields=fields, order_by="modified desc"
+    ) + frappe.get_all(RUN, filters=finished, fields=fields, order_by="modified desc")
     tickets = {
         t.name: t
         for t in frappe.get_all(
@@ -189,18 +195,17 @@ def work(
         )
     }
     readable = visible_tickets(tickets)
-    stale = add_days(now_datetime(), -STALE_DAYS)
     user = frappe.session.user
     approvals = _approvals_of([r.approval for r in runs if r.approval])
-    columns = {key: [] for key, _label, _held in COLUMNS}
+    columns = {key: [] for key, _label, _held in columns_}
     for run in runs:
         ticket = tickets.get(run.ticket)
         if not ticket or run.ticket not in readable:
             continue
         if ticket.custom_copilot_run and ticket.custom_copilot_run != run.name:
             continue  # an older run of the ticket
-        key = next(k for k, _label, held in COLUMNS if run.state in held)
-        if key == "person" and get_datetime(run.modified) < stale:
+        key = next(k for k, _label, held in columns_ if run.state in held)
+        if key in ("person", "done") and get_datetime(run.modified) < stale:
             continue
         if source and (ticket.custom_copilot_source or "") != source:
             continue
@@ -226,7 +231,8 @@ def work(
                 "shadow": bool(run.shadow),
                 "source": ticket.custom_copilot_source or "",
                 "waited_hours": _hours(run.modified),
-                "waits_on": waits_on(run, approval),
+                "waits_on": "" if key == "done" else waits_on(run, approval),
+                "done": done_line(run, approval) if key == "done" else "",
                 "url": _ticket_url(run.ticket),
             }
         )
@@ -250,7 +256,7 @@ def work(
                 "cards": columns[key][:PER_COLUMN],
                 "more": max(len(columns[key]) - PER_COLUMN, 0),
             }
-            for key, label, _held in COLUMNS
+            for key, label, _held in columns_
         ],
         "resolved_this_week": len(visible_tickets(done)),
     }
@@ -262,9 +268,46 @@ def _approvals_of(names) -> dict:
         for a in frappe.get_all(
             "HDS Copilot Approval",
             filters={"name": ["in", list(names) or [""]]},
-            fields=["name", "status", "assigned_to"],
+            fields=["name", "status", "assigned_to", "pr_url"],
         )
     }
+
+
+def done_line(run, approval=None) -> str:
+    """What ended a finished run, in a few words (testing fixes 6)."""
+    stored = frappe.parse_json(run.get("proposal") or "{}") or {}
+    if run.get("kind") == "infra":
+        action = stored.get("approval")
+        row = (
+            frappe.db.get_value(
+                "HDS Action Approval",
+                action,
+                ["title", "status", "decided_by"],
+                as_dict=True,
+            )
+            if action
+            else None
+        )
+        if run.state == "Resolved" and row:
+            return _("Fixed by Copilot: {0}, approved by {1}").format(
+                row.title,
+                get_fullname(row.decided_by) if row.decided_by else _("a person"),
+            )
+        return _("The alert resolved on its own")
+    if approval and approval.status == "Approved":
+        pr = (approval.get("pr_url") or "").rstrip("/").rsplit("/", 1)[-1]
+        return (
+            _("Fix deployed (pull request #{0})").format(pr)
+            if pr.isdigit()
+            else _("Fix deployed")
+        )
+    confirmed = (
+        frappe.db.get_value("HD Ticket", run.ticket, "custom_customer_confirmation")
+        == "Confirmed"
+    )
+    if run.state == "Resolved":
+        return _("Answered; the customer confirmed") if confirmed else _("Answered")
+    return _("Closed")
 
 
 def waits_on(run, approval=None) -> str:

@@ -571,6 +571,27 @@ class TestAfterTheDecision(InfraCase):
         )
         self.assertTrue(any("Fixed by Copilot" in (n or "") for n in notes), notes)
 
+    def test_an_answer_about_the_fix_knows_what_ran(self):
+        # testing fixes 6: "what did you do?" is answered from the action itself
+        _ticket, run, approval = self.asked()
+        actions.decide(approval, self.devops, True, via="Teams")
+        actions.mark_executed(approval, True, "restart bench: job J1 success (0:00:05)")
+        record = assistant.run_record(frappe.get_doc("HDS Copilot Run", run.name))
+        self.assertEqual(
+            (
+                record["action"]["title"],
+                record["action"]["decided_by"],
+                record["action"]["result"],
+                record["action"]["after"],
+            ),
+            (
+                frappe.db.get_value(actions.ACTION, approval, "title"),
+                frappe.utils.get_fullname(self.devops),
+                "restart bench: job J1 success (0:00:05)",
+                "waiting for the watcher's next checks",
+            ),
+        )
+
     def test_a_failed_action_goes_to_a_leader(self):
         _ticket, run, approval = self.asked()
         actions.decide(approval, self.devops, True)

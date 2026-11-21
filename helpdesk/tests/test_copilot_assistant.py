@@ -1293,6 +1293,27 @@ class TestRound4(AssistantCase):
             ).lower(),
         )
 
+    def test_after_approve_on_an_action_card_the_next_question_is_about_its_ticket(
+        self,
+    ):
+        # testing fixes 6: Arun approves the restart, then asks "what did you do?"
+        from helpdesk.copilot import thread
+        from helpdesk.test_utils import make_assignment
+
+        approval = self.action()
+        make_assignment("HD Ticket", self.ticket, self.dev)  # alert tickets are Arun's
+        run = make_copilot_run(self.ticket, "Verifying", kind="infra")
+        frappe.db.set_value("HD Ticket", self.ticket, "custom_copilot_run", run.name)
+        self.press({"approval": approval.name}, "action_approve")
+
+        replies = self.say("what did you do?", {"intent": "question"})
+
+        self.assertIn(f"About ticket {self.ticket}", json.dumps(replies[0]))
+        self.assertIn(
+            "what did you do?",
+            json.dumps(thread.history(self.ticket)),
+        )
+
     def test_the_reading_sees_whats_waiting_and_the_cards_above(self):
         approval = self.action()
         chat = assistant.chat_for(self.dev, "Web")

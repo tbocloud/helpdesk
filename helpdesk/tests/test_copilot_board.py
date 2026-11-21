@@ -4,6 +4,7 @@
 """The Copilot board (Phase 10): all of Copilot's work on one page, read with the person's own
 permissions; the worker and the AI budget for Agent Managers only."""
 
+import json
 from unittest.mock import patch
 
 import frappe
@@ -77,7 +78,15 @@ class TestWork(BoardCase):
 
         self.assertEqual(
             [c["key"] for c in result["columns"]],
-            ["investigating", "customer", "fixing", "approval", "shipping", "person"],
+            [
+                "investigating",
+                "customer",
+                "fixing",
+                "approval",
+                "shipping",
+                "person",
+                "done",
+            ],
         )
         cards = {
             c["key"]: [x["subject"] for x in c["cards"]] for c in result["columns"]
@@ -138,6 +147,68 @@ class TestWork(BoardCase):
             [c["subject"] for c in self.column(watch_only, "fixing")],
             ["Someone else's"],
         )
+
+    def test_the_done_column_says_what_ended_each(self):
+        # testing fixes 6: finished work of the last 30 days, with what ended it
+        action = frappe.get_doc(
+            {
+                "doctype": "HDS Action Approval",
+                "kind": "Press",
+                "title": "Copilot: Restart bench-0015-000052-f1",
+                "status": "Executed",
+                "requested_by": "Administrator",
+                "decided_by": self.approver,
+                "execution_log": "restart bench: job J1 success",
+            }
+        ).insert(ignore_permissions=True)
+        fixed = self.run_in(
+            "Resolved",
+            "Site down: demo-beta",
+            kind="infra",
+            proposal=json.dumps({"approval": action.name}),
+        )
+        self.run_in("Closed", "Site down: demo-alpha", kind="infra")
+        merged = self.run_in("Resolved", "Margin fixed")
+        approval = frappe.get_doc(
+            {
+                "doctype": APPROVAL,
+                "run": merged.name,
+                "ticket": merged.ticket,
+                "status": "Approved",
+                "kind": "Code Change",
+                "pr_url": "https://github.com/acme/alpha/pull/12",
+            }
+        ).insert(ignore_permissions=True)
+        merged.db_set("approval", approval.name)
+        answered = self.run_in("Resolved", "How do I print?")
+        frappe.db.set_value(
+            "HD Ticket", answered.ticket, "custom_customer_confirmation", "Confirmed"
+        )
+        old = self.run_in("Resolved", "Long ago")
+        frappe.db.set_value(
+            "HDS Copilot Run",
+            old.name,
+            "modified",
+            add_days(now_datetime(), -40),
+            update_modified=False,
+        )
+
+        done = {
+            c["subject"]: c["done"]
+            for c in self.column(board.work(customer=self.customer), "done")
+        }
+
+        self.assertEqual(
+            done,
+            {
+                "Site down: demo-beta": "Fixed by Copilot: Copilot: Restart bench-0015-000052-f1, approved by "
+                + frappe.utils.get_fullname(self.approver),
+                "Site down: demo-alpha": "The alert resolved on its own",
+                "Margin fixed": "Fix deployed (pull request #12)",
+                "How do I print?": "Answered; the customer confirmed",
+            },
+        )
+        self.assertTrue(fixed.name)
 
     def test_resolved_this_week_is_counted(self):
         done = self.run_in("Resolved", "Fixed it")

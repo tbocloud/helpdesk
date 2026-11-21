@@ -17,7 +17,13 @@ import time
 
 import frappe
 from frappe import _
-from frappe.utils import add_to_date, get_url, now_datetime, strip_html_tags
+from frappe.utils import (
+    add_to_date,
+    get_fullname,
+    get_url,
+    now_datetime,
+    strip_html_tags,
+)
 
 CHAT, MESSAGE = "HDS Copilot Chat", "HDS Copilot Chat Message"
 CHANNELS = ("Teams", "Web")
@@ -311,12 +317,13 @@ def receive(
 
     guessed = None
     if (
-        channel == "Teams"
+        # the panel too: it shows the same chat (testing fixes 6)
+        channel in CHANNELS
         and intent.get("intent") in CURRENT_TICKET_KINDS
         and not intent.get("ticket")
         and not intent.get("task")
     ):
-        # a reply in Teams without a ticket number: the ticket they were just on (Phase 11)
+        # a reply without a ticket number: the ticket they were just on (Phase 11)
         guessed = thread.current(user)
         if guessed:
             intent["ticket"] = guessed
@@ -886,6 +893,8 @@ def run_record(run) -> dict:
         },
         # the error as Copilot remembers it: every site, the fix, which sites have it
         "known_issue": known_issues.card(run),
+        # an infrastructure run's action: what was asked, who decided, what ran (testing fixes 6)
+        "action": _run_action(run),
         "events": [
             {
                 "type": e.event_type,
@@ -894,6 +903,41 @@ def run_record(run) -> dict:
             }
             for e in events
         ],
+    }
+
+
+def _run_action(run) -> dict:
+    """The Press action an infrastructure run asked for (or joined): its title, who decided and
+    when, when it ran, the job's result, and the watcher's check after; {} for other runs."""
+    from helpdesk.copilot import actions
+
+    stored = frappe.parse_json(run.proposal or "{}") or {}
+    name = stored.get("approval")
+    if (
+        run.get("kind") != "infra"
+        or not name
+        or not frappe.db.exists(actions.ACTION, name)
+    ):
+        return {}
+    a = frappe.get_doc(actions.ACTION, name)
+    return {
+        "title": a.title,
+        "status": a.status,
+        "asked_at": str(a.creation)[:16],
+        "approver": get_fullname(a.assigned_to) if a.assigned_to else None,
+        "decided_by": get_fullname(a.decided_by) if a.decided_by else None,
+        "decided_at": str(a.decided_at)[:16] if a.decided_at else None,
+        "decided_via": a.decided_via,
+        "note": a.note,
+        "ran_at": str(a.executed_at)[:16] if a.executed_at else None,
+        "result": (a.execution_log or "")[:600],
+        "joined_another_alert": bool(stored.get("joined")),
+        "checked_by_the_watcher_since": stored.get("verifying_since"),
+        "after": {
+            "Verifying": "waiting for the watcher's next checks",
+            "Resolved": "the watcher saw it healthy: fixed by Copilot",
+            "Escalated": "still failing after the check: a Leader took it",
+        }.get(run.state, run.state),
     }
 
 
@@ -1796,6 +1840,11 @@ def _press(user: str, channel: str, chat, verb: str, data: dict, inputs: dict) -
         from helpdesk.copilot import actions
 
         approval = frappe.get_doc(actions.ACTION, data.get("approval"))
+        if approval.ticket:
+            # what they ask next ("what did you do?") is about this ticket (testing fixes 6)
+            from helpdesk.copilot import thread
+
+            thread.set_current(user, approval.ticket)
         if verb == "action_show":
             return {"replies": [actions.card(approval)], "card": None}
         if approval.status != actions.PENDING:

@@ -532,6 +532,13 @@ Whatever they say about a ticket in their own chat is copied into the ticket's c
 
 **The TBO Copilot panel** (Phase 6) also shows the person's Teams chat with the bot, each message marked "in Teams". What is typed in the panel is not sent to Teams.
 
+**Questions about a ticket's fix** (testing fixes 6): an answer draws on the run's record (`assistant.run_record`),
+which for an infrastructure run also holds its action (`_run_action`): what was asked, who decided and when, when it
+ran, the Press job's result, and the watcher's check after. Pressing Approve or Reject on an action card (Teams or the
+panel) makes its ticket the one being talked about (`thread.set_current`, kept on the person's Teams and panel chats),
+so "what did you do?" right after is about it, in Teams or the panel, and the question and answer show in the
+ticket's Chat tab for the people who may write there.
+
 **Typed answers to what is waiting** (testing fixes 4): a message is read with the chat's last six messages (a
 card with its title and first line) and everything waiting for the person's decision: fixes, Press/AWS/repair
 actions, releases, developers' pull requests (`assistant.decisions_waiting`). A typed "approve" or "reject" (also
@@ -568,7 +575,7 @@ All of Copilot's work on one page: **Copilot board** in the agent app's sidebar 
 
 | Tab | What it shows |
 |---|---|
-| Work (`work`) | Each ticket's latest run in its column. **Investigating**: Queued, Investigating. **With the customer**: Explaining, Answered. **Fixing**: Preparing Fix, with Copilot's fix status. **Waiting for approval**. **Shipping**: Approved to Verifying, and Applying. **Needs a person**: Escalated, Handed Over, Failed, Rejected; dropped after 30 days. Each card shows the ticket, customer, root cause, how long it has waited, and who or what it waits on. At most 50 cards a column, then "and N more". Filters: customer; **Only mine** (assigned to the ticket, approving it, or it was handed over to you); **Raised by the error watch**. Also the count resolved this week |
+| Work (`work`) | Each ticket's latest run in its column. **Investigating**: Queued, Investigating. **With the customer**: Explaining, Answered. **Fixing**: Preparing Fix, with Copilot's fix status. **Waiting for approval**. **Shipping**: Approved to Verifying, and Applying. **Needs a person**: Escalated, Handed Over, Failed, Rejected; dropped after 30 days. **Done** (testing fixes 6): Resolved and Closed of the last 30 days, each with what ended it (`board.done_line`): "Fixed by Copilot: Restart …, approved by …" (an infrastructure action), "Fix deployed (pull request #12)", "Answered; the customer confirmed", "The alert resolved on its own". Each card shows the ticket, customer, root cause, how long it has waited, and who or what it waits on (a Done card: what ended it). At most 50 cards a column, then "and N more". Filters: customer; **Only mine** (assigned to the ticket, approving it, or it was handed over to you); **Raised by the error watch**. Also the count resolved this week |
 | Approvals (`approvals`) | Every fix and correction (HDS Copilot Approval, Pending) and every release waiting for approval, the longest wait first. Each shows its assignee, how long it waited, when it escalates, whether it is snoozed, the risk, and the senior flag |
 | Releases (`releases`) | The pipeline (Waiting for CI to Checking), then the releases finished in the last 7 days. Each shows CI, the sandbox check, the apps' commits, the sites, and who decided |
 | Sites (`sites`) | Each site card: its Copilot level, each app's commit and drift, when the apps were last read, the error watch (on or off, last check, failures, note), open known issues, and known fixes the site does not have yet |
