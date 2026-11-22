@@ -83,34 +83,8 @@ export interface MyTargets {
   currency: string;
   months: string[];
   target: Target | null;
-  /** the standard criteria; each one not assigned for the month shows as 0 */
-  defaults?: Omit<Criterion, "target">[];
-}
-
-/** A criterion on a person's page: assigned, or a standard one not assigned (listed apart). */
-export type ShownCriterion = Criterion & { unassigned?: boolean };
-
-/**
- * The month's criteria as the person sees them: what was assigned, in the head's order, then
- * every standard criterion that wasn't, marked `unassigned` (at 0, a Text one blank), so the
- * page can list them under *Not assigned yet* and nothing reads as missing.
- */
-export function withUnassigned(
-  target: Target | null,
-  defaults: Omit<Criterion, "target">[]
-): ShownCriterion[] {
-  const assigned = target?.criteria ?? [];
-  const names = new Set(assigned.map((c) => c.criterion.toLowerCase()));
-  return [
-    ...assigned,
-    ...defaults
-      .filter((d) => !names.has(d.criterion.toLowerCase()))
-      .map((d) => ({
-        ...d,
-        target: d.value_type === "Text" ? null : 0,
-        unassigned: true,
-      })),
-  ];
+  /** with no targets: whether they already asked a Sales Head for them */
+  asked: boolean;
 }
 
 /** Each kind's icon and colour, as the owner's mockups draw them (2026-11-22), so a kind

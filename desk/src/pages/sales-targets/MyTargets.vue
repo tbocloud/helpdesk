@@ -49,7 +49,7 @@
           :aria-label="__('Loading')"
         />
 
-        <template v-else>
+        <template v-else-if="target">
           <!-- the month at a glance: reached so far, where each target stands, who set them -->
           <section
             class="flex flex-wrap items-center gap-x-8 gap-y-4 rounded-xl bg-hero px-5 py-5 text-hero-ink md:px-7"
@@ -127,7 +127,7 @@
             </ul>
             <div v-else class="flex-1" />
 
-            <div v-if="target" class="flex min-w-0 items-center gap-3">
+            <div class="flex min-w-0 items-center gap-3">
               <PersonAvatar :name="setBy" size="lg" />
               <div class="flex min-w-0 flex-col">
                 <span class="text-xs text-hero-muted">{{ __("Set by") }}</span>
@@ -136,19 +136,6 @@
                   dayjs(target.modified).format("D MMM YYYY, h:mm a")
                 }}</span>
               </div>
-            </div>
-            <div v-else class="flex flex-wrap items-center gap-3">
-              <p class="text-sm text-hero-muted">
-                {{ __("Your Sales Head hasn't assigned targets yet.") }}
-              </p>
-              <button
-                v-if="latestOther"
-                type="button"
-                class="h-9 rounded-lg bg-surface-base px-3 text-sm font-medium text-ink-gray-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
-                @click="pickMonth(latestOther)"
-              >
-                {{ __("See {0}", monthTitle(latestOther)) }}
-              </button>
             </div>
           </section>
 
@@ -221,140 +208,105 @@
           </section>
 
           <div
-            v-if="tasks.length || focus.length || unassigned.length"
-            class="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]"
+            v-if="tasks.length || focus.length"
+            class="grid grid-cols-1 items-start gap-4"
+            :class="
+              tasks.length &&
+              focus.length &&
+              'lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]'
+            "
           >
-            <div class="flex min-w-0 flex-col gap-4">
-              <!-- KPIs: written targets they tick off, a Sales Head confirms -->
-              <section
-                v-if="tasks.length"
-                class="min-w-0 overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
-                :aria-labelledby="tasksHeading"
-              >
-                <div class="border-b border-outline-gray-1 px-4 py-3.5 md:px-5">
-                  <h2
-                    :id="tasksHeading"
-                    class="flex items-center gap-2 text-lg font-semibold text-ink-gray-9"
-                  >
-                    {{ __("Tasks to mark done") }}
-                    <span
-                      class="rounded-full bg-surface-gray-3 px-2 py-px text-xs font-semibold text-ink-gray-7 tabular-nums"
-                      >{{ toMarkDone }}</span
-                    >
-                  </h2>
-                  <p class="text-sm text-ink-gray-6">
-                    {{
-                      __(
-                        "Each counts once you mark it done and your Sales Head confirms it. Until then it counts 0%."
-                      )
-                    }}
-                  </p>
-                </div>
-                <ul class="divide-y divide-outline-gray-1">
-                  <li
-                    v-for="criterion in tasks"
-                    :key="criterion.criterion"
-                    class="flex flex-wrap items-center gap-3 px-4 py-3.5 md:px-5"
-                  >
-                    <span
-                      class="grid size-8 shrink-0 place-items-center rounded-md"
-                      :class="VALUE_TYPE_LOOK.Text.tile"
-                      aria-hidden="true"
-                    >
-                      <LucideFileText class="size-4" />
-                    </span>
-                    <div class="flex min-w-[10rem] flex-1 flex-col">
-                      <span class="text-base font-semibold text-ink-gray-9">{{
-                        criterion.criterion
-                      }}</span>
-                      <span
-                        class="whitespace-pre-line break-words text-sm text-ink-gray-6"
-                        >{{ criterion.target }}</span
-                      >
-                      <span
-                        v-if="criterion.kpi_note"
-                        class="mt-1 whitespace-pre-line break-words text-xs text-ink-gray-7"
-                      >
-                        {{ __("You noted: {0}", criterion.kpi_note) }}
-                      </span>
-                    </div>
-                    <KpiStatus
-                      compact
-                      class="ml-auto"
-                      :criterion="criterion"
-                      :month="month"
-                      mode="person"
-                      @changed="mine.data.target = $event"
-                    />
-                  </li>
-                </ul>
-              </section>
-
-              <!-- information only (Industry, Location): where to look, nothing to tick off -->
-              <section
-                v-if="focus.length"
-                class="min-w-0 rounded-xl border border-outline-gray-2 bg-surface-base p-4 md:px-5"
-                :aria-labelledby="focusHeading"
-              >
-                <h2
-                  :id="focusHeading"
-                  class="text-base font-semibold text-ink-gray-9"
-                >
-                  {{ __("Where to focus") }}
-                </h2>
-                <dl class="mt-2 flex flex-col gap-2">
-                  <div
-                    v-for="criterion in focus"
-                    :key="criterion.criterion"
-                    class="flex flex-wrap gap-x-2 text-sm"
-                  >
-                    <dt class="font-medium text-ink-gray-8">
-                      {{ criterion.criterion }}
-                    </dt>
-                    <dd class="whitespace-pre-line break-words text-ink-gray-6">
-                      {{ criterion.target }}
-                    </dd>
-                  </div>
-                </dl>
-              </section>
-            </div>
-
-            <!-- the standard targets with no goal this month -->
+            <!-- KPIs: written targets they tick off, a Sales Head confirms -->
             <section
-              v-if="unassigned.length"
-              class="min-w-0 rounded-xl border border-outline-gray-2 bg-surface-base p-4 md:px-5"
-              :aria-labelledby="unassignedHeading"
+              v-if="tasks.length"
+              class="min-w-0 overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
+              :aria-labelledby="tasksHeading"
             >
-              <h2
-                :id="unassignedHeading"
-                class="flex items-center gap-2 text-lg font-semibold text-ink-gray-9"
-              >
-                {{ __("Not assigned yet") }}
-                <span
-                  class="rounded-full bg-surface-gray-3 px-2 py-px text-xs font-semibold text-ink-gray-7 tabular-nums"
-                  >{{ unassigned.length }}</span
+              <div class="border-b border-outline-gray-1 px-4 py-3.5 md:px-5">
+                <h2
+                  :id="tasksHeading"
+                  class="flex items-center gap-2 text-lg font-semibold text-ink-gray-9"
                 >
-              </h2>
-              <p class="text-sm text-ink-gray-6">
-                {{
-                  __(
-                    "On your list, but no goal set for {0}.",
-                    dayjs(`${month}-01`).format("MMMM")
-                  )
-                }}
-              </p>
-              <ul class="mt-3 flex flex-wrap gap-2">
+                  {{ __("Tasks to mark done") }}
+                  <span
+                    class="rounded-full bg-surface-gray-3 px-2 py-px text-xs font-semibold text-ink-gray-7 tabular-nums"
+                    >{{ toMarkDone }}</span
+                  >
+                </h2>
+                <p class="text-sm text-ink-gray-6">
+                  {{
+                    __(
+                      "Each counts once you mark it done and your Sales Head confirms it. Until then it counts 0%."
+                    )
+                  }}
+                </p>
+              </div>
+              <ul class="divide-y divide-outline-gray-1">
                 <li
-                  v-for="criterion in unassigned"
+                  v-for="criterion in tasks"
                   :key="criterion.criterion"
-                  class="inline-flex h-8 items-center gap-1.5 rounded-full border border-dashed border-outline-gray-3 px-3 text-sm font-medium text-ink-gray-7"
+                  class="flex flex-wrap items-center gap-3 px-4 py-3.5 md:px-5"
                 >
-                  {{ criterion.criterion }}
-                  <span class="text-xs font-semibold text-ink-gray-5">{{
-                    kindMark(criterion)
-                  }}</span>
+                  <span
+                    class="grid size-8 shrink-0 place-items-center rounded-md"
+                    :class="VALUE_TYPE_LOOK.Text.tile"
+                    aria-hidden="true"
+                  >
+                    <LucideFileText class="size-4" />
+                  </span>
+                  <div class="flex min-w-[10rem] flex-1 flex-col">
+                    <span class="text-base font-semibold text-ink-gray-9">{{
+                      criterion.criterion
+                    }}</span>
+                    <span
+                      class="whitespace-pre-line break-words text-sm text-ink-gray-6"
+                      >{{ criterion.target }}</span
+                    >
+                    <span
+                      v-if="criterion.kpi_note"
+                      class="mt-1 whitespace-pre-line break-words text-xs text-ink-gray-7"
+                    >
+                      {{ __("You noted: {0}", criterion.kpi_note) }}
+                    </span>
+                  </div>
+                  <KpiStatus
+                    compact
+                    class="ml-auto"
+                    :criterion="criterion"
+                    :month="month"
+                    mode="person"
+                    @changed="mine.data.target = $event"
+                  />
                 </li>
               </ul>
+            </section>
+
+            <!-- information only (Industry, Location): where to look, nothing to tick off -->
+            <section
+              v-if="focus.length"
+              class="min-w-0 rounded-xl border border-outline-gray-2 bg-surface-base p-4 md:px-5"
+              :aria-labelledby="focusHeading"
+            >
+              <h2
+                :id="focusHeading"
+                class="text-base font-semibold text-ink-gray-9"
+              >
+                {{ __("Where to focus") }}
+              </h2>
+              <dl class="mt-2 flex flex-col gap-2">
+                <div
+                  v-for="criterion in focus"
+                  :key="criterion.criterion"
+                  class="flex flex-wrap gap-x-2 text-sm"
+                >
+                  <dt class="font-medium text-ink-gray-8">
+                    {{ criterion.criterion }}
+                  </dt>
+                  <dd class="whitespace-pre-line break-words text-ink-gray-6">
+                    {{ criterion.target }}
+                  </dd>
+                </div>
+              </dl>
             </section>
           </div>
 
@@ -369,6 +321,231 @@
                 : __("Questions about a target? Ask your Sales Head.")
             }}
           </p>
+        </template>
+
+        <!-- no targets for the month: what will come, a nudge to the head, where to go meanwhile -->
+        <template v-else>
+          <section
+            class="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-xl border border-outline-gray-2 bg-surface-base px-5 py-4"
+            :aria-labelledby="heading"
+          >
+            <span
+              class="grid size-14 shrink-0 place-items-center rounded-full border-[3px] border-dashed border-outline-gray-3 text-base font-bold text-ink-gray-7 tabular-nums"
+              aria-hidden="true"
+              >0</span
+            >
+            <div class="flex min-w-0 flex-1 flex-col">
+              <span class="text-sm text-ink-gray-6">{{
+                __("Your targets for")
+              }}</span>
+              <h2
+                :id="heading"
+                class="text-xl font-bold leading-tight text-ink-gray-9"
+              >
+                {{ monthTitle(month) }}
+              </h2>
+              <span class="text-sm text-ink-gray-6 tabular-nums">{{
+                summary
+              }}</span>
+            </div>
+            <Button
+              v-if="latestOther"
+              variant="ghost"
+              :label="__('See {0}', monthTitle(latestOther))"
+              @click="pickMonth(latestOther)"
+            />
+            <span
+              class="inline-flex h-8 items-center gap-1.5 rounded-full bg-surface-gray-2 px-3 text-sm font-medium text-ink-gray-7"
+            >
+              <LucideCircleDashed class="size-3.5" aria-hidden="true" />
+              {{ __("Not set yet") }}
+            </span>
+          </section>
+
+          <section
+            class="flex flex-col items-center gap-4 rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-12 text-center"
+            :aria-labelledby="emptyHeading"
+          >
+            <svg
+              viewBox="0 0 120 120"
+              class="size-28 text-brand"
+              aria-hidden="true"
+            >
+              <circle cx="60" cy="60" r="58" class="fill-brand-soft" />
+              <circle
+                cx="60"
+                cy="60"
+                r="40"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="3"
+                stroke-dasharray="6 7"
+                stroke-linecap="round"
+                opacity="0.35"
+              />
+              <circle
+                cx="60"
+                cy="60"
+                r="24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="3"
+                stroke-dasharray="6 7"
+                stroke-linecap="round"
+                opacity="0.6"
+              />
+              <path
+                d="M60 60 L88 30"
+                stroke="currentColor"
+                stroke-width="5"
+                stroke-linecap="round"
+              />
+              <path d="M80 26 L95 23 L92 38 Z" fill="currentColor" />
+              <circle cx="60" cy="60" r="9" fill="currentColor" />
+            </svg>
+            <h2
+              :id="emptyHeading"
+              class="text-2xl font-bold tracking-[-0.01em] text-ink-gray-9"
+            >
+              {{ __("No targets set for {0} yet", monthTitle(month)) }}
+            </h2>
+            <p class="max-w-xl text-p-base text-ink-gray-6">
+              {{
+                __(
+                  "Your Sales Head hasn't given you targets for this month. When they do, each one shows here and your progress is counted from your leads automatically."
+                )
+              }}
+            </p>
+            <div class="mt-2 flex flex-wrap justify-center gap-3">
+              <Button
+                size="lg"
+                variant="solid"
+                :label="
+                  asked ? __('Sales Head reminded') : __('Ask my Sales Head')
+                "
+                :loading="ask.loading"
+                :disabled="asked"
+                @click="ask.submit({ month })"
+              >
+                <template #prefix>
+                  <LucideCheck v-if="asked" class="size-4" />
+                  <LucideSend v-else class="size-4" />
+                </template>
+              </Button>
+              <Button
+                v-if="auth.canUseLeads"
+                size="lg"
+                :label="__('Go to my leads')"
+                @click="router.push({ name: 'Leads', query: { view: 'mine' } })"
+              />
+            </div>
+            <ErrorMessage
+              v-if="ask.error"
+              :message="
+                errorText(ask.error, __('Couldn\'t send that. Try again.'))
+              "
+              role="alert"
+            />
+            <p v-else class="text-sm text-ink-gray-6" aria-live="polite">
+              {{
+                asked
+                  ? __(
+                      "Your Sales Head knows. Your targets show here once they set them."
+                    )
+                  : __(
+                      "Sends your Sales Head a reminder to set your {0} targets.",
+                      dayjs(`${month}-01`).format("MMMM")
+                    )
+              }}
+            </p>
+          </section>
+
+          <div
+            class="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]"
+          >
+            <section
+              class="flex min-w-0 flex-col gap-4 rounded-xl border border-outline-gray-2 bg-surface-base p-5"
+              :aria-labelledby="howHeading"
+            >
+              <h2
+                :id="howHeading"
+                class="text-lg font-semibold text-ink-gray-9"
+              >
+                {{ __("How your targets will work") }}
+              </h2>
+              <ol class="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+                <li v-for="(step, i) in HOW" :key="i" class="flex gap-3">
+                  <span
+                    class="grid size-8 shrink-0 place-items-center rounded-full bg-brand-soft text-sm font-semibold text-brand-ink tabular-nums"
+                    aria-hidden="true"
+                    >{{ i + 1 }}</span
+                  >
+                  <span class="flex min-w-0 flex-col">
+                    <span class="text-base font-semibold text-ink-gray-9">{{
+                      step.title
+                    }}</span>
+                    <span class="text-sm text-ink-gray-6">{{ step.text }}</span>
+                  </span>
+                </li>
+              </ol>
+              <div
+                class="grid grid-cols-1 gap-3 sm:grid-cols-3"
+                aria-hidden="true"
+              >
+                <div
+                  v-for="n in 3"
+                  :key="n"
+                  class="flex flex-col gap-2.5 rounded-xl border border-dashed border-outline-gray-3 p-4"
+                >
+                  <span class="h-2.5 w-24 rounded-full bg-surface-gray-3" />
+                  <span class="h-4 w-16 rounded-full bg-surface-gray-3" />
+                  <span class="h-1.5 w-full rounded-full bg-surface-gray-2" />
+                </div>
+              </div>
+              <p class="text-center text-sm text-ink-gray-6">
+                {{ __("Your target cards will appear here.") }}
+              </p>
+            </section>
+
+            <section
+              v-if="shortcuts.length"
+              class="flex min-w-0 flex-col gap-3"
+              :aria-labelledby="meanwhileHeading"
+            >
+              <h2
+                :id="meanwhileHeading"
+                class="text-lg font-semibold text-ink-gray-9"
+              >
+                {{ __("Meanwhile, keep going") }}
+              </h2>
+              <RouterLink
+                v-for="shortcut in shortcuts"
+                :key="shortcut.title"
+                :to="shortcut.to"
+                class="flex items-center gap-3 rounded-xl border border-outline-gray-2 bg-surface-base p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+              >
+                <span
+                  class="grid size-10 shrink-0 place-items-center rounded-lg"
+                  :class="shortcut.tile"
+                  aria-hidden="true"
+                >
+                  <component :is="shortcut.icon" class="size-5" />
+                </span>
+                <span class="flex min-w-0 flex-1 flex-col">
+                  <span class="text-base font-semibold text-ink-gray-9">{{
+                    shortcut.title
+                  }}</span>
+                  <span class="text-sm text-ink-gray-6">{{
+                    shortcut.text
+                  }}</span>
+                </span>
+                <LucideChevronRight
+                  class="size-4 shrink-0 text-ink-gray-5"
+                  aria-hidden="true"
+                />
+              </RouterLink>
+            </section>
+          </div>
         </template>
       </div>
     </div>
@@ -386,18 +563,27 @@ import {
   Button,
   createResource,
   dayjs,
+  ErrorMessage,
   FormControl,
   TabButtons,
 } from "frappe-ui";
 import { computed, ref, useId, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { RouterLink, useRoute, useRouter } from "vue-router";
+import { batchesOn } from "@/pages/leads/callBatches";
+import { leadOptions } from "@/pages/leads/leads";
+import LucideCheck from "~icons/lucide/check";
+import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
+import LucideCircleDashed from "~icons/lucide/circle-dashed";
+import LucideGauge from "~icons/lucide/gauge";
+import LucidePhone from "~icons/lucide/phone";
+import LucideSend from "~icons/lucide/send";
+import LucideStar from "~icons/lucide/star";
 import LucideFileText from "~icons/lucide/file-text";
 import LucideInfo from "~icons/lucide/info";
 import LucideLock from "~icons/lucide/lock";
 import KpiStatus from "./KpiStatus.vue";
 import {
-  currencySymbol,
   isKpi,
   leadsLink,
   monthPace,
@@ -406,8 +592,6 @@ import {
   overallOf,
   progressOf,
   VALUE_TYPE_LOOK,
-  withUnassigned,
-  type Criterion,
   type MyTargets,
   type Progress,
   type Standing,
@@ -421,7 +605,9 @@ const heading = useId();
 const figuresHeading = useId();
 const tasksHeading = useId();
 const focusHeading = useId();
-const unassignedHeading = useId();
+const emptyHeading = useId();
+const howHeading = useId();
+const meanwhileHeading = useId();
 
 // the month is in the URL, so a link or a reload opens the same one
 const month = computed(() =>
@@ -468,13 +654,8 @@ const setBy = computed(() =>
 );
 const pace = computed(() => monthPace(month.value));
 
-// what was assigned in the head's order; the standard targets not assigned listed apart
+// what was assigned, in the head's order: the page shows nothing else
 const assigned = computed(() => target.value?.criteria ?? []);
-const unassigned = computed(() =>
-  withUnassigned(target.value, mine.data?.defaults ?? []).filter(
-    (c) => c.unassigned
-  )
-);
 const tasks = computed(() => assigned.value.filter(isKpi));
 const focus = computed(() =>
   assigned.value.filter((c) => c.value_type === "Text" && c.info_only)
@@ -568,14 +749,66 @@ const chips = computed(() =>
   ].filter((chip) => chip.count)
 );
 
-/** A standard target's kind, as its chip shows it: ₹, %, #, Text or Info. */
-function kindMark(criterion: Criterion) {
-  if (criterion.value_type === "Amount")
-    return currencySymbol(mine.data?.currency || "INR");
-  if (criterion.value_type === "Percent") return "%";
-  if (criterion.value_type === "Number") return "#";
-  return criterion.info_only ? __("Info") : __("Text");
-}
+// ---------- no targets yet ----------
+
+// asking once is enough: the server tells each Sales Head once a month
+const ask = createResource({
+  url: "helpdesk.api.sales_targets.ask_for_targets",
+  onSuccess: () => {
+    if (mine.data) mine.data.asked = true;
+  },
+});
+const asked = computed(() => !!mine.data?.asked);
+
+const HOW = [
+  {
+    title: __("Your Sales Head sets them"),
+    text: __(
+      "Numbers like leads contacted, proposals or won value, plus tasks to mark done."
+    ),
+  },
+  {
+    title: __("Your leads count towards them"),
+    text: __("Calls, stages and wins add up on their own. Nothing to fill in."),
+  },
+  {
+    title: __("You see your pace here"),
+    text: __("Each card shows where you are and where you should be by today."),
+  },
+];
+
+// where to get on with the work meanwhile: only what the sidebar also offers them
+const shortcuts = computed(() =>
+  [
+    {
+      show:
+        auth.canUseLeads &&
+        batchesOn(leadOptions.data) &&
+        !auth.hideTodaysCalls,
+      title: __("Today's calls"),
+      text: __("Work through your call list"),
+      icon: LucidePhone,
+      tile: "bg-brand-soft text-brand-ink",
+      to: { name: "Leads", query: { view: "today" } },
+    },
+    {
+      show: auth.canUseLeads,
+      title: __("My leads"),
+      text: __("Follow up and move stages"),
+      icon: LucideStar,
+      tile: "bg-violet-soft text-violet",
+      to: { name: "Leads", query: { view: "mine" } },
+    },
+    {
+      show: auth.canUseLeads && auth.hasOwnSalesDashboard,
+      title: __("Dashboard"),
+      text: __("See your calls and pipeline"),
+      icon: LucideGauge,
+      tile: "bg-warning-soft text-warning",
+      to: { name: "SalesDashboard" },
+    },
+  ].filter((shortcut) => shortcut.show)
+);
 
 /** This month, the one open, and every month they have targets in, newest first. */
 const monthChoices = computed(() =>

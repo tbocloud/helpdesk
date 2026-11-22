@@ -172,15 +172,20 @@ open, and every month the person has targets in).
   done** / **Not done after all** (`KpiStatus` compact).
 - **Where to focus**: information-only targets (Industry, Location) with their text, when
   assigned.
-- **Not assigned yet** (N): the standard targets with no goal this month as dashed chips with
-  their kind (₹, %, #, Text, Info).
 - A line at the foot: *Questions about a target? Ask {name}, your Sales Head.*
 
-**Not assigned (2026-11-19, changed 2026-11-22).** Every standard target (`default_criteria()`,
-sent as `defaults` by `get_my_targets`) is always on the page: one the Sales Head didn't assign
-for the month is listed under **Not assigned yet** (`withUnassigned` in `salesTargets.ts`). They
-were cards at 0 until the second redesign. Nothing is counted for them and they don't change the
-month overall.
+**Only what was assigned (2026-11-22).** The page shows the targets the Sales Head set and
+nothing else. Standard targets not assigned were cards at 0 (2026-11-19), then *Not assigned
+yet* chips; the owner then asked for the assigned ones only, so `get_my_targets` no longer
+sends `defaults`.
+
+**No targets for the month** (the owner's mockup, 2026-11-22): a light card in place of the hero
+(a dashed ring at 0, the month, "0 targets set · 22 of 30 days gone", **See {month}** for the
+newest month with targets, and *Not set yet*); a card saying *No targets set for {month} yet*
+with **Ask my Sales Head** (`ask_for_targets`; then *Sales Head reminded*, kept on reload by
+`asked`) and **Go to my leads**; **How your targets will work** (three steps and three empty
+card outlines); and **Meanwhile, keep going**: Today's calls, My leads and Dashboard, each
+only when the sidebar also offers it.
 
 ## Progress: counted from the leads (2026-11-18)
 
@@ -248,8 +253,13 @@ kind *Text, info only*. A number target is never information only.
   defaults and the currency.
 - `assign_targets(month, employees, criteria)` (POST): Sales Heads only. Replaces each
   person's targets for the month.
-- `get_my_targets(month)`: Presales Executives and Sales Users. Returns the standard criteria (`defaults`), their own targets and
-  the months they have targets in.
+- `get_my_targets(month)`: Presales Executives and Sales Users. Returns their own targets, the
+  months they have targets in, and `asked` (no targets, and a Sales Head was already asked).
+- `ask_for_targets(month)` (POST): the person, with no targets for the month, reminds every
+  enabled Sales Head: an `HD Notification` (Reminder, from the person, linking to the Assign
+  page with them picked), one per head and month (`dedupe_key`
+  `sales-targets-ask:<user>:<month>`), so asking again tells no one twice. Refused with
+  targets already set or no Sales Head.
 - `get_progress(month, employee=None, fresh=0)`: the person's own progress, or anyone's for a
   Sales Head. `{state: counted | not_started | unavailable | no_targets, reason, from_date,
   to_date, month_over, criteria: {name: {achieved, parts?}}}`.
@@ -282,4 +292,5 @@ month not begun, an ERP refusal shown instead of raised, who may read whose prog
 that doesn't fit its value type, and the KPI: marked done and confirmed, only a done KPI
 confirmed, a confirmed one not taken back, and kept or reset on re-assigning; the seven
 defaults with Industry and Location information only, information kept and never ticked off,
-and a number target never information only.
+and a number target never information only. Asking for targets: each Sales Head told once, `asked` after, refused with targets set
+and for anyone not given targets.
