@@ -260,11 +260,27 @@ notice (unchanged: Open and Merge), **Next step** (the follow-up date), **Number
 (`LeadNumbers.vue`, old and wrong numbers struck through), **Details**, then place, photos,
 attachments, why call, quotations and proposals.
 
+**By stage cards.** Above the list on every list tab but Follow-up (which has its own cards for
+when follow-ups are due): **All stages**, then each stage that has leads in the list, in pipeline
+order, with its count; a card picks that stage in the Stage filter (the one picked shows pressed,
+and stays even at 0). The counts follow every other filter and the tab, but not the Stage filter,
+so the other stages stay visible while one is picked. They come with the list itself:
+`list_leads(stage_counts=1)` asks TBO Smart (v1.36, `hub-leads-api.md`) to count the same query
+per stage, one grouped query, not one request per stage (17 requests took about 8 seconds). The
+cards stay out while an older TBO Smart doesn't send `stage_counts`, and while the list comes
+from the hub's copy. They took the place of the *Your calls* strip on My leads, whose "calls",
+"contacted" (answered calls) and stage names read as one another.
+
 **The list tabs** (All, My leads, Call today, Follow-up, Called): one toolbar row of Search,
-Stage, Owner, Product (and Created by or Last called where they apply), **More filters** (a
-dialog with Segment, Department, Created, Industry, State, District, Organisation size, Last call
-and Replied) and **Select leads**. What narrows the list beyond the toolbar shows as removable
-chips with **Clear all**. The leads are a table: lead (name, company, department, segment,
+Stage, Owner, Follow-up date (My leads and Follow-up), **Created**, Product (and Created by or
+Last called where they apply), **More filters** (a dialog with Segment, Department, Industry, State, District, Organisation size, Last call
+and Replied) and **Select leads**. Under the toolbar a results row
+starts with the number of leads, in bold: "404 leads", or "71 of 404 leads match" while a filter
+or search narrows it. The tab's whole count (also its pill's number) comes from an unfiltered
+answer when there is one, else from one extra `list_leads` call of that tab with `page_length`
+1, kept per tab until Refresh; the pill once showed the filtered number, which read as the tab's
+size. What narrows the list beyond the toolbar follows in that row as removable chips, with **Clear
+all** at its right end while any filter is on. The leads are a table: lead (name, company, department, segment,
 category, number, score), stage, owner, product, last call, next follow-up, updated, and the call
 button; on a phone the stage, follow-up and owner fold in under the name. Every filter and URL
 parameter works as before.
@@ -469,7 +485,7 @@ move the lead to: **Contacted** (Connected), **Not Responding** (Not answered), 
 call sheet, Log call, the Last call filter and each lead's last-call chip
 (`callBatches.OUTCOMES`). Busy keeps its own name; like Not responding it makes the lead Not
 Responding. Only the labels changed: the values the ERP site takes (Connected, Not answered, Call
-back, Not interested, Wrong number) are the same, so the names in brackets below are those values. The counts say **contacted** for the answered calls too (Today's calls, the Call batches table, the Daily report, Your calls and the Teams summary; the data keeps `connected`), and a lead moved by hand to a stage that means they spoke (for example Not answered, then Move stage to Contacted, or a new lead moved to Small Business) counts as contacted. A new lead moved by hand to Not Responding or Wrong Number counts as called, not contacted, so moving leads instead of logging calls no longer leaves them out of *N of 40 called* (TBO Smart's `call-batches.md` §5).
+back, Not interested, Wrong number) are the same, so the names in brackets below are those values. The counts say **contacted** for the answered calls too (Today's calls, the Call batches table, the Daily report and the Teams summary;; the data keeps `connected`), and a lead moved by hand to a stage that means they spoke (for example Not answered, then Move stage to Contacted, or a new lead moved to Small Business) counts as contacted. A new lead moved by hand to Not Responding or Wrong Number counts as called, not contacted, so moving leads instead of logging calls no longer leaves them out of *N of 40 called* (TBO Smart's `call-batches.md` §5).
 
 **What it shows** (`desk/src/pages/leads/TodaysCalls.vue`):
 - the batch header: slot name, time left (a live countdown, a warning icon under 15 minutes),
@@ -764,22 +780,17 @@ on `list_leads`, kept in the URL); picking it again goes back to the list as bef
 and due today. `helpdesk.api.leads.get_follow_up_counts` (cached 60 seconds per person) reads TBO
 Smart's `get_follow_up_counts`; the cards stay out while an older TBO Smart can't count.
 
-**Follow-up date.** On *Follow-up* and *My leads*, one **Follow-up date** field in the toolbar
-keeps the leads whose earliest open follow-up falls on that day; Clear all drops it. One day, not a
-from/to range: people look for the follow-ups of a day, and two stacked date fields took more room
-than the list. On Follow-up the date and a card are two ways to pick the same list, so picking one
-drops the other. The date is kept in the URL (`follow_up_date`) and sent only from these two tabs,
-as `due_from` and `due_to` of the same day: `helpdesk.api.leads.list_leads` takes a range (a real
-date, the end not before the start) and passes only the sides given to TBO Smart's `list_leads`,
-so an older TBO Smart still answers while the date is empty.
-
-**Your calls on My leads.** At the top of *My leads*, a strip (`MyCallCounts.vue`) shows the
-person's own calls **Today**, **This week** (from Monday), **This month** and **All time**, each
-with how many connected; **By day** opens every day with calls in the last year, newest first
-(day, calls, connected). They are counted as the Daily report counts calls: every call the
-person made or took (Today's calls, Log call, MyOperator), answered ones as connected; calling a
-lead twice is two calls. `helpdesk.api.leads.get_my_call_counts` (cached 60 seconds per person)
-reads TBO Smart's `get_my_call_counts`; the strip stays out while an older TBO Smart can't count.
+**Follow-up date.** On *Follow-up* and *My leads*, a **Follow-up date** select in the toolbar
+keeps the leads whose earliest open follow-up falls **Today**, **Tomorrow**, **This week** or
+**This month** (the whole calendar week or month), or on one day from **Pick a date**, which opens
+a date field beside it; Clear all drops it. Presets rather than a from/to range: people look for
+the follow-ups of a day or a stretch, and two stacked date fields took more room than the list. On
+Follow-up the date and a card are two ways to pick the same list, so picking one drops the other.
+The choice is kept in the URL (`follow_up_date`: `today`, `tomorrow`, `week`, `month` or a
+`YYYY-MM-DD` day, so older one-day links still work) and sent only from these two tabs, as
+`due_from` and `due_to`: `helpdesk.api.leads.list_leads` takes a range (a real date, the end not
+before the start) and passes only the sides given to TBO Smart's `list_leads`, so an older TBO
+Smart still answers while the date is empty.
 
 ## BD view, calling for, and recording results
 
@@ -1159,8 +1170,7 @@ Reads are also kept in Redis (`frappe.cache`), per signed-in person, key
 `hd_leads:<user>:<part>:<params>`: overview, money and intake for 60 s, `get_options` for
 10 minutes. Only successful answers are kept (not an error, not "older ERP site"); the intake's
 daily target is read live. The refresh button and "Try again" send `fresh=1`, which skips the
-copy and renews it; on the list tabs Refresh also renews the Follow-up cards and the *Your calls*
-strip. Creating or updating a lead, moving its stage (by hand or the AI's suggestion), and
+copy and renews it; on the list tabs Refresh also renews the Follow-up cards. Creating or updating a lead, moving its stage (by hand or the AI's suggestion), and
 creating or sending a proposal clear the signed-in person's copies; other people's age out within
 a minute. A department change also clears everyone's `get_options` copy, as it says who heads a
 department: a new head gets the managers' screens at once, not after 10 minutes.
@@ -1190,8 +1200,8 @@ TBO Smart doesn't have yet is `LeadsNotDeployedError` (a `LeadsUnavailableError`
 
 **Newer parts on an older ERP site:** `get_lead_intake` and `get_proposal_money` go through
 `call_if_deployed`, which answers `None` for `LeadsNotDeployedError` and drops the queued
-message, so the endpoints return `{available: false}` and the page leaves the strip, the
-Created filter and Proposals & money out without a toast. The list row's status chip simply
+message, so the endpoints return `{available: false}` and the page leaves the strip and
+Proposals & money out without a toast. The list row's status chip simply
 doesn't show without its fields. The hub can be deployed before TBO Smart.
 
 ## The pages
@@ -1299,9 +1309,12 @@ the same reads: [sales-dashboard.md](sales-dashboard.md).
   left out quietly when the ERP site is older or the read fails.
 - **Leads** list (the other tabs, `desk/src/pages/leads/Leads.vue`): views All, Mine, Call
   today and Follow-up; search (debounced) and stage, owner, segment and **Created** filters
-  (Any time, Today, Yesterday, This week, This month, Custom with from and to dates; it is
-  the `intake` metric with its period, so it replaces a number the Overview opened the list
-  with; shown once the ERP site counts it); 20 a page with Previous and Next. View, search,
+  (in the toolbar: Any created date, Created today, yesterday, this week, this month, or
+  between two dates; it is the `new` metric with its period, every lead created then,
+  imports included, so a BD sees the imported leads handed to them too; `intake`, which
+  leaves imports out, stays for the intake strip's links and shows as a chip. It replaces a
+  number the Overview opened the list with, and a `new` link for a period the select has no
+  option for, such as a quarter, stays a chip); 20 a page with Previous and Next. View, search,
   filters and page are in the URL. Rows show the name, stage, **where the lead stands with
   the client** (one chip: the proposal's status, else the quotation's, with its value and how
   long ago it went, e.g. "Proposal sent · ₹1,55,000 · 3 days ago", "Viewed 2× · …";
