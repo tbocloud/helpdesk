@@ -9,6 +9,7 @@ import LucideCalendarDays from "~icons/lucide/calendar-days";
 import LucideCalendarRange from "~icons/lucide/calendar-range";
 import LucideCamera from "~icons/lucide/camera";
 import LucideChartColumn from "~icons/lucide/chart-column";
+import LucideChartNoAxesCombined from "~icons/lucide/chart-no-axes-combined";
 import LucideClipboardList from "~icons/lucide/clipboard-list";
 import LucideClock from "~icons/lucide/clock";
 import LucideContact2 from "~icons/lucide/contact-2";
@@ -411,6 +412,14 @@ export const agentNavAreas: NavArea[] = [
             label: __("Assign sales targets"),
             icon: LucideTarget,
             to: "SalesTargets",
+            salesHeadOnly: true,
+          },
+          // how everyone is doing against them, person by person and target by target
+          {
+            id: "team-targets",
+            label: __("Team targets"),
+            icon: LucideChartNoAxesCombined,
+            to: "TeamTargets",
             salesHeadOnly: true,
           },
           // who is handed which product and how many calls per slot (docs/leads.md)

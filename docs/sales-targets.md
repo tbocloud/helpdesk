@@ -10,7 +10,7 @@ sees their own on **Sales targets**.
 
 | Role | What they get |
 | --- | --- |
-| `Sales Head` (or System Manager) | **Assign sales targets** (Sales → Team): picks people and assigns the month's targets. |
+| `Sales Head` (or System Manager) | **Assign sales targets** (Sales → Team): picks people and assigns the month's targets. **Team targets** (Sales → Team): how everyone is doing against them. |
 | `Presales Executive`, `Sales User` | **Sales targets** (Sales): their own targets as cards, month by month, read-only. |
 
 `Sales Head` and `Presales Executive` are created on migrate (`ensure_role` in
@@ -80,6 +80,46 @@ month select with an earlier and a later step either side; both pages share it).
 
 The currency is the CRM dashboards' reporting currency (`HD CRM Settings.dashboard_currency`),
 else the site default, else INR.
+
+A link with `?employee=<user>` (Team targets' **Edit targets** / **Assign targets**) opens
+the page with that person picked, then drops the parameter from the URL.
+
+## Team targets page, for Sales Heads (`/helpdesk/team-targets`, 2026-11-22)
+
+`desk/src/pages/sales-targets/TeamTargets.vue`: the assigned targets and everyone's progress in
+one place, so the head doesn't have to open each person on the Assign page. Same people, targets
+and progress as the Assign page (`get_team`, `get_team_progress`); nothing new on the server.
+The month (`?month=`) and the person open (`?employee=`) are in the URL. The header has Refresh
+(reads the ERP site past the minute's cache, `fresh=1`), the month stepper and **Assign targets**
+(the Assign page for the month).
+
+- **Four tiles**: *With targets* (3 / 7, with a meter and how many are not set), *Team average*
+  (the average of everyone's month overall), *Behind* (people with at least one target behind,
+  in warning, and how many are on track) and *KPIs to confirm* (KPIs marked done that wait on a
+  head).
+- **Team** (left card): search, role, **Target** and a standing toggle (All, Behind, On track,
+  Not set, with counts). The list puts who needs attention first: behind, then on track, then
+  those not counted, then those without targets; within each, the lowest month overall first.
+  A row shows the person and, for the month, how many targets and their month overall
+  (`OverallProgress.vue`, shared with the Assign page's list), a pulse while it's counted,
+  *Not begun* / *Couldn't count* (the ERP's reason on hover), or *Not set*.
+- **Target filter**: every target name given to someone that month (case-insensitive). With one
+  picked, the list keeps the people who have it and the right column shows it for each of them:
+  "1 of 4" with the standing (*Target reached*, *On pace*, *Behind pace by 2*, …; success or
+  warning), *Target only* for one not counted, a KPI's state (*Not done yet*, *Done, to
+  confirm*, *Confirmed*), or an information-only target's text.
+- **The person picked** (right, sticky, `TeamPersonTargets.vue`): avatar, name, who set the
+  targets and when, **Edit targets** (or **Assign targets** for someone without any, solid), the
+  month overall with the days counted, then every target as the person sees it on their own
+  page (`TargetFigure` cards with the bar, pace marker, How it's counted and See these leads;
+  the written ones after), with **Confirm it's done** / **Reopen** on each KPI (`KpiStatus`,
+  head mode). Not counted shows the ERP's reason; a month not begun says so.
+- States: loading (tiles and list skeletons), load error with Try again, not a Sales Head (the
+  route sends them Home; the server refuses), no one with a target role, no one matching the
+  filters (Show everyone; Behind with none left says so), nobody picked.
+
+The Team dashboard keeps its own short column (month overall and On track / Behind per
+salesperson); this page is where the detail is.
 
 ## Sales targets page, for the people given targets (`/helpdesk/my-targets`)
 
@@ -186,8 +226,9 @@ kind *Text, info only*. A number target is never information only.
 - `confirm_kpi(month, employee, criterion, confirmed)` (POST): Sales Heads confirm or reopen.
 
 `get_user` sends `can_assign_sales_targets` and `has_sales_targets`, which show the sidebar
-items and let the router open the pages. Both routes are in `SALES_EMPLOYEE_ROUTES`, so a
-Sales Employee who also has one of these roles can reach them.
+items and let the router open the pages (Assign sales targets and Team targets on the first,
+Sales targets on the second). All three routes are in `SALES_EMPLOYEE_ROUTES`, so a Sales
+Employee who also has one of these roles can reach them.
 
 ## Known limits
 

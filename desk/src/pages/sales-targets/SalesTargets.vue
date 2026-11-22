@@ -238,42 +238,11 @@
                       }}
                     </span>
                     <!-- how far they are this month, once counted -->
-                    <span
+                    <OverallProgress
                       v-if="overallFor(person)?.percent != null"
-                      class="flex items-center gap-2 text-xs tabular-nums"
-                      :class="
-                        overallFor(person)!.behind
-                          ? 'text-warning'
-                          : 'text-ink-gray-6'
-                      "
-                    >
-                      <span
-                        class="block h-1 w-16 overflow-hidden rounded-full bg-surface-gray-2"
-                        aria-hidden="true"
-                      >
-                        <span
-                          class="block h-full rounded-full"
-                          :class="
-                            overallFor(person)!.behind
-                              ? 'bg-warning'
-                              : 'bg-success'
-                          "
-                          :style="{ width: `${overallFor(person)!.percent}%` }"
-                        />
-                      </span>
-                      {{
-                        overallFor(person)!.behind
-                          ? __(
-                              "{0}% · {1} behind",
-                              String(overallFor(person)!.percent),
-                              String(overallFor(person)!.behind)
-                            )
-                          : __(
-                              "{0}% reached",
-                              String(overallFor(person)!.percent)
-                            )
-                      }}
-                    </span>
+                      :percent="overallFor(person)!.percent!"
+                      :behind="overallFor(person)!.behind"
+                    />
                     <span
                       v-else-if="
                         headlineAmount(person.target, team.data.currency)
@@ -437,6 +406,7 @@ import LucideSearch from "~icons/lucide/search";
 import LucideUsers from "~icons/lucide/users";
 import LucideX from "~icons/lucide/x";
 import MonthStepper from "./MonthStepper.vue";
+import OverallProgress from "./OverallProgress.vue";
 import TargetCriteriaForm from "./TargetCriteriaForm.vue";
 import {
   headlineAmount,
@@ -596,10 +566,17 @@ function pickWithout() {
   picked.value = withoutTargets.value.map((p) => p.user);
 }
 
-// someone who lost their role since drops out of the pick
+// someone who lost their role since drops out of the pick; a link from Team targets
+// (?employee=) opens on that person, once
 watch(people, (list) => {
   const users = new Set(list.map((p) => p.user));
   picked.value = picked.value.filter((u) => users.has(u));
+  const asked = String(route.query.employee || "");
+  if (asked && users.has(asked)) {
+    picked.value = [asked];
+    const { employee: _employee, ...query } = route.query;
+    router.replace({ query });
+  }
 });
 
 const pickedPeople = computed(() =>
