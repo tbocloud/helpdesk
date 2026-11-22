@@ -87,12 +87,13 @@ export interface MyTargets {
   defaults?: Omit<Criterion, "target">[];
 }
 
-/** A criterion on a person's page: assigned, or a standard one not assigned (shown as 0). */
+/** A criterion on a person's page: assigned, or a standard one not assigned (listed apart). */
 export type ShownCriterion = Criterion & { unassigned?: boolean };
 
 /**
  * The month's criteria as the person sees them: what was assigned, in the head's order, then
- * every standard criterion that wasn't, at 0 (a Text one blank), so nothing reads as missing.
+ * every standard criterion that wasn't, marked `unassigned` (at 0, a Text one blank), so the
+ * page can list them under *Not assigned yet* and nothing reads as missing.
  */
 export function withUnassigned(
   target: Target | null,
@@ -623,3 +624,16 @@ export interface TeamRow {
 
 /** Who Team targets shows: everyone, those with targets, those behind, those without. */
 export type TeamFilter = "all" | "with" | "behind" | "unset";
+
+/** Why a numeric target shows no progress, in words; "" while it is being counted. */
+export function uncountedNote(criterion: Criterion, progress: Progress | null) {
+  const { measure } = criterion;
+  if (!measure) return __("Target only: not counted from the leads.");
+  if (!progress) return "";
+  const label = MEASURE_LOOK[measure].label.toLowerCase();
+  if (progress.state === "not_started")
+    return __("Counts {0} once the month begins.", label);
+  if (progress.state === "unavailable")
+    return __("Couldn't count it: {0}", progress.reason || "");
+  return __("Counts {0}.", label);
+}

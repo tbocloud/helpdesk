@@ -33,7 +33,7 @@
       v-if="isText"
       class="whitespace-pre-line break-words text-p-base font-medium text-ink-gray-8"
     >
-      {{ criterion.unassigned || !criterion.target ? "—" : criterion.target }}
+      {{ criterion.target || "—" }}
     </p>
     <p v-else class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
       <span
@@ -78,9 +78,9 @@ import type { RouteLocationRaw } from "vue-router";
 import TargetProgress from "./TargetProgress.vue";
 import {
   figureText,
-  MEASURE_LOOK,
   progressOf,
   targetText,
+  uncountedNote,
   VALUE_TYPE_LOOK,
   type Criterion,
   type Progress,
@@ -96,8 +96,6 @@ const props = defineProps<{
   /** whose leads are counted, by name */
   owner: string;
   link: RouteLocationRaw | null;
-  /** a standard criterion not assigned for the month: shown as 0, nothing counted */
-  unassigned?: boolean;
 }>();
 
 const look = computed(() => VALUE_TYPE_LOOK[props.criterion.value_type]);
@@ -105,14 +103,12 @@ const isText = computed(() => props.criterion.value_type === "Text");
 
 const result = computed(() => {
   const measured = props.progress?.criteria?.[props.criterion.criterion];
-  return !props.unassigned && props.criterion.measure && measured
+  return props.criterion.measure && measured
     ? progressOf(props.criterion, measured, props.progress!, props.currency)
     : null;
 });
 
-const counting = computed(
-  () => !!props.criterion.measure && !props.progress && !props.unassigned
-);
+const counting = computed(() => !!props.criterion.measure && !props.progress);
 /** What they achieved once it is counted, else the target itself. */
 const value = computed(() => {
   if (!result.value) return targetText(props.criterion, props.currency);
@@ -123,15 +119,8 @@ const value = computed(() => {
 
 /** Why there is no progress to show, in words. */
 const note = computed(() => {
-  const { measure, value_type, info_only } = props.criterion;
-  if (props.unassigned) return __("Not assigned yet");
-  if (value_type === "Text") return info_only ? __("Information only") : "";
-  if (!measure) return __("Target only: not counted from the leads.");
-  const label = MEASURE_LOOK[measure].label;
-  if (props.progress?.state === "not_started")
-    return __("Counts {0} once the month begins.", label.toLowerCase());
-  if (props.progress?.state === "unavailable")
-    return __("Couldn't count it: {0}", props.progress.reason || "");
-  return __("Counts {0}.", label.toLowerCase());
+  if (isText.value)
+    return props.criterion.info_only ? __("Information only") : "";
+  return uncountedNote(props.criterion, props.progress);
 });
 </script>

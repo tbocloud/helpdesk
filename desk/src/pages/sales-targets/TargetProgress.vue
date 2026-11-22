@@ -49,33 +49,13 @@
         />
         {{ __("How it's counted") }}
       </summary>
-      <dl
-        class="mt-2 flex flex-col gap-2 rounded-lg bg-surface-gray-1 px-3 py-2.5"
-      >
-        <div v-for="line in result.lines" :key="line.label">
-          <dt class="font-medium text-ink-gray-8">{{ line.label }}</dt>
-          <dd
-            class="text-ink-gray-7"
-            :class="/[÷×=]/.test(line.text) && 'font-mono tabular-nums'"
-          >
-            {{ line.text }}
-          </dd>
-        </div>
-        <div>
-          <dt class="font-medium text-ink-gray-8">{{ __("Counted over") }}</dt>
-          <dd class="text-ink-gray-7 tabular-nums">
-            {{ __("{0}, leads owned by {1}", countedOver(progress), owner) }}
-          </dd>
-        </div>
-        <RouterLink
-          v-if="link"
-          :to="link"
-          class="inline-flex items-center gap-1 self-start rounded font-medium text-brand-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
-        >
-          {{ __("See these leads") }}
-          <LucideArrowRight class="size-3.5" aria-hidden="true" />
-        </RouterLink>
-      </dl>
+      <HowCounted
+        class="mt-2"
+        :result="result"
+        :progress="progress"
+        :owner="owner"
+        :link="link"
+      />
     </details>
   </div>
 </template>
@@ -83,10 +63,9 @@
 <script setup lang="ts">
 import { __ } from "@/translation";
 import type { RouteLocationRaw } from "vue-router";
-import LucideArrowRight from "~icons/lucide/arrow-right";
 import LucideChevronRight from "~icons/lucide/chevron-right";
+import HowCounted from "./HowCounted.vue";
 import {
-  countedOver,
   STANDING_LOOK,
   type Criterion,
   type CriterionProgress,

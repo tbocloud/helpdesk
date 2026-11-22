@@ -137,7 +137,7 @@ overall first.
 and the month overall, `OverallProgress.vue`, or *Not begun* / *Couldn't count* / *Not set*)
 and, on the right, **the person picked** (`TeamPersonTargets.vue`): avatar, name, who set the
 targets and when, **Edit targets** (or **Assign targets**, solid), the month overall with the
-days counted, then every target as the person's own page shows it (`TargetFigure` cards), with
+days counted, then every target as a card (`TargetFigure`: kind colour, Target N, figure, progress), with
 **Confirm it's done** / **Reopen** on each KPI (`KpiStatus`, head mode).
 
 States: loading (skeletons), load error with Try again, not a Sales Head (the route sends them
@@ -152,27 +152,35 @@ salesperson); this page is where the detail is.
 
 `desk/src/pages/sales-targets/MyTargets.vue` (the file and route keep the earlier name *My
 targets*; the sidebar says **Sales targets** and the page **Your sales targets**). Only
-Presales Executives and Sales Users see it. Redesigned 2026-11-22 to the owner's mockup. The
-month is a **Month** select in the header (this month, the one open, and every month the
-person has targets in). On top the dark hero panel: a target icon, *Your targets for* the
-month, how many targets are set, the month overall once counted ("39% reached · 2 behind"), and
-who set them (avatar, *Set by*, *Last changed …*). Under it **every target is its own card**
-(`TargetFigure.vue`, also used on Team targets), three across on wide screens, in the order the
-Sales Head set them, the numeric ones first: a top edge, icon square and pill in its kind's
-colour (`VALUE_TYPE_LOOK`), *Target N*, the name and the figure (amounts with the currency sign,
-percents with %; a written target's text). A counted target shows what they achieved *of* the
-target, the bar with the pace marker, where they stand and **How it's counted**; a target not
-counted says why. Each KPI shows its state and **Mark as done** (with what they did) or **Not
-done after all**. Under the cards: *Questions about a target? Ask {name}, your Sales Head.*
+Presales Executives and Sales Users see it. Redesigned twice on 2026-11-22 to the owner's
+mockups; this is the second. The month is a **Month** select in the header (this month, the one
+open, and every month the person has targets in).
 
-**Not assigned shows as 0 (2026-11-19).** Every standard target (`default_criteria()`, sent as
-`defaults` by `get_my_targets`) is always on the page. One the Sales Head didn't assign for the
-month comes after the assigned ones as a card at 0 (*₹0*, *0%*, *0*) with *Not assigned yet*
-under it; a written one says *Not assigned yet*, with no Mark as done. Nothing is counted for
-them and they don't change the month overall (`withUnassigned` in `salesTargets.ts`). A month
-with nothing assigned shows the same hero panel saying *Your Sales Head hasn't assigned targets
-yet.* with every standard target at 0 below, and a **See {month}** button for the newest month that
-has targets; the foot asks them to ask their Sales Head.
+- **Hero** (the dark panel): a ring of the month overall ("39%"), *Your targets for* the month,
+  "9 targets set · 22 of 30 days gone" (or *month over* / *starts on the 1st*), chips for what
+  is not zero (*2 reached*, *1 on pace*, *4 behind*, *2 to mark done*; each says its count in
+  words) and who set them with when. A month with nothing assigned says *Your Sales Head hasn't
+  assigned targets yet.* with **See {month}** for the newest month that has targets.
+- **Counted from your leads** (N): every assigned Amount, Number and Percent target as a compact
+  card (`TargetMeter.vue`): its kind's icon square, the name, an ⓘ button that opens the sums
+  (`HowCounted.vue`, shared with `TargetProgress`, with **See these leads**), "400 of 130", the
+  bar with today's pace ticked, the standing in words with its icon and the share reached. A
+  target not counted (target only, month not begun, the ERP refusing) says why. A key explains
+  the tick; `TabButtons` All / Reached / On pace / Behind (with counts) narrow the cards.
+- **Tasks to mark done** (the KPIs, N still open): one row each with the target's text, what
+  they noted, a status pill (*Not done yet*, *Waiting for confirm*, *Confirmed*) and **Mark as
+  done** / **Not done after all** (`KpiStatus` compact).
+- **Where to focus**: information-only targets (Industry, Location) with their text, when
+  assigned.
+- **Not assigned yet** (N): the standard targets with no goal this month as dashed chips with
+  their kind (₹, %, #, Text, Info).
+- A line at the foot: *Questions about a target? Ask {name}, your Sales Head.*
+
+**Not assigned (2026-11-19, changed 2026-11-22).** Every standard target (`default_criteria()`,
+sent as `defaults` by `get_my_targets`) is always on the page: one the Sales Head didn't assign
+for the month is listed under **Not assigned yet** (`withUnassigned` in `salesTargets.ts`). They
+were cards at 0 until the second redesign. Nothing is counted for them and they don't change the
+month overall.
 
 ## Progress: counted from the leads (2026-11-18)
 
