@@ -70,6 +70,8 @@ export interface NavItem {
   salesHeadOnly?: boolean;
   /** Sales targets (their own): Presales Executives and Sales Users */
   ownTargetsOnly?: boolean;
+  /** Sales → Dashboard: everyone with Leads but Sales Heads and Sales Managers */
+  ownDashboardOnly?: boolean;
   /** the team's sales figures: anyone with Leads but a BD */
   salesManagersOnly?: boolean;
 }
@@ -303,13 +305,14 @@ export const agentNavAreas: NavArea[] = [
     groups: [
       {
         items: [
-          // their own day: calls, leads, targets and follow-ups (docs/sales-dashboard.md)
+          // a salesperson's own day: calls, leads, targets and follow-ups (docs/sales-dashboard.md)
           {
             id: "sales-dashboard",
             label: __("Dashboard"),
             icon: LucideGauge,
             to: "SalesDashboard",
             leadsOnly: true,
+            ownDashboardOnly: true,
           },
           // their own targets for the month, set by a Sales Head (docs/sales-targets.md)
           {

@@ -115,6 +115,14 @@ def is_sales_bd_role(user: str | None = None) -> bool:
     return is_sales_employee(user) and "Sales Manager" not in frappe.get_roles(user)
 
 
+def manages_sales(user: str | None = None) -> bool:
+    """A Sales Head or Sales Manager: they follow the team (Team dashboard, Team targets,
+    Leads) and have no Sales → Dashboard, which is a salesperson's own day
+    (docs/sales-dashboard.md)."""
+    roles = set(frappe.get_roles(user or frappe.session.user))
+    return bool({SALES_HEAD_ROLE, "Sales Manager"} & roles)
+
+
 def sees_no_tickets(user: str | None = None) -> bool:
     """Writers and designers (Content Team), DM Employees and Sales Employees don't work
     tickets; the tickets they raised stay theirs."""

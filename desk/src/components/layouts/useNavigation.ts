@@ -120,6 +120,7 @@ export function useNavigation() {
       (!item.salesHeadOnly || authStore.canAssignSalesTargets) &&
       (!item.ownTargetsOnly || authStore.hasSalesTargets) &&
       (!item.salesManagersOnly || !isBd.value) &&
+      (!item.ownDashboardOnly || authStore.hasOwnSalesDashboard) &&
       (!authStore.isContentTeam || CONTENT_TEAM_ROUTES.has(to))
     );
   }

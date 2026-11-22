@@ -81,6 +81,10 @@ export const useAuthStore = defineStore("auth", () => {
   const isSalesBd: ComputedRef<boolean> = computed(
     () => !!user__.value.is_sales_bd
   );
+  // Sales → Dashboard is a salesperson's own day: not for Sales Heads or Sales Managers
+  const hasOwnSalesDashboard: ComputedRef<boolean> = computed(
+    () => !!user__.value.has_own_sales_dashboard
+  );
   // the Tickets list and New ticket: System / Agent Managers and the ERP team
   const canWorkTickets: ComputedRef<boolean> = computed(
     () => !!user__.value.can_work_tickets
@@ -231,6 +235,7 @@ export const useAuthStore = defineStore("auth", () => {
     isDmEmployee,
     isSalesEmployee,
     isSalesBd,
+    hasOwnSalesDashboard,
     canWorkTickets,
     canUseLeads,
     canUseLeadBank,

@@ -224,13 +224,19 @@ const portalRoutes = [
     beforeEnter: () =>
       useAuthStore().canViewDivisionOverview || { name: "Home" },
   },
-  // the sales dashboards, live from the ERP site (docs/sales-dashboard.md): a person's own
-  // day, and the team's for anyone but a BD (the server refuses a BD too)
+  // the sales dashboards, live from the ERP site (docs/sales-dashboard.md): a salesperson's own
+  // day (not for Sales Heads or Sales Managers), and the team's for anyone but a BD (the
+  // server refuses both)
   {
     path: "/sales/dashboard",
     name: "SalesDashboard",
     component: () => import("@/pages/sales-dashboard/SalesDashboard.vue"),
-    beforeEnter: () => useAuthStore().canUseLeads || { name: "Home" },
+    beforeEnter: () => {
+      const auth = useAuthStore();
+      return (
+        (auth.canUseLeads && auth.hasOwnSalesDashboard) || { name: "Home" }
+      );
+    },
   },
   {
     path: "/sales/team-dashboard",

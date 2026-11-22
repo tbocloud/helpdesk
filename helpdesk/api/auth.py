@@ -13,6 +13,7 @@ from helpdesk.content_team import (
     is_erp_only,
     is_sales_bd_role,
     is_sales_employee,
+    manages_sales,
 )
 from helpdesk.divisions import (
     division_info,
@@ -112,6 +113,8 @@ def get_user():
         # a Sales Employee who is no manager: Leads shows them their own calls and leads only
         # (a department head is told apart by the Leads options, from the ERP site)
         "is_sales_bd": is_sales_bd_role(current_user),
+        # Sales → Dashboard is a salesperson's own day: not for Sales Heads or Sales Managers
+        "has_own_sales_dashboard": not manages_sales(current_user),
         # the Tickets list and New ticket: System / Agent Managers and the ERP team
         "can_work_tickets": can_work_tickets(current_user),
         # the Leads page, live from the CRM site (docs/leads.md)
