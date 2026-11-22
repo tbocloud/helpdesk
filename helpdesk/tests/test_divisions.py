@@ -543,6 +543,15 @@ class TestDivisionSalesRoles(DivisionCase):
         self.assertIsNone(divisions.scoreboard_people(DEV))
         self.assertIsNone(divisions.scoreboard_people(BOB), "KSA's Sales Executive")
 
+    def test_the_two_roles_get_the_sales_area_of_the_sidebar(self):
+        self.india.db_set("crm_source", self.source.name)
+        self.assertFalse(content_team.in_sales(ANN), "before they are given a role")
+        self.set_india_members(
+            (ANN, divisions.DIVISION_SALES_USER), (CARA, divisions.DIVISION_ADMIN)
+        )
+        self.assertTrue(content_team.in_sales(ANN))
+        self.assertTrue(content_team.in_sales(CARA))
+
 
     def test_a_division_admin_sets_up_lead_departments_on_their_divisions_site(self):
         from helpdesk.api import lead_bank as lead_bank_api

@@ -7,6 +7,7 @@ from helpdesk.content_team import (
     can_edit_content,
     can_work_tickets,
     in_content_team,
+    in_sales,
     is_content_only,
     is_dm_employee,
     is_dm_head,
@@ -115,6 +116,8 @@ def get_user():
         "is_sales_bd": is_sales_bd_role(current_user),
         # Sales → Dashboard is a salesperson's own day: not for Sales Heads or Sales Managers
         "has_own_sales_dashboard": not manages_sales(current_user),
+        # the Sales area of the sidebar: only the people in sales
+        "in_sales": in_sales(current_user),
         # the Tickets list and New ticket: System / Agent Managers and the ERP team
         "can_work_tickets": can_work_tickets(current_user),
         # the Leads page, live from the CRM site (docs/leads.md)

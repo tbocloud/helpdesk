@@ -115,6 +115,29 @@ def is_sales_bd_role(user: str | None = None) -> bool:
     return is_sales_employee(user) and "Sales Manager" not in frappe.get_roles(user)
 
 
+SALES_ROLES = {
+    "Sales User",
+    "Sales Manager",
+    SALES_HEAD_ROLE,
+    PRESALES_EXECUTIVE_ROLE,
+    SALES_EMPLOYEE_ROLE,
+}
+
+
+def in_sales(user: str | None = None) -> bool:
+    """Gets the Sales area of the sidebar: Sales Users, Sales Managers, Sales Heads,
+    Presales Executives and Sales Employees, a Division Admin or Division Sales User of
+    their active division, and System
+    Managers, who set it up. Nobody else is in sales, so nobody else sees it."""
+    from helpdesk.divisions import leads_role
+
+    user = user or frappe.session.user
+    if user == "Administrator":
+        return True
+    roles = set(frappe.get_roles(user))
+    return bool("System Manager" in roles or SALES_ROLES & roles or leads_role(user))
+
+
 def manages_sales(user: str | None = None) -> bool:
     """A Sales Head or Sales Manager: they follow the team (Team dashboard, Team targets,
     Leads) and have no Sales → Dashboard, which is a salesperson's own day

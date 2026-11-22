@@ -122,6 +122,8 @@ export const useAuthStore = defineStore("auth", () => {
   const canViewDivisionOverview: ComputedRef<boolean> = computed(
     () => !!user__.value.can_view_division_overview
   );
+  // the Sales area of the sidebar: sales, presales and their heads and managers only
+  const inSales: ComputedRef<boolean> = computed(() => !!user__.value.in_sales);
   // Sales targets: Sales Heads set each month's targets (docs/sales-targets.md)
   const canAssignSalesTargets: ComputedRef<boolean> = computed(
     () => !!user__.value.can_assign_sales_targets
@@ -247,6 +249,7 @@ export const useAuthStore = defineStore("auth", () => {
     canViewDivisionOverview,
     canAssignSalesTargets,
     hasSalesTargets,
+    inSales,
     hideTodaysCalls,
     telephonyInstalled,
     canOpenChat,
