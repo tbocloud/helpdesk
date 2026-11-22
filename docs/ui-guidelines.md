@@ -146,7 +146,23 @@ rules above where the two disagreed. What that allows, and nothing beyond it:
   now the mockup's segmented look (the checked option white on a light track).
 - **Bulk selection**: a near-black bar across the table with outlined white buttons.
 
-### Page recipe (every page)
+### The owner's exception: the sales targets pages (2026-11-22)
+
+The owner sent mockups for Team targets, Your sales targets and Assign sales targets and asked
+for the pages to match. What that allows, on those pages only:
+
+- **The hero panel**: one dark summary panel at the top of Team targets and Your sales targets
+  (`bg-hero`, white text, `text-hero-muted` for secondary lines; tokens in `theme.css`). On it,
+  `hero-fill` (mint) draws the team average and *on track*, `hero-pace` (yellow) the tick for
+  today's pace, `warm-fill` *behind*; each always with its count or words beside it. Contrast:
+  white on `hero` 12.1, `hero-muted` 7.1, `hero-fill` 6.4 and `hero-pace` 8.1
+  (light; higher in dark).
+- **A colour per target kind** (`VALUE_TYPE_LOOK`): Amount green, Number blue, Percent violet,
+  Text amber, as a card's 4 px top edge, its icon square and its pill. The pill always names
+  the kind.
+- **Standing colours in the team grid** (`STANDING_LOOK`): reached green, on pace blue, behind
+  amber, nothing counted gray, each cell with the standing's icon and its words.
+
 
 - **Type**: a compact scale (`desk/tailwind.config.js`): every frappe-ui size is about 1 px
   smaller than stock (`text-base` 13 px, `text-sm` 12.5 px, `text-xs` 11.5 px, `text-lg`

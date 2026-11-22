@@ -6,6 +6,13 @@
         class="mx-4 flex min-h-12 flex-wrap items-center justify-between gap-x-4 gap-y-2 md:mx-0 md:min-h-9 md:items-end"
       >
         <div class="flex min-w-0 flex-1 items-center gap-2">
+          <span
+            v-if="icon"
+            class="mr-2 hidden size-12 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand-ink md:inline-flex"
+            aria-hidden="true"
+          >
+            <component :is="icon" class="size-6" />
+          </span>
           <div v-if="title" class="flex min-w-0 flex-col gap-1">
             <h1
               class="truncate text-lg font-bold text-ink-gray-9 md:text-[22px] md:leading-[1.25] md:tracking-[-0.01em]"
@@ -26,9 +33,11 @@
   </Teleport>
 </template>
 <script setup lang="ts">
-import { nextTick, ref } from "vue";
+import { nextTick, ref, type Component } from "vue";
 
 defineProps<{
+  /** the page's mark beside the title, on a brand-soft square (wider screens only) */
+  icon?: Component;
   /** the page's name, as the page's one h1 */
   title?: string;
   /** one sentence under the title on wider screens: what the page is for */

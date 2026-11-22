@@ -12,7 +12,7 @@
     >
       <div
         class="h-full rounded-full transition-[width] motion-reduce:transition-none"
-        :class="FILL[result.standing]"
+        :class="STANDING_LOOK[result.standing].fill"
         :style="{ width: `${Math.min(result.percent ?? 0, 100)}%` }"
       />
       <!-- where an even pace would be today -->
@@ -26,10 +26,10 @@
 
     <p
       class="flex flex-wrap items-center gap-x-1.5 text-xs tabular-nums"
-      :class="INK[result.standing]"
+      :class="STANDING_LOOK[result.standing].ink"
     >
       <component
-        :is="ICONS[result.standing]"
+        :is="STANDING_LOOK[result.standing].icon"
         class="size-3.5 shrink-0"
         aria-hidden="true"
       />
@@ -85,16 +85,12 @@ import { __ } from "@/translation";
 import type { RouteLocationRaw } from "vue-router";
 import LucideArrowRight from "~icons/lucide/arrow-right";
 import LucideChevronRight from "~icons/lucide/chevron-right";
-import LucideCircleCheck from "~icons/lucide/circle-check";
-import LucideCircleDashed from "~icons/lucide/circle-dashed";
-import LucideTrendingDown from "~icons/lucide/trending-down";
-import LucideTrendingUp from "~icons/lucide/trending-up";
 import {
   countedOver,
+  STANDING_LOOK,
   type Criterion,
   type CriterionProgress,
   type Progress,
-  type Standing,
 } from "./salesTargets";
 
 defineProps<{
@@ -106,30 +102,4 @@ defineProps<{
   /** the Leads list of the leads behind the figure; null when the viewer can't open it */
   link: RouteLocationRaw | null;
 }>();
-
-// behind is warning, never danger: a target not yet reached isn't a failure (ui-guidelines §8)
-const FILL: Record<Standing, string> = {
-  done: "bg-success",
-  on_pace: "bg-success",
-  behind: "bg-warning",
-  short: "bg-warning",
-  below: "bg-warning",
-  none: "bg-surface-gray-4",
-};
-const INK: Record<Standing, string> = {
-  done: "text-success",
-  on_pace: "text-success",
-  behind: "text-warning",
-  short: "text-warning",
-  below: "text-warning",
-  none: "text-ink-gray-6",
-};
-const ICONS: Record<Standing, unknown> = {
-  done: LucideCircleCheck,
-  on_pace: LucideTrendingUp,
-  behind: LucideTrendingDown,
-  short: LucideTrendingDown,
-  below: LucideTrendingDown,
-  none: LucideCircleDashed,
-};
 </script>

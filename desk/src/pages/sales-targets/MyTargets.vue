@@ -5,11 +5,17 @@
       :subtitle="__('What your Sales Head set for you, month by month.')"
     >
       <template #right-header>
-        <MonthStepper
-          :model-value="month"
-          :options="monthChoices"
-          @update:model-value="pickMonth"
-        />
+        <label class="flex items-center gap-3">
+          <span class="text-sm text-ink-gray-6">{{ __("Month") }}</span>
+          <FormControl
+            :model-value="month"
+            type="select"
+            size="md"
+            class="w-44"
+            :options="monthChoices"
+            @update:model-value="pickMonth(String($event))"
+          />
+        </label>
       </template>
     </LayoutHeader>
 
@@ -44,59 +50,85 @@
         />
 
         <template v-else>
+          <!-- the month, how many targets, and who set them -->
           <section
-            class="min-w-0 overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
+            class="flex flex-wrap items-center gap-x-8 gap-y-5 rounded-xl bg-hero px-5 py-6 text-hero-ink md:px-8"
             :aria-labelledby="heading"
           >
-            <!-- the month, and who set its targets -->
-            <header
-              class="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 px-4 py-4 md:px-5"
-            >
+            <div class="flex min-w-0 flex-1 items-center gap-4">
+              <span
+                class="grid size-14 shrink-0 place-items-center rounded-xl bg-hero-track"
+                aria-hidden="true"
+              >
+                <LucideTarget class="size-7" />
+              </span>
               <div class="flex min-w-0 flex-col gap-0.5">
+                <span class="text-base text-hero-muted">{{
+                  __("Your targets for")
+                }}</span>
                 <h2
                   :id="heading"
-                  class="text-base font-semibold text-ink-gray-9"
+                  class="text-[28px] font-bold leading-tight tracking-[-0.02em]"
                 >
                   {{ monthTitle(month) }}
                 </h2>
-                <!-- nothing assigned: every standard target shows at 0 below -->
-                <p v-if="!target" class="text-sm text-ink-gray-6">
-                  {{ __("Your Sales Head hasn't assigned targets yet.") }}
-                </p>
-                <p v-else class="text-sm text-ink-gray-6 tabular-nums">
+              </div>
+            </div>
+
+            <!-- nothing assigned: every standard target shows at 0 below -->
+            <div v-if="!target" class="flex flex-wrap items-center gap-4">
+              <p class="text-sm text-hero-muted">
+                {{ __("Your Sales Head hasn't assigned targets yet.") }}
+              </p>
+              <button
+                v-if="latestOther"
+                type="button"
+                class="h-9 rounded-lg bg-surface-base px-3 text-sm font-medium text-ink-gray-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+                @click="pickMonth(latestOther)"
+              >
+                {{ __("See {0}", monthTitle(latestOther)) }}
+              </button>
+            </div>
+            <div v-else class="flex flex-wrap items-center gap-x-8 gap-y-4">
+              <div class="flex flex-col items-center">
+                <span class="text-[40px] font-bold leading-none tabular-nums">
+                  {{ target.criteria.length }}
+                </span>
+                <span class="text-sm text-hero-muted">
                   {{
                     target.criteria.length === 1
-                      ? __("1 target")
-                      : __("{0} targets", String(target.criteria.length))
+                      ? __("target set")
+                      : __("targets set")
                   }}
-                  <template v-if="overall?.percent != null">
-                    ·
-                    {{
-                      __("{0}% of the month reached", String(overall.percent))
-                    }}
-                    <template v-if="overall.behind">
-                      ·
-                      {{
-                        overall.behind === 1
-                          ? __("1 behind")
-                          : __("{0} behind", String(overall.behind))
-                      }}
-                    </template>
-                  </template>
-                </p>
+                </span>
               </div>
-              <Button
-                v-if="!target && latestOther"
-                :label="__('See {0}', monthTitle(latestOther))"
-                @click="pickMonth(latestOther)"
-              />
-              <div v-else-if="target" class="flex min-w-0 items-center gap-2.5">
+              <div
+                v-if="overall?.percent != null"
+                class="flex flex-col items-center"
+              >
+                <span class="text-[40px] font-bold leading-none tabular-nums">
+                  {{ overall.percent }}%
+                </span>
+                <span class="text-sm text-hero-muted">
+                  {{
+                    overall.behind
+                      ? __("reached · {0} behind", String(overall.behind))
+                      : __("reached so far")
+                  }}
+                </span>
+              </div>
+              <div
+                class="flex min-w-0 items-center gap-3 sm:border-l sm:border-hero-track sm:pl-8"
+              >
                 <PersonAvatar :name="setBy" size="lg" />
                 <div class="flex min-w-0 flex-col">
-                  <span class="truncate text-sm font-medium text-ink-gray-8">
-                    {{ __("Set by {0}", setBy) }}
-                  </span>
-                  <span class="text-xs text-ink-gray-6 tabular-nums">
+                  <span class="text-sm text-hero-muted">{{
+                    __("Set by")
+                  }}</span>
+                  <span class="truncate text-base font-semibold">{{
+                    setBy
+                  }}</span>
+                  <span class="text-sm text-hero-muted tabular-nums">
                     {{
                       __(
                         "Last changed {0}",
@@ -106,16 +138,15 @@
                   </span>
                 </div>
               </div>
-            </header>
+            </div>
           </section>
 
-          <!-- every target as the app's stat card, in the head's order: figures, then the written ones -->
-          <div
-            class="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-4"
-          >
+          <!-- every target as a card, in the head's order: figures first, then the written ones -->
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <TargetFigure
-              v-for="criterion in figures"
+              v-for="(criterion, i) in figures"
               :key="criterion.criterion"
+              :index="i + 1"
               :criterion="criterion"
               :unassigned="criterion.unassigned"
               :currency="mine.data.currency"
@@ -127,35 +158,36 @@
                   : null
               "
             />
-            <StatTile
-              v-for="criterion in written"
+            <TargetFigure
+              v-for="(criterion, i) in written"
               :key="criterion.criterion"
-              :label="criterion.criterion"
-              :value="criterion.unassigned ? '—' : String(criterion.target)"
-              :sub="criterion.unassigned ? __('Not assigned yet') : undefined"
-              :icon="VALUE_TYPE_LOOK.Text.icon"
-              :icon-tone="VALUE_TYPE_LOOK.Text.tone"
+              :index="figures.length + i + 1"
+              :criterion="criterion"
+              :unassigned="criterion.unassigned"
+              :currency="mine.data.currency"
+              :progress="null"
+              :owner="auth.userName"
+              :link="null"
             >
               <!-- information only (Industry, Location) is nothing to tick off -->
               <KpiStatus
                 v-if="isKpi(criterion) && !criterion.unassigned"
-                class="mt-1"
                 :criterion="criterion"
                 :month="month"
                 mode="person"
                 @changed="mine.data.target = $event"
               />
-            </StatTile>
+            </TargetFigure>
           </div>
 
-          <p class="flex items-center gap-2 text-xs text-ink-gray-6">
-            <LucideMessageCircleQuestion
-              class="size-3.5 shrink-0"
-              aria-hidden="true"
-            />
+          <p class="flex items-center gap-2 text-sm text-ink-gray-6">
+            <LucideInfo class="size-4 shrink-0" aria-hidden="true" />
             {{
               setBy
-                ? __("Questions about a target? Ask {0}.", setBy)
+                ? __(
+                    "Questions about a target? Ask {0}, your Sales Head.",
+                    setBy
+                  )
                 : __("Questions about a target? Ask your Sales Head.")
             }}
           </p>
@@ -168,26 +200,24 @@
 <script setup lang="ts">
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import PersonAvatar from "@/components/PersonAvatar.vue";
-import StatTile from "@/components/StatTile.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";
 import { useAuthStore } from "@/stores/auth";
 import { errorText } from "@/utils";
-import { Button, createResource, dayjs } from "frappe-ui";
+import { Button, createResource, dayjs, FormControl } from "frappe-ui";
 import { computed, useId, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideLock from "~icons/lucide/lock";
-import LucideMessageCircleQuestion from "~icons/lucide/message-circle-question";
+import LucideInfo from "~icons/lucide/info";
+import LucideTarget from "~icons/lucide/target";
 import KpiStatus from "./KpiStatus.vue";
-import MonthStepper from "./MonthStepper.vue";
 import {
   isKpi,
   leadsLink,
   monthTitle,
   monthValue,
   overallOf,
-  VALUE_TYPE_LOOK,
   withUnassigned,
   type MyTargets,
   type Progress,
@@ -243,8 +273,8 @@ const overall = computed(() =>
 const setBy = computed(() =>
   target.value ? target.value.assigned_by_name || target.value.assigned_by : ""
 );
-// what was assigned, then each standard target not assigned at 0; figures go in the grid,
-// written targets in a list under it, each in the head's order
+// what was assigned, then each standard target not assigned at 0; figures first, then the
+// written targets, each in the head's order
 const shown = computed(() =>
   withUnassigned(target.value, mine.data?.defaults ?? [])
 );

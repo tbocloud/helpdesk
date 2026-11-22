@@ -1,13 +1,16 @@
 import { money } from "@/components/invoicing/invoices";
-import type { Tone } from "@/components/tone";
 import { __ } from "@/translation";
 import { dayjs } from "frappe-ui";
 import type { Component } from "vue";
 import type { RouteLocationRaw } from "vue-router";
 import LucideHash from "~icons/lucide/hash";
-import LucideBanknote from "~icons/lucide/banknote";
+import LucideCircleCheck from "~icons/lucide/circle-check";
+import LucideCircleDashed from "~icons/lucide/circle-dashed";
+import LucideFileText from "~icons/lucide/file-text";
+import LucideIndianRupee from "~icons/lucide/indian-rupee";
 import LucidePercent from "~icons/lucide/percent";
-import LucideText from "~icons/lucide/text";
+import LucideTrendingDown from "~icons/lucide/trending-down";
+import LucideTrendingUp from "~icons/lucide/trending-up";
 import { monthTitle, monthValue } from "../leads/commission";
 
 export { monthTitle, monthValue };
@@ -109,17 +112,37 @@ export function withUnassigned(
   ];
 }
 
-/** Each kind's icon, and the colour of its circle on a person's target cards, so a kind
- * reads at a glance: money green, rates blue, counts the brand teal, written targets amber
- * (the owner's ask, 2026-11-20). */
+/** Each kind's icon and colour, as the owner's mockups draw them (2026-11-22), so a kind
+ * reads at a glance: money green, rates violet, counts blue, written targets amber. `tile`
+ * is the soft square and the pill (always with the kind's name), `bar` a card's top edge. */
 export const VALUE_TYPE_LOOK: Record<
   ValueType,
-  { label: string; icon: Component; tone: Tone | "brand" }
+  { label: string; icon: Component; tile: string; bar: string }
 > = {
-  Amount: { label: __("Amount"), icon: LucideBanknote, tone: "success" },
-  Number: { label: __("Number"), icon: LucideHash, tone: "brand" },
-  Percent: { label: __("Percent"), icon: LucidePercent, tone: "info" },
-  Text: { label: __("Text"), icon: LucideText, tone: "warning" },
+  Amount: {
+    label: __("Amount"),
+    icon: LucideIndianRupee,
+    tile: "bg-success-soft text-success",
+    bar: "bg-success",
+  },
+  Number: {
+    label: __("Number"),
+    icon: LucideHash,
+    tile: "bg-info-soft text-info",
+    bar: "bg-info",
+  },
+  Percent: {
+    label: __("Percent"),
+    icon: LucidePercent,
+    tile: "bg-violet-soft text-violet",
+    bar: "bg-violet",
+  },
+  Text: {
+    label: __("Text"),
+    icon: LucideFileText,
+    tile: "bg-warning-soft text-warning",
+    bar: "bg-warning",
+  },
 };
 
 /** A Text target that is a KPI to tick off, not information only. */
@@ -249,6 +272,53 @@ export const MEASURE_LOOK: Record<
     label: __("Win rate"),
     counts: __("Leads won ÷ (leads won + leads lost) × 100."),
     metric: "won",
+  },
+};
+
+/**
+ * Each standing's colour and icon, so a cell, a bar and a line all read the same way:
+ * reached green, on pace blue, behind amber (never red: a target not reached yet isn't a
+ * failure, ui-guidelines §8), nothing counted gray. Always next to the standing in words.
+ */
+export const STANDING_LOOK: Record<
+  Standing,
+  { fill: string; ink: string; cell: string; icon: Component }
+> = {
+  done: {
+    fill: "bg-success",
+    ink: "text-success",
+    cell: "border-[color-mix(in_srgb,var(--success)_30%,transparent)] bg-success-soft",
+    icon: LucideCircleCheck,
+  },
+  on_pace: {
+    fill: "bg-info",
+    ink: "text-info",
+    cell: "border-[color-mix(in_srgb,var(--info)_30%,transparent)] bg-info-soft",
+    icon: LucideTrendingUp,
+  },
+  behind: {
+    fill: "bg-warning",
+    ink: "text-warning",
+    cell: "border-[color-mix(in_srgb,var(--warning)_30%,transparent)] bg-warning-soft",
+    icon: LucideTrendingDown,
+  },
+  short: {
+    fill: "bg-warning",
+    ink: "text-warning",
+    cell: "border-[color-mix(in_srgb,var(--warning)_30%,transparent)] bg-warning-soft",
+    icon: LucideTrendingDown,
+  },
+  below: {
+    fill: "bg-warning",
+    ink: "text-warning",
+    cell: "border-[color-mix(in_srgb,var(--warning)_30%,transparent)] bg-warning-soft",
+    icon: LucideTrendingDown,
+  },
+  none: {
+    fill: "bg-surface-gray-5",
+    ink: "text-ink-gray-6",
+    cell: "border-outline-gray-2 bg-surface-gray-1",
+    icon: LucideCircleDashed,
   },
 };
 
@@ -443,5 +513,113 @@ export function overallOf(
   const percent = shares.length
     ? Math.round(shares.reduce((a, b) => a + b, 0) / shares.length)
     : null;
-  return { percent, behind };
+  return { percent, behind, counted: shares.length };
 }
+
+/**
+ * How far into the month today is: a running month has a pace (the share of its days gone),
+ * a past one is over, a later one hasn't begun.
+ */
+export function monthPace(month: string) {
+  const start = dayjs(`${month}-01`);
+  const days = start.daysInMonth();
+  const today = dayjs();
+  if (today.isBefore(start, "month"))
+    return { state: "ahead" as const, day: 0, days, percent: 0 };
+  if (today.isAfter(start, "month"))
+    return { state: "over" as const, day: days, days, percent: 100 };
+  const day = today.date();
+  return {
+    state: "running" as const,
+    day,
+    days,
+    percent: Math.round((day / days) * 100),
+  };
+}
+
+/** One person's target in the team's grid: the figure, what it is out of, and how it stands. */
+export interface TargetCell {
+  value: string;
+  of: string;
+  /** share of the target reached; null with no bar to draw */
+  percent: number | null;
+  standing: Standing;
+  /** the standing in words, for the cell's title and screen readers */
+  text: string;
+  counting: boolean;
+}
+
+export function targetCell(
+  criterion: Criterion,
+  progress: Progress | null,
+  currency: string
+): TargetCell {
+  const base = {
+    percent: null,
+    standing: "none" as Standing,
+    counting: false,
+  };
+  if (criterion.value_type === "Text") {
+    const status = criterion.kpi_status;
+    const text =
+      status === "Confirmed"
+        ? __("Confirmed")
+        : status === "Done"
+        ? __("Done, to confirm")
+        : __("Not done yet");
+    return {
+      ...base,
+      value: __("KPI"),
+      of: text,
+      text,
+      standing:
+        status === "Confirmed"
+          ? "done"
+          : status === "Done"
+          ? "on_pace"
+          : "none",
+    };
+  }
+  const target = targetText(criterion, currency);
+  if (!criterion.measure)
+    return { ...base, value: target, of: __("Target only"), text: "" };
+  if (!progress)
+    return { ...base, value: "—", of: "", text: "", counting: true };
+  const measured =
+    progress.state === "counted"
+      ? progress.criteria?.[criterion.criterion]
+      : null;
+  if (!measured)
+    return {
+      ...base,
+      value: "—",
+      of: __("of {0}", target),
+      text: __("Nothing counted"),
+    };
+  const result = progressOf(criterion, measured, progress, currency);
+  return {
+    value:
+      result.achieved === null
+        ? "—"
+        : figureText(criterion, result.achieved, currency),
+    of: __("of {0}", target),
+    percent: result.percent,
+    standing: result.standing,
+    text: result.standingText,
+    counting: false,
+  };
+}
+
+/** Where a person's month stands on Team targets: behind first, not set last. */
+export type TeamStanding = "behind" | "on_track" | "uncounted" | "unset";
+
+/** One person on Team targets: their month's progress (null while read) and overall standing. */
+export interface TeamRow {
+  person: TargetPerson;
+  progress: Progress | null;
+  overall: ReturnType<typeof overallOf> | null;
+  standing: TeamStanding;
+}
+
+/** Who Team targets shows: everyone, those with targets, those behind, those without. */
+export type TeamFilter = "all" | "with" | "behind" | "unset";

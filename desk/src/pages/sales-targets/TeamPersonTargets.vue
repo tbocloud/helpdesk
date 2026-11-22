@@ -90,10 +90,11 @@
         <OverallProgress :percent="overall.percent" :behind="overall.behind" />
       </div>
 
-      <div class="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-3">
+      <div class="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3">
         <TargetFigure
-          v-for="criterion in figures"
+          v-for="(criterion, i) in figures"
           :key="criterion.criterion"
+          :index="i + 1"
           :criterion="criterion"
           :currency="currency"
           :progress="progress"
@@ -104,25 +105,25 @@
               : null
           "
         />
-        <StatTile
-          v-for="criterion in written"
+        <TargetFigure
+          v-for="(criterion, i) in written"
           :key="criterion.criterion"
-          :label="criterion.criterion"
-          :value="String(criterion.target ?? '—')"
-          :sub="isKpi(criterion) ? undefined : __('Information only')"
-          :icon="VALUE_TYPE_LOOK.Text.icon"
-          :icon-tone="VALUE_TYPE_LOOK.Text.tone"
+          :index="figures.length + i + 1"
+          :criterion="criterion"
+          :currency="currency"
+          :progress="null"
+          :owner="person.full_name"
+          :link="null"
         >
           <KpiStatus
             v-if="isKpi(criterion)"
-            class="mt-1"
             :criterion="criterion"
             :month="month"
             mode="head"
             :employee="person.user"
             @changed="emit('changed', $event)"
           />
-        </StatTile>
+        </TargetFigure>
       </div>
     </div>
   </div>
@@ -130,7 +131,6 @@
 
 <script setup lang="ts">
 import PersonAvatar from "@/components/PersonAvatar.vue";
-import StatTile from "@/components/StatTile.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
@@ -150,7 +150,6 @@ import {
   leadsLink,
   monthTitle,
   overallOf,
-  VALUE_TYPE_LOOK,
   type Progress,
   type Target,
   type TargetPerson,
