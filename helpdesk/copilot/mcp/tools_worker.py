@@ -43,7 +43,9 @@ def get_run_context(caller) -> dict:
 
 
 def post_event(caller, seq: int, type: str, payload: dict | None = None) -> dict:
-    stored = runs.add_event(caller.run, type, payload or {}, runs.WORKER, seq=seq)
+    stored = runs.add_event(
+        caller.run, runs.worker_event_type(type), payload or {}, runs.WORKER, seq=seq
+    )
     return {"seq": seq, "stored": stored}
 
 

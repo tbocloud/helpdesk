@@ -97,7 +97,10 @@ def check_token(header: str | None, service_url: str | None) -> dict:
         keys = signing_keys()
         # Microsoft rotates its keys: an unknown key id reads them again, at most once in
         # KEYS_REFRESH_SECONDS, so made-up tokens cannot make every request wait on Microsoft
-        if kid not in keys and not frappe.cache.get_value(KEYS_REFRESHED_KEY):
+        if kid not in keys and not frappe.cache.get_value(
+            KEYS_REFRESHED_KEY,
+            expires=True,  # a key that expires: never kept per request
+        ):
             frappe.cache.set_value(
                 KEYS_REFRESHED_KEY, 1, expires_in_sec=KEYS_REFRESH_SECONDS
             )

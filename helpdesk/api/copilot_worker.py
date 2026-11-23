@@ -192,7 +192,7 @@ def post_events(run: str, lease_token: str, events: list | str) -> dict:
         seq = int(event["seq"])
         runs.add_event(
             doc,
-            str(event.get("type") or "note"),
+            runs.worker_event_type(event.get("type")),
             event.get("payload") or {},
             runs.WORKER,
             seq=seq,
