@@ -75,6 +75,39 @@ class TestWorkerApi(FrappeTestCase):
         with self.assertRaises(frappe.PermissionError):
             worker.heartbeat()
 
+    def test_the_worker_never_writes_an_event_the_hub_reads_with_a_meaning(self):
+        # review of #342: a "stage" goes on to the customer's site; the worker's own is kept
+        # under its own name, never sent
+        worker = FakeWorker("w1")
+        worker.claim()
+        worker.events(
+            [
+                {
+                    "seq": 7,
+                    "type": "stage",
+                    "payload": {
+                        "stage": "Resolved",
+                        "message": "anything",
+                        "hub_ref": "x",
+                        "pushed": False,
+                    },
+                }
+            ]
+        )
+        stored = frappe.get_all(
+            "HDS Copilot Event",
+            filters={"run": self.run.name, "seq": 7},
+            fields=["event_type", "actor"],
+        )
+        self.assertEqual(
+            [(e.event_type, e.actor) for e in stored], [("worker_stage", runs.WORKER)]
+        )
+        self.assertFalse(
+            frappe.db.exists(
+                "HDS Copilot Event", {"run": self.run.name, "event_type": "stage"}
+            )
+        )
+
     def test_a_wrong_token_is_refused(self):
         FakeWorker("w1").claim()
         with self.assertRaises(frappe.PermissionError):

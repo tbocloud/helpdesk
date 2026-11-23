@@ -1182,6 +1182,7 @@ def refresh():
         fields=[
             "name",
             "state",
+            "rounds",
             "lease_expires",
             "assigned_to",
             "assigned_at",
@@ -1199,12 +1200,15 @@ def refresh():
                 and get_datetime(row.lease_expires) < now
             ):
                 # a worker that went away (or pushed without reporting): a fresh look at the
-                # pull request as it now stands, never the old head handed out again
+                # pull request as it now stands, never the old head handed out again. The round
+                # counts, so a worker that keeps dying hands it back after MAX_ROUNDS instead of
+                # starting (and telling) a new round for ever
                 frappe.db.set_value(
                     PR,
                     row.name,
                     {
                         "state": "Reviewing",
+                        "rounds": (row.rounds or 0) + 1,
                         "lease_token_hash": None,
                         "lease_expires": None,
                         "worker_id": None,

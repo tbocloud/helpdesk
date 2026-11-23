@@ -413,6 +413,24 @@ class TestFixRounds(PullCase):
             ("Ready for approval", new),
         )
 
+    def test_a_worker_that_keeps_dying_hands_it_back_after_three_rounds(self):
+        # review of #342: a lapsed round did not count, so a crashing worker meant a new round,
+        # and a message to the developer, every hour for ever
+        rec = self.fixing()
+        for _ in range(pulls.MAX_ROUNDS):
+            pulls.claim("w1")
+            frappe.db.set_value(
+                pulls.PR,
+                rec.name,
+                "lease_expires",
+                add_to_date(now_datetime(), minutes=-1),
+            )
+            pulls.refresh()  # the round lapses: back to Reviewing, and it counts
+            pulls.evaluate(rec.name)  # the same findings: Fixing again, or handed back
+        self.assertEqual(
+            frappe.db.get_value(pulls.PR, rec.name, "state"), "With the developer"
+        )
+
     def test_a_wrong_lease_is_refused(self):
         rec = self.fixing()
         pulls.claim("w1")

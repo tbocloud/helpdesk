@@ -138,7 +138,7 @@ def send_stage(run, stage: str, context: dict | None = None) -> bool:
 def _last_stage(run) -> tuple | None:
     rows = frappe.get_all(
         "HDS Copilot Event",
-        filters={"run": run.name, "event_type": "stage"},
+        filters={"run": run.name, "event_type": "stage", "actor": runs.SYSTEM},
         fields=["payload"],
         order_by="creation desc",
         limit=1,

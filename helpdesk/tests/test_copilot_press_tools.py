@@ -420,6 +420,66 @@ class TestActions(PressCase):
         self.assertEqual(self.calls("press.api.site.archive"), [])
         self.assertEqual(self.calls("press.api.bench.restart"), [])
 
+    def test_a_press_approval_is_never_asked_with_a_card_written_by_hand(self):
+        # review of #342: the card shows only its title and details, so a Press payload comes
+        # from Copilot's own action, never from whoever asks
+        from helpdesk.api import copilot_actions
+
+        frappe.set_user(self.one)
+        with self.assertRaises(frappe.PermissionError):
+            copilot_actions.request_action_approval(
+                "Press",
+                "Back up galom.tbo365.cloud",
+                "",
+                {
+                    "action": "restore",
+                    "method": "press.api.site.restore",
+                    "args": {"name": "galom.tbo365.cloud", "files": {"database": "x"}},
+                    "target": "galom.tbo365.cloud",
+                },
+            )
+
+    def test_an_approval_runs_only_as_copilot_asks_for_it(self):
+        # a restore under a backup's card at a plain approver's risk, or a restart with an
+        # argument Copilot never adds: approved, and still nothing runs
+        for payload in (
+            {
+                "action": "restore",
+                "method": "press.api.site.restore",
+                "args": {"name": "galom.tbo365.cloud", "files": {"database": "x"}},
+                "target": "galom.tbo365.cloud",
+            },
+            {
+                "action": "restart_bench",
+                "method": "press.api.bench.restart",
+                "args": {"name": "bench-0020", "force": 1},
+                "target": "bench-0020",
+            },
+        ):
+            approval = actions.request(
+                "Press", "Back up galom", "", payload, risk="normal", user=self.one
+            )
+            actions.decide(approval.name, self.two, True)
+            approval.reload()
+            self.assertEqual(approval.status, "Failed", payload["action"])
+        self.assertEqual(self.calls("press.api.site.restore"), [])
+        self.assertEqual(self.calls("press.api.bench.restart"), [])
+
+    def test_job_output_and_logs_lose_their_secrets(self):
+        # review of #342: a person (and their AI client) reads Press's output as the worker does
+        trace = "connect redis://:hunter2@10.0.0.5:6379/0 failed"
+        with patch(
+            "helpdesk.copilot.press.call",
+            return_value={"steps": [{"output": trace}]},
+        ):
+            output = press_tools.job("48213")["steps"][0]["output"]
+        self.assertNotIn("hunter2", output)
+        self.assertIn("10.0.0.5", output)
+        with patch("helpdesk.copilot.press.call", return_value=trace):
+            self.assertNotIn(
+                "hunter2", press_tools.site_log("galom.tbo365.cloud", "web.error.log")
+            )
+
     def test_press_refusals_reach_the_record(self):
         asked = press_tools.run("update_site", "galom.tbo365.cloud", self.one, "Web")
         with patch(

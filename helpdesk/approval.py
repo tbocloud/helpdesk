@@ -152,10 +152,17 @@ def execute_approved_actions(action_request_name):
     # Claim the request before the first remote write. MCPClient commits
     # after every call it audits, which would release the row lock above
     # mid-way; the persisted status keeps a second run out.
+    decided = ar.status
     ar.db_set("status", "Executing", commit=True)
 
-    mcp = MCPClient(session.connection)
-    approval = _signed(ar, session.connection)
+    try:
+        mcp = MCPClient(session.connection)
+        approval = _signed(ar, session.connection)
+    except Exception:
+        # the site could not be reached (or nothing could be signed) before any write: the
+        # request goes back to its decision, so it can be executed again once the site is up
+        ar.db_set("status", decided, commit=True)
+        raise
 
     execution_log = []
     all_success = True

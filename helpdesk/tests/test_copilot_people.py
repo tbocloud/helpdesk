@@ -241,6 +241,46 @@ class TestCopilotPeople(FrappeTestCase):
             set_customer_people(CUSTOMER, rows=[row(people.SENIOR, SENIOR[0])])
         self.assertIn("set once for every customer", str(caught.exception))
 
+    def test_only_tbo_support_changes_a_customers_copilot_settings(self):
+        # review of #342: a customer's own manager may save their record, never change how far
+        # Copilot goes or who approves its fixes
+        from helpdesk.test_utils import create_user
+
+        manager = create_user("customer.manager.p22@people.example").name
+        frappe.set_user(manager)
+        frappe.get_doc("HD Customer", CUSTOMER).save(ignore_permissions=True)
+        for change in (
+            {"custom_copilot_level": "Correct"},
+            {"custom_copilot_enabled": 1},
+        ):
+            doc = frappe.get_doc("HD Customer", CUSTOMER)
+            doc.update(change)
+            with self.assertRaises(frappe.PermissionError):
+                doc.save(ignore_permissions=True)
+        doc = frappe.get_doc("HD Customer", CUSTOMER)
+        doc.append(people.CUSTOMER_TABLE, row(people.FIX_APPROVER, manager))
+        with self.assertRaises(frappe.PermissionError):
+            doc.save(ignore_permissions=True)
+        frappe.set_user("Administrator")
+        doc = frappe.get_doc("HD Customer", CUSTOMER)
+        doc.custom_copilot_level = "Correct"
+        doc.save(ignore_permissions=True)
+        self.assertEqual(
+            frappe.db.get_value("HD Customer", CUSTOMER, "custom_copilot_level"),
+            "Correct",
+        )
+
+    def test_a_hub_that_never_had_copilot_migrates_past_the_owner_patch(self):
+        # review of #342: the patch read a customer field that only the later Copilot patches
+        # add, and stopped the first migrate of a hub that never had Copilot
+        from helpdesk.patches.v16_0_2 import copilot_developer_is_ticket_owner
+
+        with patch.object(frappe.db, "has_column", return_value=False), patch.object(
+            frappe, "get_all"
+        ) as get_all:
+            copilot_developer_is_ticket_owner.execute()
+        get_all.assert_not_called()
+
     def test_the_code_names_nobody_and_picks_nobody_by_a_role(self):
         source = inspect.getsource(people)
         # the only role lookup is the documented last resort: the Agent Managers while no Leader is set

@@ -479,7 +479,8 @@ def receive(
         {"intent": intent.get("intent"), "cost_usd": cost}, update_modified=False
     )
     if intent.get("intent") == "change_request":
-        add_instruction(ticket, user, intent.get("reason") or text)
+        # the person's own words, never the model's reading of them, go down under their name
+        add_instruction(ticket, user, text)
     replies = assistant.handle(user, via, chat, intent, text, files or [])
     here = get_url(f"/helpdesk/tickets/{ticket}")
     for reply in replies:  # a link to this same ticket means nothing in its own chat
@@ -1171,6 +1172,10 @@ def maybe_summarise(ticket: str, force: bool = False):
             "helpdesk.copilot.thread.summarise",
             queue="short",
             ticket=str(ticket),
+            # one summary at a time per ticket: while the AI is down, new messages do not pile
+            # up calls
+            job_id=f"copilot-summary:{ticket}",
+            deduplicate=True,
             enqueue_after_commit=True,
             now=frappe.flags.in_test,
         )

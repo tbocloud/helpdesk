@@ -240,6 +240,26 @@ class TestTheEngine(AssistantCase):
         self.assertEqual(self.decided, [])
         self.assertIn("Too old", result["card"]["lines"][-1])
 
+    def test_only_the_approver_snoozes_its_reminders(self):
+        # review of #342: anyone could hold another approver's reminders
+        _run, approval = self.pending_fix()
+        other = create_agent("chat.other@example.com").name
+        self.press({"approval": approval.name, "hours": 2}, "snooze", user=other)
+        self.assertFalse(frappe.db.get_value(APPROVAL, approval.name, "snoozed_until"))
+
+    def test_a_ticket_chats_confirmation_does_not_stop_the_news(self):
+        # review of #342: a confirmation in a ticket's chat names no user; next to a person's own
+        # it made sorting the watchers fail, and with it every news delivery for the ticket
+        from helpdesk.copilot import thread
+
+        run, _approval = self.pending_fix()
+        for chat in (
+            thread.thread_for(run.ticket),
+            assistant.chat_for(self.dev, "Web"),
+        ):
+            assistant.record(chat, "Out", "Fix it?", run=run.name, action_status="Done")
+        self.assertEqual(assistant.watchers(run), [self.dev])
+
     def test_snooze_holds_the_reminder_but_not_the_escalation(self):
         _run, approval = self.pending_fix()
         self.press({"approval": approval.name, "hours": 2}, "snooze")
@@ -443,6 +463,56 @@ class TestTheTeamsBot(TeamsCase):
         ):
             with self.assertRaises(frappe.PermissionError):
                 teams.check_token(header, url)
+
+    def test_made_up_key_ids_read_microsofts_keys_at_most_once_in_a_while(self):
+        # review of #342: every unknown key id read the keys again, two calls to Microsoft per
+        # request; a network failure there was a 500 instead of a refusal
+        frappe.cache.delete_value(teams.KEYS_REFRESHED_KEY)
+        self.addCleanup(frappe.cache.delete_value, teams.KEYS_REFRESHED_KEY)
+        teams.signing_keys.reset_mock()
+        bogus = "Bearer " + jwt.encode(
+            {"aud": "bot-app-id"},
+            self.key,
+            algorithm="RS256",
+            headers={"kid": "made-up"},
+        )
+        for _ in range(3):
+            with self.assertRaises(frappe.PermissionError):
+                teams.check_token(bogus, SERVICE)
+        refreshed = [
+            c for c in teams.signing_keys.call_args_list if c.kwargs.get("refresh")
+        ]
+        self.assertEqual(len(refreshed), 1)
+        frappe.cache.delete_value(teams.KEYS_REFRESHED_KEY)
+        with patch.object(
+            teams, "signing_keys", side_effect=teams.requests.ConnectionError("down")
+        ):
+            with self.assertRaises(frappe.PermissionError):
+                teams.check_token(bogus, SERVICE)
+
+    def test_only_a_system_manager_changes_who_a_teams_account_acts_as(self):
+        # review of #342: the bot acts as this record's user, so an Agent Manager could have
+        # become anyone (a Senior) in Teams
+        self.intents["help"] = {"intent": "help"}
+        teams.handle_activity(self.activity(type="message", text="help"))
+        person = frappe.get_doc(teams.TEAMS_USER, {"aad_object_id": "aad-dev"})
+        other = create_agent("chat.other@example.com").name
+        manager = create_agent("teams.manager@example.com").name
+        frappe.get_doc("User", manager).add_roles("Agent Manager")
+        frappe.set_user(manager)
+        person.user = other
+        with self.assertRaises(frappe.PermissionError):
+            person.save(ignore_permissions=True)
+        person.reload()
+        person.disabled = 1  # switching an account off stays theirs
+        person.save(ignore_permissions=True)
+        frappe.set_user("Administrator")
+        person.reload()
+        person.user = other
+        person.save(ignore_permissions=True)
+        self.assertEqual(
+            frappe.db.get_value(teams.TEAMS_USER, person.name, "user"), other
+        )
 
     def test_another_tenant_is_refused(self):
         with self.assertRaises(frappe.PermissionError):

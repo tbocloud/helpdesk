@@ -159,10 +159,14 @@
             :card="forThisPerson(m.card)"
             :busy="busy"
             :status="m.status === 'Done' ? __('Done') : null"
-            @press="(a, values) => press(a, values, m.name)"
+            @press="
+              (a, values) => confirmThen(a, () => press(a, values, m.name))
+            "
           />
+          <div v-else class="text-base text-ink-gray-8">{{ m.text }}</div>
+          <!-- after the chain above: inside it, its v-else would follow this button instead -->
           <Button
-            v-if="customerChat && isDraft(m) && m.status !== 'Done'"
+            v-if="m.card && customerChat && isDraft(m) && m.status !== 'Done'"
             class="mt-1.5"
             size="sm"
             variant="subtle"
@@ -173,7 +177,6 @@
           >
             {{ __("Edit") }}
           </Button>
-          <div v-else class="text-base text-ink-gray-8">{{ m.text }}</div>
         </div>
       </template>
       <div
@@ -312,6 +315,25 @@
           @click="submitAsked"
         >
           {{ asking.action?.label }}
+        </Button>
+      </template>
+    </Dialog>
+
+    <Dialog
+      v-model="confirming.open"
+      :options="{ title: confirming.title, size: 'sm' }"
+    >
+      <template #body-content>
+        <p class="text-p-base text-ink-gray-7">{{ confirming.text }}</p>
+      </template>
+      <template #actions>
+        <Button
+          variant="solid"
+          class="w-full"
+          :loading="busy"
+          @click="confirmed"
+        >
+          {{ confirming.title }}
         </Button>
       </template>
     </Dialog>
@@ -520,6 +542,9 @@ async function sendToCustomer() {
 }
 
 async function send() {
+  // Enter again while the last message is still on its way would send it twice (to a customer
+  // too): the box takes nothing until the server answered
+  if (busy.value) return;
   if (toCustomer.value) return sendToCustomer();
   if (!draft.value.trim() && !files.value.length) return;
   const text = draft.value;
@@ -556,9 +581,40 @@ const asking = reactive({
   label: "",
   placeholder: "",
 });
+// a deploy to a customer's live site now (Press restarts its bench, in working hours) is asked
+// once more: one misplaced click must not start it
+const CONFIRM: Record<string, string> = {
+  deploy_now: __(
+    "Copilot deploys this fix to the customer's live site now, and Press restarts its bench. Deploy now?"
+  ),
+  release_now: __(
+    "This release goes to the customers' live sites now, and Press restarts their benches. Deploy now?"
+  ),
+};
+const confirming = reactive({
+  open: false,
+  title: "",
+  text: "",
+  go: null as null | (() => unknown),
+});
+function confirmThen(a: CopilotAction, go: () => unknown) {
+  const text = CONFIRM[a.verb];
+  if (!text) return go();
+  confirming.title = a.label;
+  confirming.text = text;
+  confirming.go = go;
+  confirming.open = true;
+}
+async function confirmed() {
+  const go = confirming.go;
+  confirming.open = false;
+  confirming.go = null;
+  if (go) await go();
+}
+
 function act(a: CopilotAction) {
   const needs = a.data?.needs as string | undefined;
-  if (!needs) return press(a, {});
+  if (!needs) return confirmThen(a, () => press(a, {}));
   asking.action = a;
   asking.value = "";
   asking.label = NEEDS[needs]?.label || needs;
@@ -602,9 +658,20 @@ onBeforeUnmount(() => {
   $socket.off("helpdesk:copilot-thread", onChange);
   $socket.off("helpdesk:copilot-run", onChange);
 });
+// another ticket in the same view: nothing of the last one's box, files, dialogs or buttons may
+// act on this one (half-typed words for a customer, a pressed Deploy now)
 watch(
   () => props.ticket,
-  () => thread.reload()
+  () => {
+    draft.value = "";
+    draftFrom.value = null;
+    files.value = [];
+    asking.open = false;
+    confirming.open = false;
+    confirming.go = null;
+    thread.reset();
+    thread.reload();
+  }
 );
 watch(
   () => messages.value.length,

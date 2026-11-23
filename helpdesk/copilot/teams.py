@@ -27,6 +27,8 @@ TOKEN_URL = "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token"
 SCOPE = "https://api.botframework.com/.default"
 TEAMS_USER = "HDS Teams User"
 KEYS_KEY = "copilot-teams:keys"
+KEYS_REFRESHED_KEY = "copilot-teams:keys-refreshed"
+KEYS_REFRESH_SECONDS = 300
 TOKEN_KEY = "copilot-teams:token"
 TIMEOUT = 15
 MAX_FILE_BYTES = 50 * 1024 * 1024
@@ -93,8 +95,13 @@ def check_token(header: str | None, service_url: str | None) -> dict:
     try:
         kid = jwt.get_unverified_header(token).get("kid")
         keys = signing_keys()
-        if kid not in keys:
-            keys = signing_keys(refresh=True)  # Microsoft rotates its keys
+        # Microsoft rotates its keys: an unknown key id reads them again, at most once in
+        # KEYS_REFRESH_SECONDS, so made-up tokens cannot make every request wait on Microsoft
+        if kid not in keys and not frappe.cache.get_value(KEYS_REFRESHED_KEY):
+            frappe.cache.set_value(
+                KEYS_REFRESHED_KEY, 1, expires_in_sec=KEYS_REFRESH_SECONDS
+            )
+            keys = signing_keys(refresh=True)
         if kid not in keys:
             raise frappe.PermissionError("unknown signing key")
         key = jwt.algorithms.RSAAlgorithm.from_jwk(keys[kid])
@@ -108,6 +115,11 @@ def check_token(header: str | None, service_url: str | None) -> dict:
         )
     except jwt.PyJWTError as e:
         raise frappe.PermissionError(f"bad Bot Framework token: {e}") from e
+    except (requests.RequestException, ValueError, KeyError) as e:
+        # Microsoft's keys could not be read: the request is refused, never a 500
+        raise frappe.PermissionError(
+            "Bot Framework's signing keys could not be read"
+        ) from e
     claimed = (
         (claims.get("serviceurl") or claims.get("serviceUrl") or "").rstrip("/").lower()
     )

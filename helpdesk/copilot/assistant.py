@@ -1819,12 +1819,31 @@ def _press(user: str, channel: str, chat, verb: str, data: dict, inputs: dict) -
     if verb in ("approve", "reject", "snooze", "show_fix"):
         approval = frappe.get_doc("HDS Copilot Approval", data.get("approval"))
         if verb == "show_fix":
+            if approval.ticket and not frappe.has_permission(
+                "HD Ticket", "read", str(approval.ticket), user=user
+            ):
+                return {
+                    "replies": [
+                        text_card(_("You cannot open this fix's ticket."), "warning")
+                    ],
+                    "card": None,
+                }
             return {"replies": [fix_card(approval)], "card": None}
         if approval.status != "Pending":
             return {
                 "replies": [],
                 "card": decided_card(approval),
             }  # first decision wins
+        if verb == "snooze" and approval.assigned_to != user:
+            return {
+                "replies": [
+                    text_card(
+                        _("Only the approver it waits for can snooze its reminders."),
+                        "warning",
+                    )
+                ],
+                "card": None,
+            }
         if verb == "snooze":
             return {
                 "replies": [snooze(user, approval, data.get("hours"), channel)],
@@ -2336,7 +2355,12 @@ def watchers(run) -> list[str]:
         set(
             frappe.get_all(
                 MESSAGE,
-                filters={"run": run.name, "action_status": "Done"},
+                # a ticket's chat has no user of its own: its confirmations name nobody to tell
+                filters={
+                    "run": run.name,
+                    "action_status": "Done",
+                    "user": ["is", "set"],
+                },
                 pluck="user",
             )
         )

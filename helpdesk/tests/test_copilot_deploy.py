@@ -165,6 +165,25 @@ class TestWhenAndWhere(DeployCase):
         self.assertIn("another Copilot deploy", request.error)
         self.assertEqual(self.press.deploys, [])
 
+    def test_a_run_that_moved_on_closes_its_deploy_and_lets_the_lock_go(self):
+        # review of #342: a release of the same commit resolved the run first; its request then
+        # failed every five minutes holding the one deploy lock, and every other deploy waited
+        self.request(self.senior, "now")
+        self.press.apps[0]["hash"] = MERGED  # the bench already runs the commit
+        frappe.db.set_value(
+            "HDS Copilot Run", self.current_run().name, "state", "Resolved"
+        )
+        self.cron()
+        request = frappe.get_doc(deploy.DEPLOY, self.current_run().deploy_request)
+        self.assertEqual(request.status, "Cancelled")
+        self.assertTrue(deploy._take_lock("TBO-DEP-NEXT"))
+
+    def test_an_unexpected_error_lets_the_lock_go(self):
+        self.request(self.senior, "now")
+        with patch.object(deploy, "_offer", side_effect=KeyError("apps")):
+            self.cron()
+        self.assertTrue(deploy._take_lock("TBO-DEP-NEXT"))
+
     def test_a_deploy_that_cannot_start_moves_to_the_next_window(self):
         self.press.deploy_in_progress = True
         self.request(self.senior, "now", riyadh(22))
