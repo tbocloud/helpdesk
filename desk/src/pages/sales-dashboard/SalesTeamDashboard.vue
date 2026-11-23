@@ -41,7 +41,7 @@
 
     <div class="relative flex-1 overflow-y-auto overflow-x-hidden">
       <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
-        <!-- the period and whose leads, in one card -->
+        <!-- the period, whose leads, the department and the source, in one card -->
         <div
           class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-3"
         >
@@ -59,10 +59,29 @@
             <FormControl
               :id="ownerId"
               type="select"
-              class="w-52"
+              class="sm:w-52"
               :model-value="owner"
               :options="ownerOptions"
               @update:model-value="setQuery({ owner: $event || undefined })"
+            />
+            <FormControl
+              v-if="departmentOptions.length"
+              type="select"
+              class="sm:w-48"
+              :aria-label="__('Department')"
+              :model-value="department"
+              :options="departmentOptions"
+              @update:model-value="
+                setQuery({ department: $event || undefined })
+              "
+            />
+            <FormControl
+              type="select"
+              class="sm:w-44"
+              :aria-label="__('Source')"
+              :model-value="source"
+              :options="sourceOptions"
+              @update:model-value="setQuery({ source: $event || undefined })"
             />
           </div>
           <p class="text-[12px] text-ink-gray-6">
@@ -418,7 +437,11 @@
                       <CardLink
                         :to="{
                           name: 'Leads',
-                          query: { view: 'all', owner: row.user },
+                          query: {
+                            view: 'all',
+                            ...narrowQuery,
+                            owner: row.user,
+                          },
                         }"
                       >
                         {{ __("Leads") }}
@@ -574,6 +597,9 @@
                 </CardLink>
               </header>
               <PartError :message="errors.handed_out" />
+              <p v-if="source && handedOut" class="text-xs text-ink-gray-6">
+                {{ __("All sources: batches aren't counted by source.") }}
+              </p>
               <p
                 v-if="handedOut && !handedOut.length"
                 class="py-8 text-center text-sm text-ink-gray-6"
@@ -676,7 +702,13 @@ import PersonAvatar from "@/components/PersonAvatar.vue";
 import StatTile from "@/components/StatTile.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import TargetRing from "@/pages/leads/TargetRing.vue";
-import { leadOptions, loadLeadOptions } from "@/pages/leads/leads";
+import {
+  choices,
+  leadOptions,
+  loadLeadOptions,
+  usableDepartments,
+  type LeadOptions,
+} from "@/pages/leads/leads";
 import { useChartColors } from "@/pages/performance/chartTheme";
 import {
   monthTitle,
@@ -746,23 +778,34 @@ const PERIODS = [
   { label: __("This month"), value: "month" },
 ];
 
-// the period and the person are in the URL, so a link or a reload opens the same view
+// the period, the person, the department and the source are in the URL, so a link or a
+// reload opens the same view
 const period = computed<TeamPeriod>(() =>
   ["today", "week", "month"].includes(String(route.query.period))
     ? (route.query.period as TeamPeriod)
     : "today"
 );
 const owner = computed(() => String(route.query.owner || ""));
+const department = computed(() => String(route.query.department || ""));
+const source = computed(() => String(route.query.source || ""));
 function setQuery(query: Record<string, string | undefined>) {
   router.replace({ query: { ...route.query, ...query } });
+}
+function params() {
+  return {
+    period: period.value,
+    owner: owner.value || null,
+    department: department.value || null,
+    source: source.value || null,
+  };
 }
 
 const dash = createResource<TeamDashboard>({
   url: "helpdesk.api.sales_dashboard.get_team_dashboard",
-  makeParams: () => ({ period: period.value, owner: owner.value || null }),
+  makeParams: params,
   auto: true,
 });
-watch([period, owner], () => dash.reload());
+watch([period, owner, department, source], () => dash.reload());
 // the day moves on: read again every two minutes and when the person comes back to the tab
 useIntervalFn(() => !dash.loading && dash.reload(), 120_000);
 const visibility = useDocumentVisibility();
@@ -771,7 +814,7 @@ watch(
   (state) => state === "visible" && !dash.loading && dash.reload()
 );
 function refresh() {
-  dash.submit({ period: period.value, owner: owner.value || null, fresh: 1 });
+  dash.submit({ ...params(), fresh: 1 });
 }
 const isRefusal = computed(() => dash.error?.exc_type === "PermissionError");
 
@@ -810,8 +853,16 @@ const periodWord = computed(
       },
     }[period.value])
 );
-// the Leads list opens with the same period and person; today's state needs no period
-const ownerQuery = computed(() => ({ owner: owner.value || undefined }));
+// the Leads list opens with the same department, source, period and person; today's state
+// needs no period
+const narrowQuery = computed(() => ({
+  department: department.value || undefined,
+  source: source.value || undefined,
+}));
+const ownerQuery = computed(() => ({
+  ...narrowQuery.value,
+  owner: owner.value || undefined,
+}));
 const periodQuery = computed(() => ({
   ...ownerQuery.value,
   period: period.value,
@@ -819,9 +870,24 @@ const periodQuery = computed(() => ({
 function stageLink(stage: string) {
   return {
     name: "Leads",
-    query: { view: "all", stage, owner: owner.value || undefined },
+    query: { view: "all", stage, ...ownerQuery.value },
   };
 }
+
+const options = computed(() => leadOptions.data as LeadOptions | undefined);
+// no picker for one department or none: there is nothing to choose between
+const departmentOptions = computed(() => {
+  const list = usableDepartments(options.value, department.value);
+  return list.length > 1
+    ? [
+        { label: __("Any department"), value: "" },
+        ...list.map((d) => ({ label: d.name, value: d.name })),
+      ]
+    : [];
+});
+const sourceOptions = computed(() =>
+  choices(options.value?.sources, __("Any source"))
+);
 
 const ownerOptions = computed(() => [
   {

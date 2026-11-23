@@ -171,3 +171,45 @@ class TestSalesDashboard(FrappeTestCase):
         if getdate(today).weekday():
             yesterday = str(add_days(getdate(today), -1))
             self.assertIn(yesterday, [p["from_date"] for p in first])
+
+    def test_a_department_and_source_reach_every_figure(self):
+        frappe.set_user(MANAGER)
+        api.get_team_dashboard(fresh=1)
+        reads = [
+            p
+            for m, _post, p in self.crm.lead_calls
+            if m in ("get_overview", "get_lead_analysis")
+        ]
+        # left out when not picked
+        self.assertFalse(any("department" in p or "source" in p for p in reads))
+        said = {"narrowed": {"department": "Elsewhere", "source": "Website"}}
+        self.crm.lead_answers["get_overview"] = {**OVERVIEW, **said}
+        self.crm.lead_answers["get_lead_analysis"] = {
+            "calling": [calling(SALES, 4, 2)],
+            **said,
+        }
+        self.crm.lead_calls.clear()
+        page = api.get_team_dashboard(fresh=1, department="Elsewhere", source="Website")
+        reads = [
+            p
+            for m, _post, p in self.crm.lead_calls
+            if m in ("get_overview", "get_lead_analysis")
+        ]
+        # the overview, the period's calls and each day of the week
+        self.assertGreaterEqual(len(reads), 3)
+        self.assertTrue(
+            all(
+                (p["department"], p["source"]) == ("Elsewhere", "Website")
+                for p in reads
+            )
+        )
+        self.assertEqual(page["errors"], {})
+        self.assertEqual(page["people"][0]["called"], 4)
+        # the batches handed out are only StayVeX's
+        self.assertEqual(page["handed_out"], [])
+
+    def test_figures_the_erp_site_did_not_narrow_are_refused(self):
+        # an older TBO Smart drops the arguments and answers with everyone's figures
+        frappe.set_user(MANAGER)
+        with self.assertRaises(LeadsUnavailableError):
+            api.get_team_dashboard(fresh=1, source="Website")
