@@ -11,12 +11,15 @@ from helpdesk.sales_targets import (
     MEASURES,
     VALUE_TYPES,
     SalesTargetsForbiddenError,
+    asked_heads,
     criteria_of,
     default_criteria,
     has_own_targets,
     measured,
     month_start,
+    remind_sales_heads,
     require_assigner,
+    sales_heads,
     target_people,
 )
 
@@ -75,13 +78,8 @@ def assign_targets(month: str, employees, criteria) -> dict:
 @frappe.whitelist()
 def get_my_targets(month: str | None = None) -> dict:
     """A Presales Executive or Sales User: their own targets for the month, the months they
-    have targets in, and the standard criteria, which the page shows as 0 when not assigned."""
-    user = frappe.session.user
-    if not has_own_targets(user):
-        frappe.throw(
-            _("Sales targets is for Presales Executives and Sales Users."),
-            SalesTargetsForbiddenError,
-        )
+    have targets in, and, with none yet, whether they already asked a Sales Head for them."""
+    user = require_own_targets()
     start = month_start(month or nowdate())
     months = frappe.qb.get_query(
         TARGET,
@@ -90,13 +88,39 @@ def get_my_targets(month: str | None = None) -> dict:
         order_by="month desc",
         limit=24,
     ).run(pluck=True)
+    target = targets_for(start, [user]).get(user)
     return {
         "month": start.strftime("%Y-%m"),
         "currency": currency(),
         "months": [m.strftime("%Y-%m") for m in months],
-        "target": targets_for(start, [user]).get(user),
-        "defaults": default_criteria(),
+        "target": target,
+        "asked": not target and bool(asked_heads(user, start)),
     }
+
+
+@frappe.whitelist(methods=["POST"])
+def ask_for_targets(month: str) -> dict:
+    """A person with no targets for the month reminds the Sales Heads to set them."""
+    user = require_own_targets()
+    start = month_start(month)
+    if targets_for(start, [user]).get(user):
+        frappe.throw(
+            _("You already have targets for {0}.").format(start.strftime("%B %Y"))
+        )
+    if not sales_heads():
+        frappe.throw(_("There's no Sales Head to ask yet. Ask your manager."))
+    return {"told": remind_sales_heads(user, start)}
+
+
+def require_own_targets() -> str:
+    """The signed-in user, when they are given targets; else refused."""
+    user = frappe.session.user
+    if not has_own_targets(user):
+        frappe.throw(
+            _("Sales targets is for Presales Executives and Sales Users."),
+            SalesTargetsForbiddenError,
+        )
+    return user
 
 
 @frappe.whitelist()

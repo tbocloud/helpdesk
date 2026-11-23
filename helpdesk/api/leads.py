@@ -40,6 +40,8 @@ COPY_PARAMS = {
     "search",
     "start",
     "page_length",
+    # the copy answers without the stage cards' counts, so the page leaves them out
+    "stage_counts",
     *lead_mirror_read.FILTER_COLUMNS,
 }
 # when a lead's earliest open follow-up is due: the Follow-up view's cards
@@ -90,8 +92,6 @@ FILE_INLINE_TYPES = (*PHOTO_TYPES, "application/pdf")
 PHOTO_METHOD = "helpdesk.api.leads.lead_photo"
 PHOTO_CACHE = "private, max-age=3600"
 MAX_PAGE = 100
-# how far back My leads' day-by-day calls go (the ERP site refuses more)
-MAX_CALL_DAYS = 366
 # the hub and the ERP site share one worker pool on Frappe Cloud, so a read that was just
 # answered is kept per person for a short while instead of asked again (docs/leads.md)
 CACHE_PREFIX = "hd_leads"
@@ -200,8 +200,10 @@ def list_leads(
     due: str | None = None,
     due_from: str | None = None,
     due_to: str | None = None,
+    stage_counts: int | str = 0,
 ) -> dict:
-    """A page of leads. `view` called lists the leads called at least once, last called first
+    """A page of leads. With `stage_counts` the ERP site also counts the list per stage, its
+    stage filter left out ({stage_counts: {stage: leads}}; missing from an older TBO Smart). `view` called lists the leads called at least once, last called first
     (`from_date` and `to_date` without a `metric` keep those last called in those days);
     `created_by_me` keeps the leads the person created, whoever owns them now. `due` (Follow-up only) keeps the leads whose earliest open
     follow-up is overdue, today, tomorrow, in the week after (`week`) or `later`. `due_from` and
@@ -269,6 +271,7 @@ def list_leads(
         # cint: a malformed number is 0, never a server error
         start=max(cint(start), 0),
         page_length=min(max(cint(page_length) or 20, 1), MAX_PAGE),
+        stage_counts=1 if cint(stage_counts) else None,
     )
     result = read_or_copy(
         lambda: call("list_leads", **params), lambda: list_from_copy(params)
@@ -436,25 +439,6 @@ def read_lead_intake(fresh) -> dict:
         "available": True,
         "target": max(cint(target), 0),
     }
-
-
-@frappe.whitelist()
-def get_my_call_counts(days: int | str = 60, fresh: int | str = 0) -> dict:
-    """The signed-in person's own calls for My leads: today, this week, this month and all
-    time ({calls, connected}), and `days` ([{date, calls, connected}], newest first) for the
-    days with calls in the last `days` days, at most 366. Counted as the Daily report counts
-    calls. `available` is false while the ERP site's TBO Smart is older than this."""
-    require_leads()
-    days = min(max(cint(days) or 60, 1), MAX_CALL_DAYS)
-    result = cached_read(
-        "my_calls",
-        {"days": days},
-        READ_TTL,
-        fresh,
-        lambda: call_if_deployed("get_my_call_counts", days=days),
-        keep=lambda answer: answer is not None,
-    )
-    return {**result, "available": True} if result is not None else {"available": False}
 
 
 @frappe.whitelist()

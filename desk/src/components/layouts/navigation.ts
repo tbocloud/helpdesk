@@ -9,6 +9,7 @@ import LucideCalendarDays from "~icons/lucide/calendar-days";
 import LucideCalendarRange from "~icons/lucide/calendar-range";
 import LucideCamera from "~icons/lucide/camera";
 import LucideChartColumn from "~icons/lucide/chart-column";
+import LucideChartNoAxesCombined from "~icons/lucide/chart-no-axes-combined";
 import LucideClipboardList from "~icons/lucide/clipboard-list";
 import LucideClock from "~icons/lucide/clock";
 import LucideContact2 from "~icons/lucide/contact-2";
@@ -69,6 +70,8 @@ export interface NavItem {
   salesHeadOnly?: boolean;
   /** Sales targets (their own): Presales Executives and Sales Users */
   ownTargetsOnly?: boolean;
+  /** Sales → Dashboard: everyone with Leads but Sales Heads and Sales Managers */
+  ownDashboardOnly?: boolean;
   /** the team's sales figures: anyone with Leads but a BD */
   salesManagersOnly?: boolean;
 }
@@ -302,13 +305,14 @@ export const agentNavAreas: NavArea[] = [
     groups: [
       {
         items: [
-          // their own day: calls, leads, targets and follow-ups (docs/sales-dashboard.md)
+          // a salesperson's own day: calls, leads, targets and follow-ups (docs/sales-dashboard.md)
           {
             id: "sales-dashboard",
             label: __("Dashboard"),
             icon: LucideGauge,
             to: "SalesDashboard",
             leadsOnly: true,
+            ownDashboardOnly: true,
           },
           // their own targets for the month, set by a Sales Head (docs/sales-targets.md)
           {
@@ -411,6 +415,14 @@ export const agentNavAreas: NavArea[] = [
             label: __("Assign sales targets"),
             icon: LucideTarget,
             to: "SalesTargets",
+            salesHeadOnly: true,
+          },
+          // how everyone is doing against them, person by person and target by target
+          {
+            id: "team-targets",
+            label: __("Team targets"),
+            icon: LucideChartNoAxesCombined,
+            to: "TeamTargets",
             salesHeadOnly: true,
           },
           // who is handed which product and how many calls per slot (docs/leads.md)

@@ -9,7 +9,7 @@ from frappe import _
 from frappe.utils import add_days, cint, getdate, today
 
 from helpdesk.api import call_batches, leads
-from helpdesk.content_team import only_sales_team
+from helpdesk.content_team import manages_sales, only_sales_team
 from helpdesk.integrations.crm.leads import (
     LeadsError,
     call_if_deployed,
@@ -29,6 +29,13 @@ def get_my_dashboard(fresh: int | str = 0) -> dict:
     contacted each day since Monday) and `follow_ups` (counts and the first few due). Each
     part is optional: one that fails is null with its message in `errors`."""
     require_leads()
+    if manages_sales():
+        frappe.throw(
+            _(
+                "The Dashboard is a salesperson's own day. Sales Heads and Sales Managers follow the team on the Team dashboard."
+            ),
+            frappe.PermissionError,
+        )
     user = frappe.session.user
     page = {"calls": None, "month": None, "week": None, "follow_ups": None}
     page["errors"] = read_parts(

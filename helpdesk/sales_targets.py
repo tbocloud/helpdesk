@@ -5,11 +5,14 @@ criteria (Target Amount, Quality Target, ...) each with a value, plus any criter
 One `HD Sales Target` per person per month holds them; the person sees theirs on Sales targets.
 """
 
+from urllib.parse import urlencode
+
 import frappe
 from frappe import _
 from frappe.utils import cint, flt, get_fullname, getdate
 
 from helpdesk.content_team import PRESALES_EXECUTIVE_ROLE, SALES_HEAD_ROLE
+from helpdesk.work_reminders import new_notification
 
 # ERPNext's role, also given on the hub to the CRM's salespeople (helpdesk.integrations.crm.users)
 SALES_USER_ROLE = "Sales User"
@@ -108,6 +111,66 @@ def month_start(month: str):
         frappe.throw(_("Pick a month, like 2026-12."))
 
 
+def sales_heads() -> list[str]:
+    """Enabled Sales Heads: who sets targets, and who hears a person asking for theirs."""
+    has_role = frappe.qb.DocType("Has Role")
+    user = frappe.qb.DocType("User")
+    return (
+        frappe.qb.from_(has_role)
+        .join(user)
+        .on(user.name == has_role.parent)
+        .select(user.name)
+        .distinct()
+        .where(
+            (has_role.parenttype == "User")
+            & (has_role.role == SALES_HEAD_ROLE)
+            & (user.enabled == 1)
+            & user.name.notin(NOT_PEOPLE)
+        )
+        .run(pluck=True)
+    )
+
+
+def ask_key(user: str, start) -> str:
+    """The notice a person's ask for a month's targets is kept under, once per head."""
+    return f"sales-targets-ask:{user}:{start:%Y-%m}"
+
+
+def asked_heads(user: str, start) -> set[str]:
+    """The Sales Heads already told that `user` waits for the month's targets."""
+    return set(
+        frappe.qb.get_query(
+            "HD Notification",
+            fields=["user_to"],
+            filters={"dedupe_key": ask_key(user, start)},
+        ).run(pluck=True)
+    )
+
+
+def remind_sales_heads(user: str, start) -> int:
+    """Tell each Sales Head not told yet that `user` has no targets for the month, with a link
+    to the Assign page on them. Asking again tells no one twice. Returns how many were told."""
+    told = asked_heads(user, start)
+    message = _("{0} asks for their sales targets for {1}.").format(
+        get_fullname(user), start.strftime("%B %Y")
+    )
+    link = "/helpdesk/sales-targets?" + urlencode(
+        {"month": f"{start:%Y-%m}", "employee": user}
+    )
+    heads = [head for head in sales_heads() if head not in told and head != user]
+    for head in heads:
+        new_notification(
+            head,
+            "User",
+            user,
+            message,
+            link,
+            user_from=user,
+            dedupe_key=ask_key(user, start),
+        )
+    return len(heads)
+
+
 def target_people() -> list[dict]:
     """Enabled users with a target role, by name: who a Sales Head may give targets to."""
     has_role = frappe.qb.DocType("Has Role")
@@ -188,8 +251,9 @@ def measured(measure: str, totals: dict, money: dict) -> dict:
     if measure == "collected":
         return {"achieved": flt(money.get("advances"))}
     if measure == "meeting_rate":
-        meetings, contacted = cint(totals.get("meetings")), cint(
-            totals.get("contacted")
+        meetings, contacted = (
+            cint(totals.get("meetings")),
+            cint(totals.get("contacted")),
         )
         return {
             "achieved": rate(meetings, contacted),

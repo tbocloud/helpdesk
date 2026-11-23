@@ -1,7 +1,23 @@
 <template>
   <!-- a KPI (a Text target): ticked off by the person, then confirmed by a Sales Head -->
-  <div class="flex min-w-0 flex-col gap-2">
-    <p class="flex flex-wrap items-center gap-x-1.5 text-xs" :class="look.ink">
+  <div
+    class="flex min-w-0 gap-2"
+    :class="compact ? 'flex-wrap items-center justify-end' : 'flex-col'"
+  >
+    <!-- compact: a row's status pill and action; the row shows the note and the rule -->
+    <span
+      v-if="compact"
+      class="inline-flex h-6 items-center gap-1 whitespace-nowrap rounded-md px-2 text-xs font-medium"
+      :class="look.pill"
+    >
+      <component :is="look.icon" class="size-3.5" aria-hidden="true" />
+      {{ look.short }}
+    </span>
+    <p
+      v-else
+      class="flex flex-wrap items-center gap-x-1.5 text-xs"
+      :class="look.ink"
+    >
       <component :is="look.icon" class="size-3.5 shrink-0" aria-hidden="true" />
       <span class="font-medium">{{ look.text }}</span>
       <span v-if="criterion.kpi_done_on" class="text-ink-gray-6 tabular-nums">
@@ -9,7 +25,7 @@
       </span>
     </p>
     <blockquote
-      v-if="criterion.kpi_note"
+      v-if="criterion.kpi_note && !compact"
       class="whitespace-pre-line break-words border-l-2 border-outline-gray-3 pl-2.5 text-p-sm text-ink-gray-7"
     >
       {{ criterion.kpi_note }}
@@ -18,7 +34,7 @@
     <!-- the person ticks it off, with what they did -->
     <form
       v-if="writing"
-      class="flex flex-col gap-2"
+      class="flex basis-full flex-col gap-2"
       @submit.prevent="send({ done: 1, note })"
     >
       <FormControl
@@ -39,15 +55,25 @@
       </div>
     </form>
     <div v-else-if="action" class="flex">
-      <Button :label="action.label" :loading="saving" @click="action.run">
+      <Button
+        :size="compact ? 'md' : 'sm'"
+        :label="action.label"
+        :loading="saving"
+        @click="action.run"
+      >
         <template #prefix>
           <component :is="action.icon" class="size-4" />
         </template>
       </Button>
     </div>
 
-    <ErrorMessage v-if="error" :message="error" role="alert" />
-    <p class="text-xs text-ink-gray-6">
+    <ErrorMessage
+      v-if="error"
+      class="basis-full"
+      :message="error"
+      role="alert"
+    />
+    <p v-if="!compact" class="text-xs text-ink-gray-6">
       {{
         __(
           "Counts once it's marked done and a Sales Head confirms it. Until then it counts 0% of the month."
@@ -76,6 +102,8 @@ const props = defineProps<{
   mode: "person" | "head";
   /** whose KPI, for a head */
   employee?: string;
+  /** a pill and the action on one line, for a list row */
+  compact?: boolean;
 }>();
 const emit = defineEmits<{ changed: [target: Target] }>();
 
@@ -90,6 +118,8 @@ const look = computed(() => {
     return {
       icon: LucideCircleCheck,
       ink: "text-success",
+      pill: "bg-success-soft text-success",
+      short: __("Confirmed"),
       text: __(
         "Confirmed by {0}",
         props.criterion.kpi_confirmed_by_name ||
@@ -101,6 +131,9 @@ const look = computed(() => {
     return {
       icon: LucideClock,
       ink: "text-info",
+      pill: "bg-info-soft text-info",
+      short:
+        props.mode === "person" ? __("Waiting for confirm") : __("To confirm"),
       text:
         props.mode === "person"
           ? __("Marked done, waiting for your Sales Head")
@@ -109,6 +142,8 @@ const look = computed(() => {
   return {
     icon: LucideCircleDashed,
     ink: "text-ink-gray-6",
+    pill: "bg-surface-gray-2 text-ink-gray-7",
+    short: __("Not done yet"),
     text: __("Not done yet"),
   };
 });

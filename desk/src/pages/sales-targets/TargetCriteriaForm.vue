@@ -17,44 +17,69 @@
         <span>{{ replaceNote }}</span>
       </p>
 
-      <fieldset class="flex min-w-0 flex-col">
-        <legend class="mb-2 text-sm font-semibold text-ink-gray-9 tabular-nums">
-          {{ __("Targets for {0}", monthTitle(month)) }}
-          <span v-if="criteria.length" class="font-normal text-ink-gray-6">
-            · {{ criteria.length }}
+      <fieldset class="flex min-w-0 flex-col gap-3">
+        <legend
+          class="mb-3 flex w-full items-baseline justify-between gap-3 tabular-nums"
+        >
+          <span class="text-lg font-semibold text-ink-gray-9">
+            {{ __("Targets for {0}", monthTitle(month)) }}
+          </span>
+          <span v-if="criteria.length" class="text-sm text-ink-gray-6">
+            {{
+              criteria.length === 1
+                ? __("1 target")
+                : __("{0} targets", String(criteria.length))
+            }}
           </span>
         </legend>
         <TaskyState
           v-if="!criteria.length"
-          class="rounded-lg border border-dashed border-outline-gray-3 py-8"
+          class="rounded-xl border border-dashed border-outline-gray-3 py-8"
           :icon="LucideListPlus"
           :title="__('No targets on the list')"
           :message="
             __('Add one below to give these people something to aim for.')
           "
         />
-        <!-- one row a target: its name and kind on the left, the figure on the right -->
-        <ol
-          v-else
-          class="divide-y divide-outline-gray-1 rounded-lg border border-outline-gray-2"
-        >
+        <!-- one card a target: number, name and kind on top, the figure under it -->
+        <ol v-else class="flex flex-col gap-3">
           <li
             v-for="(row, index) in criteria"
             :key="row.key"
-            class="grid grid-cols-[1.25rem_minmax(0,1fr)_8rem_2rem] items-center gap-x-2 gap-y-2 py-2.5 pl-3 pr-1.5"
+            class="flex min-w-0 flex-col gap-3 rounded-xl border border-outline-gray-2 bg-surface-base p-3.5"
           >
-            <span
-              class="text-xs font-medium text-ink-gray-5 tabular-nums"
-              aria-hidden="true"
-              >{{ index + 1 }}</span
-            >
-            <label :for="inputId(row)" class="flex min-w-0 flex-col">
+            <div class="flex min-w-0 items-center gap-2.5">
               <span
-                class="truncate text-sm font-medium text-ink-gray-8"
-                :title="row.criterion"
-                >{{ row.criterion }}</span
+                class="inline-flex size-6 shrink-0 items-center justify-center rounded-md bg-surface-gray-2 text-xs font-semibold text-ink-gray-6 tabular-nums"
+                aria-hidden="true"
+                >{{ index + 1 }}</span
               >
-            </label>
+              <label
+                :for="inputId(row)"
+                class="min-w-0 flex-1 truncate text-sm font-semibold text-ink-gray-9"
+                :title="row.criterion"
+                >{{ row.criterion }}</label
+              >
+              <span
+                class="inline-flex h-5 shrink-0 items-center whitespace-nowrap rounded-md px-1.5 text-xs font-medium"
+                :class="VALUE_TYPE_LOOK[row.value_type].tile"
+              >
+                {{
+                  row.info_only
+                    ? __("Info only")
+                    : VALUE_TYPE_LOOK[row.value_type].label
+                }}
+              </span>
+              <Button
+                variant="ghost"
+                :aria-label="__('Remove {0}', row.criterion)"
+                @click="remove(row.key)"
+              >
+                <template #icon>
+                  <LucideX class="size-4 text-ink-gray-6" />
+                </template>
+              </Button>
+            </div>
             <FormControl
               v-if="row.value_type !== 'Text'"
               :id="inputId(row)"
@@ -65,36 +90,27 @@
               :max="row.value_type === 'Percent' ? 100 : undefined"
               step="any"
               inputmode="decimal"
-              class="[&_input]:text-right [&_input]:font-mono [&_input]:tabular-nums"
+              class="[&_input]:h-10 [&_input]:font-mono [&_input]:text-base [&_input]:tabular-nums"
               :class="problems[row.key] && '[&_input]:!border-danger'"
               :placeholder="PLACEHOLDERS[row.value_type]"
               :aria-invalid="!!problems[row.key]"
               :aria-describedby="problems[row.key] ? problemId(row) : undefined"
             >
-              <template v-if="row.value_type === 'Amount'" #prefix>
-                <span class="text-sm text-ink-gray-6">{{ symbol }}</span>
+              <template v-if="row.value_type !== 'Percent'" #prefix>
+                <span class="text-sm text-ink-gray-6">{{
+                  row.value_type === "Amount" ? symbol : "#"
+                }}</span>
               </template>
-              <template v-else-if="row.value_type === 'Percent'" #suffix>
+              <template v-else #suffix>
                 <span class="text-sm text-ink-gray-6">%</span>
               </template>
             </FormControl>
-            <span v-else aria-hidden="true" />
-            <Button
-              variant="ghost"
-              :aria-label="__('Remove {0}', row.criterion)"
-              @click="remove(row.key)"
-            >
-              <template #icon>
-                <LucideX class="size-4 text-ink-gray-6" />
-              </template>
-            </Button>
             <FormControl
-              v-if="row.value_type === 'Text'"
+              v-else
               :id="inputId(row)"
               v-model="row.target"
               type="textarea"
               :rows="2"
-              class="col-span-2 col-start-2"
               :class="problems[row.key] && '[&_textarea]:!border-danger'"
               :placeholder="textPlaceholder(row)"
               :aria-invalid="!!problems[row.key]"
@@ -103,15 +119,15 @@
             <p
               v-if="problems[row.key]"
               :id="problemId(row)"
-              class="col-span-2 col-start-2 flex items-center gap-1 text-xs text-danger"
+              class="-mt-1 flex items-center gap-1 text-xs text-danger"
             >
               <LucideCircleAlert class="size-3.5 shrink-0" aria-hidden="true" />
               {{ problems[row.key] }}
             </p>
-            <!-- what counts towards it, in words, so the head knows what they ask for -->
+            <!-- what counts towards it, so the head knows what they ask for -->
             <div
               v-if="row.value_type !== 'Text'"
-              class="col-span-3 col-start-2 flex min-w-0 flex-col gap-1.5"
+              class="flex min-w-0 flex-col gap-1.5"
             >
               <div class="flex min-w-0 items-center gap-2">
                 <label
@@ -144,7 +160,6 @@
             </div>
             <KpiStatus
               v-else-if="savedFor && isKpi(row) && row.kpi_status !== undefined"
-              class="col-span-3 col-start-2"
               :criterion="row"
               :month="month"
               mode="head"
@@ -157,14 +172,14 @@
 
       <!-- the head's own targets, beyond the five -->
       <div
-        class="flex flex-col gap-2"
+        class="flex flex-col gap-2 border-t border-outline-gray-2 pt-4"
         role="group"
         :aria-labelledby="addHeading"
       >
         <h3 :id="addHeading" class="text-sm font-semibold text-ink-gray-9">
           {{ __("Add a target") }}
         </h3>
-        <div class="grid grid-cols-[minmax(0,1fr)_7rem_auto] items-start gap-2">
+        <div class="grid grid-cols-[minmax(0,1fr)_8rem_auto] items-start gap-2">
           <FormControl
             v-model="newName"
             type="text"
@@ -213,14 +228,12 @@
       </div>
     </div>
 
-    <div
-      class="flex flex-col gap-2 rounded-b-xl border-t border-outline-gray-2 bg-surface-base p-4"
-    >
+    <div class="flex flex-col gap-2 rounded-b-xl bg-surface-base p-4 pt-2">
       <ErrorMessage v-if="error" :message="error" role="alert" />
       <Button
         type="submit"
         variant="solid"
-        size="md"
+        size="lg"
         class="w-full"
         :label="assignLabel"
         :loading="saving"

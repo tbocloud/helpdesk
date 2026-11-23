@@ -14,7 +14,7 @@
         </Button>
         <!-- one tap from Home on the phone (docs/lead-bank.md) -->
         <Button
-          v-if="canUseLeadBank"
+          v-if="canUseLeadBank && inSales"
           variant="solid"
           size="md"
           :label="__('Add a lead')"
@@ -239,7 +239,7 @@ import {
 import { itemKey } from "@/pages/work/workMeta";
 import type { RouteLocationRaw } from "vue-router";
 
-const { userFirstName, canUseLeadBank } = storeToRefs(useAuthStore());
+const { userFirstName, canUseLeadBank, inSales } = storeToRefs(useAuthStore());
 
 const home = createResource({
   url: "helpdesk.api.home.get_home",

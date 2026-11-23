@@ -92,6 +92,17 @@
   --champion: #8a5600;
   --champion-soft: #fdf7e8;
   --champion-border: #edd59c;
+  /*
+   * hero: the one dark summary panel at the top of a targets page (Team targets, Your
+   * sales targets), from the owner's mockups. White text on it; the fill, pace and
+   * track colours are only for the gauge and bars drawn on it, always with words.
+   */
+  --hero: #173a48;
+  --hero-ink: #ffffff;
+  --hero-muted: #b8c9d0;
+  --hero-track: #2c5161;
+  --hero-fill: #5fd0b3;
+  --hero-pace: #f2d24b;
   /* performance channel colours; always with a text label */
   --channel-instagram: #b8306f;
   --channel-facebook: #2f5fc4;
@@ -205,6 +216,8 @@
   --champion: #f0bf5e;
   --champion-soft: #2a2213;
   --champion-border: #4f3f1c;
+  --hero: #12303b;
+  --hero-track: #24495a;
   --channel-instagram: #f08bbb;
   --channel-facebook: #8fb2f5;
   --channel-linkedin: #7fb0f5;

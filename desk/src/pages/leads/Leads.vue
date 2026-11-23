@@ -141,8 +141,29 @@
         />
 
         <template v-else>
-          <!-- what they called: today, this week, this month, all time, and by day -->
-          <MyCallCounts v-if="view === 'mine'" ref="callCounts" />
+          <!-- every stage with leads in this list (its other filters kept), each picks the Stage filter -->
+          <section
+            v-if="stageCards.length"
+            class="flex flex-col gap-3"
+            :aria-label="__('Leads by stage')"
+          >
+            <h2 class="text-base font-semibold text-ink-gray-9">
+              {{ __("By stage") }}
+            </h2>
+            <div
+              class="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))]"
+            >
+              <StatTile
+                v-for="card in stageCards"
+                :key="card.value"
+                compact
+                :label="card.label"
+                :value="card.count.toLocaleString()"
+                :pressed="filters.stage === card.value"
+                @click="filters.stage = card.value"
+              />
+            </div>
+          </section>
           <!-- overdue, today, tomorrow, the week, later: a card lists its leads -->
           <FollowUpCards
             v-if="view === 'follow_up'"
@@ -212,14 +233,32 @@
                 :aria-label="__('Last called')"
                 :options="LAST_CALLED"
               />
+              <template v-if="hasFollowUpDate">
+                <FormControl
+                  v-model="followUpPick"
+                  type="select"
+                  size="md"
+                  class="w-full sm:w-44"
+                  :aria-label="__('Follow-up date')"
+                  :options="FOLLOW_UP_DATES"
+                />
+                <FormControl
+                  v-if="followUpPick === 'custom'"
+                  v-model="followUpDay"
+                  type="date"
+                  size="md"
+                  class="w-full sm:w-44"
+                  :aria-label="__('Follow-up on')"
+                  :placeholder="__('Pick a date')"
+                />
+              </template>
               <FormControl
-                v-if="hasFollowUpDate"
-                v-model="filters.follow_up_date"
-                type="date"
+                v-model="created"
+                type="select"
                 size="md"
                 class="w-full sm:w-44"
-                :aria-label="__('Follow-up date')"
-                :placeholder="__('Follow-up date')"
+                :aria-label="__('Created')"
+                :options="CREATED"
               />
               <LeadCategoryFilters
                 ref="productPanel"
@@ -266,13 +305,23 @@
                 :label="__('To')"
               />
             </div>
-            <!-- what narrows the list beyond the toolbar, each one removable -->
+            <!-- how many leads the list holds, then what narrows it beyond the toolbar, each one removable -->
             <div
-              v-if="hasFilters"
+              v-if="(data && !waitingForDates) || hasFilters"
               class="flex flex-wrap items-center gap-2 border-b border-outline-gray-2 px-4 py-3 md:px-4"
               role="group"
               :aria-label="__('Active filters')"
             >
+              <p
+                v-if="data && !waitingForDates"
+                class="mr-2 whitespace-nowrap text-base font-semibold text-ink-gray-9"
+                aria-live="polite"
+              >
+                <span class="font-mono text-lg font-bold tabular-nums">{{
+                  data.total.toLocaleString()
+                }}</span>
+                {{ countText }}
+              </p>
               <button
                 v-for="chip in hiddenChips"
                 :key="chip.key"
@@ -285,6 +334,8 @@
                 <LucideX class="size-3.5" aria-hidden="true" />
               </button>
               <Button
+                v-if="hasFilters"
+                class="ml-auto"
                 variant="ghost"
                 :label="__('Clear all')"
                 @click="clearFilters"
@@ -856,13 +907,6 @@
             :label="__('Department')"
             :options="departmentFilter"
           />
-          <FormControl
-            v-if="intakeOn"
-            v-model="created"
-            type="select"
-            :label="__('Created')"
-            :options="CREATED"
-          />
         </div>
         <LeadCategoryFilters
           ref="categoryPanel"
@@ -902,6 +946,7 @@
 <script setup lang="ts">
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import PersonAvatar from "@/components/PersonAvatar.vue";
+import StatTile from "@/components/StatTile.vue";
 import ViewTabs from "@/components/ViewTabs.vue";
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import TaskyState from "@/components/TaskyState.vue";
@@ -912,6 +957,7 @@ import { errorText } from "@/utils";
 import { watchDebounced } from "@vueuse/core";
 import {
   Button,
+  call,
   Checkbox,
   createResource,
   dayjs,
@@ -946,7 +992,6 @@ import LeadFormDialog from "./LeadFormDialog.vue";
 import LeadSetCategoryDialog from "./LeadSetCategoryDialog.vue";
 import MergeLeadsDialog from "./MergeLeadsDialog.vue";
 import FollowUpCards from "./FollowUpCards.vue";
-import MyCallCounts from "./MyCallCounts.vue";
 import LeadIntakeStrip from "./LeadIntakeStrip.vue";
 import LeadsBusiness from "./LeadsBusiness.vue";
 import LeadsCommission from "./LeadsCommission.vue";
@@ -1019,22 +1064,23 @@ const PERIOD_LABELS: Record<string, string> = {
   month: __("this month"),
   quarter: __("this quarter"),
 };
-// the Created filter: leads taken in a period (the ERP site's "intake" metric)
+// the Created filter: every lead created in the period, imports included (the ERP site's "new"
+// metric; "intake", which leaves imports out, is for the intake strip's links only)
 const CREATED = [
-  { label: __("Any time"), value: "" },
-  { label: __("Today"), value: "today" },
-  { label: __("Yesterday"), value: "yesterday" },
-  { label: __("This week"), value: "week" },
-  { label: __("This month"), value: "month" },
-  { label: __("Custom"), value: "custom" },
+  { label: __("Any created date"), value: "" },
+  { label: __("Created today"), value: "today" },
+  { label: __("Created yesterday"), value: "yesterday" },
+  { label: __("Created this week"), value: "week" },
+  { label: __("Created this month"), value: "month" },
+  { label: __("Created between…"), value: "custom" },
 ];
+const CREATED_PERIODS = CREATED.map((c) => c.value).filter(Boolean);
 const overviewPanel = ref<InstanceType<typeof LeadsOverview> | null>(null);
 const dailyPanel = ref<InstanceType<typeof LeadsDailyReport> | null>(null);
 const todayPanel = ref<InstanceType<typeof TodaysCalls> | null>(null);
 const businessPanel = ref<InstanceType<typeof LeadsBusiness> | null>(null);
 const outreachPanel = ref<InstanceType<typeof LeadsOutreach> | null>(null);
 const commissionPanel = ref<InstanceType<typeof LeadsCommission> | null>(null);
-const callCounts = ref<InstanceType<typeof MyCallCounts> | null>(null);
 const followUpCards = ref<InstanceType<typeof FollowUpCards> | null>(null);
 
 const authStore = useAuthStore();
@@ -1057,7 +1103,9 @@ function defaultTab(): LeadTab {
   if (authStore.isSalesBd && (!loaded || !loaded.departments)) return today;
   if (loaded?.is_bd ?? authStore.isSalesBd)
     return batchesOn(loaded) ? today : "call_today";
-  return authStore.isSalesEmployee && batchesOn(loaded) && !authStore.hideTodaysCalls
+  return authStore.isSalesEmployee &&
+    batchesOn(loaded) &&
+    !authStore.hideTodaysCalls
     ? "today"
     : "overview";
 }
@@ -1102,7 +1150,8 @@ const filters = reactive({
   called: queryValue("called"),
   // the Follow-up card picked: when the follow-ups are due ("" overdue and today)
   due: queryValue("due"),
-  // Follow-up and My leads: the day the earliest open follow-up falls on (YYYY-MM-DD)
+  // Follow-up and My leads: when the earliest open follow-up falls: today, tomorrow, week,
+  // month, or one day (YYYY-MM-DD); "custom" while that day is still being picked
   follow_up_date: queryValue("follow_up_date"),
 });
 // the tabs with the follow-up date; the API sends it for these only too
@@ -1122,6 +1171,39 @@ watch(
     if (day) filters.due = "";
   }
 );
+const FOLLOW_UP_DATES = [
+  { label: __("Any follow-up date"), value: "" },
+  { label: __("Today"), value: "today" },
+  { label: __("Tomorrow"), value: "tomorrow" },
+  { label: __("This week"), value: "week" },
+  { label: __("This month"), value: "month" },
+  { label: __("Pick a date"), value: "custom" },
+];
+const isDay = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
+// a day in the URL (an older link, or one picked) shows as "Pick a date" with that day
+const followUpPick = computed({
+  get: () =>
+    isDay(filters.follow_up_date) ? "custom" : filters.follow_up_date,
+  set: (value: string) => (filters.follow_up_date = value),
+});
+const followUpDay = computed({
+  get: () => (isDay(filters.follow_up_date) ? filters.follow_up_date : ""),
+  set: (value: string) => (filters.follow_up_date = value || "custom"),
+});
+/** The follow-up days the Follow-up date keeps: [from, to] as YYYY-MM-DD, or nulls. */
+function followUpRange(value: string): [string | null, string | null] {
+  if (isDay(value)) return [value, value];
+  const today = dayjs();
+  const day = (d: typeof today) => d.format("YYYY-MM-DD");
+  if (value === "today") return [day(today), day(today)];
+  if (value === "tomorrow")
+    return [day(today.add(1, "day")), day(today.add(1, "day"))];
+  if (value === "week")
+    return [day(today.startOf("week")), day(today.endOf("week"))];
+  if (value === "month")
+    return [day(today.startOf("month")), day(today.endOf("month"))];
+  return [null, null];
+}
 const CREATED_BY = [
   { label: __("Owned or created"), value: "" },
   { label: __("Created by me"), value: "me" },
@@ -1246,7 +1328,8 @@ const extra = reactive(queryExtra());
 // what the Overview opened this list with, each one removable
 const extraChips = computed(() => {
   const chips: { key: string; label: string; remove: () => void }[] = [];
-  if (extra.metric && extra.metric !== "intake") {
+  // the Created select shows its own; any other figure (a quarter's new leads too) is a chip
+  if (extra.metric && !created.value) {
     const label = METRIC_LABELS[extra.metric as LeadMetric] || extra.metric;
     const when =
       extra.period === "custom" && extra.from && extra.to
@@ -1315,15 +1398,6 @@ const hiddenChips = computed(() => {
       label: __("Department: {0}", filters.department),
       remove: () => (filters.department = ""),
     });
-  if (created.value)
-    chips.push({
-      key: "created",
-      label: __(
-        "Created: {0}",
-        CREATED.find((c) => c.value === created.value)?.label || created.value
-      ),
-      remove: () => (created.value = ""),
-    });
   for (const [key, label] of Object.entries(CATEGORY_LABELS))
     for (const value of categories.value[key as keyof LeadCategories])
       chips.push({
@@ -1351,7 +1425,7 @@ const hasFilters = computed(
       filters.department ||
       filters.created_by ||
       filters.called ||
-      (hasFollowUpDate.value && filters.follow_up_date) ||
+      (hasFollowUpDate.value && followUpRange(filters.follow_up_date)[0]) ||
       hasCategories.value ||
       extra.metric ||
       extraChips.value.length
@@ -1359,16 +1433,19 @@ const hasFilters = computed(
 );
 
 const created = computed({
-  get: () => (extra.metric === "intake" ? extra.period || "month" : ""),
+  get: () =>
+    extra.metric === "new" && CREATED_PERIODS.includes(extra.period || "month")
+      ? extra.period || "month"
+      : "",
   set: (value: string) => {
     if (!value) {
-      if (extra.metric === "intake")
+      if (created.value)
         Object.assign(extra, { metric: "", period: "", from: "", to: "" });
       return;
     }
     const custom = value === "custom";
     Object.assign(extra, {
-      metric: "intake",
+      metric: "new",
       period: value,
       from: custom ? extra.from : "",
       to: custom ? extra.to : "",
@@ -1427,7 +1504,8 @@ const tabs = computed(() =>
     if (tab.value === "daily") return hasDaily.value;
     if (tab.value === "business") return canViewBusiness.value;
     if (tab.value === "outreach") return hasOutreach.value;
-    if (tab.value === "today") return hasBatches.value && !authStore.hideTodaysCalls;
+    if (tab.value === "today")
+      return hasBatches.value && !authStore.hideTodaysCalls;
     if (tab.value === "call_today") return !hasBatches.value;
     return true;
   })
@@ -1445,7 +1523,7 @@ const listTabs = computed(() =>
     .filter((tab) => !REPORTS.includes(tab.value))
     .map((tab) => ({
       ...tab,
-      count: tab.value === view.value && data.value ? data.value.total : null,
+      count: tab.value === view.value ? viewTotals[tab.value] ?? null : null,
     }))
 );
 const reportTabs = computed(() =>
@@ -1507,7 +1585,8 @@ watch(options, (value) => {
     view.value = isBd.value ? "call_today" : "overview";
   if (hasBatches.value && view.value === "call_today")
     view.value = authStore.hideTodaysCalls ? homeTab.value : "today";
-  if (authStore.hideTodaysCalls && view.value === "today") view.value = homeTab.value;
+  if (authStore.hideTodaysCalls && view.value === "today")
+    view.value = homeTab.value;
   // a link to a tab the person may not open
   if (value && !value.can_view_business && view.value === "business")
     view.value = "overview";
@@ -1570,10 +1649,14 @@ const leads = createResource({
         ? 1
         : null,
     due: view.value === "follow_up" ? filters.due || null : null,
-    // one day: the API takes a range, from and to that same day
-    due_from: hasFollowUpDate.value ? filters.follow_up_date || null : null,
-    due_to: hasFollowUpDate.value ? filters.follow_up_date || null : null,
+    due_from: hasFollowUpDate.value
+      ? followUpRange(filters.follow_up_date)[0]
+      : null,
+    due_to: hasFollowUpDate.value
+      ? followUpRange(filters.follow_up_date)[1]
+      : null,
     view: isList.value ? view.value : "all",
+    stage_counts: hasStageCards.value ? 1 : null,
     start: (page.value - 1) * PAGE_LENGTH,
     page_length: PAGE_LENGTH,
   }),
@@ -1621,8 +1704,8 @@ function refresh() {
   else {
     intake.submit({ fresh: 1 });
     staleLeads.submit({ fresh: 1 });
-    callCounts.value?.reload();
     followUpCards.value?.reload();
+    for (const key of Object.keys(viewTotals)) delete viewTotals[key];
     if (!waitingForDates.value) reloadLeads();
   }
 }
@@ -1639,6 +1722,8 @@ const data = computed(
       | {
           rows: LeadRow[];
           total: number;
+          /** {stage: leads} without the Stage filter; missing from an older TBO Smart */
+          stage_counts?: Record<string, number>;
           /** the ERP site is away: the hub's saved copy, as of `copied_at` */
           from_copy?: boolean;
           copied_at?: string;
@@ -1658,6 +1743,34 @@ const quiet = computed(
 const statuses = computed(
   () => new Map((data.value?.rows ?? []).map((r) => [r.name, clientStatus(r)]))
 );
+// Follow-up has its own cards (when they are due), so the stage cards stay out there
+const hasStageCards = computed(
+  () => isList.value && view.value !== "follow_up"
+);
+// "All stages" first, then the stages with leads in their pipeline order; the one picked stays
+// even at 0, so it can be seen and let go
+const stageCards = computed(() => {
+  const counts = data.value?.stage_counts;
+  if (!hasStageCards.value || !counts) return [];
+  const stages = (options.value?.stages ?? [])
+    .filter((s) => counts[s.name] || s.name === filters.stage)
+    .map((s) => ({
+      value: s.name,
+      label: s.label || s.name,
+      count: counts[s.name] ?? 0,
+    }));
+  const all = Object.values(counts).reduce((sum, n) => sum + n, 0);
+  return [{ value: "", label: __("All stages"), count: all }, ...stages];
+});
+// under the toolbar: how many leads this tab holds, or match its filters out of them
+const countText = computed(() => {
+  const total = viewTotals[view.value];
+  if (hasFilters.value && total !== undefined)
+    return __("of {0} leads match", total.toLocaleString());
+  if (hasFilters.value)
+    return data.value?.total === 1 ? __("lead matches") : __("leads match");
+  return data.value?.total === 1 ? __("lead") : __("leads");
+});
 const pageCount = computed(() =>
   Math.max(Math.ceil((data.value?.total ?? 0) / PAGE_LENGTH), 1)
 );
@@ -1671,7 +1784,20 @@ const rangeText = computed(() => {
 // an old link, or leads removed on the ERP site: go to the last page there is
 watch(data, (d) => {
   if (d && page.value > pageCount.value) page.value = pageCount.value;
+  if (!d) return;
+  // an unfiltered answer is the tab's whole count; a filtered one asks for it once
+  if (!hasFilters.value) viewTotals[view.value] = d.total;
+  else loadViewTotal();
 });
+// each list tab's whole count, filters aside: its pill, and "12 of 404 leads match"
+const viewTotals = reactive<Record<string, number>>({});
+function loadViewTotal() {
+  const v = view.value;
+  if (!isList.value || v in viewTotals) return;
+  call("helpdesk.api.leads.list_leads", { view: v, page_length: 1 })
+    .then((r: { total: number }) => (viewTotals[v] = r.total))
+    .catch(() => {});
+}
 
 // the URL changed from outside (the sidebar, back and forward): take its state,
 // page included, without the reset to page 1 below

@@ -13,8 +13,12 @@ A part the ERP site refuses (or an older TBO Smart without it) is left out with 
 
 ## Sales → Dashboard (`/helpdesk/sales/dashboard`, `SalesDashboard`)
 
-The signed-in person's own day. In the sidebar first under Sales, for everyone with Leads
-(`leadsOnly`), BDs included. `get_my_dashboard(fresh)`.
+The signed-in person's own day: a salesperson's page, for Sales Users, Presales Executives and
+BDs. In the sidebar first under Sales, for everyone with Leads (`leadsOnly`) **except Sales Heads
+and Sales Managers** (`ownDashboardOnly`, `has_own_sales_dashboard` from `auth.get_user`,
+`helpdesk.content_team.manages_sales`), who follow the team on the Team dashboard instead; the
+route sends them Home and `get_my_dashboard` refuses them (PermissionError), even when they
+also hold Sales User. `get_my_dashboard(fresh)`.
 
 | Card | Figure | Source |
 | --- | --- | --- |

@@ -120,6 +120,7 @@ export function useNavigation() {
       (!item.salesHeadOnly || authStore.canAssignSalesTargets) &&
       (!item.ownTargetsOnly || authStore.hasSalesTargets) &&
       (!item.salesManagersOnly || !isBd.value) &&
+      (!item.ownDashboardOnly || authStore.hasOwnSalesDashboard) &&
       (!authStore.isContentTeam || CONTENT_TEAM_ROUTES.has(to))
     );
   }
@@ -153,7 +154,9 @@ export function useNavigation() {
   // not on every route change: the route only moves `active`.
   const areas = computed<NavArea[]>(() => {
     const source = isCustomerPortal.value ? customerNavAreas : agentNavAreas;
+    // only the people in sales get the Sales area
     return source
+      .filter((area) => area.id !== "sales" || authStore.inSales)
       .map((area) => ({
         ...area,
         groups: area.groups

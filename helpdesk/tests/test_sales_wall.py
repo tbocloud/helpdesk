@@ -18,8 +18,11 @@ from helpdesk.test_utils import (
     hold_commits,
     make_assignment,
     make_content_post,
+    make_presales_executive,
     make_project,
     make_sales_employee,
+    make_sales_head,
+    make_sales_manager,
     make_task,
     make_tasky_user,
     make_team,
@@ -76,6 +79,23 @@ class TestWhatTheySee(SalesWallCase):
         self.assertFalse(boot["can_work_tickets"])
         self.assertFalse(boot["can_see_overview"])
         self.assertFalse(boot["in_content_team"])
+        self.assertTrue(boot["in_sales"])
+
+    def test_only_the_people_in_sales_get_the_sales_area(self):
+        for user, why in (
+            (self.dev, "a developer"),
+            (self.manager, "an Agent Manager"),
+        ):
+            frappe.set_user(user)
+            self.assertFalse(get_user()["in_sales"], why)
+        frappe.set_user("Administrator")
+        for user in (
+            make_sales_head("head.sales@sales-wall.example", "Hari Head"),
+            make_sales_manager("mgr.sales@sales-wall.example", "Mini"),
+            make_presales_executive("pre.sales@sales-wall.example", "Priya Presales"),
+        ):
+            frappe.set_user(user)
+            self.assertTrue(get_user()["in_sales"], user)
 
     def test_managers_are_never_walled(self):
         frappe.get_doc("User", self.manager).add_roles(SALES_EMPLOYEE_ROLE)

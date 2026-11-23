@@ -146,6 +146,17 @@ class TestSalesDashboard(FrappeTestCase):
         overviews = [p for m, _post, p in self.crm.lead_calls if m == "get_overview"]
         self.assertEqual(overviews[0]["owner"], SALES)
 
+    def test_sales_heads_and_managers_have_no_own_dashboard(self):
+        for email, role in (
+            ("head@salesdash.example", "Sales Head"),
+            ("salesmanager@salesdash.example", "Sales Manager"),
+        ):
+            make_sales_employee(email, role, role, "Sales User")
+            frappe.set_user(email)
+            with self.assertRaises(frappe.PermissionError):
+                api.get_my_dashboard()
+            frappe.set_user("Administrator")
+
     def test_a_day_that_has_ended_is_read_once_an_hour(self):
         frappe.set_user(MANAGER)
         api.get_team_dashboard(fresh=1)

@@ -81,6 +81,10 @@ export const useAuthStore = defineStore("auth", () => {
   const isSalesBd: ComputedRef<boolean> = computed(
     () => !!user__.value.is_sales_bd
   );
+  // Sales → Dashboard is a salesperson's own day: not for Sales Heads or Sales Managers
+  const hasOwnSalesDashboard: ComputedRef<boolean> = computed(
+    () => !!user__.value.has_own_sales_dashboard
+  );
   // the Tickets list and New ticket: System / Agent Managers and the ERP team
   const canWorkTickets: ComputedRef<boolean> = computed(
     () => !!user__.value.can_work_tickets
@@ -118,6 +122,8 @@ export const useAuthStore = defineStore("auth", () => {
   const canViewDivisionOverview: ComputedRef<boolean> = computed(
     () => !!user__.value.can_view_division_overview
   );
+  // the Sales area of the sidebar: sales, presales and their heads and managers only
+  const inSales: ComputedRef<boolean> = computed(() => !!user__.value.in_sales);
   // Sales targets: Sales Heads set each month's targets (docs/sales-targets.md)
   const canAssignSalesTargets: ComputedRef<boolean> = computed(
     () => !!user__.value.can_assign_sales_targets
@@ -231,6 +237,7 @@ export const useAuthStore = defineStore("auth", () => {
     isDmEmployee,
     isSalesEmployee,
     isSalesBd,
+    hasOwnSalesDashboard,
     canWorkTickets,
     canUseLeads,
     canUseLeadBank,
@@ -242,6 +249,7 @@ export const useAuthStore = defineStore("auth", () => {
     canViewDivisionOverview,
     canAssignSalesTargets,
     hasSalesTargets,
+    inSales,
     hideTodaysCalls,
     telephonyInstalled,
     canOpenChat,

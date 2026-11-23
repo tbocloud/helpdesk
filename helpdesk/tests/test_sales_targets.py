@@ -255,12 +255,46 @@ class TestInformationOnlyTargets(FrappeTestCase):
         make_sales_target(PERSON, THIS_MONTH, [{**CRITERIA[2], "info_only": 1}])
         self.assertEqual(self.saved()["Client Meeting"]["info_only"], 0)
 
-    def test_the_person_gets_the_standard_targets_to_show_as_0_when_none_assigned(self):
+
+class TestAskForTargets(FrappeTestCase):
+    def setUp(self):
+        hold_commits(self)
+        self.addCleanup(frappe.set_user, "Administrator")
+        make_sales_head(HEAD, "Hana Head")
+        make_presales_executive(PERSON, "Priya Presales")
+
+    def asks(self, head=HEAD):
+        return frappe.qb.get_query(
+            "HD Notification",
+            fields=["message", "link", "user_from"],
+            filters={
+                "user_to": head,
+                "dedupe_key": f"sales-targets-ask:{PERSON}:{THIS_MONTH}",
+            },
+        ).run(as_dict=True)
+
+    def test_a_person_without_targets_tells_each_sales_head_once(self):
         frappe.set_user(PERSON)
-        mine = api.get_my_targets(THIS_MONTH)
-        self.assertIsNone(mine["target"])
-        self.assertEqual(
-            [d["criterion"] for d in mine["defaults"]],
-            [d["criterion"] for d in api.default_criteria()],
-        )
-        self.assertNotIn("target", mine["defaults"][0])
+        self.assertFalse(api.get_my_targets(THIS_MONTH)["asked"])
+        api.ask_for_targets(THIS_MONTH)
+        api.ask_for_targets(THIS_MONTH)
+        frappe.set_user("Administrator")
+        asks = self.asks()
+        self.assertEqual(len(asks), 1)
+        self.assertIn("Priya Presales", asks[0].message)
+        self.assertEqual(asks[0].user_from, PERSON)
+        self.assertIn("/helpdesk/sales-targets?month=", asks[0].link)
+        frappe.set_user(PERSON)
+        self.assertTrue(api.get_my_targets(THIS_MONTH)["asked"])
+
+    def test_no_ask_with_targets_already_set(self):
+        make_sales_target(PERSON, THIS_MONTH, CRITERIA)
+        frappe.set_user(PERSON)
+        self.assertFalse(api.get_my_targets(THIS_MONTH)["asked"])
+        with self.assertRaises(frappe.ValidationError):
+            api.ask_for_targets(THIS_MONTH)
+
+    def test_only_people_given_targets_may_ask(self):
+        frappe.set_user(HEAD)
+        with self.assertRaises(frappe.PermissionError):
+            api.ask_for_targets(THIS_MONTH)

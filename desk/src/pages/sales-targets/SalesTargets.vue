@@ -1,19 +1,24 @@
 <template>
   <div class="flex h-full flex-col">
     <LayoutHeader
+      :icon="LucideTarget"
       :title="__('Assign sales targets')"
       :subtitle="
-        __(
-          'Pick people, fill in their targets for the month, then assign them.'
-        )
+        __('Pick people, fill in each target for the month, then assign them.')
       "
     >
       <template #right-header>
-        <MonthStepper
-          :model-value="month"
-          :options="MONTHS"
-          @update:model-value="pickMonth"
-        />
+        <label class="flex items-center gap-3">
+          <span class="text-sm text-ink-gray-6">{{ __("Month") }}</span>
+          <FormControl
+            :model-value="month"
+            type="select"
+            size="md"
+            class="w-44"
+            :options="MONTHS"
+            @update:model-value="pickMonth"
+          />
+        </label>
       </template>
     </LayoutHeader>
 
@@ -40,15 +45,26 @@
           />
         </TaskyState>
 
-        <div
-          v-else-if="!team.data"
-          class="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_30rem] xl:grid-cols-[minmax(0,1fr)_38rem] 2xl:grid-cols-[minmax(0,1fr)_44rem]"
-          aria-busy="true"
-          :aria-label="__('Loading')"
-        >
-          <div class="h-96 animate-pulse rounded-xl bg-surface-gray-3" />
-          <div class="h-96 animate-pulse rounded-xl bg-surface-gray-3" />
-        </div>
+        <template v-else-if="!team.data">
+          <div
+            class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"
+            aria-hidden="true"
+          >
+            <div
+              v-for="n in 4"
+              :key="n"
+              class="h-[76px] animate-pulse rounded-xl bg-surface-gray-3"
+            />
+          </div>
+          <div
+            class="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_30rem] xl:grid-cols-[minmax(0,1fr)_38rem] 2xl:grid-cols-[minmax(0,1fr)_44rem]"
+            aria-busy="true"
+            :aria-label="__('Loading')"
+          >
+            <div class="h-96 animate-pulse rounded-xl bg-surface-gray-3" />
+            <div class="h-96 animate-pulse rounded-xl bg-surface-gray-3" />
+          </div>
+        </template>
 
         <TaskyState
           v-else-if="!people.length"
@@ -62,50 +78,42 @@
           "
         />
 
-        <div
-          v-else
-          class="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_30rem] lg:items-start xl:grid-cols-[minmax(0,1fr)_38rem] 2xl:grid-cols-[minmax(0,1fr)_44rem]"
-        >
-          <!-- the team, and who still needs targets for the month -->
-          <section
-            class="min-w-0 overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
-            :aria-labelledby="peopleHeading"
-          >
-            <div class="flex flex-col gap-3 border-b border-outline-gray-2 p-4">
-              <div class="flex flex-wrap items-start justify-between gap-3">
-                <div class="flex min-w-0 flex-col gap-0.5">
-                  <h2
-                    :id="peopleHeading"
-                    class="text-base font-semibold text-ink-gray-9"
-                  >
-                    {{ __("Team") }}
-                  </h2>
-                  <p class="text-sm text-ink-gray-6 tabular-nums">
-                    {{
-                      __(
-                        "{0} of {1} have targets for {2}",
-                        String(withTargets),
-                        String(people.length),
-                        monthTitle(month)
-                      )
-                    }}
-                  </p>
-                </div>
-                <Button
-                  v-if="withoutTargets.length && !allWithoutPicked"
-                  size="md"
-                  :label="
+        <template v-else>
+          <!-- the three steps, and how much of the team has targets -->
+          <ol class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <li
+              v-for="(step, index) in steps"
+              :key="index"
+              class="flex min-h-[76px] items-center gap-3 rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-3"
+            >
+              <span
+                class="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-brand text-sm font-semibold text-brand-on tabular-nums"
+                aria-hidden="true"
+                >{{ index + 1 }}</span
+              >
+              <p class="text-sm text-ink-gray-6">
+                <strong class="font-semibold text-ink-gray-9">{{
+                  step.lead
+                }}</strong>
+                {{ step.rest }}
+              </p>
+            </li>
+            <li
+              class="flex min-h-[76px] flex-col justify-center gap-2.5 rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-3"
+            >
+              <div class="flex items-start justify-between gap-3">
+                <span class="text-sm font-semibold text-ink-gray-9">{{
+                  __("Team coverage")
+                }}</span>
+                <span class="text-right text-sm text-ink-gray-6 tabular-nums">
+                  {{
                     __(
-                      'Pick the {0} without targets',
-                      String(withoutTargets.length)
+                      "{0} of {1} have targets",
+                      String(withTargets),
+                      String(people.length)
                     )
-                  "
-                  @click="pickWithout"
-                >
-                  <template #prefix>
-                    <LucideListChecks class="size-4" />
-                  </template>
-                </Button>
+                  }}
+                </span>
               </div>
               <div
                 class="h-1.5 overflow-hidden rounded-full bg-surface-gray-2"
@@ -120,75 +128,112 @@
                   :style="{ width: `${(withTargets / people.length) * 100}%` }"
                 />
               </div>
-            </div>
+            </li>
+          </ol>
 
-            <!-- filters: search first and widest -->
-            <div
-              class="flex flex-wrap items-center gap-2 border-b border-outline-gray-2 px-4 py-3"
+          <div
+            class="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_30rem] lg:items-start xl:grid-cols-[minmax(0,1fr)_38rem] 2xl:grid-cols-[minmax(0,1fr)_44rem]"
+          >
+            <!-- the team: who gets these targets -->
+            <section
+              class="min-w-0 overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
+              :aria-labelledby="peopleHeading"
             >
-              <FormControl
-                v-model="search"
-                type="search"
-                size="md"
-                class="min-w-[12rem] flex-1"
-                :placeholder="__('Search people')"
-                :aria-label="__('Search people')"
-              >
-                <template #prefix>
-                  <LucideSearch
-                    class="size-4 text-ink-gray-5"
-                    aria-hidden="true"
-                  />
-                </template>
-              </FormControl>
-              <FormControl
-                v-model="roleFilter"
-                type="select"
-                size="md"
-                class="!w-48"
-                :aria-label="__('Role')"
-                :options="roleOptions"
-              />
-              <TabButtons
-                v-model="statusFilter"
-                :aria-label="__('Targets')"
-                :options="statusOptions"
-              />
-            </div>
-
-            <TaskyState
-              v-if="!shown.length"
-              class="py-10"
-              :icon="
-                statusFilter === 'without' && !search
-                  ? LucideCircleCheck
-                  : LucideSearch
-              "
-              :title="emptyTitle"
-              :message="__('Show everyone to see the whole team.')"
-            >
-              <Button :label="__('Show everyone')" @click="clearFilters" />
-            </TaskyState>
-            <template v-else>
               <div
-                class="grid h-11 grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-3 border-b border-outline-gray-1 bg-surface-gray-1 px-4 text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6"
+                class="flex flex-col gap-3 border-b border-outline-gray-2 p-4 md:px-5"
               >
-                <span class="flex">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                  <div class="flex items-center gap-2">
+                    <h2
+                      :id="peopleHeading"
+                      class="text-lg font-semibold text-ink-gray-9"
+                    >
+                      {{ __("People") }}
+                    </h2>
+                    <TaskyBadge
+                      v-if="picked.length"
+                      tone="brand"
+                      class="tabular-nums"
+                      :label="__('{0} selected', String(picked.length))"
+                    />
+                    <button
+                      v-if="picked.length"
+                      type="button"
+                      class="rounded text-xs font-medium text-brand-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+                      @click="picked = []"
+                    >
+                      {{ __("Clear") }}
+                    </button>
+                  </div>
+                  <FormControl
+                    v-model="search"
+                    type="search"
+                    size="md"
+                    class="w-full sm:w-72"
+                    :placeholder="__('Search people')"
+                    :aria-label="__('Search people')"
+                  >
+                    <template #prefix>
+                      <LucideSearch
+                        class="size-4 text-ink-gray-5"
+                        aria-hidden="true"
+                      />
+                    </template>
+                  </FormControl>
+                </div>
+
+                <div class="flex flex-wrap items-center justify-between gap-2">
                   <Checkbox
                     :model-value="allShownPicked"
                     :indeterminate="someShownPicked && !allShownPicked"
-                    :aria-label="__('Select everyone shown')"
+                    :label="__('Select all shown ({0})', String(shown.length))"
+                    :disabled="!shown.length"
                     @update:model-value="pickShown(!!$event)"
                   />
-                </span>
-                <span>{{ __("Person") }}</span>
-                <span class="text-right">{{ monthShort }}</span>
+                  <!-- the usual job: everyone still without targets, at once -->
+                  <Button
+                    v-if="withoutTargets.length && !allWithoutPicked"
+                    variant="ghost"
+                    :label="
+                      __(
+                        'Pick the {0} without targets',
+                        String(withoutTargets.length)
+                      )
+                    "
+                    @click="pickWithout"
+                  >
+                    <template #prefix>
+                      <LucideListChecks class="size-4" />
+                    </template>
+                  </Button>
+                </div>
+
+                <ViewTabs
+                  v-model="roleFilter"
+                  class="self-start"
+                  :aria-label="__('Role')"
+                  :options="roleOptions"
+                />
               </div>
-              <ul class="divide-y divide-outline-gray-1">
+
+              <TaskyState
+                v-if="!shown.length"
+                class="py-10"
+                :icon="LucideSearch"
+                :title="
+                  search
+                    ? __('No one matches “{0}”', search)
+                    : __('No one has this role')
+                "
+                :message="__('Show everyone to see the whole team.')"
+              >
+                <Button :label="__('Show everyone')" @click="clearFilters" />
+              </TaskyState>
+              <ul v-else class="divide-y divide-outline-gray-1">
                 <li
                   v-for="person in shown"
                   :key="person.user"
-                  class="grid min-h-[60px] cursor-pointer grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-3 px-4 py-2.5 transition-colors"
+                  class="grid min-h-[72px] cursor-pointer grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 transition-colors md:px-5"
                   :class="
                     isPicked(person.user)
                       ? 'bg-brand-soft'
@@ -206,28 +251,30 @@
                   </span>
                   <span class="flex min-w-0 items-center gap-3">
                     <PersonAvatar :name="person.full_name" size="lg" />
-                    <span class="flex min-w-0 flex-col">
+                    <span class="flex min-w-0 flex-col gap-1">
                       <span
-                        class="truncate text-[13px] font-semibold text-ink-gray-9"
+                        class="truncate text-sm font-semibold text-ink-gray-9"
                         :title="person.full_name"
                         >{{ person.full_name }}</span
                       >
-                      <span class="truncate text-xs text-ink-gray-6">{{
-                        person.roles.map(roleLabel).join(" · ")
-                      }}</span>
+                      <span class="flex flex-wrap gap-1">
+                        <TaskyBadge
+                          v-for="role in person.roles"
+                          :key="role"
+                          :tone="ROLE_TONES[role] ?? 'neutral'"
+                          :label="roleLabel(role)"
+                        />
+                      </span>
                     </span>
                   </span>
                   <span
                     v-if="person.target"
-                    class="flex flex-col items-end gap-0.5 text-right"
+                    class="flex flex-col items-end gap-1 text-right"
                   >
                     <span
-                      class="flex items-center gap-1.5 text-sm font-medium text-ink-gray-8 tabular-nums"
+                      class="inline-flex items-center gap-1.5 rounded-full bg-success-soft px-2.5 py-0.5 text-xs font-medium text-success tabular-nums"
                     >
-                      <LucideCircleCheck
-                        class="size-3.5 text-success"
-                        aria-hidden="true"
-                      />
+                      <LucideCircleCheck class="size-3.5" aria-hidden="true" />
                       {{
                         person.target.criteria.length === 1
                           ? __("1 target")
@@ -238,42 +285,11 @@
                       }}
                     </span>
                     <!-- how far they are this month, once counted -->
-                    <span
+                    <OverallProgress
                       v-if="overallFor(person)?.percent != null"
-                      class="flex items-center gap-2 text-xs tabular-nums"
-                      :class="
-                        overallFor(person)!.behind
-                          ? 'text-warning'
-                          : 'text-ink-gray-6'
-                      "
-                    >
-                      <span
-                        class="block h-1 w-16 overflow-hidden rounded-full bg-surface-gray-2"
-                        aria-hidden="true"
-                      >
-                        <span
-                          class="block h-full rounded-full"
-                          :class="
-                            overallFor(person)!.behind
-                              ? 'bg-warning'
-                              : 'bg-success'
-                          "
-                          :style="{ width: `${overallFor(person)!.percent}%` }"
-                        />
-                      </span>
-                      {{
-                        overallFor(person)!.behind
-                          ? __(
-                              "{0}% · {1} behind",
-                              String(overallFor(person)!.percent),
-                              String(overallFor(person)!.behind)
-                            )
-                          : __(
-                              "{0}% reached",
-                              String(overallFor(person)!.percent)
-                            )
-                      }}
-                    </span>
+                      :percent="overallFor(person)!.percent!"
+                      :behind="overallFor(person)!.behind"
+                    />
                     <span
                       v-else-if="
                         headlineAmount(person.target, team.data.currency)
@@ -286,126 +302,109 @@
                   </span>
                   <span
                     v-else
-                    class="flex items-center gap-1.5 text-sm text-ink-gray-6"
+                    class="inline-flex items-center gap-1.5 rounded-full bg-surface-gray-2 px-2.5 py-0.5 text-xs font-medium text-ink-gray-6"
                   >
                     <LucideCircleDashed class="size-3.5" aria-hidden="true" />
-                    {{ __("Not set") }}
+                    {{ __("No targets yet") }}
                   </span>
                 </li>
               </ul>
-            </template>
-            <div
-              class="flex flex-wrap items-center justify-between gap-2 border-t border-outline-gray-2 px-4 py-3 text-xs text-ink-gray-6 tabular-nums"
-            >
-              <span>{{
-                __(
-                  "Showing {0} of {1}",
-                  String(shown.length),
-                  String(people.length)
-                )
-              }}</span>
-              <span v-if="picked.length" class="flex items-center gap-2">
-                {{ __("{0} picked", String(picked.length)) }}
-                <button
-                  type="button"
-                  class="rounded font-medium text-brand-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
-                  @click="picked = []"
-                >
-                  {{ __("Clear") }}
-                </button>
-              </span>
-            </div>
-          </section>
-
-          <!-- the targets for the people picked -->
-          <section
-            class="flex min-w-0 flex-col rounded-xl border border-outline-gray-2 bg-surface-base lg:sticky lg:top-0 lg:max-h-[calc(100vh-7rem)]"
-            :aria-labelledby="panelHeading"
-          >
-            <TaskyState
-              v-if="!pickedPeople.length"
-              class="px-4 py-12"
-              :icon="LucideMousePointerClick"
-              :title="__('Pick someone to start')"
-              :message="
-                __(
-                  'Click a person to set their targets for {0}, or tick several to give them all the same.',
-                  monthTitle(month)
-                )
-              "
-            >
-              <h2 :id="panelHeading" class="sr-only">
-                {{ __("Targets") }}
-              </h2>
-            </TaskyState>
-            <template v-else>
-              <div
-                class="flex min-w-0 items-center gap-3 border-b border-outline-gray-2 p-4"
+              <p
+                class="border-t border-outline-gray-2 px-4 py-3.5 text-sm text-ink-gray-6 tabular-nums md:px-5"
               >
+                {{
+                  __(
+                    "{0} of {1} people have targets for {2}.",
+                    String(withTargets),
+                    String(people.length),
+                    monthTitle(month)
+                  )
+                }}
+              </p>
+            </section>
+
+            <!-- the targets for the people picked -->
+            <section
+              class="flex min-w-0 flex-col rounded-xl border border-outline-gray-2 bg-surface-base lg:sticky lg:top-0 lg:max-h-[calc(100vh-7rem)]"
+              :aria-labelledby="panelHeading"
+            >
+              <TaskyState
+                v-if="!pickedPeople.length"
+                class="px-4 py-12"
+                :icon="LucideMousePointerClick"
+                :title="__('Pick someone to start')"
+                :message="
+                  __(
+                    'Click a person to set their targets for {0}, or tick several to give them all the same.',
+                    monthTitle(month)
+                  )
+                "
+              >
+                <h2 :id="panelHeading" class="sr-only">
+                  {{ __("Targets") }}
+                </h2>
+              </TaskyState>
+              <template v-else>
                 <!-- who gets these targets: one face, or the first few overlapping -->
-                <span class="flex shrink-0 -space-x-2">
-                  <PersonAvatar
-                    v-for="person in pickedPeople.slice(0, 3)"
-                    :key="person.user"
-                    :name="person.full_name"
-                    size="lg"
-                    class="ring-2 ring-surface-base"
-                  />
-                  <span
-                    v-if="pickedPeople.length > 3"
-                    class="inline-flex size-[30px] items-center justify-center rounded-full bg-surface-gray-3 text-[11px] font-semibold text-ink-gray-7 ring-2 ring-surface-base tabular-nums"
-                    aria-hidden="true"
-                    >+{{ pickedPeople.length - 3 }}</span
-                  >
-                </span>
-                <div class="flex min-w-0 flex-1 flex-col">
-                  <span class="text-xs text-ink-gray-6">{{
-                    __("Assigning to")
-                  }}</span>
-                  <h2
-                    :id="panelHeading"
-                    class="truncate text-base font-semibold text-ink-gray-9"
-                    :title="pickedLine"
-                  >
-                    {{
-                      pickedPeople.length === 1
-                        ? pickedPeople[0].full_name
-                        : __("{0} people", String(pickedPeople.length))
-                    }}
-                  </h2>
-                  <p
-                    v-if="pickedLine"
-                    class="truncate text-xs text-ink-gray-6"
-                    :title="pickedLine"
-                  >
-                    {{ pickedLine }}
-                  </p>
-                </div>
-                <Button
-                  variant="ghost"
-                  :aria-label="__('Clear the pick')"
-                  @click="picked = []"
+                <div
+                  class="mx-4 mt-4 flex min-w-0 items-center gap-3 rounded-lg border border-outline-gray-2 bg-surface-gray-1 p-3"
                 >
-                  <template #icon>
-                    <LucideX class="size-4 text-ink-gray-6" />
-                  </template>
-                </Button>
-              </div>
-              <TargetCriteriaForm
-                :key="formKey"
-                :month="month"
-                :currency="team.data.currency"
-                :value-types="team.data.value_types"
-                :start="startCriteria"
-                :people="pickedPeople"
-                :measures="team.data.measures"
-                :saved-for="savedOne"
-                :progress="savedOne ? personProgress.data ?? null : null"
-                @assigned="reloadAll"
-              />
-            </template>
-          </section>
-        </div>
+                  <span class="flex shrink-0 -space-x-2">
+                    <PersonAvatar
+                      v-for="person in pickedPeople.slice(0, 3)"
+                      :key="person.user"
+                      :name="person.full_name"
+                      size="lg"
+                      class="ring-2 ring-surface-gray-1"
+                    />
+                    <span
+                      v-if="pickedPeople.length > 3"
+                      class="inline-flex size-[30px] items-center justify-center rounded-full bg-surface-gray-3 text-[11px] font-semibold text-ink-gray-7 ring-2 ring-surface-gray-1 tabular-nums"
+                      aria-hidden="true"
+                      >+{{ pickedPeople.length - 3 }}</span
+                    >
+                  </span>
+                  <div class="flex min-w-0 flex-1 flex-col">
+                    <span
+                      class="text-2xs font-semibold uppercase tracking-[0.06em] text-brand-ink"
+                      >{{ __("Assigning to") }}</span
+                    >
+                    <h2
+                      :id="panelHeading"
+                      class="truncate text-sm font-semibold text-ink-gray-9"
+                      :title="pickedLine"
+                    >
+                      {{
+                        pickedPeople.length === 1
+                          ? pickedPeople[0].full_name
+                          : __("{0} people", String(pickedPeople.length))
+                      }}
+                    </h2>
+                    <p
+                      v-if="pickedLine"
+                      class="truncate text-xs text-ink-gray-6"
+                      :title="pickedLine"
+                    >
+                      {{ pickedLine }}
+                    </p>
+                  </div>
+                </div>
+                <TargetCriteriaForm
+                  :key="formKey"
+                  :month="month"
+                  :currency="team.data.currency"
+                  :value-types="team.data.value_types"
+                  :start="startCriteria"
+                  :people="pickedPeople"
+                  :measures="team.data.measures"
+                  :saved-for="savedOne"
+                  :progress="savedOne ? personProgress.data ?? null : null"
+                  @assigned="reloadAll"
+                />
+              </template>
+            </section>
+          </div>
+        </template>
       </div>
     </div>
   </div>
@@ -414,7 +413,10 @@
 <script setup lang="ts">
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import PersonAvatar from "@/components/PersonAvatar.vue";
+import TaskyBadge from "@/components/TaskyBadge.vue";
 import TaskyState from "@/components/TaskyState.vue";
+import ViewTabs from "@/components/ViewTabs.vue";
+import type { Tone } from "@/components/tone";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
 import {
@@ -423,7 +425,6 @@ import {
   createResource,
   dayjs,
   FormControl,
-  TabButtons,
 } from "frappe-ui";
 import { computed, ref, useId, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -434,9 +435,9 @@ import LucideListChecks from "~icons/lucide/list-checks";
 import LucideLock from "~icons/lucide/lock";
 import LucideMousePointerClick from "~icons/lucide/mouse-pointer-click";
 import LucideSearch from "~icons/lucide/search";
+import LucideTarget from "~icons/lucide/target";
 import LucideUsers from "~icons/lucide/users";
-import LucideX from "~icons/lucide/x";
-import MonthStepper from "./MonthStepper.vue";
+import OverallProgress from "./OverallProgress.vue";
 import TargetCriteriaForm from "./TargetCriteriaForm.vue";
 import {
   headlineAmount,
@@ -455,6 +456,11 @@ const ROLE_LABELS: Record<string, string> = {
   "Presales Executive": __("Presales Executive"),
   "Sales User": __("Sales User"),
 };
+// each role reads apart at a glance on the list (the owner's design, 2026-11-22)
+const ROLE_TONES: Record<string, Tone | "brand"> = {
+  "Presales Executive": "info",
+  "Sales User": "brand",
+};
 const roleLabel = (role: string) => ROLE_LABELS[role] ?? role;
 
 const route = useRoute();
@@ -470,8 +476,15 @@ const month = computed(() => {
 function pickMonth(value: string) {
   router.replace({ query: { ...route.query, month: value } });
 }
-/** "Nov 2026", the column heading over each person's targets */
-const monthShort = computed(() => dayjs(month.value).format("MMM YYYY"));
+
+const steps = computed(() => [
+  { lead: __("Pick people"), rest: __("from your team") },
+  {
+    lead: __("Fill in targets"),
+    rest: __("for {0}", dayjs(month.value).format("MMMM")),
+  },
+  { lead: __("Assign"), rest: __("— they see it right away") },
+]);
 
 const team = createResource<TeamTargets>({
   url: "helpdesk.api.sales_targets.get_team",
@@ -514,32 +527,28 @@ const withoutTargets = computed(() => people.value.filter((p) => !p.target));
 // ---------- which people are shown ----------
 
 const roleFilter = ref("all");
-const roleOptions = computed(() => [
-  { label: __("All roles"), value: "all" },
-  ...Object.keys(ROLE_LABELS).map((role) => ({
-    label: `${roleLabel(role)} (${
-      people.value.filter((p) => p.roles.includes(role)).length
-    })`,
-    value: role,
-  })),
-]);
-const statusFilter = ref<"all" | "without" | "with">("all");
-const statusOptions = computed(() => [
-  { label: __("All"), value: "all" },
-  {
-    label: __("Not set ({0})", String(withoutTargets.value.length)),
-    value: "without",
-  },
-  { label: __("Set ({0})", String(withTargets.value)), value: "with" },
-]);
+const roleOptions = computed(() =>
+  [{ label: __("All"), value: "all" }]
+    .concat(
+      Object.keys(ROLE_LABELS).map((role) => ({
+        label: roleLabel(role),
+        value: role,
+      }))
+    )
+    .map((option) => ({
+      ...option,
+      count:
+        option.value === "all"
+          ? people.value.length
+          : people.value.filter((p) => p.roles.includes(option.value)).length,
+    }))
+);
 const search = ref("");
 const shown = computed(() => {
   const text = search.value.trim().toLowerCase();
   return people.value.filter(
     (p) =>
       (roleFilter.value === "all" || p.roles.includes(roleFilter.value)) &&
-      (statusFilter.value === "all" ||
-        (statusFilter.value === "with") === !!p.target) &&
       (!text ||
         p.full_name.toLowerCase().includes(text) ||
         p.user.toLowerCase().includes(text))
@@ -548,17 +557,7 @@ const shown = computed(() => {
 function clearFilters() {
   search.value = "";
   roleFilter.value = "all";
-  statusFilter.value = "all";
 }
-
-// filtered to "Not set" with none left is good news, not a dead end
-const emptyTitle = computed(() =>
-  search.value
-    ? __("No one matches “{0}”", search.value)
-    : statusFilter.value === "without"
-    ? __("Everyone shown has targets for {0}", monthTitle(month.value))
-    : __("No one matches these filters")
-);
 
 // ---------- who is picked ----------
 
@@ -596,10 +595,19 @@ function pickWithout() {
   picked.value = withoutTargets.value.map((p) => p.user);
 }
 
-// someone who lost their role since drops out of the pick
+// someone who lost their role since drops out of the pick; a link from Team targets
+// (?employee= or ?pick=without) opens on that person or those people, once
 watch(people, (list) => {
   const users = new Set(list.map((p) => p.user));
   picked.value = picked.value.filter((u) => users.has(u));
+  const asked = String(route.query.employee || "");
+  if (asked && users.has(asked)) picked.value = [asked];
+  // Team targets' "Assign to N people": everyone still without targets
+  else if (route.query.pick === "without") pickWithout();
+  if (route.query.employee || route.query.pick) {
+    const { employee: _employee, pick: _pick, ...query } = route.query;
+    router.replace({ query });
+  }
 });
 
 const pickedPeople = computed(() =>
@@ -614,7 +622,7 @@ const pickedLine = computed(() => {
     : __("No targets for {0} yet", monthTitle(month.value));
 });
 
-/** One person with targets opens on theirs; anyone else on the five defaults, to fill in. */
+/** One person with targets opens on theirs; anyone else on the defaults, to fill in. */
 const savedOne = computed(() =>
   pickedPeople.value.length === 1 && pickedPeople.value[0].target
     ? pickedPeople.value[0]

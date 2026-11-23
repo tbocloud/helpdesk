@@ -10,7 +10,7 @@ sees their own on **Sales targets**.
 
 | Role | What they get |
 | --- | --- |
-| `Sales Head` (or System Manager) | **Assign sales targets** (Sales → Team): picks people and assigns the month's targets. |
+| `Sales Head` (or System Manager) | **Assign sales targets** (Sales → Team): picks people and assigns the month's targets. **Team targets** (Sales → Team): how everyone is doing against them. |
 | `Presales Executive`, `Sales User` | **Sales targets** (Sales): their own targets as cards, month by month, read-only. |
 
 `Sales Head` and `Presales Executive` are created on migrate (`ensure_role` in
@@ -45,17 +45,18 @@ counts.
 
 ## Assign sales targets page (`/helpdesk/sales-targets`)
 
-`desk/src/pages/sales-targets/SalesTargets.vue`, redesigned 2026-11-18. The month is in the URL
-(`?month=2026-12`), from three months ahead to a year back, picked with `MonthStepper.vue` (a
-month select with an earlier and a later step either side; both pages share it).
+`desk/src/pages/sales-targets/SalesTargets.vue`, redesigned 2026-11-18 and again 2026-11-22 to
+the owner's mockup. The month is in the URL (`?month=2026-12`), from three months ahead to a
+year back, picked with a **Month** select in the header.
 
-- **Team** (left card): "4 of 6 have targets for November 2026" over a green meter. **Pick the
-  N without targets** picks everyone still without them, the usual job. The filter bar holds
-  search, a role select (All roles, Presales Executive, Sales User) and a Not set / Set
-  toggle. Then a table: a select-everyone-shown box in the heading row, and one row a person
-  (avatar, name, roles in plain text, and for the month either "5 targets" with a check and
-  their first Amount target, or "Not set"). A click on a row picks only that person, and a
-  checkbox adds or drops one. The footer says how many are shown and picked, with Clear.
+- **Steps strip**: *Pick people*, *Fill in targets* for the month, *Assign*, and a **Team
+  coverage** card ("0 of 6 have targets" over a green meter).
+- **People** (left card): the heading with "N selected" and Clear, search, **Select all shown
+  (N)**, **Pick the N without targets** (the usual job), and the roles as pills with counts
+  (`ViewTabs`: All, Presales Executive, Sales User). One row a person: checkbox, avatar, name,
+  role badges, and for the month a green "5 targets" pill (with their month overall or first
+  Amount target under it) or a gray *No targets yet*. A click on a row picks only that person;
+  the checkbox adds or drops one. The footer says how many of the team have targets.
 - **Progress** on the Team list: each person with targets shows the month overall (a small
   bar and "62% reached", or "62% · 2 behind" in warning) once their progress is read.
 - **Targets** (right, sticky, `TargetCriteriaForm.vue`; 30rem wide, 38rem from `xl`,
@@ -81,33 +82,110 @@ month select with an earlier and a later step either side; both pages share it).
 The currency is the CRM dashboards' reporting currency (`HD CRM Settings.dashboard_currency`),
 else the site default, else INR.
 
+A link with `?employee=<user>` (Team targets' **Edit targets** / **Assign targets**) opens
+the page with that person picked; `?pick=without` (Team targets' **Assign to N people**) opens it
+with everyone still without targets picked. Either parameter is dropped from the URL after.
+
+Each target's kind has one colour everywhere (`VALUE_TYPE_LOOK`, the owner's mockups,
+2026-11-22): **Amount** green with a ₹ icon, **Number** blue, **Percent** violet, **Text**
+amber. It shows as the kind's pill on the Assign form and as the top edge, icon square and pill
+of a target card; the pill always names the kind.
+
+## Team targets page, for Sales Heads (`/helpdesk/team-targets`, 2026-11-22)
+
+`desk/src/pages/sales-targets/TeamTargets.vue`, redesigned the same day to the owner's mockup:
+everyone's targets for the month side by side, so the head doesn't have to open each person.
+Same people, targets and progress as the Assign page (`get_team`, `get_team_progress`); nothing
+new on the server. The month (`?month=`), the view (`?view=person`) and the person open
+(`?employee=`) are in the URL. The header has the view switch (**Whole team** / **Person by
+person**, `TabButtons`), Refresh (reads the ERP site past the minute's cache, `fresh=1`), the
+month stepper and **Assign targets** (the Assign page for the month).
+
+Each person's standing for the month: *behind* (at least one counted target behind pace),
+*on track*, *nothing counted* (targets, but no progress yet), *not set*. Lists put who needs
+attention first: behind, on track, nothing counted, not set; within each, the lowest month
+overall first.
+
+**Whole team** (the default):
+
+- **Pace panel** (`TeamPaceHero.vue`, the dark hero): a gauge of the team average (everyone's
+  month overall, averaged) with a yellow tick at today's pace (`monthPace`: days gone ÷ days in
+  the month), "The team should be at 73% by today" and what the tick means; one bar of everyone
+  by standing with the counts under it. A past month says it is over and where the team ended;
+  a later one that it hasn't begun.
+- **Targets set**: "2 / 7" over a brand meter, the people without targets (faces and names),
+  how many KPIs wait on a head's confirm, and **Assign to N people** (the Assign page with them
+  picked).
+- **Everyone's targets** (`TeamTargetsMatrix.vue`): pills Everyone / With targets / Behind /
+  Not set with counts, a key, then a table: one row a person (face, name, and "39% · 4 of 9
+  behind" in warning, "4 targets · nothing counted" or *Not set*), one column each target given
+  to anyone that month (case-insensitive; information-only targets get none). A cell
+  (`targetCell`) shows what they achieved, *of* the target and a bar, filled by standing
+  (`STANDING_LOOK`: reached green, on pace blue, behind amber, nothing counted gray) with the
+  standing's icon and its words for screen readers and on hover; a KPI shows its state; a
+  target they don't have is a dashed *Not a target*; someone without targets gets one dashed
+  *No targets for … yet*. The person column stays put while the table scrolls sideways. A
+  click on a person opens them in Person by person.
+- **Team totals by target** (`TeamTotals.vue`): each counted Amount or Number target added up
+  over everyone counted (rates don't add up, so Percent targets are left out): a bar coloured
+  by standing with today's pace ticked, and "400 / 130".
+- **Behind pace** (`BehindPace.vue`): the person behind on the most targets: up to three of
+  those targets, biggest gap to the pace first ("1 of 4 · 25%", *Behind pace by 1.9*), what
+  they have already reached, and **Open {name}'s targets**.
+
+**Person by person**: the team list (search and the same pills; a row shows how many targets
+and the month overall, `OverallProgress.vue`, or *Not begun* / *Couldn't count* / *Not set*)
+and, on the right, **the person picked** (`TeamPersonTargets.vue`): avatar, name, who set the
+targets and when, **Edit targets** (or **Assign targets**, solid), the month overall with the
+days counted, then every target as a card (`TargetFigure`: kind colour, Target N, figure, progress), with
+**Confirm it's done** / **Reopen** on each KPI (`KpiStatus`, head mode).
+
+States: loading (skeletons), load error with Try again, not a Sales Head (the route sends them
+Home; the server refuses), no one with a target role, no one matching the pills or search (Show
+everyone; Behind with none left says no one is behind), nothing counted yet for the totals,
+no one behind, nobody picked.
+
+The Team dashboard keeps its own short column (month overall and On track / Behind per
+salesperson); this page is where the detail is.
+
 ## Sales targets page, for the people given targets (`/helpdesk/my-targets`)
 
 `desk/src/pages/sales-targets/MyTargets.vue` (the file and route keep the earlier name *My
 targets*; the sidebar says **Sales targets** and the page **Your sales targets**). Only
-Presales Executives and Sales Users see it. A card for the month on top: the month and the
-count, with who set them (avatar, "Set by …", "Last changed …") on the right. Under it **every
-target is its own card** (`StatTile`, the Team dashboard's stat card; 2026-11-20, the owner
-asked for cards like *Tasks finished*), in a grid of cards at least 220px wide, in the order the
-Sales Head set them: the numeric ones first (`TargetFigure.vue`), then the written ones. A card
-has the name top left, its kind's icon top right on a coloured circle (amounts green, percents
-blue, counts the brand teal, written targets amber; `VALUE_TYPE_LOOK`, 2026-11-20), the figure (amounts with the
-currency sign, percents with %; a written target's text) and a line under it. A counted target
-shows what they achieved, *of* the target under it, the bar with the pace marker, where they
-stand and **How it's counted**; a target not counted says so. Each KPI shows its state and
-**Mark as done** (with what they did) or **Not done after all**. Under the cards a line says to
-ask the Sales Head about a target. The heading adds the month overall. No colour per target:
-the figures are what matter (docs/ui-guidelines.md §8). The month stepper offers this
-month and every month the person has targets in.
+Presales Executives and Sales Users see it. Redesigned twice on 2026-11-22 to the owner's
+mockups; this is the second. The month is a **Month** select in the header (this month, the one
+open, and every month the person has targets in).
 
-**Not assigned shows as 0 (2026-11-19).** Every standard target (`default_criteria()`, sent as
-`defaults` by `get_my_targets`) is always on the page. One the Sales Head didn't assign for the
-month comes after the assigned ones as a card at 0 (*₹0*, *0%*, *0*) with *Not assigned yet*
-under it; a written one says *Not assigned yet*, with no Mark as done. Nothing is counted for
-them and they don't change the month overall (`withUnassigned` in `salesTargets.ts`). A month
-with nothing assigned shows the same card with every standard target at 0, the heading *Your
-Sales Head hasn't assigned targets yet.* and a **See {month}** button for the newest month that
-has targets; the foot asks them to ask their Sales Head.
+- **Hero** (the dark panel): a ring of the month overall ("39%"), *Your targets for* the month,
+  "9 targets set · 22 of 30 days gone" (or *month over* / *starts on the 1st*), chips for what
+  is not zero (*2 reached*, *1 on pace*, *4 behind*, *2 to mark done*; each says its count in
+  words) and who set them with when. A month with nothing assigned says *Your Sales Head hasn't
+  assigned targets yet.* with **See {month}** for the newest month that has targets.
+- **Counted from your leads** (N): every assigned Amount, Number and Percent target as a compact
+  card (`TargetMeter.vue`): its kind's icon square, the name, an ⓘ button that opens the sums
+  (`HowCounted.vue`, shared with `TargetProgress`, with **See these leads**), "400 of 130", the
+  bar with today's pace ticked, the standing in words with its icon and the share reached. A
+  target not counted (target only, month not begun, the ERP refusing) says why. A key explains
+  the tick; `TabButtons` All / Reached / On pace / Behind (with counts) narrow the cards.
+- **Tasks to mark done** (the KPIs, N still open): one row each with the target's text, what
+  they noted, a status pill (*Not done yet*, *Waiting for confirm*, *Confirmed*) and **Mark as
+  done** / **Not done after all** (`KpiStatus` compact).
+- **Where to focus**: information-only targets (Industry, Location) with their text, when
+  assigned.
+- A line at the foot: *Questions about a target? Ask {name}, your Sales Head.*
+
+**Only what was assigned (2026-11-22).** The page shows the targets the Sales Head set and
+nothing else. Standard targets not assigned were cards at 0 (2026-11-19), then *Not assigned
+yet* chips; the owner then asked for the assigned ones only, so `get_my_targets` no longer
+sends `defaults`.
+
+**No targets for the month** (the owner's mockup, 2026-11-22): a light card in place of the hero
+(a dashed ring at 0, the month, "0 targets set · 22 of 30 days gone", **See {month}** for the
+newest month with targets, and *Not set yet*); a card saying *No targets set for {month} yet*
+with **Ask my Sales Head** (`ask_for_targets`; then *Sales Head reminded*, kept on reload by
+`asked`) and **Go to my leads**; **How your targets will work** (three steps and three empty
+card outlines); and **Meanwhile, keep going**: Today's calls, My leads and Dashboard, each
+only when the sidebar also offers it.
 
 ## Progress: counted from the leads (2026-11-18)
 
@@ -175,8 +253,13 @@ kind *Text, info only*. A number target is never information only.
   defaults and the currency.
 - `assign_targets(month, employees, criteria)` (POST): Sales Heads only. Replaces each
   person's targets for the month.
-- `get_my_targets(month)`: Presales Executives and Sales Users. Returns the standard criteria (`defaults`), their own targets and
-  the months they have targets in.
+- `get_my_targets(month)`: Presales Executives and Sales Users. Returns their own targets, the
+  months they have targets in, and `asked` (no targets, and a Sales Head was already asked).
+- `ask_for_targets(month)` (POST): the person, with no targets for the month, reminds every
+  enabled Sales Head: an `HD Notification` (Reminder, from the person, linking to the Assign
+  page with them picked), one per head and month (`dedupe_key`
+  `sales-targets-ask:<user>:<month>`), so asking again tells no one twice. Refused with
+  targets already set or no Sales Head.
 - `get_progress(month, employee=None, fresh=0)`: the person's own progress, or anyone's for a
   Sales Head. `{state: counted | not_started | unavailable | no_targets, reason, from_date,
   to_date, month_over, criteria: {name: {achieved, parts?}}}`.
@@ -186,8 +269,9 @@ kind *Text, info only*. A number target is never information only.
 - `confirm_kpi(month, employee, criterion, confirmed)` (POST): Sales Heads confirm or reopen.
 
 `get_user` sends `can_assign_sales_targets` and `has_sales_targets`, which show the sidebar
-items and let the router open the pages. Both routes are in `SALES_EMPLOYEE_ROUTES`, so a
-Sales Employee who also has one of these roles can reach them.
+items and let the router open the pages (Assign sales targets and Team targets on the first,
+Sales targets on the second). All three routes are in `SALES_EMPLOYEE_ROUTES`, so a Sales
+Employee who also has one of these roles can reach them.
 
 ## Known limits
 
@@ -208,4 +292,5 @@ month not begun, an ERP refusal shown instead of raised, who may read whose prog
 that doesn't fit its value type, and the KPI: marked done and confirmed, only a done KPI
 confirmed, a confirmed one not taken back, and kept or reset on re-assigning; the seven
 defaults with Industry and Location information only, information kept and never ticked off,
-and a number target never information only.
+and a number target never information only. Asking for targets: each Sales Head told once, `asked` after, refused with targets set
+and for anyone not given targets.
