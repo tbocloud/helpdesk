@@ -205,6 +205,8 @@ export interface LeadRow {
   tbo_lead_type?: string | null;
   /** the product / brand it belongs to under its department (absent from an older TBO Smart) */
   product?: string | null;
+  /** where the lead came from (absent from an older TBO Smart) */
+  source?: string | null;
   industry?: string | null;
   state?: string | null;
   district?: string | null;

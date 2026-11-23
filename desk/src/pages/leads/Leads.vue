@@ -268,6 +268,14 @@
                 :only="['product']"
                 bare
               />
+              <FormControl
+                v-model="extra.source"
+                type="select"
+                size="md"
+                class="w-full sm:w-[150px]"
+                :aria-label="__('Source')"
+                :options="choices(options?.sources, __('Any source'))"
+              />
               <Button
                 size="md"
                 :label="
@@ -495,6 +503,13 @@
                       </th>
                       <th scope="col" class="hidden px-3 lg:table-cell">
                         {{ __("Product") }}
+                      </th>
+                      <th
+                        v-if="showSource"
+                        scope="col"
+                        class="hidden px-3 lg:table-cell"
+                      >
+                        {{ __("Source") }}
                       </th>
                       <th scope="col" class="hidden px-3 lg:table-cell">
                         {{ __("Last call") }}
@@ -743,6 +758,14 @@
                         :class="!row.product && 'text-ink-gray-6'"
                       >
                         {{ row.product || __("Not set") }}
+                      </td>
+                      <td
+                        v-if="showSource"
+                        class="hidden max-w-40 truncate px-3 py-3 align-middle lg:table-cell"
+                        :class="!row.source && 'text-ink-gray-6'"
+                        :title="row.source || undefined"
+                      >
+                        {{ row.source || __("Not set") }}
                       </td>
                       <td class="hidden px-3 py-3 align-middle lg:table-cell">
                         <div class="flex flex-col items-start gap-1">
@@ -1354,12 +1377,6 @@ const extraChips = computed(() => {
         Object.assign(extra, { metric: "", period: "", from: "", to: "" }),
     });
   }
-  if (extra.source)
-    chips.push({
-      key: "source",
-      label: __("Source: {0}", extra.source),
-      remove: () => (extra.source = ""),
-    });
   if (extra.temperature)
     chips.push({
       key: "temperature",
@@ -1425,6 +1442,7 @@ const hasFilters = computed(
       filters.department ||
       filters.created_by ||
       filters.called ||
+      extra.source ||
       (hasFollowUpDate.value && followUpRange(filters.follow_up_date)[0]) ||
       hasCategories.value ||
       extra.metric ||
@@ -1729,6 +1747,10 @@ const data = computed(
           copied_at?: string;
         }
       | undefined
+);
+// an older TBO Smart sends no source with the rows: no column then, rather than all "Not set"
+const showSource = computed(
+  () => !!data.value?.rows.some((row) => "source" in row)
 );
 // idle days by lead name; empty while the ERP site's TBO Smart is older than this
 const quiet = computed(

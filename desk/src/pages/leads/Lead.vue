@@ -37,6 +37,9 @@
                   · {{ departmentLabel(lead) }}
                 </template>
                 <template v-if="lead.product"> · {{ lead.product }}</template>
+                <template v-if="lead.source">
+                  · {{ __("Source: {0}", lead.source) }}
+                </template>
               </p>
               <h1
                 class="mt-1 truncate text-[24px] font-bold leading-tight tracking-[-0.01em] text-ink-gray-9"
@@ -319,8 +322,11 @@
                 <template v-for="field in detailFields" :key="field.label">
                   <dt class="text-ink-gray-6">{{ field.label }}</dt>
                   <dd
-                    class="min-w-0 break-words text-ink-gray-8"
-                    :class="field.mono ? 'font-mono tabular-nums' : ''"
+                    class="min-w-0 break-words"
+                    :class="[
+                      field.mono ? 'font-mono tabular-nums' : '',
+                      field.muted ? 'text-ink-gray-6' : 'text-ink-gray-8',
+                    ]"
                   >
                     <a
                       v-if="field.href"
@@ -810,6 +816,7 @@ const detailFields = computed(() => {
     value: string;
     href?: string;
     mono?: boolean;
+    muted?: boolean;
   }[] = [
     { label: __("Company"), value: l.company_name || "" },
     {
@@ -829,7 +836,12 @@ const detailFields = computed(() => {
       label: __("Owner"),
       value: l.owner_name || ownerName(options.value, l.lead_owner),
     },
-    { label: __("Source"), value: l.source || "" },
+    // kept when empty, so a missing source is seen and can be filled in with Edit
+    {
+      label: __("Source"),
+      value: l.source || __("Not set"),
+      muted: !l.source,
+    },
     { label: __("Segment"), value: l.segment || "" },
     { label: __("Territory"), value: l.territory || "" },
     { label: __("Product"), value: l.product || "" },
