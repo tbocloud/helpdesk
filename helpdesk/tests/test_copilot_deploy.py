@@ -338,6 +338,31 @@ class TestTheCheckAfter(DeployCase):
         self.assertIn("The fix is live", self.events("stage")[-1]["message"])
         self.assertTrue(deploy._take_lock("TBO-DEP-NEXT"))  # released
 
+    def test_a_site_that_keeps_its_error_log_private_says_errors_were_not_checked(self):
+        # a site whose access list leaves out Error Log answers its deploy status without errors
+        # (helpdesk_client #6): the check says so, never "no new errors" as if they were read
+        self.checked_site(
+            answers={
+                "get_deploy_status": {
+                    "scheduler_enabled": True,
+                    "maintenance_mode": False,
+                    "errors": None,
+                }
+            },
+            # the site refuses its Error Log to the hub: the check must not ask for it
+            refuse=("get_error_log",),
+        )
+        self.deployed()
+        self.cron()
+        request = frappe.get_doc(deploy.DEPLOY, self.current_run().deploy_request)
+        self.assertEqual(request.status, "Succeeded")
+        row = next(
+            r
+            for r in frappe.parse_json(request.check_results)
+            if r["check"] == "no new errors since the deploy"
+        )
+        self.assertIn("not checked", row["detail"])
+
     def test_a_new_error_after_the_deploy_escalates_it(self):
         self.checked_site(
             errors=[

@@ -151,25 +151,44 @@ def site_rows(connection: str, session: str, request, documents) -> list[dict]:
         )
     ]
     status = _call(client, session, "get_deploy_status", {"since": str(started)}) or {}
-    before = _call(
-        client,
-        session,
-        "get_error_log",
-        {"since": str(started - timedelta(days=7)), "until": str(started), "limit": 50},
-    )
-    known = (
-        {signature(entry) for entry in before if isinstance(entry, dict)}
-        if isinstance(before, list)
-        else set()
-    )
-    new = [
-        top.get("signature")
-        for top in ((status.get("errors") or {}).get("top") or [])
-        if top.get("signature")
-        and top["signature"] not in known
-        and not top["signature"].startswith(NOISE)
-    ]
-    rows.append(_row(_("no new errors since the deploy"), not new, "; ".join(new[:3])))
+    if "errors" in status and status["errors"] is None:
+        # the site's own access list keeps its Error Log from TBO Support (helpdesk_client #6), so its
+        # older errors cannot be asked for either: say so instead of passing as if they had been read
+        rows.append(
+            _row(
+                _("no new errors since the deploy"),
+                True,
+                _(
+                    "not checked: this site does not share its Error Log with TBO Support"
+                ),
+            )
+        )
+    else:
+        before = _call(
+            client,
+            session,
+            "get_error_log",
+            {
+                "since": str(started - timedelta(days=7)),
+                "until": str(started),
+                "limit": 50,
+            },
+        )
+        known = (
+            {signature(entry) for entry in before if isinstance(entry, dict)}
+            if isinstance(before, list)
+            else set()
+        )
+        new = [
+            top.get("signature")
+            for top in ((status.get("errors") or {}).get("top") or [])
+            if top.get("signature")
+            and top["signature"] not in known
+            and not top["signature"].startswith(NOISE)
+        ]
+        rows.append(
+            _row(_("no new errors since the deploy"), not new, "; ".join(new[:3]))
+        )
     rows.append(
         _row(
             _("the scheduler is running"),
