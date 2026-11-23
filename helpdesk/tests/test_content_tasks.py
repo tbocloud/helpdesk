@@ -4,7 +4,7 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_days, add_to_date, getdate, now_datetime
 
-from helpdesk.api.content_board import get_content_project
+from helpdesk.api.content_board import add_entries, get_content_project
 from helpdesk.content_team import (
     CONTENT_TEAM_ROLE,
     DM_EMPLOYEE_ROLE,
@@ -1010,3 +1010,29 @@ class TestContentTeamRole(ContentTaskCase):
             ),
             1,
         )
+
+
+class TestReferenceLink(ContentTaskCase):
+    def test_add_entry_keeps_the_reference_link_on_every_post(self):
+        link = "https://drive.google.com/drive/folders/brand-kit"
+        names = add_entries(
+            values={
+                "customer": CUSTOMER,
+                "title": "Diwali offer",
+                "status": "Drafting",
+                "publish_on": str(self.publish),
+                "reference_link": link,
+            },
+            channels=["Instagram", "Facebook"],
+            separate=1,
+        )
+        self.assertEqual(len(names), 2)
+        for name in names:
+            self.assertEqual(
+                frappe.db.get_value("HD Content Post", name, "reference_link"), link
+            )
+
+    def test_a_reference_link_must_be_a_url(self):
+        post = self.post()
+        post.reference_link = "not a link"
+        self.assertRaises(frappe.ValidationError, post.save)

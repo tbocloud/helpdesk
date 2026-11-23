@@ -4,7 +4,11 @@ import { errorText } from "@/utils";
 import { useDebounceFn } from "@vueuse/core";
 import { call, createResource, toast } from "frappe-ui";
 import { computed, reactive, ref, watch } from "vue";
-import { unfilledPlaceholders, type SignoffQuestion } from "./signoffMeta";
+import {
+  fillsPlaceholders,
+  unfilledPlaceholders,
+  type SignoffQuestion,
+} from "./signoffMeta";
 
 /** A stage's detail: a plain value, or (a table) its rows. */
 export type DetailValue = string | number | null | Record<string, unknown>[];
@@ -17,6 +21,8 @@ export interface SignoffFormState {
   trainer: string;
   signatory_contact: string;
   customer_address: string;
+  /** From: an outgoing Email Account (get_signoff_form's sender_accounts) */
+  sender_email_account: string;
   cc: string;
   subject: string;
   body: string;
@@ -38,6 +44,7 @@ export interface SignoffSource {
   signatory_contact?: string | null;
   customer_address?: string | null;
   cc_emails?: string | null;
+  sender_email_account?: string | null;
   email_subject?: string | null;
   email_body?: string | null;
   attach_pdf?: number | boolean;
@@ -73,6 +80,13 @@ export interface SignoffContact {
   is_primary?: boolean;
 }
 
+/** An outgoing account the person may send the sign-off from. */
+export interface SenderAccount {
+  name: string;
+  email: string;
+  is_default: boolean;
+}
+
 export interface SignoffAddress {
   name: string;
   title: string;
@@ -106,6 +120,8 @@ interface FormOptions {
   addresses: SignoffAddress[];
   contacts: SignoffContact[];
   default_contact?: string | null;
+  sender_accounts: SenderAccount[];
+  default_sender_account?: string | null;
   default_cc: string[];
   templates: SignoffTemplate[];
   team: { user: string; full_name: string }[];
@@ -144,6 +160,7 @@ function blankForm(): SignoffFormState {
     trainer: "",
     signatory_contact: "",
     customer_address: "",
+    sender_email_account: "",
     cc: "",
     subject: "",
     body: "",
@@ -227,6 +244,8 @@ export function useSignoffForm(opts: {
     }),
     onSuccess(data: FormOptions) {
       if (editing.value || carried) {
+        // a draft made before From was asked starts on yours
+        form.sender_email_account ||= data.default_sender_account || "";
         if (editing.value) {
           // its template's Always CC is in the draft's CC: a template picked instead replaces it
           const own = data.templates.find((t) => t.name === form.template);
@@ -238,6 +257,7 @@ export function useSignoffForm(opts: {
         return;
       }
       form.cc = data.default_cc.join(", ");
+      form.sender_email_account = data.default_sender_account || "";
       form.signatory_contact = data.default_contact || "";
       form.customer_address = data.addresses[0]?.name ?? "";
       // a UAT starts on the first UAT template that fits the project, if any
@@ -274,6 +294,7 @@ export function useSignoffForm(opts: {
         signatory_contact: s?.signatory_contact ?? "",
         customer_address: s?.customer_address ?? "",
         cc: s?.cc_emails ?? "",
+        sender_email_account: s?.sender_email_account ?? "",
         subject: s?.email_subject ?? "",
         body: s?.email_body ?? "",
         attach_pdf: s ? !!s.attach_pdf : true,
@@ -496,6 +517,18 @@ export function useSignoffForm(opts: {
       addingContact.value = false;
     }
   }
+  const senderOptions = computed(() =>
+    (data.value?.sender_accounts ?? []).map((a) => ({
+      label: a.is_default ? __("{0} (default)", a.email) : a.email,
+      value: a.name,
+    }))
+  );
+  const senderEmail = computed(
+    () =>
+      data.value?.sender_accounts.find(
+        (a) => a.name === form.sender_email_account
+      )?.email ?? ""
+  );
   const signatory = computed(() =>
     contacts.value.find((c) => c.contact === form.signatory_contact)
   );
@@ -602,8 +635,9 @@ export function useSignoffForm(opts: {
     };
   }
 
-  /** A draft's kept mail that is still exactly what its choices fill in was never written by
-   * hand: it goes on following them (a date set later fills in, a new signatory is greeted). */
+  /** A draft's kept mail that is still what its choices fill in was never written by hand: it
+   * goes on following them (a date set later fills in, a new signatory is greeted). One saved
+   * before a detail was given still has that placeholder where the fill now has the value. */
   async function followIfUntouched() {
     try {
       const mail: Mail = await call(
@@ -611,10 +645,14 @@ export function useSignoffForm(opts: {
         mailParams()
       );
       if (
-        mail.subject.trim() === form.subject.trim() &&
-        mailWords(mail.body) === mailWords(form.body)
-      )
+        fillsPlaceholders(form.subject.trim(), mail.subject.trim()) &&
+        fillsPlaceholders(mailWords(form.body), mailWords(mail.body))
+      ) {
+        form.subject = mail.subject;
+        form.body = mail.body;
+        baseline.value = { subject: mail.subject, body: mail.body };
         autoFill.value = true;
+      }
     } catch {
       // the draft keeps its mail; Reapply template is there
     }
@@ -752,6 +790,7 @@ export function useSignoffForm(opts: {
       email_subject: form.subject.trim(),
       email_body: mailWords(form.body) ? form.body : "",
       cc_emails: ccList.value.join(", "),
+      sender_email_account: form.sender_email_account || null,
       customer_address: form.customer_address || null,
       attach_pdf: form.attach_pdf ? 1 : 0,
       details: detailPayload(),
@@ -856,6 +895,8 @@ export function useSignoffForm(opts: {
     signatory,
     addresses,
     address,
+    senderOptions,
+    senderEmail,
     ccList,
     unfilled,
     detailsPicked,

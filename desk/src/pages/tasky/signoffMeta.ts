@@ -47,6 +47,18 @@ export function unfilledPlaceholders(text: string): string[] {
   );
 }
 
+/** Whether `filled` is `kept` with (some of) its placeholders filled in: nothing else differs. */
+export function fillsPlaceholders(kept: string, filled: string): boolean {
+  const pattern = kept
+    .split(PLACEHOLDER)
+    // split keeps the captured names at the odd indexes: those are the gaps
+    .map((part, i) =>
+      i % 2 ? "[\\s\\S]*?" : part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    )
+    .join("");
+  return new RegExp(`^${pattern}$`).test(filled);
+}
+
 /** A question on a sign-off or a template; `name` is set once it is saved. */
 export interface SignoffQuestion {
   name?: string;

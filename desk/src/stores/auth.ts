@@ -1,3 +1,4 @@
+import type { Division } from "@/pages/divisions/divisions";
 import { LOGIN_PAGE, router } from "@/router";
 import { call, createResource } from "frappe-ui";
 import { defineStore } from "pinia";
@@ -80,6 +81,10 @@ export const useAuthStore = defineStore("auth", () => {
   const isSalesBd: ComputedRef<boolean> = computed(
     () => !!user__.value.is_sales_bd
   );
+  // Sales → Dashboard is a salesperson's own day: not for Sales Heads or Sales Managers
+  const hasOwnSalesDashboard: ComputedRef<boolean> = computed(
+    () => !!user__.value.has_own_sales_dashboard
+  );
   // the Tickets list and New ticket: System / Agent Managers and the ERP team
   const canWorkTickets: ComputedRef<boolean> = computed(
     () => !!user__.value.can_work_tickets
@@ -92,9 +97,44 @@ export const useAuthStore = defineStore("auth", () => {
   const canUseLeadBank: ComputedRef<boolean> = computed(
     () => !!user__.value.can_use_lead_bank
   );
-  // CRM dashboards: someone who may open at least one (docs/crm-dashboard.md)
-  const canViewCrmDashboards: ComputedRef<boolean> = computed(
-    () => !!user__.value.can_view_crm_dashboards
+  // divisions the person may switch to, the active one, and what they may do with them
+  // (docs/divisions.md); the server enforces every one of these
+  const divisions: ComputedRef<Division[]> = computed(
+    () => user__.value.divisions || []
+  );
+  const activeDivision: ComputedRef<string | null> = computed(
+    () => user__.value.active_division || null
+  );
+  const isSuperAdmin: ComputedRef<boolean> = computed(
+    () => !!user__.value.is_super_admin
+  );
+  const canManageDivisions: ComputedRef<boolean> = computed(
+    () => !!user__.value.can_manage_divisions
+  );
+  // a Division Admin of the active division is a Sales Manager on its ERP site
+  // (divisions.ERP_SALES_ROLES), so they set up its lead departments; a Group Admin isn't
+  const isActiveDivisionAdmin: ComputedRef<boolean> = computed(
+    () =>
+      canUseLeads.value &&
+      divisions.value.find((d) => d.name === activeDivision.value)?.role ===
+        "Division Admin"
+  );
+  const canViewDivisionOverview: ComputedRef<boolean> = computed(
+    () => !!user__.value.can_view_division_overview
+  );
+  // the Sales area of the sidebar: sales, presales and their heads and managers only
+  const inSales: ComputedRef<boolean> = computed(() => !!user__.value.in_sales);
+  // Sales targets: Sales Heads set each month's targets (docs/sales-targets.md)
+  const canAssignSalesTargets: ComputedRef<boolean> = computed(
+    () => !!user__.value.can_assign_sales_targets
+  );
+  // Sales targets (their own): Presales Executives and Sales Users read theirs
+  const hasSalesTargets: ComputedRef<boolean> = computed(
+    () => !!user__.value.has_sales_targets
+  );
+  // Presales Executives don't get Today's calls: no sidebar item, no pill, never the landing tab
+  const hideTodaysCalls: ComputedRef<boolean> = computed(
+    () => !!user__.value.hide_todays_calls
   );
   const canSeeCustomerReport: ComputedRef<boolean> = computed(
     () => !!(user__.value.is_manager || user__.value.is_project_manager)
@@ -197,10 +237,20 @@ export const useAuthStore = defineStore("auth", () => {
     isDmEmployee,
     isSalesEmployee,
     isSalesBd,
+    hasOwnSalesDashboard,
     canWorkTickets,
     canUseLeads,
     canUseLeadBank,
-    canViewCrmDashboards,
+    divisions,
+    activeDivision,
+    isSuperAdmin,
+    canManageDivisions,
+    isActiveDivisionAdmin,
+    canViewDivisionOverview,
+    canAssignSalesTargets,
+    hasSalesTargets,
+    inSales,
+    hideTodaysCalls,
     telephonyInstalled,
     canOpenChat,
     isLoggedIn,

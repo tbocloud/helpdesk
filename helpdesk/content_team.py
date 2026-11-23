@@ -20,6 +20,10 @@ ERP_EMPLOYEE_ROLE = "ERP Employee"
 # a salesperson: sees the sales screens (Leads, the Scoreboard) and no tasks, projects,
 # tickets or content (docs/departments.md)
 SALES_EMPLOYEE_ROLE = "Sales Employee"
+# sets each month's targets for the presales and sales people (docs/sales-targets.md)
+SALES_HEAD_ROLE = "Sales Head"
+# a presales person: is given targets and sees them on Sales targets
+PRESALES_EXECUTIVE_ROLE = "Presales Executive"
 # what a Sales Employee is never told about: the hub's work, support and content records
 SALES_HIDDEN_DOCTYPES = (
     "Project",
@@ -79,31 +83,67 @@ def is_dm_employee(user: str | None = None) -> bool:
 
 
 def is_sales_employee(user: str | None = None) -> bool:
-    """A Sales Employee: the hub shows them the sales screens only. Their task, project,
-    ticket and content lists are empty and those records are refused when opened, and
-    nobody can give them a task or a ticket. System Managers and Agent Managers keep
-    everything, as with the department walls."""
+    """A Sales Employee, or a Division Admin or Division Sales User of their active
+    division (docs/divisions.md): the hub shows them the sales screens only. Their task,
+    project, ticket and content lists are empty and those records are refused when
+    opened, and nobody can give them a task or a ticket. System Managers and Agent
+    Managers keep everything, as with the department walls."""
+    from helpdesk.divisions import leads_role
     from helpdesk.tasky.permissions import is_tasky_admin
 
     user = user or frappe.session.user
     if is_tasky_admin(user):
         return False
-    return SALES_EMPLOYEE_ROLE in frappe.get_roles(user)
+    return SALES_EMPLOYEE_ROLE in frappe.get_roles(user) or bool(leads_role(user))
 
 
 def is_sales_bd_role(user: str | None = None) -> bool:
-    """A salesperson by role: a Sales Employee who is not a System Manager, Agent Manager or
-    Sales Manager. Whether they also head a department is known on the ERP site only
-    (`helpdesk.api.leads.is_bd` settles it); a BD sees Today's calls, their own leads and
-    follow-ups, nothing of the team's (docs/leads.md)."""
+    """A salesperson by role: a Division Sales User (a Division Admin manages instead), or a
+    Sales Employee who is not a System Manager, Agent Manager or Sales Manager. Whether they
+    also head a department is known on the ERP site only (`helpdesk.api.leads.is_bd`
+    settles it); a BD sees Today's calls, their own leads and follow-ups, nothing of the
+    team's (docs/leads.md)."""
+    from helpdesk.divisions import DIVISION_SALES_USER, leads_role
     from helpdesk.tasky.permissions import is_tasky_admin
 
     user = user or frappe.session.user
-    return (
-        is_sales_employee(user)
-        and not is_tasky_admin(user)
-        and "Sales Manager" not in frappe.get_roles(user)
-    )
+    if is_tasky_admin(user):
+        return False
+    division_role = leads_role(user)
+    if division_role:
+        return division_role == DIVISION_SALES_USER
+    return is_sales_employee(user) and "Sales Manager" not in frappe.get_roles(user)
+
+
+SALES_ROLES = {
+    "Sales User",
+    "Sales Manager",
+    SALES_HEAD_ROLE,
+    PRESALES_EXECUTIVE_ROLE,
+    SALES_EMPLOYEE_ROLE,
+}
+
+
+def in_sales(user: str | None = None) -> bool:
+    """Gets the Sales area of the sidebar: Sales Users, Sales Managers, Sales Heads,
+    Presales Executives and Sales Employees, a Division Admin or Division Sales User of
+    their active division, and System
+    Managers, who set it up. Nobody else is in sales, so nobody else sees it."""
+    from helpdesk.divisions import leads_role
+
+    user = user or frappe.session.user
+    if user == "Administrator":
+        return True
+    roles = set(frappe.get_roles(user))
+    return bool("System Manager" in roles or SALES_ROLES & roles or leads_role(user))
+
+
+def manages_sales(user: str | None = None) -> bool:
+    """A Sales Head or Sales Manager: they follow the team (Team dashboard, Team targets,
+    Leads) and have no Sales → Dashboard, which is a salesperson's own day
+    (docs/sales-dashboard.md)."""
+    roles = set(frappe.get_roles(user or frappe.session.user))
+    return bool({SALES_HEAD_ROLE, "Sales Manager"} & roles)
 
 
 def sees_no_tickets(user: str | None = None) -> bool:
@@ -245,6 +285,8 @@ def ensure_role():
         (DM_EMPLOYEE_ROLE, "/helpdesk/content"),
         (ERP_EMPLOYEE_ROLE, "/helpdesk/content"),
         (SALES_EMPLOYEE_ROLE, "/helpdesk/leads"),
+        (SALES_HEAD_ROLE, "/helpdesk/sales-targets"),
+        (PRESALES_EXECUTIVE_ROLE, "/helpdesk/my-targets"),
     ):
         if frappe.db.exists("Role", role):
             continue

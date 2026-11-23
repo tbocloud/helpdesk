@@ -146,7 +146,23 @@ rules above where the two disagreed. What that allows, and nothing beyond it:
   now the mockup's segmented look (the checked option white on a light track).
 - **Bulk selection**: a near-black bar across the table with outlined white buttons.
 
-### Page recipe (every page)
+### The owner's exception: the sales targets pages (2026-11-22)
+
+The owner sent mockups for Team targets, Your sales targets and Assign sales targets and asked
+for the pages to match. What that allows, on those pages only:
+
+- **The hero panel**: one dark summary panel at the top of Team targets and Your sales targets
+  (`bg-hero`, white text, `text-hero-muted` for secondary lines; tokens in `theme.css`). On it,
+  `hero-fill` (mint) draws the team average and *on track*, `hero-pace` (yellow) the tick for
+  today's pace, `warm-fill` *behind*; each always with its count or words beside it. Contrast:
+  white on `hero` 12.1, `hero-muted` 7.1, `hero-fill` 6.4 and `hero-pace` 8.1
+  (light; higher in dark).
+- **A colour per target kind** (`VALUE_TYPE_LOOK`): Amount green, Number blue, Percent violet,
+  Text amber, as a card's 4 px top edge, its icon square and its pill. The pill always names
+  the kind.
+- **Standing colours in the team grid** (`STANDING_LOOK`): reached green, on pace blue, behind
+  amber, nothing counted gray, each cell with the standing's icon and its words.
+
 
 - **Type**: a compact scale (`desk/tailwind.config.js`): every frappe-ui size is about 1 px
   smaller than stock (`text-base` 13 px, `text-sm` 12.5 px, `text-xs` 11.5 px, `text-lg`
@@ -231,39 +247,33 @@ fixed and uses the existing tokens, never a new colour:
   `danger`**: it isn't a failure to shame. Every tone has its icon or words beside it.
 - No gradients, no tone outside the table above, and the rest of the app is unchanged.
 
-### The owner's exception: the CRM dashboards are colourful (2026-11-13)
+### The owner's exception: the division overview's charts are colourful (2026-11-13)
 
-The owner asked for the CRM dashboards page to be colourful, so each metric carries a tone
-**on that screen only** ([crm-dashboard.md](crm-dashboard.md)). The reason: the page is
-scanned for a dozen figures at once, and a tone per kind of figure tells won from lost from
-money still to win at a glance. The mapping is fixed, uses the existing tokens, and lives in
-one place (`METRIC_LOOK` in `desk/src/pages/crm-dashboard/crmDashboard.ts`):
+The owner asked for the CRM dashboards page to be colourful, so each figure carries a tone
+**on its charts only**. The CRM dashboards were removed on 2026-11-17; the Business overview
+(docs/divisions.md) draws its charts with the same `DashboardChart` and keeps the rule. The
+reason: the page is scanned for many figures at once, and a tone per kind of figure tells won
+from lost from money still to win at a glance. The mapping is fixed, uses the existing tokens,
+and lives in one place (`METRIC_LOOK` in `desk/src/pages/divisions/chartLook.ts`):
 
-| Metric | Tone (icon circle, chart card heading) | Chart series |
+| Figure | Tone (chart card heading) | Chart series |
 | --- | --- | --- |
-| Total leads, open leads | `brand` (leads, as on the Daily report) | slot 0 (blue) |
-| Won, converted, won sales value, average deal value | `success` | slot 2 (green) |
-| Lost leads | `danger` | slot 1 (orange) |
-| Expected revenue, pending sales value | `warning` | slot 3 (amber) |
-| Conversion rate, closing time | `info` | slot 4 (pink), always alone in its chart |
+| Leads, open projects | `brand` (as on the Daily report) | slot 0 (blue) |
+| Won leads, sales value, completed | `success` | slot 2 (green) |
+| Overdue tasks | `danger` | slot 1 (orange) |
+| Quoted value, projects on hold | `warning` | slot 3 (amber) |
+| Conversion rate | `info` | slot 4 (pink), always alone in its chart |
 
-- The three headline KPI cards are filled with their tone's soft colour (`StatTile`'s `tint`),
-  the icon on the solid tone, and a mini trend in the tone's colour; every other KPI card is a
-  compact `StatTile` with a 4 px left edge and its icon in the tone. Values stay neutral ink.
-  The page sits on the gray canvas like every page, the filters are a light bar of
-  outlined selects with no box around them, and a chart card is a section as on the Daily
-  report: a 4 px left border, a soft heading strip and the heading icon in the tone of the
-  chart's metric.
+- A chart card is a section as on the Daily report: a 4 px left border, a soft heading strip
+  and the heading icon in the tone of the chart's figure. Values stay neutral ink.
 - **Series colours come from `chartTheme`'s validated palette, never the status tones:** the
   status tones failed the colour-vision checks as series (red beside green and amber). Each
-  metric keeps its slot from chart to chart; two series whose slots don't pass together in
+  figure keeps its slot from chart to chart; two series whose slots don't pass together in
   both themes (orange with amber, green with pink) fall back to blue and orange. Bars carry
   their value at the end and lines their last figure, because the lighter slots sit below 3:1
-  on white. A table's columns carry a dot of their metric's colour beside the name.
-- A card's change against the period before is `success` when it is good news, `warning`
-  when it isn't, never `danger` (as on the Daily report, a slower stretch is not a failure),
-  and neutral for figures where neither is (open leads, pending value); it always reads in
-  words with its arrow.
+  on white. A table's columns carry a dot of their figure's colour beside the name.
+- The overview's stat tiles stay plain `StatTile`s with an icon tone only where it means
+  something (leads brand, conversion info, sales value success).
 - Every tone has its icon and words beside it. No gradients (a line's area wash is one flat
   colour), and the rest of the app is unchanged.
 

@@ -277,6 +277,11 @@ import SettingsSection from "../SettingsSection.vue";
 import CallBatchRules from "./CallBatchRules.vue";
 import DepartmentProducts from "./DepartmentProducts.vue";
 
+// a division's admin picks from their division's people only; everyone else from the agents
+const props = defineProps<{
+  people?: { user: string; full_name?: string }[];
+}>();
+
 const { agents } = useAgentStore();
 const formId = `lead-department-${useId()}`;
 // the two types the owner works with, until the ERP site's options say otherwise
@@ -299,7 +304,12 @@ const error = computed(() =>
 onMounted(() => {
   leadDepartments.fetch();
   loadLeadOptions();
-  if (!agents.loading && !agents.data?.length && !agents.list.promise)
+  if (
+    !props.people &&
+    !agents.loading &&
+    !agents.data?.length &&
+    !agents.list.promise
+  )
     agents.fetch();
 });
 
@@ -317,15 +327,19 @@ const typeOptions = computed(() => {
   return types.map((t) => ({ label: t, value: t }));
 });
 
-/** The hub's agents by their email, which is how the ERP site knows them; a person a
- * department already has stays pickable even when they are no longer an active agent. */
+/** The people to pick (the agents, or the division's people) by their email, which is how
+ * the ERP site knows them; a person a department already has stays pickable even when they
+ * are no longer among them. */
 const userOptions = computed(() => {
   const options = new Map<string, { label: string; value: string }>();
-  for (const a of agents.data ?? [])
-    if (a.user)
-      options.set(a.user, {
-        label: a.agent_name ? `${a.agent_name} (${a.user})` : a.user,
-        value: a.user,
+  const pickable =
+    props.people ??
+    (agents.data ?? []).map((a) => ({ user: a.user, full_name: a.agent_name }));
+  for (const p of pickable)
+    if (p.user)
+      options.set(p.user, {
+        label: p.full_name ? `${p.full_name} (${p.user})` : p.user,
+        value: p.user,
       });
   for (const d of departments.value)
     for (const p of [...d.heads, ...(d.viewers ?? []), ...d.members])

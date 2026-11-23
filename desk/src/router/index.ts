@@ -20,6 +20,7 @@ const LEADS_ROUTES = new Set([
   "Lead",
   "LeadProposal",
   "LeadNewProposal",
+  "LeadProposalSetup",
   "AssignLeads",
   "MemberCalls",
 ]);
@@ -195,26 +196,79 @@ const portalRoutes = [
     component: () => import("@/pages/leads/NewProposal.vue"),
     props: true,
   },
+  // the first page again for a draft proposal: its Update saves and regenerates it
+  {
+    path: "/leads/:leadId/proposals/:proposalId/setup",
+    name: "LeadProposalSetup",
+    component: () => import("@/pages/leads/NewProposal.vue"),
+    props: true,
+  },
   {
     path: "/leads/:leadId/proposals/:proposalId",
     name: "LeadProposal",
     component: () => import("@/pages/leads/Proposal.vue"),
     props: true,
   },
-  // configurable lead reporting across companies (docs/crm-dashboard.md)
+  // the central and per-division overview and reports (docs/divisions.md)
   {
-    path: "/crm-dashboards/:dashboardId?",
-    name: "CrmDashboard",
-    component: () => import("@/pages/crm-dashboard/CrmDashboard.vue"),
-    // admins too before the first dashboard exists, to see the page's set-up prompt
+    path: "/business-overview",
+    name: "DivisionOverview",
+    component: () => import("@/pages/divisions/DivisionOverview.vue"),
+    beforeEnter: () =>
+      useAuthStore().canViewDivisionOverview || { name: "Home" },
+  },
+  {
+    path: "/division-reports",
+    name: "DivisionReports",
+    component: () => import("@/pages/divisions/DivisionReports.vue"),
+    beforeEnter: () =>
+      useAuthStore().canViewDivisionOverview || { name: "Home" },
+  },
+  // the sales dashboards, live from the ERP site (docs/sales-dashboard.md): a salesperson's own
+  // day (not for Sales Heads or Sales Managers), and the team's for anyone but a BD (the
+  // server refuses both)
+  {
+    path: "/sales/dashboard",
+    name: "SalesDashboard",
+    component: () => import("@/pages/sales-dashboard/SalesDashboard.vue"),
     beforeEnter: () => {
       const auth = useAuthStore();
       return (
-        auth.canViewCrmDashboards ||
-        auth.isAdmin ||
-        auth.isManager || { name: "Home" }
+        (auth.canUseLeads && auth.hasOwnSalesDashboard) || { name: "Home" }
       );
     },
+  },
+  {
+    path: "/sales/team-dashboard",
+    name: "SalesTeamDashboard",
+    component: () => import("@/pages/sales-dashboard/SalesTeamDashboard.vue"),
+    beforeEnter: () => useAuthStore().canUseLeads || { name: "Home" },
+  },
+  // each month's targets: a Sales Head sets them, the people read theirs (docs/sales-targets.md)
+  {
+    path: "/sales-targets",
+    name: "SalesTargets",
+    component: () => import("@/pages/sales-targets/SalesTargets.vue"),
+    beforeEnter: () => useAuthStore().canAssignSalesTargets || { name: "Home" },
+  },
+  {
+    path: "/team-targets",
+    name: "TeamTargets",
+    component: () => import("@/pages/sales-targets/TeamTargets.vue"),
+    beforeEnter: () => useAuthStore().canAssignSalesTargets || { name: "Home" },
+  },
+  {
+    path: "/my-targets",
+    name: "MyTargets",
+    component: () => import("@/pages/sales-targets/MyTargets.vue"),
+    beforeEnter: () => useAuthStore().hasSalesTargets || { name: "Home" },
+  },
+  // expense claims on the division's ERP site: claim and approve (docs/expenses.md)
+  {
+    path: "/expenses",
+    name: "Expenses",
+    component: () => import("@/pages/expenses/Expenses.vue"),
+    beforeEnter: () => useAuthStore().canUseLeads || { name: "Home" },
   },
   // the Lead Bank: any active agent adds leads by photo and sees their own (docs/lead-bank.md)
   {

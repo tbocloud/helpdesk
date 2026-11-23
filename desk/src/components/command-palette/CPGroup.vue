@@ -6,30 +6,20 @@
     <component
       :is="item.icon"
       v-if="item.icon"
-      class="mr-3 h-4 w-4 text-ink-gray-7"
+      class="mr-3 h-4 w-4 shrink-0 text-ink-gray-6"
     />
-    <span class="overflow-hidden text-ellipsis whitespace-nowrap">
-      {{ item.title }}&nbsp;
-    </span>
+    <span class="min-w-0 truncate">{{ item.title }}</span>
     <span
-      v-if="item.modified"
-      class="ml-auto whitespace-nowrap pl-2 text-ink-gray-5"
+      v-if="item.description"
+      class="ml-auto max-w-[45%] shrink-0 truncate pl-3 text-sm text-ink-gray-5"
     >
-      {{ dayjs(item.modified).fromNow(true) }}
+      {{ item.description }}
     </span>
   </div>
 </template>
 <script setup lang="ts">
-import { dayjs } from "frappe-ui";
-
-defineProps({
-  item: {
-    type: Object,
-    required: true,
-  },
-  active: {
-    type: Boolean,
-    required: true,
-  },
-});
+defineProps<{
+  item: { title: string; description?: string; icon?: unknown };
+  active: boolean;
+}>();
 </script>

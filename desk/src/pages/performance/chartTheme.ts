@@ -23,7 +23,8 @@ function resolveColor(cssValue: string): string {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
-function token(name: string) {
+/** A theme token (a CSS variable such as "--success") as a colour ECharts can draw. */
+export function token(name: string) {
   const value = getComputedStyle(document.documentElement)
     .getPropertyValue(name)
     .trim();

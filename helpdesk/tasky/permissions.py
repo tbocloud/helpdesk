@@ -36,6 +36,11 @@ from helpdesk.content_team import (
     is_erp_only,
     is_sales_employee,
 )
+from helpdesk.divisions import (
+    can_see_division,
+    check_assignment_division,
+    division_condition,
+)
 from helpdesk.utils import assigned_names_query
 
 ADMIN_ROLES = ("System Manager", "Agent Manager")
@@ -169,6 +174,11 @@ def check_assignment_department(todo, method=None):
                 frappe.db.get_value("Project", project, "custom_department"),
             )
         )
+    # like the Sales wall, only a new assignment: closing an older one still works
+    if todo.status == "Open" and (
+        todo.is_new() or todo.has_value_changed("allocated_to")
+    ):
+        check_assignment_division(project, todo.allocated_to)
 
 
 def check_sales_assignment(todo):
@@ -570,6 +580,9 @@ def project_query(user: str | None = None) -> str | None:
     hidden = hidden_departments(user)
     if hidden:
         condition += f" and ifnull(`tabProject`.`custom_department`, '') not in ({_departments_sql(hidden)})"
+    division = division_condition("`tabProject`.`division`", user)
+    if division:
+        condition += f" and {division}"
     return condition
 
 
@@ -591,6 +604,13 @@ def task_query(user: str | None = None) -> str | None:
         condition += (
             f" and ifnull(`tabTask`.`project`, '') not in (select `name` from `tabProject` "
             f"where `custom_department` in ({_departments_sql(hidden)}))"
+        )
+    division = division_condition("`division`", user)
+    if division:
+        # a task follows its project's division
+        condition += (
+            " and ifnull(`tabTask`.`project`, '') not in (select `name` from `tabProject` "
+            f"where not {division})"
         )
     if is_erp_only(user):
         # the content calendar is the Digital team's, whatever its project's department
@@ -634,6 +654,8 @@ def project_has_permission(
         return True
     if doc.get("custom_department") in hidden_departments(user):
         return False
+    if not can_see_division(doc.get("division"), user):
+        return False
     if is_project_owner(doc.name, user):
         return True
     if ptype in ("read", "print", "email", "report") and (
@@ -650,6 +672,10 @@ def task_has_permission(doc, ptype: str | None = None, user: str | None = None) 
     if is_tasky_admin(user):
         return True
     if is_sales_employee(user) or is_hidden_project(doc.project, user):
+        return False
+    if doc.project and not can_see_division(
+        frappe.db.get_value("Project", doc.project, "division"), user
+    ):
         return False
     # outside the content team, only their own content tasks; never for ERP Employees
     if (

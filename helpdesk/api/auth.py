@@ -7,16 +7,27 @@ from helpdesk.content_team import (
     can_edit_content,
     can_work_tickets,
     in_content_team,
+    in_sales,
     is_content_only,
     is_dm_employee,
     is_dm_head,
     is_erp_only,
     is_sales_bd_role,
     is_sales_employee,
+    manages_sales,
 )
-from helpdesk.crm_dashboard.report import open_dashboards
+from helpdesk.divisions import (
+    division_info,
+    division_without_site,
+    leads_closed_by_site,
+)
 from helpdesk.helpdesk.doctype.hd_customer.hd_customer import can_set_ticket_owner
 from helpdesk.integrations.crm.leads import can_use_lead_bank, can_use_leads
+from helpdesk.sales_targets import (
+    can_assign_targets,
+    has_own_targets,
+    hides_todays_calls,
+)
 from helpdesk.tasky.permissions import is_project_manager as tasky_is_project_manager
 from helpdesk.utils import agent_only, get_agent_name, get_agents_team
 from helpdesk.utils import is_agent as _is_agent
@@ -103,14 +114,24 @@ def get_user():
         # a Sales Employee who is no manager: Leads shows them their own calls and leads only
         # (a department head is told apart by the Leads options, from the ERP site)
         "is_sales_bd": is_sales_bd_role(current_user),
+        # Sales → Dashboard is a salesperson's own day: not for Sales Heads or Sales Managers
+        "has_own_sales_dashboard": not manages_sales(current_user),
+        # the Sales area of the sidebar: only the people in sales
+        "in_sales": in_sales(current_user),
         # the Tickets list and New ticket: System / Agent Managers and the ERP team
         "can_work_tickets": can_work_tickets(current_user),
         # the Leads page, live from the CRM site (docs/leads.md)
-        "can_use_leads": can_use_leads(current_user),
+        "can_use_leads": can_use_leads(current_user)
+        and not division_without_site(current_user)
+        and not leads_closed_by_site(current_user),
         # Add a lead and My leads: every active agent while Leads is on (docs/lead-bank.md)
         "can_use_lead_bank": can_use_lead_bank(current_user),
-        # CRM dashboards: someone who may open at least one (docs/crm-dashboard.md)
-        "can_view_crm_dashboards": bool(open_dashboards(current_user)),
+        # Sales targets: Sales Heads set each month's targets (docs/sales-targets.md)
+        "can_assign_sales_targets": can_assign_targets(current_user),
+        # Sales targets (their own): Presales Executives and Sales Users read theirs
+        "has_sales_targets": has_own_targets(current_user),
+        # Presales Executives don't get Today's calls: no sidebar item, no pill on Leads
+        "hide_todays_calls": hides_todays_calls(current_user),
         # lets the frontend skip call-integration checks when telephony isn't installed
         "telephony_installed": "telephony" in frappe.get_installed_apps(),
         "user_image": user_image,
@@ -122,6 +143,8 @@ def get_user():
         # chime with a new ticket's notice (Settings → Preferences, default off)
         "new_ticket_sound": bool(user.hd_new_ticket_sound),
         "user_teams": user_team_names,
+        # divisions, the active one and what the person may do with them (docs/divisions.md)
+        **division_info(current_user),
         "availability": availability.get("availability"),
         "availability_changed_on": availability.get("availability_changed_on"),
         "persona_captured": persona_captured,

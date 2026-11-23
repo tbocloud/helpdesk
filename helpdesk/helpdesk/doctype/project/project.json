@@ -8,6 +8,7 @@
 	"field_order": [
 		"project_name",
 		"customer",
+		"division",
 		"project_type",
 		"project_lead",
 		"review_before_done",
@@ -38,6 +39,15 @@
 			"in_list_view": 1,
 			"in_standard_filter": 1,
 			"search_index": 1
+		},
+		{
+			"fieldname": "division",
+			"fieldtype": "Link",
+			"label": "Division",
+			"options": "HD Division",
+			"search_index": 1,
+			"in_standard_filter": 1,
+			"description": "Only the division's members see the project (Super Admins see every division). Empty: everyone who could see it before."
 		},
 		{
 			"fieldname": "project_lead",
@@ -121,7 +131,7 @@
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-11-13 14:00:00.000000",
+	"modified": "2026-11-16 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "Project",

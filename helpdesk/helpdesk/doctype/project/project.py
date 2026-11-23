@@ -6,6 +6,7 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import getdate
 
+from helpdesk.divisions import active_division, can_see_division, check_division_for
 from helpdesk.tasky.permissions import hidden_departments
 
 # set by Create project on the lead's documents strip (docs/proposals.md)
@@ -18,9 +19,13 @@ PLAN_LINK = (
 
 
 class Project(Document):
+    def before_insert(self):
+        self.set_default_division()
+
     def validate(self):
         self.validate_dates()
         self.validate_department()
+        self.validate_division()
         self.protect_plan_link()
 
     def on_trash(self):
@@ -50,6 +55,31 @@ class Project(Document):
                     _("The project's plan link is set only by Create project."),
                     frappe.PermissionError,
                 )
+
+    def set_default_division(self):
+        if not self.division:
+            self.division = active_division()
+
+    def validate_division(self):
+        """Nobody moves a project into a division they aren't in (they'd lose it), and its
+        lead and members are the division's people (docs/divisions.md)."""
+        if not self.division:
+            return
+        if self.has_value_changed("division") and not can_see_division(self.division):
+            frappe.throw(
+                _("You aren't a member of the {0} division.").format(self.division),
+                frappe.PermissionError,
+            )
+        if self.has_value_changed("division") or self.has_value_changed("project_lead"):
+            check_division_for(self.division, [self.project_lead])
+        if self.has_value_changed("division") or self.members_changed():
+            check_division_for(self.division, [row.user for row in self.users])
+
+    def members_changed(self) -> bool:
+        before = self.get_doc_before_save()
+        if not before:
+            return True
+        return {row.user for row in before.users} != {row.user for row in self.users}
 
     def validate_dates(self):
         if (

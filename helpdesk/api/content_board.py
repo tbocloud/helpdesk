@@ -33,6 +33,7 @@ ENTRY_FIELDS = (
     "status",
     "publish_on",
     "caption",
+    "reference_link",
     "hashtags",
     "brief",
     "task_mode",

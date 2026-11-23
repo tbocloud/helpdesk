@@ -254,6 +254,18 @@
           @click="f.reapply()"
         />
       </div>
+      <FormControl
+        v-if="f.senderOptions.length"
+        v-model="f.form.sender_email_account"
+        type="select"
+        :label="__('From')"
+        :options="f.senderOptions"
+        :description="
+          __(
+            'The customer sees your name with this address. Reminders go from it too, and their reply comes back to it.'
+          )
+        "
+      />
       <TextInput
         v-model="f.form.subject"
         :label="__('Subject')"

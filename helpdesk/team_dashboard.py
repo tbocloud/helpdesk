@@ -171,11 +171,14 @@ def recent_periods(period: str, count: int, day=None) -> list[tuple[date, date]]
 # --- the numbers -------------------------------------------------------------
 
 
-def collect(start, end, with_overdue: bool = True, today=None) -> dict:
+def collect(
+    start, end, with_overdue: bool = True, today=None, division: str | None = None
+) -> dict:
     """Every row the dashboard counts in the period, for everyone; cached briefly.
 
     `with_overdue` adds the open tasks overdue today, which only mean something for
-    the period in progress or one that just closed.
+    the period in progress or one that just closed. Sales come from `division`'s ERP
+    site (the CRM connection for none).
     """
     today = getdate(today or nowdate())
     # a closed period without today's overdue no longer depends on the day: keep it
@@ -198,12 +201,27 @@ def collect(start, end, with_overdue: bool = True, today=None) -> dict:
         )
     # salespeople's CRM activity, read from the CRM site and cached on its own, so
     # a site that can't be reached never holds up the rest of the Scoreboard
-    activity = sales.activity(start, end, with_overdue)
+    activity = sales.activity(start, end, with_overdue, division)
     return {
         **data,
         "sales": activity["rows"],
         "sales_status": {k: v for k, v in activity.items() if k != "rows"},
     }
+
+
+def only_people(data: dict, people: set[str]) -> dict:
+    """`collect`'s rows narrowed to `people`: a task or post shared with others keeps only
+    them, so nobody else's work is counted or named."""
+    out = dict(data)
+    for key in ("tasks", "overdue", "posts"):
+        out[key] = [
+            {**row, "users": [u for u in row["users"] if u in people]}
+            for row in data.get(key) or []
+            if set(row["users"]) & people
+        ]
+    for key in ("hours", "sales"):
+        out[key] = [row for row in data.get(key) or [] if row["user"] in people]
+    return out
 
 
 def clear_cache():

@@ -101,6 +101,14 @@ export default {
           on: "var(--on-brand)",
         },
         canvas: "var(--surface-canvas)",
+        hero: {
+          DEFAULT: "var(--hero)",
+          ink: "var(--hero-ink)",
+          muted: "var(--hero-muted)",
+          track: "var(--hero-track)",
+          fill: "var(--hero-fill)",
+          pace: "var(--hero-pace)",
+        },
         violet: {
           DEFAULT: "var(--violet)",
           soft: "var(--violet-soft)",

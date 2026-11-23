@@ -164,7 +164,13 @@ export interface MyCalls {
     campaign_product?: string | null;
   } | null;
   counts?: CallCounts;
-  today?: { size: number; called: number; connected: number };
+  /** where the day's called leads stand now (an older TBO Smart leaves `stages` out) */
+  today?: {
+    size: number;
+    called: number;
+    connected: number;
+    stages?: StageCount[];
+  };
   /** the day by slot (an older TBO Smart leaves it out) */
   slots?: SlotTotals[];
   pending: QueueCall[];
@@ -212,6 +218,35 @@ export interface BatchReport {
   date?: string;
   people: BatchReportPerson[];
   totals: Partial<Record<"size" | "called" | "connected" | "overdue", number>>;
+}
+
+// where called leads went: the call stages keep their meaning (contacted green, not
+// interested red); any other stage takes the next colour in the order it first shows, so a
+// stage looks the same everywhere on one page. A legend always names it beside the colour.
+const CALL_STAGE_COLORS: Record<string, string> = {
+  Contacted: "--success",
+  "Not Responding": "--warm-fill",
+  "Not Interested": "--danger",
+  "Wrong Number": "--violet",
+};
+const OTHER_STAGE_COLORS = [
+  "--info",
+  "--brand",
+  "--hot-fill",
+  "--person-4",
+  "--person-6",
+];
+
+/** A stage's colour as a theme CSS variable ("--success"), for the stages a page shows. */
+export function stageColors(stages: string[]) {
+  const others = [...new Set(stages)].filter(
+    (stage) => !(stage in CALL_STAGE_COLORS)
+  );
+  return (stage: string) =>
+    CALL_STAGE_COLORS[stage] ??
+    OTHER_STAGE_COLORS[
+      Math.max(others.indexOf(stage), 0) % OTHER_STAGE_COLORS.length
+    ];
 }
 
 /** "1 h 42 min left", "12 min left", "Under a minute left", "Time is up". */

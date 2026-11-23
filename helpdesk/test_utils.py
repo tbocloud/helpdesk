@@ -754,6 +754,30 @@ def make_sales_employee(email: str, full_name: str, *roles: str):
     return make_tasky_user(email, full_name, roles=(SALES_EMPLOYEE_ROLE, *roles))
 
 
+def make_sales_head(email: str, full_name: str):
+    """Creates an agent with the Sales Head role, who assigns monthly sales targets."""
+    from helpdesk.content_team import SALES_HEAD_ROLE, ensure_role
+
+    ensure_role()
+    return make_tasky_user(email, full_name, roles=(SALES_HEAD_ROLE,))
+
+
+def make_presales_executive(email: str, full_name: str):
+    """Creates an agent with the Presales Executive role, who is given sales targets."""
+    from helpdesk.content_team import PRESALES_EXECUTIVE_ROLE, ensure_role
+
+    ensure_role()
+    return make_tasky_user(email, full_name, roles=(PRESALES_EXECUTIVE_ROLE,))
+
+
+def make_sales_target(employee: str, month: str, criteria: list[dict]):
+    """Assigns `criteria` ({criterion, value_type, target, measure?}) to `employee` for
+    `month` ("2026-11") the way the Assign page does, as the current user (a Sales Head)."""
+    from helpdesk.api.sales_targets import assign_targets
+
+    return assign_targets(month, [employee], criteria)
+
+
 def attach_file(doctype: str, name: str, file_name: str = "draft.png"):
     """Attaches a small private file to a document as the current user, the way the
     upload button does (it needs write permission on the document)."""
@@ -3337,6 +3361,15 @@ def make_email_account(email_id: str, **kwargs):
     ).insert(ignore_permissions=True)
 
 
+def give_email_account(user: str, account: str):
+    """Lets `user` send from the Email Account `account` (a row in their User Emails)."""
+    doc = frappe.get_doc("User", user)
+    if not any(row.email_account == account for row in doc.user_emails):
+        doc.append("user_emails", {"email_account": account})
+        doc.save(ignore_permissions=True)
+    return doc
+
+
 def make_pull_request(task: str, number: int, state: str = "Open", **kwargs):
     """Creates an HD Pull Request linking a GitHub PR (no real GitHub call) to `task`."""
     return frappe.get_doc(
@@ -3507,6 +3540,13 @@ class FakeCRM:
     def add_role(self, email, role):
         self.role_calls.append((email, role))
         self.users[email]["roles"].append({"role": role})
+
+    def remove_role(self, email, user, role):
+        # like the CRM site: the roles sent (those read into `user`, minus `role`) replace them
+        self.role_calls.append((email, f"-{role}"))
+        self.users[email]["roles"] = [
+            r for r in user.get("roles") or [] if r.get("role") != role
+        ]
 
     def has_doctype(self, doctype):
         return doctype != "CRM Organization" or self.has_crm_organizations
@@ -6409,9 +6449,10 @@ class FakeLeadERP:
 
 
 class FakeCRMSite:
-    """In-memory stand-in for an ERPNext site a CRM dashboard source reads (CRMClient's
-    get_page, get_list, doctype_fields, logged_user and call). Leads keep the fields they are
-    given; each change moves the site's clock a second, so `modified` orders them."""
+    """In-memory stand-in for the ERPNext site an HD CRM Source reads (CRMClient's
+    get_page, doctype_fields, logged_user, users_with_roles and call). Leads keep
+    the fields they are given; each change moves the site's clock a second, so `modified`
+    orders them. `users` are its desk users, added with `add_user`."""
 
     LEAD_FIELDS = (
         ("company", "Link"),
@@ -6430,11 +6471,10 @@ class FakeCRMSite:
 
     def __init__(self):
         self.leads: dict[str, dict] = {}
-        # unit type -> records, as ERPNext's Company, Branch, Department and Employee list them
-        self.org: dict[str, list[dict]] = {}
         self.clock = datetime(2031, 3, 4, 5, 6, 7)
         self.down = False
         self.pages: list[dict] = []
+        self.users: dict[str, dict] = {}
 
     def tick(self) -> str:
         self.clock += timedelta(seconds=1)
@@ -6449,6 +6489,19 @@ class FakeCRMSite:
 
     def remove(self, name: str):
         self.leads.pop(name, None)
+
+    def add_user(self, email: str, *roles: str, enabled: bool = True):
+        """Adds or replaces a desk user of the site with these roles."""
+        self.users[email] = {
+            "email": email,
+            "full_name": email.split("@")[0].title(),
+            "enabled": int(enabled),
+            "roles": sorted(roles),
+        }
+
+    def users_with_roles(self):
+        self.check()
+        return [dict(user) for user in self.users.values()]
 
     def check(self):
         if self.down:
@@ -6475,14 +6528,6 @@ class FakeCRMSite:
         page = rows[start : start + page_length]
         return [{f: lead.get(f) for f in fields} for lead in page]
 
-    def get_list(self, doctype, fields, filters=None):
-        self.check()
-        if doctype not in self.org:
-            from helpdesk.integrations.crm.client import CRMError
-
-            raise CRMError("The CRM site answered 403: no access", 403)
-        return [{f: record.get(f) for f in fields} for record in self.org[doctype]]
-
     def doctype_fields(self, doctype):
         self.check()
         if doctype != "Lead":
@@ -6504,7 +6549,7 @@ class FakeCRMSite:
 
 
 def make_crm_source(name: str = "Test Source", **values):
-    """Creates a CRM dashboard data source with its own (fake) connection, mapped to
+    """Creates an ERP site's data source with its own (fake) connection, mapped to
     FakeCRMSite's lead fields, statuses New → Open, Won, Lost and Converted mapped, in INR.
     `values` override any field, e.g. a status_map."""
     doc = frappe.get_doc(
@@ -6531,21 +6576,6 @@ def make_crm_source(name: str = "Test Source", **values):
                 {"status": "Lost", "category": "Lost"},
                 {"status": "Converted", "category": "Converted"},
             ],
-            **values,
-        }
-    )
-    doc.insert(ignore_permissions=True)
-    return doc
-
-
-def make_crm_org_unit(source: str, unit_type: str, unit_name: str, **values):
-    """Creates a company, branch, department, team or employee of a CRM dashboard source."""
-    doc = frappe.get_doc(
-        {
-            "doctype": "HD CRM Org Unit",
-            "source": source,
-            "unit_type": unit_type,
-            "unit_name": unit_name,
             **values,
         }
     )
@@ -6616,31 +6646,72 @@ def fill_crm_site(site: FakeCRMSite, today):
     )
 
 
-def crm_kpi(page: dict, metric: str, aggregation: str | None = None) -> dict:
-    """The KPI card of `metric` (and `aggregation`, when given) on a CRM dashboard page."""
-    return next(
-        card
-        for card in page["kpis"]
-        if card["metric"] == metric
-        and (aggregation is None or card["aggregation"] == aggregation)
-    )
-
-
-def make_crm_dashboard(dashboard_name: str = "Test Dashboard", **values):
-    """Creates an active CRM dashboard: by default every company over all time, the
-    Company, Branch and Status category filters, one card per metric and no charts."""
-    from helpdesk.crm_dashboard.registry import ALL_KPIS
-
+def make_division(
+    code: str,
+    name: str | None = None,
+    members: list[tuple[str, str]] | None = None,
+    **values,
+):
+    """Creates an active division (docs/divisions.md) with `members` as (user, role) pairs,
+    e.g. ("ann@example.com", "Division Admin"). `values` override any field."""
     doc = frappe.get_doc(
         {
-            "doctype": "HD CRM Dashboard",
-            "dashboard_name": dashboard_name,
-            "scope": "all",
-            "default_period": "all_time",
-            "filters": [{"filter": f} for f in ("company", "branch", "category")],
-            "kpis": [{"metric": metric} for metric in ALL_KPIS],
+            "doctype": "HD Division",
+            "division_code": code,
+            "division_name": name or code,
+            "country": "India",
+            "currency": "INR",
+            "members": [{"user": u, "role": r} for u, r in members or []],
             **values,
         }
     )
     doc.insert(ignore_permissions=True)
     return doc
+
+
+class FakeERPSales:
+    """In-memory stand-in for a division's ERP site as the division overview reads it:
+    the count of its enabled Customers and its Quotations (CRMClient's call and get_page).
+    `down` makes every read fail as an unreachable site would."""
+
+    def __init__(self, customers: int = 0):
+        self.customers = customers
+        self.quotations: list[dict] = []
+        self.down = False
+
+    def add_quotation(self, status: str, value: float, transaction_date):
+        self.quotations.append(
+            {
+                "name": f"QTN-{len(self.quotations) + 1}",
+                "status": status,
+                "base_grand_total": value,
+                "transaction_date": str(transaction_date),
+            }
+        )
+
+    def check(self):
+        from helpdesk.integrations.crm.client import CRMError
+
+        if self.down:
+            raise CRMError("Couldn't reach the CRM site: down")
+
+    def call(self, method, post=False, **params):
+        self.check()
+        if method == "frappe.client.get_count" and params.get("doctype") == "Customer":
+            return self.customers
+        raise AssertionError(f"FakeERPSales has no method {method}")
+
+    def get_page(
+        self, doctype, fields, filters=None, order_by=None, start=0, page_length=500
+    ):
+        self.check()
+        assert doctype == "Quotation"
+        bounds = {(f[0], f[1]): f[2] for f in filters or []}
+        rows = [
+            q
+            for q in self.quotations
+            if bounds.get(("transaction_date", ">="), "")
+            <= q["transaction_date"]
+            <= bounds.get(("transaction_date", "<="), "9999")
+        ]
+        return rows[start : start + page_length]

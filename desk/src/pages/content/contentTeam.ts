@@ -42,13 +42,24 @@ export const LEAD_BANK_ROUTES = new Set([
 // added later stays out of their way until someone decides it's a sales page. Every
 // other route goes to Leads, Home included: Home is their tasks and tickets.
 export const SALES_EMPLOYEE_ROUTES = new Set([
+  "SalesDashboard",
+  "SalesTeamDashboard",
   "Leads",
   "Lead",
   "LeadProposal",
   "LeadNewProposal",
+  "LeadProposalSetup",
   "AssignLeads",
-  "CrmDashboard",
+  // a Sales Manager of a division (docs/divisions.md)
+  "DivisionOverview",
+  "DivisionReports",
+  "SalesTargets",
+  "TeamTargets",
+  "MyTargets",
+  "Expenses",
   "TeamDashboard",
+  // their meetings, holidays and leave; the server lists them no tasks
+  "WorkCalendar",
   "Notifications",
   "Invalid Page",
   ...LEAD_BANK_ROUTES,

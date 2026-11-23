@@ -50,6 +50,10 @@ export function useNavigation() {
   );
   const isBd = computed(() => leadOptions.data?.is_bd ?? authStore.isSalesBd);
   const hasBatches = computed(() => batchesOn(leadOptions.data));
+  // Today's calls: for members of a department with call batches, but not Presales Executives
+  const todaysCalls = computed(
+    () => hasBatches.value && !authStore.hideTodaysCalls
+  );
   // the ERP site decides who may plan (a Sales Manager, a head); a BD never does
   // a department's viewer watches Assign leads even as a BD
   const canPlanCalls = computed(
@@ -59,18 +63,26 @@ export function useNavigation() {
       )
   );
   const canViewBusiness = computed(() => !!leadOptions.data?.can_view_business);
+  // a division's sales user gets Add a lead, My leads, Leads and the Scoreboard only
+  const isDivisionSalesUser = computed(
+    () =>
+      authStore.divisions.find((d) => d.name === authStore.activeDivision)
+        ?.role === "Division Sales User"
+  );
 
   function isLeadTabVisible(tab: NonNullable<NavItem["leadTab"]>) {
     switch (tab) {
       case "today":
-        return hasBatches.value;
+        return todaysCalls.value;
       case "all":
-        // a BD with call batches has Today's calls in its place
-        return !(isBd.value && hasBatches.value);
+        // a BD with Today's calls has it in its place
+        return !(isBd.value && todaysCalls.value);
       case "overview":
         return !isBd.value;
       case "business":
         return !isBd.value && canViewBusiness.value;
+      case "commission":
+        return !isDivisionSalesUser.value;
       default:
         return true;
     }
@@ -78,8 +90,13 @@ export function useNavigation() {
 
   // the tab the Leads page opens on when the URL names none
   function defaultLeadTab() {
-    if (isBd.value) return hasBatches.value ? "today" : "call_today";
-    return authStore.isSalesEmployee && hasBatches.value ? "today" : "overview";
+    if (isBd.value) {
+      if (todaysCalls.value) return "today";
+      return hasBatches.value ? "mine" : "call_today";
+    }
+    return authStore.isSalesEmployee && todaysCalls.value
+      ? "today"
+      : "overview";
   }
 
   function isItemVisible(item: NavItem) {
@@ -99,7 +116,11 @@ export function useNavigation() {
       (!item.overviewOnly || authStore.canSeeOverview) &&
       (!item.adoptionOnly || authStore.canSeeAdoption) &&
       (!item.customerReportOnly || authStore.canSeeCustomerReport) &&
-      (!item.crmDashboardsOnly || authStore.canViewCrmDashboards) &&
+      (!item.divisionOverviewOnly || authStore.canViewDivisionOverview) &&
+      (!item.salesHeadOnly || authStore.canAssignSalesTargets) &&
+      (!item.ownTargetsOnly || authStore.hasSalesTargets) &&
+      (!item.salesManagersOnly || !isBd.value) &&
+      (!item.ownDashboardOnly || authStore.hasOwnSalesDashboard) &&
       (!authStore.isContentTeam || CONTENT_TEAM_ROUTES.has(to))
     );
   }
@@ -133,7 +154,9 @@ export function useNavigation() {
   // not on every route change: the route only moves `active`.
   const areas = computed<NavArea[]>(() => {
     const source = isCustomerPortal.value ? customerNavAreas : agentNavAreas;
+    // only the people in sales get the Sales area
     return source
+      .filter((area) => area.id !== "sales" || authStore.inSales)
       .map((area) => ({
         ...area,
         groups: area.groups

@@ -10,12 +10,13 @@ import LucideCalendarDays from "~icons/lucide/calendar-days";
 import LucideCalendarRange from "~icons/lucide/calendar-range";
 import LucideCamera from "~icons/lucide/camera";
 import LucideChartColumn from "~icons/lucide/chart-column";
-import LucideChartPie from "~icons/lucide/chart-pie";
+import LucideChartNoAxesCombined from "~icons/lucide/chart-no-axes-combined";
 import LucideClipboardList from "~icons/lucide/clipboard-list";
 import LucideClock from "~icons/lucide/clock";
 import LucideContact2 from "~icons/lucide/contact-2";
 import LucideFileSpreadsheet from "~icons/lucide/file-spreadsheet";
 import LucideFolderKanban from "~icons/lucide/folder-kanban";
+import LucideGoal from "~icons/lucide/goal";
 import LucideHandshake from "~icons/lucide/handshake";
 import LucideGauge from "~icons/lucide/gauge";
 import LucideHome from "~icons/lucide/home";
@@ -26,14 +27,18 @@ import LucideListTodo from "~icons/lucide/list-todo";
 import LucideMessagesSquare from "~icons/lucide/messages-square";
 import LucideNewspaper from "~icons/lucide/newspaper";
 import LucidePhoneCall from "~icons/lucide/phone-call";
+import LucideReceipt from "~icons/lucide/receipt";
 import LucideShapes from "~icons/lucide/shapes";
 import LucideSquareKanban from "~icons/lucide/square-kanban";
+import LucideTarget from "~icons/lucide/target";
 import LucideTicket from "~icons/lucide/ticket";
 import LucideTrophy from "~icons/lucide/trophy";
 import LucideUsers from "~icons/lucide/users";
 import LucideUserRoundCog from "~icons/lucide/user-round-cog";
 import LucideActivity from "~icons/lucide/activity";
 import LucideVideo from "~icons/lucide/video";
+import LucideFileChartColumn from "~icons/lucide/file-chart-column";
+import LucideGlobe from "~icons/lucide/globe";
 
 /** A page in the sidebar. The flags are the role rules; see `isNavItemVisible`. */
 export interface NavItem {
@@ -60,8 +65,16 @@ export interface NavItem {
   overviewOnly?: boolean;
   adoptionOnly?: boolean;
   customerReportOnly?: boolean;
-  /** CRM dashboards: someone who may open at least one */
-  crmDashboardsOnly?: boolean;
+  /** Business overview and Division reports: Super Admins and division managers */
+  divisionOverviewOnly?: boolean;
+  /** Sales targets: Sales Heads (and admins) */
+  salesHeadOnly?: boolean;
+  /** Sales targets (their own): Presales Executives and Sales Users */
+  ownTargetsOnly?: boolean;
+  /** Sales → Dashboard: everyone with Leads but Sales Heads and Sales Managers */
+  ownDashboardOnly?: boolean;
+  /** the team's sales figures: anyone with Leads but a BD */
+  salesManagersOnly?: boolean;
 }
 
 /** A page in the tree under a parent item (a saved view). */
@@ -301,6 +314,23 @@ export const agentNavAreas: NavArea[] = [
     groups: [
       {
         items: [
+          // a salesperson's own day: calls, leads, targets and follow-ups (docs/sales-dashboard.md)
+          {
+            id: "sales-dashboard",
+            label: __("Dashboard"),
+            icon: LucideGauge,
+            to: "SalesDashboard",
+            leadsOnly: true,
+            ownDashboardOnly: true,
+          },
+          // their own targets for the month, set by a Sales Head (docs/sales-targets.md)
+          {
+            id: "my-targets",
+            label: __("Sales targets"),
+            icon: LucideGoal,
+            to: "MyTargets",
+            ownTargetsOnly: true,
+          },
           // the batch of calls for today; only for people whose department hands them out
           {
             id: "todays-calls",
@@ -316,7 +346,13 @@ export const agentNavAreas: NavArea[] = [
             label: __("Leads"),
             icon: LucideHandshake,
             to: "Leads",
-            also: ["Lead", "FindProspects", "LeadNewProposal", "LeadProposal"],
+            also: [
+              "Lead",
+              "FindProspects",
+              "LeadNewProposal",
+              "LeadProposalSetup",
+              "LeadProposal",
+            ],
             leadTab: "all",
             leadsOnly: true,
           },
@@ -344,11 +380,28 @@ export const agentNavAreas: NavArea[] = [
             leadTab: "commission",
             leadsOnly: true,
           },
+          // expense claims on the division's ERP site: claim and approve (docs/expenses.md)
+          {
+            id: "expenses",
+            label: __("Expenses"),
+            icon: LucideReceipt,
+            to: "Expenses",
+            leadsOnly: true,
+          },
         ],
       },
       {
         label: __("Team"),
         items: [
+          // the team's calls, pipeline and targets in one page (docs/sales-dashboard.md)
+          {
+            id: "sales-team-dashboard",
+            label: __("Team dashboard"),
+            icon: LucideGauge,
+            to: "SalesTeamDashboard",
+            leadsOnly: true,
+            salesManagersOnly: true,
+          },
           {
             id: "leads-overview",
             label: __("Overview"),
@@ -365,13 +418,21 @@ export const agentNavAreas: NavArea[] = [
             leadTab: "business",
             leadsOnly: true,
           },
-          // configurable lead reporting across companies (docs/crm-dashboard.md)
+          // each month's targets for the presales and sales people (docs/sales-targets.md)
           {
-            id: "crm-dashboards",
-            label: __("CRM dashboards"),
-            icon: LucideChartPie,
-            to: "CrmDashboard",
-            crmDashboardsOnly: true,
+            id: "sales-targets",
+            label: __("Assign sales targets"),
+            icon: LucideTarget,
+            to: "SalesTargets",
+            salesHeadOnly: true,
+          },
+          // how everyone is doing against them, person by person and target by target
+          {
+            id: "team-targets",
+            label: __("Team targets"),
+            icon: LucideChartNoAxesCombined,
+            to: "TeamTargets",
+            salesHeadOnly: true,
           },
           // who is handed which product and how many calls per slot (docs/leads.md)
           {
@@ -442,6 +503,21 @@ export const agentNavAreas: NavArea[] = [
     groups: [
       {
         items: [
+          // across divisions (docs/divisions.md)
+          {
+            id: "business-overview",
+            label: __("Business overview"),
+            icon: LucideGlobe,
+            to: "DivisionOverview",
+            divisionOverviewOnly: true,
+          },
+          {
+            id: "division-reports",
+            label: __("Division reports"),
+            icon: LucideFileChartColumn,
+            to: "DivisionReports",
+            divisionOverviewOnly: true,
+          },
           {
             id: "summaries",
             label: __("Summaries"),

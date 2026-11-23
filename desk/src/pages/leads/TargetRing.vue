@@ -32,7 +32,7 @@
     <span
       class="absolute inset-0 flex items-center justify-center font-mono text-sm font-semibold tabular-nums text-ink-gray-9"
       aria-hidden="true"
-      >{{ actual }}</span
+      >{{ text ?? actual }}</span
     >
   </div>
 </template>
@@ -48,6 +48,8 @@ const props = defineProps<{
   tone: Tone;
   /** what a screen reader hears besides the numbers, e.g. "on track" */
   statusText: string;
+  /** the centre's text instead of `actual`, e.g. "62%" */
+  text?: string;
 }>();
 
 const RADIUS = 20;

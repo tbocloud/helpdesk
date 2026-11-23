@@ -12,8 +12,9 @@ photo and Submit, in plain words, on the phone first.
 
 ## How to use (staff)
 
-1. Tap **Add a lead**. It is on **Home** (top right), in the menu, and on the phone's home screen
-   icon (press and hold the TBO Support icon, then Add a lead).
+1. Tap **Add a lead**. For people in sales it is on **Home** (top right) and under **Sales** in the
+   menu; for everyone it is on the phone's home screen icon (press and hold the TBO Support icon,
+   then Add a lead).
 2. Tap **Take a photo** of the board, card or ad, or **Choose from gallery**. You can add up to five
    photos of the same business.
 3. Wait a few seconds: "Reading the photo". The form fills itself in. Fix anything that is wrong
@@ -47,8 +48,10 @@ leads or any money except your own.
    Bank)**. Defaults: India 2%, UAE 3%, KSA 3%, cap 25,000 per lead.
 4. **Departments per region.** India goes to the department called **TBO** until you pick another.
    Make the **UAE** and **KSA** departments in Settings → CRM → Lead departments when those teams
-   exist, then pick them in the same Referral card. Until then those leads wait in a list on the
-   Team page and the Sales Managers and TBO Management are notified.
+   exist, then pick them in the same Referral card. In a division with its own ERP site, its
+   Division Admin does both in Settings → Central administration → **Lead setup**. Until then
+   those leads wait in a list on the Team page and the Sales Managers and TBO Management are
+   notified.
 5. **Managers' dashboard:** Lead Bank → Team (Sales Manager, System Manager, TBO Management).
 6. **Statements:** Leads → Commission → Generate drafts as usual; referral lines appear in the
    collector's statement.
@@ -69,6 +72,12 @@ leads or any money except your own.
 - **Access:** `can_use_lead_bank` is in `get_user` as `can_use_lead_bank`. `LEAD_BANK_ROUTES`
   (`pages/content/contentTeam.ts`) is added to the Sales Employee and Content Team allow lists, so
   no wall hides it; the router sends anyone without it Home.
+- **Who sees the links:** the whole **Sales** area of the sidebar, and the Home page's Add a lead
+  button, show only for people in sales: `helpdesk.content_team.in_sales`, in `get_user` as
+  `in_sales` (Sales User, Sales Manager, Sales Head, Presales Executive, Sales Employee, a
+  Division Admin or Division Sales User of their active division, and System Managers). Others
+  keep the Lead Bank itself (the routes, the phone shortcut), but no longer see it in the menu:
+  it is not their work.
 - **The phone:** the photo inputs use `accept="image/*" capture="environment"` (the camera) and a
   second one for the gallery, as the lead photos do. The location is the lead's place (a Maps link
   and its pin). The app's manifest has an **Add a lead** shortcut, so long-pressing the installed

@@ -471,6 +471,14 @@ def save_proposal(name: str, data: dict | str) -> dict:
     return proposal("save_proposal", post=True, name=name, data=as_json_value(data))
 
 
+@frappe.whitelist(methods=["POST"])
+def delete_proposal(name: str) -> dict:
+    """A draft deleted for good on the ERP site, with its draft quotation; one that went out is
+    refused there."""
+    require_leads()
+    return proposals("delete_proposal", post=True, name=name) or {}
+
+
 @frappe.whitelist()
 def get_client_profile(lead: str) -> dict:
     """What the lead says about the client, and the website summary read earlier."""
@@ -574,6 +582,30 @@ def regenerate_proposal(name: str, force: int | str = 0) -> dict:
 
 
 @frappe.whitelist(methods=["POST"])
+def change_template(
+    name: str, template: str, scoping: dict | str | None = None
+) -> dict:
+    """A draft proposal moved to another template on the ERP site, with the scoping it brings."""
+    require_leads()
+    template = (template or "").strip()
+    if not template:
+        frappe.throw(_("Pick the template to change to."))
+    result = (
+        proposals(
+            "change_template",
+            post=True,
+            name=name,
+            template=template,
+            scoping=as_json_value(scoping) if scoping else None,
+        )
+        or {}
+    )
+    if result.get("proposal"):
+        clean_letter_head(result["proposal"])
+    return result
+
+
+@frappe.whitelist(methods=["POST"])
 def chat_edit(name: str, message: str) -> dict:
     """The assistant: a change in words, read on the ERP site into structured changes."""
     require_leads()
@@ -584,12 +616,6 @@ def chat_edit(name: str, message: str) -> dict:
     if result.get("proposal"):
         clean_letter_head(result["proposal"])
     return result
-
-
-@frappe.whitelist(methods=["POST"])
-def price_from_modules(name: str) -> dict:
-    require_leads()
-    return proposal("price_from_modules", post=True, name=name)
 
 
 @frappe.whitelist(methods=["POST"])

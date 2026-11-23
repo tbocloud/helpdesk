@@ -20,6 +20,7 @@ from frappe.utils import (
 from helpdesk import lead_mirror_read, whatsapp_outreach
 from helpdesk.api import pending_calls
 from helpdesk.content_team import is_sales_bd_role, only_sales_team
+from helpdesk.divisions import active_division, on_crm_connection
 from helpdesk.integrations.crm.leads import (
     LeadsError,
     LeadsNotDeployedError,
@@ -39,6 +40,8 @@ COPY_PARAMS = {
     "search",
     "start",
     "page_length",
+    # the copy answers without the stage cards' counts, so the page leaves them out
+    "stage_counts",
     *lead_mirror_read.FILTER_COLUMNS,
 }
 # when a lead's earliest open follow-up is due: the Follow-up view's cards
@@ -89,8 +92,6 @@ FILE_INLINE_TYPES = (*PHOTO_TYPES, "application/pdf")
 PHOTO_METHOD = "helpdesk.api.leads.lead_photo"
 PHOTO_CACHE = "private, max-age=3600"
 MAX_PAGE = 100
-# how far back My leads' day-by-day calls go (the ERP site refuses more)
-MAX_CALL_DAYS = 366
 # the hub and the ERP site share one worker pool on Frappe Cloud, so a read that was just
 # answered is kept per person for a short while instead of asked again (docs/leads.md)
 CACHE_PREFIX = "hd_leads"
@@ -128,7 +129,9 @@ def cached_read(part: str, params: dict, ttl: int, fresh, read, keep=bool):
     """`read()`'s answer, from the signed-in person's cache while it is fresh enough.
     `fresh` skips the cache and renews it. A failed read caches nothing, nor does an
     answer `keep` refuses (an ERP site that doesn't have the part yet)."""
-    key = f"{CACHE_PREFIX}:{frappe.session.user}:{part}:{json.dumps(params, sort_keys=True)}"
+    # per division too: each reads its own ERP site
+    division = active_division() or ""
+    key = f"{CACHE_PREFIX}:{frappe.session.user}:{division}:{part}:{json.dumps(params, sort_keys=True)}"
     if not cint(fresh):
         hit = frappe.cache.get_value(key, expires=True)
         if hit is not None:
@@ -197,8 +200,10 @@ def list_leads(
     due: str | None = None,
     due_from: str | None = None,
     due_to: str | None = None,
+    stage_counts: int | str = 0,
 ) -> dict:
-    """A page of leads. `view` called lists the leads called at least once, last called first
+    """A page of leads. With `stage_counts` the ERP site also counts the list per stage, its
+    stage filter left out ({stage_counts: {stage: leads}}; missing from an older TBO Smart). `view` called lists the leads called at least once, last called first
     (`from_date` and `to_date` without a `metric` keep those last called in those days);
     `created_by_me` keeps the leads the person created, whoever owns them now. `due` (Follow-up only) keeps the leads whose earliest open
     follow-up is overdue, today, tomorrow, in the week after (`week`) or `later`. `due_from` and
@@ -266,6 +271,7 @@ def list_leads(
         # cint: a malformed number is 0, never a server error
         start=max(cint(start), 0),
         page_length=min(max(cint(page_length) or 20, 1), MAX_PAGE),
+        stage_counts=1 if cint(stage_counts) else None,
     )
     result = read_or_copy(
         lambda: call("list_leads", **params), lambda: list_from_copy(params)
@@ -276,11 +282,16 @@ def list_leads(
 def read_or_copy(read, copy):
     """`read` from the ERP site; when it can't be used right now and the hub's copy of the
     leads is ready, `copy` instead (docs/lead-mirror.md, phase 2a). The ERP's error stands
-    when the copy has no answer either (`copy` returns None)."""
+    when the copy has no answer either (`copy` returns None). The copy holds only the CRM
+    connection's leads, so another division's ERP site never falls back to it."""
     try:
         return read()
     except LeadsUnavailableError as error:
-        if isinstance(error, LeadsNotDeployedError) or not lead_mirror_read.ready():
+        if (
+            isinstance(error, LeadsNotDeployedError)
+            or not lead_mirror_read.ready()
+            or not on_crm_connection()
+        ):
             raise
         answer = copy()
         if answer is None:
@@ -428,25 +439,6 @@ def read_lead_intake(fresh) -> dict:
         "available": True,
         "target": max(cint(target), 0),
     }
-
-
-@frappe.whitelist()
-def get_my_call_counts(days: int | str = 60, fresh: int | str = 0) -> dict:
-    """The signed-in person's own calls for My leads: today, this week, this month and all
-    time ({calls, connected}), and `days` ([{date, calls, connected}], newest first) for the
-    days with calls in the last `days` days, at most 366. Counted as the Daily report counts
-    calls. `available` is false while the ERP site's TBO Smart is older than this."""
-    require_leads()
-    days = min(max(cint(days) or 60, 1), MAX_CALL_DAYS)
-    result = cached_read(
-        "my_calls",
-        {"days": days},
-        READ_TTL,
-        fresh,
-        lambda: call_if_deployed("get_my_call_counts", days=days),
-        keep=lambda answer: answer is not None,
-    )
-    return {**result, "available": True} if result is not None else {"available": False}
 
 
 @frappe.whitelist()
@@ -1004,7 +996,7 @@ def add_industry(name: str) -> dict:
         name=(name or "").strip(),
     )
     # the pick list is cached for ten minutes: this person sees the new one at once
-    frappe.cache.delete_keys(f"{CACHE_PREFIX}:{frappe.session.user}:options")
+    frappe.cache.delete_keys(f"{CACHE_PREFIX}:{frappe.session.user}:*:options")
     return result
 
 
@@ -1420,9 +1412,17 @@ def lead_file(lead: str, file: str, filename: str | None = None) -> None:
     bytes. `filename` is only the name the browser saves it as."""
     require_leads()
     content, content_type = download("get_lead_file", lead=lead, file=file)
+    send_file(content, content_type, filename, file)
+
+
+def send_file(
+    content: bytes, content_type: str, filename: str | None, fallback: str
+) -> None:
+    """Answer with a file from the ERP site: PDFs and pictures open in the browser, anything
+    else is saved as plain bytes, under `filename` cleaned (or `fallback`)."""
     inline = content_type in FILE_INLINE_TYPES
     frappe.local.response.filename = (
-        re.sub(r'[\\/:*?"<>|\x00-\x1f]', "", filename or "").strip()[:140] or file
+        re.sub(r'[\\/:*?"<>|\x00-\x1f]', "", filename or "").strip()[:140] or fallback
     )
     frappe.local.response.filecontent = content
     frappe.local.response.content_type = (

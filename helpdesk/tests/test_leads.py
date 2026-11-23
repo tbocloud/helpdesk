@@ -47,19 +47,6 @@ class TestLeads(FrappeTestCase):
     def as_bde(self):
         frappe.set_user(BDE)
 
-    def test_my_call_counts_come_from_the_erp_site_for_the_person(self):
-        self.crm.lead_answers["get_my_call_counts"] = {
-            "today": {"calls": 12, "connected": 7},
-            "all_time": {"calls": 900, "connected": 410},
-            "days": [{"date": "2026-11-11", "calls": 12, "connected": 7}],
-        }
-        self.as_bde()
-        counts = leads_api.get_my_call_counts(days=9999, fresh=1)
-        self.assertTrue(counts["available"])
-        self.assertEqual(counts["today"], {"calls": 12, "connected": 7})
-        ((method, _post, params),) = self.crm.lead_calls
-        self.assertEqual((method, params["days"]), ("get_my_call_counts", 366))
-
     def test_follow_up_cards_count_and_list_by_when_they_are_due(self):
         self.crm.lead_answers["get_follow_up_counts"] = {
             "overdue": 4,
@@ -79,6 +66,15 @@ class TestLeads(FrappeTestCase):
         self.assertNotIn("due", sent)
         with self.assertRaises(frappe.ValidationError):
             leads_api.list_leads(view="follow_up", due="soon")
+
+    def test_stage_counts_are_asked_only_when_the_page_wants_them(self):
+        self.as_bde()
+        leads_api.list_leads(view="mine", stage_counts=1)
+        sent = [p for m, _post, p in self.crm.lead_calls if m == "list_leads"][-1]
+        self.assertEqual(sent["stage_counts"], 1)
+        leads_api.list_leads(view="mine")
+        sent = [p for m, _post, p in self.crm.lead_calls if m == "list_leads"][-1]
+        self.assertIsNone(sent.get("stage_counts"))
 
     def test_follow_ups_can_be_kept_to_the_days_they_are_due(self):
         self.as_bde()

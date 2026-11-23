@@ -1,0 +1,162 @@
+{
+	"actions": [],
+	"autoname": "field:division_code",
+	"creation": "2026-11-16 12:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"division_name",
+		"division_code",
+		"status",
+		"country",
+		"column_break_profile",
+		"workspace_url",
+		"currency",
+		"time_zone",
+		"language",
+		"division_admin",
+		"connection_section",
+		"crm_source",
+		"members_section",
+		"members"
+	],
+	"fields": [
+		{
+			"fieldname": "division_name",
+			"fieldtype": "Data",
+			"label": "Division name",
+			"reqd": 1,
+			"in_list_view": 1
+		},
+		{
+			"fieldname": "division_code",
+			"fieldtype": "Data",
+			"label": "Division code",
+			"reqd": 1,
+			"unique": 1,
+			"set_only_once": 1,
+			"in_list_view": 1,
+			"description": "2 to 10 capital letters or digits, e.g. IND. It names the division and can't change later."
+		},
+		{
+			"fieldname": "status",
+			"fieldtype": "Select",
+			"label": "Status",
+			"options": "Active\nInactive",
+			"default": "Active",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"description": "An inactive division's records are hidden from its members; Super Admins still see them."
+		},
+		{
+			"fieldname": "country",
+			"fieldtype": "Link",
+			"label": "Country",
+			"options": "Country",
+			"reqd": 1,
+			"in_list_view": 1,
+			"in_standard_filter": 1
+		},
+		{
+			"fieldname": "column_break_profile",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "workspace_url",
+			"fieldtype": "Data",
+			"label": "Workspace URL",
+			"options": "URL",
+			"description": "Where the division's people work, e.g. https://india.teambackoffice.com."
+		},
+		{
+			"fieldname": "currency",
+			"fieldtype": "Link",
+			"label": "Currency",
+			"options": "Currency",
+			"reqd": 1
+		},
+		{
+			"fieldname": "time_zone",
+			"fieldtype": "Data",
+			"label": "Time zone",
+			"description": "An IANA time zone, e.g. Asia/Kolkata."
+		},
+		{
+			"fieldname": "language",
+			"fieldtype": "Link",
+			"label": "Default language",
+			"options": "Language"
+		},
+		{
+			"fieldname": "division_admin",
+			"fieldtype": "Link",
+			"label": "Division administrator",
+			"options": "User",
+			"description": "Added to the members as Division Admin when saved."
+		},
+		{
+			"fieldname": "connection_section",
+			"fieldtype": "Section Break",
+			"label": "ERP connection"
+		},
+		{
+			"fieldname": "crm_source",
+			"fieldtype": "Link",
+			"label": "ERP site",
+			"options": "HD CRM Source",
+			"unique": 1,
+			"description": "The data source of this division's ERP site (Settings \u2192 Divisions \u2192 ERP sites): its leads, customers and quotations are read and written there."
+		},
+		{
+			"fieldname": "members_section",
+			"fieldtype": "Section Break",
+			"label": "Members"
+		},
+		{
+			"fieldname": "members",
+			"fieldtype": "Table",
+			"label": "Members",
+			"options": "HD Division Member"
+		}
+	],
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-11-16 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Division",
+	"naming_rule": "By fieldname",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "System Manager",
+			"share": 1,
+			"write": 1
+		},
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent Manager",
+			"share": 1,
+			"write": 1
+		}
+	],
+	"sort_field": "division_name",
+	"sort_order": "ASC",
+	"states": [],
+	"title_field": "division_name",
+	"show_title_field_in_link": 1,
+	"track_changes": 1
+}

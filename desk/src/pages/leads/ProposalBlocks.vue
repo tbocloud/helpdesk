@@ -161,7 +161,7 @@
             :description="
               editable && !withGuidance
                 ? __(
-                    'A blank line starts a paragraph; “- ” a list item; “## ” a subheading; “a | b” lines a table; “A → B” a workflow.'
+                    'A blank line starts a paragraph; “- ” a list item; “## ” a subheading; “a | b” lines a table; “A → B” a workflow; “> ” a highlight; a “Figure | label” table big numbers.'
                   )
                 : ''
             "

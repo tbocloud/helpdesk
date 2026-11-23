@@ -132,6 +132,7 @@
         class="lg:sticky lg:top-4 lg:max-h-[calc(100vh-8rem)]"
         :mail="{
           subject: f.form.subject,
+          from: f.senderEmail,
           toName: f.signatory?.full_name || '',
           toEmail: f.signatory?.email || '',
           cc: f.ccList,

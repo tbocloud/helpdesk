@@ -52,6 +52,20 @@ in `useNavigation.ts`, state in `stores/sidebar.ts`).
   Search and the area name stay at the top, the strip and Help & docs at the bottom.
   The current page is tinted `brand-soft` with `aria-current="page"`. Raising a ticket is
   on the Tickets page (there is no separate help card).
+- **Command palette** (`components/command-palette/CP.vue`, Search or Ctrl/Cmd+K; not for
+  salespeople or on phones). As you type it filters, in this order:
+  - **Pages**: the sidebar's own pages (`areas` from `useNavigation`, passed in by
+    `AppSidebar.vue`), so it only offers pages the person's sidebar shows; matched on the
+    page or area name. With nothing typed it lists them all.
+  - **Projects** and **Tasks**: from 2 characters, `helpdesk.tasky.api.search_work` (250 ms
+    debounce) matches title or ID through `frappe.get_list`, so permissions and department
+    walls apply; newest change first, 8 of each. A project opens its dashboard
+    (`TaskyProject`), a task opens its details on My Work (`?task=`). An answer for an older
+    query is never shown under a newer one.
+  - **Search tickets for "…"**: from 2 characters, to ticket workers only; opens the
+    full-text search page (`SearchAgent`).
+  - `#<id>` instead shows only "Go to ticket #<id>". While tasks load it says so; with
+    nothing found it says "Nothing matches".
 - **Collapsed panel** (`NavPanelCollapsed.vue`, 3.5rem): the rail's top button (Collapse /
   Expand menu) folds the panel to an icon-only column instead of hiding it, so the pages
   stay one click away. It shows Search (opens the command palette), the selected area's
@@ -649,7 +663,10 @@ board (`pages/tasky/Kanban.vue`, route `MyBoard`, no `projectId`) showing the cu
 tasks from every project they're assigned in, by status: Open, In progress, In review, On hold,
 Completed, Cancelled. `get_kanban_tasks()` without `project` returns tasks assigned to
 the user (through `frappe.get_list`, so permissions and department walls apply), with finished
-and cancelled ones only if changed in the last 30 days. Each card names its project. Dragging,
+and cancelled ones only if changed in the last 30 days. Each card names its project.
+Every column lists the newest-created task first, except Completed, which lists the last
+finished first (`completed_on`, a date, so same-day ties go by last change); this ordering
+applies to project boards too. Dragging,
 the timer, hold/resume, complete, edit, ask for help and hand over work as on a project board,
 each using the task's own project; project-level actions (Plan, Approve/Send back, Make
 recurring) stay on the project's board.

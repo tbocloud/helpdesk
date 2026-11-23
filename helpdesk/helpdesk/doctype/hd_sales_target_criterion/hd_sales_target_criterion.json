@@ -1,0 +1,109 @@
+{
+	"actions": [],
+	"creation": "2026-11-17 12:00:00.000000",
+	"doctype": "DocType",
+	"editable_grid": 1,
+	"engine": "InnoDB",
+	"field_order": [
+		"criterion",
+		"value_type",
+		"measure",
+		"target_value",
+		"target_text",
+		"info_only",
+		"kpi_status",
+		"kpi_note",
+		"kpi_done_on",
+		"kpi_confirmed_by"
+	],
+	"fields": [
+		{
+			"fieldname": "criterion",
+			"fieldtype": "Data",
+			"in_list_view": 1,
+			"label": "Criterion",
+			"reqd": 1
+		},
+		{
+			"default": "Number",
+			"fieldname": "value_type",
+			"fieldtype": "Select",
+			"in_list_view": 1,
+			"label": "Value Type",
+			"options": "Amount\nNumber\nPercent\nText",
+			"reqd": 1
+		},
+		{
+			"depends_on": "eval:doc.value_type != 'Text'",
+			"description": "What the leads count towards this target; blank: not counted (docs/sales-targets.md, Progress)",
+			"fieldname": "measure",
+			"fieldtype": "Select",
+			"in_list_view": 1,
+			"label": "Counts From",
+			"options": "\nwon_value\ncollected\nmeetings\nproposals\nwon\ncontacted\nnew_leads\nmeeting_rate\nwin_rate"
+		},
+		{
+			"depends_on": "eval:doc.value_type != 'Text'",
+			"fieldname": "target_value",
+			"fieldtype": "Float",
+			"in_list_view": 1,
+			"label": "Target"
+		},
+		{
+			"depends_on": "eval:doc.value_type == 'Text'",
+			"fieldname": "target_text",
+			"fieldtype": "Small Text",
+			"label": "Target (Text)"
+		},
+		{
+			"default": "0",
+			"depends_on": "eval:doc.value_type == 'Text'",
+			"description": "Only says where to focus (e.g. Industry, Location): nobody marks it done, and it doesn't count in the month's progress",
+			"fieldname": "info_only",
+			"fieldtype": "Check",
+			"label": "Information Only"
+		},
+		{
+			"depends_on": "eval:doc.value_type == 'Text' && !doc.info_only",
+			"fieldname": "kpi_status",
+			"fieldtype": "Select",
+			"label": "KPI Status",
+			"options": "\nDone\nConfirmed",
+			"read_only": 1
+		},
+		{
+			"depends_on": "eval:doc.kpi_status",
+			"fieldname": "kpi_note",
+			"fieldtype": "Small Text",
+			"label": "What Was Done",
+			"read_only": 1
+		},
+		{
+			"depends_on": "eval:doc.kpi_status",
+			"fieldname": "kpi_done_on",
+			"fieldtype": "Datetime",
+			"label": "Marked Done On",
+			"read_only": 1
+		},
+		{
+			"depends_on": "eval:doc.kpi_status == 'Confirmed'",
+			"fieldname": "kpi_confirmed_by",
+			"fieldtype": "Link",
+			"label": "Confirmed By",
+			"options": "User",
+			"read_only": 1
+		}
+	],
+	"index_web_pages_for_search": 0,
+	"istable": 1,
+	"links": [],
+	"modified": "2026-11-19 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Sales Target Criterion",
+	"owner": "Administrator",
+	"permissions": [],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": []
+}

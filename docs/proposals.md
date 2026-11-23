@@ -63,8 +63,10 @@ sending `acting_user`; each maps 1:1 to `tbo_smart.api.hub_proposals.<same name>
 | `get_requirements_from_lead(lead)`, `extract_requirements(lead, text)` | A blank text is refused here |
 | `read_chat_answer(lead, question, text)` | An off-script chat answer; a blank text is refused here, the question capped at 300 and the text at 3,000 characters |
 | `finalise_proposal(name, ready)` | 1: Mark ready, 0: Reopen |
+| `change_template(name, template, scoping)` | A draft moved to another template, same number; a blank template is refused here |
 | `regenerate_section(name, index, force)`, `regenerate_proposal(name, force)`, `chat_edit(name, message)` | `chat_edit` refuses a blank message and caps it at 1,000 characters |
-| `price_from_modules(name)`, `get_pricing_form(name)`, `save_pricing(name, values)`, `request_approval(name, reason)` | A reason is required here too |
+| `get_pricing_form(name)`, `save_pricing(name, values)`, `request_approval(name, reason)` | A reason is required here too |
+| `delete_proposal(name)` | A draft only (the ERP site refuses one that went out); its draft quotation goes with it |
 | `share_proposal(name)`, `send_proposal(name, recipients, message, attach_pdf)`, `create_revision(name)` | |
 | `save_questions(name, questions)`, `share_questionnaire(name)`, `send_questionnaire(name, recipients, message)`, `apply_answers(name)` | A BRD's client questionnaire (the questions as a list; blank recipients and message trimmed) |
 | `create_project_from_plan(plan)` | The hub project from an approved plan, once (see below) |
@@ -151,6 +153,65 @@ the scoping form (`ProposalScopingForm.vue`), and the timeline, payment terms an
 edit one state: every chat answer lands in the summary at once, and presales can click any field
 to change it, or **Skip to the form** (and **Back to the assistant**) at any point.
 
+**Implementation type** (`ProposalImplementation.vue`, top of "What the proposal covers"; the
+owner's ask of 2026-11-18): **ERP** or **Digital Marketing**, a segmented control. It maps onto
+what the ERP site seeds, so nothing new is stored: ERP is always ERPNext, the *ERPNext
+Implementation* template; **ERPNext, with** any mix of **Mobile app** (the *ERPNext + Flutter
+Mobile App* template, `mobile_app` and the *Flutter Mobile App* module; off is ERPNext without
+one), **Website** (the *Website & Portal* module) and **ERPNext customisation** (the
+Customisations list, which shows once picked). Digital Marketing is the *Digital Marketing –
+6-month strategy* template. Switching type takes that template's default modules and clears the
+add-ons; when customisations are already listed it asks first, inline (**Keep them** / **Switch**),
+since they would be lost; a type whose template is off on the ERP site isn't offered. The Template select stays
+for the other templates (HRMS, Helpdesk, CRM…); on one of those the control shows no type and
+says so. On ERP the scoping form doesn't ask the mobile app again (`hidden`). The helpers
+(`implementationOf`, `withImplementation`, `withAddon`, `erpAddons`) are in `proposals.ts`, shared
+with the chat.
+
+**Price** (`ProposalPriceEstimate.vue`, under the summary once there is a module or a
+customisation): **Price by** (`TabButtons`) chooses how the modules are priced. **Module**: the
+modules by app (**ERPNext** or **Digital Marketing**, **Mobile app**, **Website**), each with its
+price (the catalogue's list price until one is typed; **Use the list price** undoes it, as does
+emptying the box; a module taken off loses its typed price) and a subtotal. **App**: one price per
+app (its modules' list prices added up until one is typed), no module prices. **Custom**: one
+price for all the modules, nothing else. Each price is a `ProposalPriceRow.vue`. The basis and its
+prices are scoping answers the ERP site keeps and prices the quotation by (`price_basis` Module /
+App / Custom, `app_prices` {main, mobile, website}, `custom_price`; TBO Smart's `module_items`):
+by App a quotation line per app, by Custom one line, each named by the modules it covers, so
+nothing is split over the modules. An ERP site without TBO Smart's price basis drops them and
+prices by module; the hub then says so (`warnDropped` in `proposals.ts`, after Generate, Update
+and the builder's Save, also for a dropped custom timeline period or custom milestones), so a
+choice never disappears silently.
+Then **ERPNext customisation** (each customisation's own
+price, or its days at the day rate), **Branch rollout** (the additional branches × the price per
+branch, or the ERP site's branch rate, `options.branch_rate`; with neither it says to set one and
+adds nothing), and the **Total before GST** in the ERP site's currency
+(`options.currency`, INR when the site doesn't send it). A note says a module linked to an Item
+takes the segment's rate and that the quotation has the final figures. On **Generate** the basis and its
+prices go with the scoping; by Module the prices typed are set on the new proposal's modules by
+hand (`save_proposal` with `rate_overridden`), so the quotation, the builder's Modules and the
+preview start from them. If that save fails the proposal
+is still opened, with a warning to set them in its Modules. Preview and sending by email (typing the To)
+are the builder's, below.
+
+**Additional branches** (the ERPNext templates ask them, `branches`): in the scoping form (here
+and in the builder) the number of branches beyond the head office and the first branch, and a
+**Price per branch** (blank: the ERP site's **Branch rate** in TBO Smart Settings, shown as its
+placeholder). The ERP site prices them as one quotation line, "Additional branch rollout (n
+branches)", and adds an Investment note on what a branch covers.
+
+**The ERPNext + mobile template** follows the owner's model proposal of 2026-11-18 (the order,
+headings, fixed Security and AMC sections, 50 / 30 / 20 milestones, assumptions and exclusions):
+that is the ERP site's preset (TBO Smart's `docs/proposals.md` §3.2), so the hub shows whatever the
+template says; nothing about it is fixed here.
+
+**A customisation's price.** Each customisation in the scoping form (here and in the builder) has
+a **Price** beside its days: blank charges its days at the ERP site's day rate, as before; a price
+typed is sent as `price` on its row and the ERP site makes it a quotation line of its own
+("Customisation: <item>"). This needs TBO Smart's priced customisations
+(`customisation_rows` keeping `price`, `priced_customisation_line`); an ERP site without it drops
+the price and charges the days.
+
 The chat is **scripted**: its questions cost no tokens, and quick-reply chips are used wherever
 the choices are fixed. It starts once the lead's profile is in, **greets with a recap** of what is
 already known (website, what they do, industry, pain points, modules) and **skips every question
@@ -170,17 +231,34 @@ points. In order:
 3. **What the client needs** (skipped when the requirements are filled) (typed, pasted or "Use the lead's notes"): kept as the requirements
    and, with the AI on, read into the form by the one extraction call (template, modules,
    customisations, users, hosting, AMC…); the assistant says what it filled.
-4. **Modules** (chips, the template's or the extraction's picked; **Done**).
-5. **Customisations** (one short line each, split one a line, 1 day each until set; or "None").
-6. **Mobile app / data migration / integrations / source code** (chips), then which systems to
-   connect when integrations is picked.
-7. **Users** (chips 10 / 25 / 50 / 100 / Unlimited, or a number), **companies** (chips 1 / 2 / 3 /
-   Unlimited, or a number) and **hosting** (chips). In the form each is a number with an
+4. **ERP or Digital Marketing** (chips; skipped when only one is on), then on ERP **ERPNext with
+   any of these?** (Mobile app, Website, ERPNext customisation; **Done** with none is ERPNext on
+   its own).
+5. **Modules** (chips, the template's or the extraction's picked; **Done**).
+6. **Customisations** (one short line each, split one a line, 1 day each until set; or "None").
+   On ERP, asked only when the customisation add-on was picked.
+7. **Mobile app / data migration / integrations / source code** (chips; on ERP without the mobile
+   app, asked above), then which systems to connect when integrations is picked.
+8. **Users** (chips 10 / 25 / 50 / 100 / Unlimited, or a number), **companies** (chips 1 / 2 / 3 /
+   Unlimited, or a number), on ERP when the template asks it the **additional branches** (chips 0
+   / 5 / 10, or a number) and **hosting** (chips). In the form each is a number with an
    **Unlimited** box.
-8. **Timeline** (45 / 60 / 90 / 120 days, the suggested one marked), **payment terms**, **AMC**
+9. **Timeline** (45 / 60 / 90 / 120 days, the suggested one marked), **payment terms**, **AMC**
    (a plan, or No AMC).
-9. **Anything else** (added to the requirements).
-10. Before offering Generate, the chat asks for whatever required profile field is still empty
+   In the summary (and the builder's scoping panel) the Timeline field
+   (`ProposalTimelineField.vue`) also offers **Custom period…**: a number of days (1–1,000,
+   starting from the template it was on), sent as `timeline_days`; the ERP site scales the
+   nearest template's phases to it (TBO Smart's `chosen_timeline`). Picking a template again clears
+   it. An ERP site without TBO Smart's custom period drops it and keeps the template.
+   The Payment terms field (`ProposalPaymentTermsField.vue`) likewise offers **Custom
+   milestones…**: this proposal's own milestones (a label and a share in %, starting at Advance
+   50 / On go-live 50, add or remove up to 12), shown adding up to 100% or what they add up to;
+   sent as `payment_milestones`, refused by the ERP site unless they make 100%. They replace the
+   template in the Payment Terms section, its amounts and the quotation's payment schedule.
+   Picking a template clears them; so does changing the proposal's template on the ERP site.
+   (The templates themselves are edited in Settings → the proposal library.)
+10. **Anything else** (added to the requirements).
+11. Before offering Generate, the chat asks for whatever required profile field is still empty
     (industry, pain points).
 
 **Off-script answers.** An answer that doesn't fit its question (an intent at the website step,
@@ -226,13 +304,42 @@ picked chips and the primary button; `role="log"` with `aria-live`, every chip a
 AI calls a typical proposal makes: **two** (the extraction and the narrative); **three** for a
 lead's first proposal with a website (the summary is kept on the lead); none with the AI off.
 
+### Edit proposal (`/helpdesk/leads/<lead>/proposals/<name>/setup`, `NewProposal.vue`)
+
+The first page again for a draft proposal, reached by the builder's **Back** (Generate replaces the
+New proposal page with the builder, so the browser's back skips it). It is filled from the
+proposal (`get_proposal`): its template, client profile, requirements, scoping with its modules as
+they are now, the assistant's transcript (the assistant starts shut, so it doesn't ask again;
+**Back to the assistant** opens it), and on the Price card the proposal's price basis with its
+prices (by Module, the modules' prices set by hand).
+There is no Blank template and no AI checkbox (regenerating decides). **Update proposal** instead
+of Generate: a new template or other modules go through `change_template` (the ERP site rebuilds
+the modules), then `save_proposal` with the profile, requirements, scoping (the price basis with it) and, by Module, the Price card's
+prices (a module the card leaves on its list price goes back to it), then `regenerate_proposal`
+(sections edited by hand are kept and named in a toast); then back to the builder. A failure
+shows inline and stays on the page.
+
 ### Builder (`/helpdesk/leads/<lead>/proposals/<name>`, `Proposal.vue`)
 
-- **Header:** breadcrumb, status, **Share** (Copy link, Download PDF, Print, Preview link),
-  **Save changes** ("Saved" and off until something changes) or **Create revision** once sent,
-  and one primary action: on a draft **Mark ready** (off with unsaved edits and while the ERP
-  site gives share blockers, the first as its tooltip); once marked, **Reopen** and **Send**
-  (**Send again** once sent). Send is off while the ERP site gives reasons.
+- **Delete draft** (a trash icon in the header, a draft the person can change only): asks first
+  (red **Delete**; on a revision it says the version before stays), then `delete_proposal` deletes
+  it on the ERP site, with its draft quotation, and goes to the lead. A proposal that went out
+  isn't offered it, and the ERP site refuses it (TBO Smart's `delete_draft`).
+- **Header:** a **Back** button (←: on a draft proposal the builder can edit, to its first page,
+  **Edit proposal** below, asking first when there are unsaved edits; otherwise to the page
+  before, or to the lead when the page was opened from a link; the New proposal page has the
+  same), breadcrumb, status, **Share** (Copy link,
+  Download PDF, Print, Preview link), **Save changes** ("Saved" and off until something changes)
+  or **Create revision** once sent, and **Send** as the one primary action (**Send again** once
+  sent). On a draft **Mark ready** sits beside it as a secondary button; once marked, **Reopen**.
+  Send is off with unsaved edits and while the ERP site gives reasons (a draft's share blockers,
+  a marked one's send blockers), the first as its tooltip.
+- **Send dialog:** **To** typed by hand (the lead's email, or whom it was last sent to, filled
+  in; several addresses separated by commas), a message and *Attach the PDF too*. On a draft it
+  says that sending marks it ready first, and Send marks it ready (`finalise_proposal`) and then
+  sends; if marking fails nothing is sent and the reason shows in the dialog. If the send itself
+  fails, a draft this Send marked ready is reopened, so it is a draft again; should that reopen
+  fail too, the dialog says it is still marked ready.
 - **Mark ready** fixes the draft's content and numbers (the form turns read-only, with "Ready to
   send. The content and the numbers are fixed; Reopen to change them."); **Reopen** makes it
   editable again. The ERP site refuses any change while it is marked.
@@ -246,9 +353,14 @@ lead's first proposal with a website (the summary is kept on the lead); none wit
   nothing.
 - **Download PDF** (the ERP site's A4 PDF, a draft's through its preview) and **Print** (the
   client's page with the print dialog).
-- **Can't send yet:** every reason in the ERP site's words. **With the client**
+- **Can't send yet:** every reason in the ERP site's words; while a draft has no quotation (and
+  the person may price it), a **Price the proposal** button there opens the pricing dialog, the
+  same as the Investment section's. **With the client**
   (`ProposalTracking.vue`) once sent.
-- **Details:** title, valid till, **Price shown** (Itemised / Consolidated), **Letter head**
+- **Template:** the Details show **Template: <name>**. The builder has no Change template
+  button; to change the template or the modules, go **Back** to the edit page (Update proposal
+  calls `change_template` when either changed).
+- **Details:** title, valid till, **Letter head**
   (Default (<name>) or any Letter Head; editors see a warning when the ERP site has none), about
   how many pages against the template's length guide, and for editors the AI on this proposal
   (runs, tokens, estimated cost, and about how many tokens a full regenerate costs).
@@ -259,10 +371,13 @@ lead's first proposal with a website (the summary is kept on the lead); none wit
 - **Client, requirements and scoping** (collapsed): the profile, the requirements, the scoping
   form and the template picks, and **Regenerate proposal** (every section again; sections edited
   by hand are kept, and a dialog offers to rebuild them too).
-- **Modules** (`ProposalModules.vue`): each module's fit, days and price (a price typed is "set by
-  hand"; **Use the list price** undoes it), its text (what it covers, key features: this
-  proposal's copy only) with **Reset to library**, **Add a module** from the catalogue, and
-  **Price from modules** (the quotation's lines).
+- **Price** (`ProposalPriceEstimate.vue`, the first page's Price card): Module / App / Custom
+  and the prices for the basis picked (a module's price as the proposal has it, an Item's rate
+  say, until one is typed), customisations, branches and the total. Off unless the proposal is
+  an editable draft the person may price. Save sends the scoping and the modules; the ERP site
+  prices the quotation again when the prices or the basis changed. There is no Modules card:
+  the modules and their days are changed on the first page (Back → Edit proposal → Update
+  proposal), and the hub has no `price_from_modules` endpoint.
 - **Sections** (`ProposalBlocks.vue`): the 23 master sections and any Image / Custom ones, each a
   collapsible card (the AI's, custom and image ones open; data ones shut) with an **On** switch,
   "AI" and "Edited" marks, **Regenerate** (AI sections) or **Reset to library** (data sections; a
@@ -278,9 +393,28 @@ lead's first proposal with a website (the summary is kept on the lead); none wit
   asked, when and their words at the top ("No reason given. Ask the client what to change." when
   they gave none).
 - **Versions**, the **Send dialog** and **What the client sees** (`ProposalPreview.vue`: the
-  cover, the contents with the parts, numbered sections and subsections, tables, workflow
-  chains, the module cards, the timeline bar, payment amounts (of the grand total), the price
-  itemised or consolidated with the net total, each tax line and the grand total, the signature
+  cover, the contents with the parts, **At a glance** (tiles before section 1: the modules in
+  scope, the timeline, the investment with taxes, the recommended AMC plan or else the valid-till
+  date; shown when two or more are known), numbered sections and subsections, tables, workflow
+  chains, the module cards (each with its effort days as a bar against the largest module, a
+  "n modules · d days of effort" line above them, and, when the proposal spans more than one
+  app, grouped and labelled by app), the timeline bar, the **investment split** (a stacked bar and legend over the
+  quotation's lines, the largest four and "Other", or the project alone when consolidated, then
+  the taxes; shares of the grand total, line amounts scaled for any discount), and the
+  shapes TBO Smart's `draw_parts` draws (`drawParts` in `proposals.ts`, the same rules): a
+  "Figure | label | detail" table as big-number tiles, two or more short subsections in a row
+  as cards, Deliverables as cards, Out of Scope and Assumptions as numbered rows with the lead
+  words ("Extra integrations: …") in bold, and "> " lines as a highlight ("title | tag"); the
+  Implementation Plan's phases as numbered markers on a line; the payment milestones as columns
+  (the amount in a band, darkest first) with the grand total under them; and, when the Warranty
+  & Support text names a free period ("six months", "90 days"), a go-live → optional AMC line
+  above the AMC plans. Cards, tiles and markers take the client document's accents in turn
+  (`DOC_TONES`: teal, green, orange, red; `DOC_TONE_INK` for big numbers), the AMC plan cards (a card a plan: a header band with
+  its name and yearly fee, brand-filled with a Recommended tag and raised for the recommended
+  one, `scoping.amc_plan`, gray for the others; a Coverage bar, "n of m" features included;
+  then the features with a round ✓ / – mark; the table hidden, as TBO Smart's `amc_plans` draws it), payment amounts (of
+  the grand total), the price
+  as the proposal's pricing mode says (the builder no longer switches it) with the net total, each tax line and the grand total, the signature
   boxes and the letter head; the ERP site's page and PDF are the
   real thing). It fits its column with no horizontal overflow at 1280, 1440 and 1920 px and at
   phone width: long words (links, emails) wrap, and a letter head's HTML with fixed widths is
@@ -295,7 +429,7 @@ no module editor (they keep what they copied); its sections are its type's (`sec
 agreement's Parties, Purpose, Change Requests, Intellectual Property, Confidentiality and
 Termination added to the block labels); the preview's cover shows the type ("Quotation",
 "Project Agreement"), no part titles, and no contents for a quotation, with the type's default
-headings. A quotation is priced here (the pricing dialog, *Price from modules*, *Request
+headings. A quotation is priced here (the pricing dialog, *Request
 approval*); an agreement shows the accepted quotation's (or, while the proposal is the
 quotation, the accepted proposal's) price read only and has a **Project start
 date** (Send says to set it; saving a new one dates the timeline and the purpose on the ERP site,
@@ -361,13 +495,21 @@ For everyone who sees Leads; read only for people who may not change it on the E
 - **Proposal templates** (`ProposalTemplateEditor.vue`): name, solution type, description, length
   guide, the **scoping questions** it asks, its **default modules**, the default packages and the
   sections (on or off, with each one's guidance).
+- **Payment terms templates** (`PaymentTermsSettings.vue`): the ERP site's Payment Terms library
+  items as their own list (each with its milestones in words and a small split bar), and a
+  dialog to add or edit one: its name (as the proposal's Payment terms list shows it), its
+  milestones (`PaymentMilestonesEditor.vue`, the same rows as a proposal's Custom milestones:
+  a label and a share each, up to 12, Save only when they add up to 100%), solution types, order
+  and enabled; Delete asks once. Saved as the library item's text, "Milestone | 30" a line
+  (`milestonesBody` / `parseMilestones` in `proposals.ts`, a header row skipped). Payment Terms
+  is left out of the Section libraries list, so it is managed in one place.
 - **Module catalogue**, **Section libraries** and **Proposal images**
   (`ProposalLibrarySettings.vue`): each record edits in a dialog. A module: name, usual fit,
   effort, default price, Item, image tag, what it covers, key features, scope ("Subsection |
   line"), deliverables, assumptions, out of scope, workflow, solution types, enabled, and **Draft
   with AI** (fills the text once for review; nothing is saved until Save). A library item: its
   library (company overview, solution components, scope, workflows, architecture, deliverables,
-  phases, timeline templates, roles, investment notes, payment terms templates, warranty, AMC
+  phases, timeline templates, roles, investment notes, warranty, AMC
   plans, assumptions, out of scope, risks, terms, agreement clauses), title, text, subsection (an
   agreement clause: its section), days, yearly price,
   condition, order, solution types, enabled. An image: upload (PNG, JPEG, WebP up to 5 MB),

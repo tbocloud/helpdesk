@@ -1853,8 +1853,11 @@ def get_kanban_tasks(project: str | None = None):
             "custom_recurring_task",
             # a content post's task may be handed to anyone (TeammatePicker)
             "content_post",
+            "completed_on",
+            "modified",
         ],
-        order_by="custom_phase asc, subject asc",
+        # newest work on top of each column; Completed is re-sorted below
+        order_by="creation desc",
     )
 
     # one query for the whole board; a card shows its most recently active open PR
@@ -1896,7 +1899,50 @@ def get_kanban_tasks(project: str | None = None):
             }
         )
 
+    # last finished first; completed_on is only a date, so same-day ties go by last change
+    columns["Completed"].sort(
+        key=lambda t: (str(t.get("completed_on") or ""), str(t.get("modified"))),
+        reverse=True,
+    )
+
     return {"columns": columns}
+
+
+@frappe.whitelist()
+def search_work(query: str, limit: int = 8) -> dict:
+    """Tasks and projects whose title or ID contains `query`, for the ⌘K palette.
+    Goes through frappe.get_list, so a person only finds what they may read."""
+    query = (query or "").strip()
+    if len(query) < 2:
+        return {"tasks": [], "projects": []}
+    limit = min(int(limit or 8), 20)
+    like = f"%{query}%"
+    tasks = frappe.get_list(
+        "Task",
+        filters={"status": ("!=", "Template")},
+        or_filters={"subject": ("like", like), "name": ("like", like)},
+        fields=["name", "subject", "status", "project", "modified"],
+        order_by="modified desc",
+        limit=limit,
+    )
+    projects = frappe.get_list(
+        "Project",
+        or_filters={"project_name": ("like", like), "name": ("like", like)},
+        fields=["name", "project_name", "status", "modified"],
+        order_by="modified desc",
+        limit=limit,
+    )
+    project_names = dict(
+        frappe.get_all(
+            "Project",
+            filters={"name": ("in", list({t.project for t in tasks if t.project}))},
+            fields=["name", "project_name"],
+            as_list=True,
+        )
+    )
+    for t in tasks:
+        t["project_name"] = project_names.get(t.project)
+    return {"tasks": tasks, "projects": projects}
 
 
 @frappe.whitelist()

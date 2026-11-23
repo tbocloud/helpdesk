@@ -31,8 +31,16 @@ is generated.
 - **The mail is a Communication** on the sign-off (`frappe.core.doctype.communication.email._make`,
   without its "email" permission check, which only System Managers would pass): it shows in the
   mail history and the customer's reply threads onto it when an incoming email account receives
-  it. It goes from the sender's own outgoing email account when they have one, else the site's
-  default.
+  it. It goes from the sign-off's **From** (`sender_email_account`) with the sender's name:
+  Frappe sends through the outgoing account whose address the From has. Every mail of the
+  thread (first send, reminders, "review again", the signed record) uses it. A sign-off
+  without one (made before From was asked) goes from the sender's own address, which Frappe
+  sends through their own account or, without one, the site's default.
+- **From** offers the outgoing Email Accounts the person may send from: the site's default and
+  the ones given to them in their User settings (User Emails), the default first. It starts on
+  the account with their own address, else the default. Nobody sends from a colleague's
+  mailbox: picking an account not offered to you is refused on save, and sending a sign-off
+  whose From you can't use is refused on send (reminders keep the first sender's).
 - **Snapshot when sent**: the customer's address (`address_display`), the contact's name,
   designation and email are kept as they were, so the mail and the document don't change when
   the customer's records do.
@@ -139,7 +147,8 @@ Item answers: **Pending**, **Done**, **Not clear**, **Escalated**.
      access or an invite, and picks them; an email that is already a contact just picks that
      contact), and CC (the project lead
      and you; the customer's other contacts are offered; any valid address).
-   - **Mail content**: subject and body filled in from the template ([Mail](#mail)), and
+   - **Mail content**: **From** (hidden when the site has no outgoing account), subject and
+     body filled in from the template ([Mail](#mail)), and
      **Attach sign-off document (PDF)**, on by default.
    - Buttons: **Edit in full page** (also an expand icon by the close icon), Cancel, **Save as
      draft**, **Send to customer** (disabled with the reason on hover until it can go; only for
@@ -249,7 +258,11 @@ lists, link) and CC, kept on the sign-off (`email_subject`, `email_body`, `cc_em
   again whenever a field it uses changes, until the mail is changed by hand; then **Reapply template** puts it back after
   asking ("Your changes to the mail are lost"). A fill that arrives after the mail was typed into
   is dropped, so typing is never overwritten. Editing a draft: its kept mail goes on following its
-  choices when it is still exactly what they fill in (a date set later fills in); a draft mail
+  choices when it is still what they fill in (a date set later fills in). A draft saved before a
+  detail was given still has that `{{ placeholder }}` where the fill now has the value; that still
+  counts as untouched (`fillsPlaceholders`), so opening it fills the mail in, and it follows the
+  choices from then on. Without this, such a draft stayed stuck on its placeholders and could not
+  be sent until someone clicked Reapply template. A draft mail
   written by hand stays, and **Reapply template** (shown for it, without asking when nothing was
   typed in the dialog) fills it in again. Switching template replaces the earlier template's
   Always CC with the new one's.
@@ -388,7 +401,8 @@ Manager only; everything else goes through these checks.
   `customer` (fetched), `module_title` (required for a training), `template`, `signoff_type`,
   `crm_plan`, `crm_recorded`, `status`, `training_date`, `trainer`; the recipient:
   `signatory_contact`, `signatory_name`, `signatory_email`, `signatory_designation` (snapshot),
-  `customer_address`, `address_display` (snapshot); the mail: `cc_emails`, `email_subject`,
+  `customer_address`, `address_display` (snapshot); the mail: `sender_email_account` → Email
+  Account (From; locked once sent), `cc_emails`, `email_subject`,
   `email_body`, `attach_pdf`, `sent_pdf` → File; `items`; the link and sending: `link_token_hash`,
   `link_expires_on`, `link_sent_on` (sent on), `link_sent_by` (sent by), `reminder_sent_on`;
   signed off: `signed_on`, `signer_name`, `signer_designation`, `signer_email`, `signed_off_by` →
@@ -465,7 +479,10 @@ page) with the requirements' mail; a mail a site changed is left alone.
   `link_sent_on`, `signed_on`, `remarks`, `customer_status`, `total`, `done`, `follow_up`.
 - `get_signoff_form(project, lead?)` → `{project_name, project_type, customer, customer_name,
   addresses (primary first, with how each reads), contacts (with designation, is_primary),
-  default_contact, default_cc, templates, team, can_send, can_create_uat, placeholder_labels}`.
+  default_contact, sender_accounts ({name, email, is_default}), default_sender_account,
+  default_cc, templates, team, can_send, can_create_uat, placeholder_labels}`.
+  `create_signoff`, `create_uat_signoff` and `update_signoff` take `sender_email_account`;
+  `get_signoff` returns it and its address as `sender_email`.
 - `add_signoff_contact(project, full_name, email, designation?, lead?)` → the new contact, as
   `get_signoff_form` lists contacts. Who may create the sign-off (`_project_for(…, manage=True)`)
   may add who signs; it goes through `HD Customer.add_contact_by_email` (reuses a Contact with

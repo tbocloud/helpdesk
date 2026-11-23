@@ -206,6 +206,28 @@
               {{ aiError }}
             </p>
           </div>
+          <div class="flex flex-col gap-1">
+            <FormControl
+              v-model="form.reference_link"
+              type="url"
+              inputmode="url"
+              :label="__('Reference link')"
+              :placeholder="__('https://…')"
+              :description="
+                __('An example, a source or the drive folder to follow.')
+              "
+            />
+            <a
+              v-if="/^https?:\/\/\S+$/.test(form.reference_link.trim())"
+              :href="form.reference_link.trim()"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="inline-flex w-fit items-center gap-1 rounded text-p-sm text-brand-ink underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+            >
+              {{ __("Open the link") }}
+              <LucideExternalLink class="size-3.5" aria-hidden="true" />
+            </a>
+          </div>
           <FormControl
             :model-value="form.brief"
             type="textarea"
@@ -456,6 +478,7 @@ import LucideClock from "~icons/lucide/clock";
 import LucideLoaderCircle from "~icons/lucide/loader-circle";
 import LucideMessageSquareWarning from "~icons/lucide/message-square-warning";
 import LucideSparkles from "~icons/lucide/sparkles";
+import LucideExternalLink from "~icons/lucide/external-link";
 import {
   STATUSES,
   htmlToText,
@@ -495,6 +518,7 @@ const EMPTY = {
   status: "Idea",
   publish_on: "",
   caption: "",
+  reference_link: "",
   hashtags: "",
   brief: "",
   published_url: "",

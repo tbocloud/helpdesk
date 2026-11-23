@@ -141,6 +141,8 @@ def get_signoff_form(project: str, lead: str | None = None) -> dict:
     )
     me = frappe.session.user
     contacts = _customer_contacts(info.customer) if info.customer else []
+    sender_accounts = HDProjectSignoff.sender_accounts(me)
+    my_email = frappe.db.get_value("User", me, "email") or ""
     return {
         "project_name": info.project_name or project,
         "project_type": info.project_type,
@@ -162,6 +164,12 @@ def get_signoff_form(project: str, lead: str | None = None) -> dict:
             {"user": u, "full_name": get_fullname(u)} for u in get_project_team(project)
         ],
         "contacts": contacts,
+        # From: the accounts you may send from; your own address first, else the default
+        "sender_accounts": sender_accounts,
+        "default_sender_account": next(
+            (a["name"] for a in sender_accounts if a["email"] == my_email.lower()),
+            next((a["name"] for a in sender_accounts if a["is_default"]), None),
+        ),
         "default_cc": [
             e
             for e in dict.fromkeys((info.project_lead, me))
@@ -337,6 +345,8 @@ def get_signoff(signoff: str) -> dict:
         "email_subject": doc.email_subject,
         "email_body": doc.email_body,
         "cc_emails": doc.cc_emails,
+        "sender_email_account": doc.sender_email_account,
+        "sender_email": doc.sender_account_email(),
         "attach_pdf": doc.attach_pdf,
         "sent_pdf": _file_info(doc.sent_pdf) if doc.sent_pdf else None,
         "remarks": doc.remarks,
@@ -410,6 +420,7 @@ def create_signoff(
     email_subject: str | None = None,
     email_body: str | None = None,
     cc_emails: str | None = None,
+    sender_email_account: str | None = None,
     send: int | str = 0,
     lead: str | None = None,
     customer_address: str | None = None,
@@ -433,7 +444,7 @@ def create_signoff(
             "trainer": cstr(trainer).strip(),
             "signatory_contact": signatory_contact,
             "status": DRAFT,
-            **_mail_fields(email_subject, email_body, cc_emails),
+            **_mail_fields(email_subject, email_body, cc_emails, sender_email_account),
             **_document_fields(customer_address, attach_pdf),
             **_detail_values(details),
             "items": _parse_items(items) if items else [],
@@ -451,6 +462,7 @@ def create_uat_signoff(
     email_subject: str | None = None,
     email_body: str | None = None,
     cc_emails: str | None = None,
+    sender_email_account: str | None = None,
     send: int | str = 0,
     lead: str | None = None,
     customer_address: str | None = None,
@@ -480,7 +492,7 @@ def create_uat_signoff(
             "signoff_type": UAT,
             "template": template or None,
             "crm_plan": plan,
-            **_mail_fields(email_subject, email_body, cc_emails),
+            **_mail_fields(email_subject, email_body, cc_emails, sender_email_account),
             **_document_fields(customer_address, attach_pdf),
             **_uat_details(details, cases),
             "module_title": _("User acceptance testing ({0})").format(
@@ -524,11 +536,17 @@ def _uat_cases(project: str, cached: bool = False) -> dict:
     return found
 
 
-def _mail_fields(subject: str | None, body: str | None, cc: str | None) -> dict:
+def _mail_fields(
+    subject: str | None,
+    body: str | None,
+    cc: str | None,
+    sender_account: str | None = None,
+) -> dict:
     return {
         "email_subject": cstr(subject).strip() or None,
         "email_body": body or None,
         "cc_emails": cstr(cc).strip() or None,
+        "sender_email_account": cstr(sender_account).strip() or None,
     }
 
 
@@ -669,6 +687,7 @@ def update_signoff(
     email_subject: str | None = None,
     email_body: str | None = None,
     cc_emails: str | None = None,
+    sender_email_account: str | None = None,
     customer_address: str | None = None,
     attach_pdf: int | str = 1,
     details: str | dict | None = None,
@@ -686,7 +705,7 @@ def update_signoff(
     doc.trainer = cstr(trainer).strip() or None
     doc.signatory_contact = signatory_contact
     doc.set("items", _merge_items(doc, items))
-    doc.update(_mail_fields(email_subject, email_body, cc_emails))
+    doc.update(_mail_fields(email_subject, email_body, cc_emails, sender_email_account))
     doc.update(_document_fields(customer_address, attach_pdf))
     if details is not None:
         doc.update(_detail_values(details))

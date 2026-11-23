@@ -12,7 +12,8 @@ Sales rows say why their numbers are missing. See docs/team-dashboard.md, Sales.
 import frappe
 from frappe import _
 
-from helpdesk.integrations.crm.client import CRMClient, CRMError
+from helpdesk.divisions import NoDivisionSiteError, division_client
+from helpdesk.integrations.crm.client import CRMError
 from helpdesk.integrations.crm.leads import API, friendly_error, leads_on
 
 # where the activity counts: CRM, a sub-department of Sales (DEFAULT_GROUPS)
@@ -64,16 +65,19 @@ def blank() -> dict:
     return dict.fromkeys(FIELDS.values(), 0)
 
 
-def activity(start, end, with_overdue: bool = True) -> dict:
+def activity(
+    start, end, with_overdue: bool = True, division: str | None = None
+) -> dict:
     """{status, message, currency, rows}: each person's activity in the period as
-    Scoreboard rows (department CRM). `status` is off while Leads aren't set up,
-    unavailable (with the reason) when the CRM site can't answer. Cached briefly."""
+    Scoreboard rows (department CRM), read from `division`'s ERP site (the CRM connection
+    for none). `status` is off while Leads aren't set up, unavailable (with the reason)
+    when the site can't answer. Cached briefly."""
     if not leads_on():
         return {"status": OFF, "message": None, "currency": None, "rows": []}
-    key = f"{CACHE_PREFIX}:{start}:{end}"
+    key = f"{CACHE_PREFIX}:{division or ''}:{start}:{end}"
     found = frappe.cache.get_value(key, expires=True)
     if found is None:
-        found = fetch(start, end)
+        found = fetch(start, end, division)
         frappe.cache.set_value(
             key,
             found,
@@ -104,11 +108,13 @@ def activity(start, end, with_overdue: bool = True) -> dict:
     }
 
 
-def fetch(start, end) -> dict:
-    """The CRM site's answer, or why there is none. The hub asks as its own API
-    user: the Scoreboard is open to everyone and closes periods at night."""
+def fetch(start, end, division: str | None = None) -> dict:
+    """The site's answer, or why there is none. The hub asks as its own API user: the
+    Scoreboard is open to everyone and closes periods at night."""
     try:
-        client = CRMClient.from_settings()
+        client = division_client(division)
+    except NoDivisionSiteError as e:
+        return unavailable(str(e))
     except CRMError:
         return unavailable(
             _("The ERP site isn't connected. Ask an admin to set up Settings → CRM.")

@@ -1,0 +1,164 @@
+<template>
+  <!-- what is being implemented: ERP (ERPNext and its add-ons) or Digital Marketing
+       (docs/proposals.md "Implementation type") -->
+  <div class="flex flex-col gap-3">
+    <div class="flex flex-col gap-1.5">
+      <span :id="typeId" class="text-sm font-medium text-ink-gray-8">
+        {{ __("Implementation type") }}
+      </span>
+      <TabButtons
+        class="self-start"
+        :model-value="kind"
+        :aria-labelledby="typeId"
+        :options="kindOptions"
+        @update:model-value="pickKind"
+      />
+      <div
+        v-if="pending"
+        role="alert"
+        class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg bg-warning-soft px-3 py-2"
+      >
+        <LucideTriangleAlert
+          class="size-4 shrink-0 text-warning"
+          aria-hidden="true"
+        />
+        <span class="min-w-0 flex-1 text-p-sm text-ink-gray-8">
+          {{
+            __(
+              "Switching to {0} removes the customisations you listed ({1}).",
+              IMPLEMENTATION_LABELS[pending],
+              String(listed)
+            )
+          }}
+        </span>
+        <div class="flex gap-2">
+          <Button :label="__('Keep them')" @click="pending = null" />
+          <Button
+            variant="solid"
+            :label="__('Switch')"
+            @click="switchTo(pending)"
+          />
+        </div>
+      </div>
+      <p v-else-if="!kind" class="text-p-sm text-ink-gray-6">
+        {{
+          __(
+            "This template is neither ERP nor Digital Marketing. Pick one to switch to it."
+          )
+        }}
+      </p>
+    </div>
+
+    <fieldset v-if="kind === 'ERP'" class="flex flex-col gap-2">
+      <legend class="mb-1 text-sm font-medium text-ink-gray-8">
+        {{ __("ERPNext, with") }}
+      </legend>
+      <div class="flex flex-wrap gap-2" role="group">
+        <button
+          v-for="a in ERP_ADDONS"
+          :key="a.value"
+          type="button"
+          :aria-pressed="addons.includes(a.value)"
+          class="inline-flex min-h-[36px] items-center gap-1.5 rounded-full border px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+          :class="
+            addons.includes(a.value)
+              ? 'border-transparent bg-brand text-brand-on'
+              : 'border-outline-gray-2 bg-surface-base text-ink-gray-8 hover:bg-surface-gray-1'
+          "
+          @click="toggle(a.value)"
+        >
+          <LucideCheck
+            v-if="addons.includes(a.value)"
+            class="size-3.5"
+            aria-hidden="true"
+          />
+          {{ a.label }}
+        </button>
+      </div>
+      <p class="text-p-sm text-ink-gray-6">
+        {{
+          __("Pick any mix. Leave the mobile app off for ERPNext without one.")
+        }}
+      </p>
+    </fieldset>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { __ } from "@/translation";
+import { Button, TabButtons } from "frappe-ui";
+import { computed, ref, useId } from "vue";
+import LucideCheck from "~icons/lucide/check";
+import LucideTriangleAlert from "~icons/lucide/triangle-alert";
+import {
+  ERP_ADDONS,
+  erpAddons,
+  IMPLEMENTATION_LABELS,
+  implementationOf,
+  implementations,
+  withAddon,
+  withImplementation,
+  type ErpAddon,
+  type Implementation,
+  type ImplementationChoice,
+  type ProposalTemplate,
+  type Scoping,
+} from "./proposals";
+
+const props = defineProps<{
+  template: string;
+  scoping: Scoping;
+  /** the enabled templates */
+  templates: ProposalTemplate[];
+}>();
+const emit = defineEmits<{
+  (e: "change", value: ImplementationChoice): void;
+}>();
+
+const typeId = `proposal-implementation-${useId()}`;
+
+const kindOptions = computed(() =>
+  implementations(props.templates).map((k) => ({
+    label: IMPLEMENTATION_LABELS[k],
+    value: k,
+  }))
+);
+const kind = computed(() =>
+  implementationOf(
+    props.templates.find((t) => t.name === props.template)?.solution_type
+  )
+);
+
+const addons = computed(() => erpAddons(props.scoping));
+
+/** customisations with something written in them, which another type clears */
+const listed = computed(
+  () => props.scoping.customisations.filter((c) => c.item.trim()).length
+);
+/** the type waiting on "Switch" because switching would lose those */
+const pending = ref<Implementation | null>(null);
+
+function pickKind(value: Implementation) {
+  if (value === kind.value) return (pending.value = null);
+  if (listed.value) pending.value = value;
+  else switchTo(value);
+}
+
+function switchTo(value: Implementation) {
+  pending.value = null;
+  const next = withImplementation(value, props.scoping, props.templates);
+  if (next) emit("change", next);
+}
+
+function toggle(addon: ErpAddon) {
+  emit(
+    "change",
+    withAddon(
+      addon,
+      !addons.value.includes(addon),
+      { template: props.template, scoping: props.scoping },
+      props.templates
+    )
+  );
+}
+</script>
