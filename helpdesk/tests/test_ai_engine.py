@@ -446,10 +446,11 @@ class TestCallers(AIProviderCase):
             work_summary,
         )
         from helpdesk.api import content, ticket_ai
+        from helpdesk.copilot import conversation
 
         prompts = [
             ai_suggestion.SUGGESTION_SYSTEM_PROMPT,
-            chatwoot_bridge.CHAT_SYSTEM_PROMPT,
+            conversation.PROMPT,
             chatwoot_bridge.SUMMARY_SYSTEM_PROMPT,
             content_topics.SYSTEM_PROMPT,
             home_plan.SYSTEM_PROMPT,

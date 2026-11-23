@@ -1,4 +1,3 @@
-import os
 from datetime import datetime
 
 import frappe
@@ -22,14 +21,13 @@ from helpdesk.helpdesk.doctype.hd_signoff_template.hd_signoff_template import (
 )
 from helpdesk.intake import ensure_intake_defaults
 from helpdesk.setup.default_views import add_default_views
+from helpdesk.setup.form_scripts import install_form_scripts
 
 from .default_template import create_default_template
 from .file import create_helpdesk_folder
 from .ticket_feedback import create_ticket_feedback_options
 from .ticket_type import create_fallback_ticket_type, create_ootb_ticket_types
 from .welcome_ticket import create_welcome_ticket
-
-FORM_SCRIPT_NAME = "Helpdesk AI Support Actions"
 
 # Project User roles; helpdesk.tasky.api.CATEGORY_TO_ROLE maps task categories to them
 PROJECT_ROLES = (
@@ -86,7 +84,7 @@ def after_install():
     add_property_setters()
     add_website_settings_permission()
     add_default_views()
-    _create_form_script()
+    install_form_scripts()
     ensure_content_team_role()
     ensure_default_occasions()
     ensure_default_departments()
@@ -94,8 +92,22 @@ def after_install():
     ensure_default_content_options()
     ensure_customization_ticket_type()
     ensure_intake_defaults()
+    ensure_copilot_roles_and_users()
     # Always keep this at last, because sql_ddl makes the db commit
     add_fts_index()
+
+
+def ensure_copilot_roles_and_users():
+    """The Copilot Worker role, the Teams bot user and the watcher's user (TBO Monitor), made at
+    install as well as on migrate (helpdesk.setup.after_migrate): a new site, a test site among
+    them, has them before its first migrate."""
+    from helpdesk.api.copilot_worker import ensure_role as ensure_worker_role
+    from helpdesk.copilot.teams import ensure_bot_user as ensure_teams_bot_user
+    from helpdesk.monitor import ensure_user as ensure_monitor_user
+
+    ensure_worker_role()
+    ensure_teams_bot_user()
+    ensure_monitor_user()
 
 
 def add_default_categories_and_articles():
@@ -428,6 +440,16 @@ def get_custom_fields():
                 "no_copy": 1,
             },
             {
+                # the watcher's follow-up key: one open task per slow-burning issue (helpdesk/monitor.py)
+                "fieldname": "custom_monitor_key",
+                "fieldtype": "Data",
+                "label": "Monitor key",
+                "insert_after": "custom_ai_description",
+                "read_only": 1,
+                "no_copy": 1,
+                "search_index": 1,
+            },
+            {
                 "fieldname": "custom_category",
                 "fieldtype": "Select",
                 "label": "Category",
@@ -508,6 +530,113 @@ def get_custom_fields():
                 "no_copy": 1,
             },
         ],
+        "HD Customer": [
+            {
+                "fieldname": "custom_copilot_section",
+                "fieldtype": "Section Break",
+                "label": "TBO Copilot",
+                "insert_after": "country",
+            },
+            {
+                "fieldname": "custom_copilot_enabled",
+                "fieldtype": "Check",
+                "label": "Copilot Enabled",
+                "insert_after": "custom_copilot_section",
+                "description": "A Copilot run starts for every new ticket of this customer",
+            },
+            {
+                "fieldname": "custom_assigned_developer",
+                "fieldtype": "Link",
+                "options": "User",
+                "label": "Assigned Developer (old)",
+                "insert_after": "custom_copilot_enabled",
+                "hidden": 1,
+                "description": "Retired: Copilot uses the Ticket Owner (and the backup while the owner is away). Read only when a customer has no ticket owner",
+            },
+            {
+                "fieldname": "custom_copilot_level",
+                "fieldtype": "Select",
+                "options": "\nDiagnose only\nExplain\nFix\nCorrect",
+                "label": "Copilot Level",
+                "insert_after": "custom_assigned_developer",
+                "description": "How far Copilot may go on this customer's tickets: Diagnose only (the team sees the diagnosis), Explain (the customer sees stages and the explanations agents send), Fix (Copilot also writes fixes), Correct (a senior may also approve setting and data corrections). Blank: the default in HDS Copilot Settings",
+            },
+            {
+                "fieldname": "custom_copilot_watch",
+                "fieldtype": "Check",
+                "label": "Watch Errors",
+                "default": "0",
+                "insert_after": "custom_copilot_level",
+                "description": "Copilot checks this customer's sites for new errors and opens a ticket for one before they report it (HDS Copilot Settings → Error Watch)",
+            },
+            # who Copilot goes to for this customer (helpdesk.copilot.people): set here, never in code
+            {
+                "fieldname": "custom_copilot_people_section",
+                "fieldtype": "Section Break",
+                "label": "Copilot People",
+                "insert_after": "custom_copilot_watch",
+                "description": "Who Copilot goes to for this customer. Empty places use HDS Copilot Settings → People",
+            },
+            {
+                "fieldname": "custom_copilot_people",
+                "fieldtype": "Table",
+                "options": "HDS Copilot Role Person",
+                "label": "Copilot People",
+                "insert_after": "custom_copilot_people_section",
+                "description": "Developer (empty: the Ticket Owner, then the Backup Ticket Owner), Fix Approver (empty: the developers) and Project Coordinator (empty: the common ones). Main first, then Fallback 1, 2 and 3; then the common people in HDS Copilot Settings → People. Senior, Leader, Infrastructure, Risk Alerts and Deploy Notices are set there, for every customer",
+            },
+            # Phase 22's fields, read by the Phase 23 patch into Copilot People, then kept hidden for one version
+            {
+                "fieldname": "custom_first_developer",
+                "fieldtype": "Link",
+                "options": "User",
+                "label": "First Developer (before Phase 23)",
+                "insert_after": "custom_copilot_people",
+                "hidden": 1,
+                "read_only": 1,
+            },
+            {
+                "fieldname": "custom_second_developer",
+                "fieldtype": "Link",
+                "options": "User",
+                "label": "Second Developer (before Phase 23)",
+                "insert_after": "custom_first_developer",
+                "hidden": 1,
+                "read_only": 1,
+            },
+            {
+                "fieldname": "custom_fix_approver",
+                "fieldtype": "Link",
+                "options": "User",
+                "label": "Fix Approver (before Phase 23)",
+                "insert_after": "custom_second_developer",
+                "hidden": 1,
+                "read_only": 1,
+            },
+            {
+                "fieldname": "custom_copilot_column_people",
+                "fieldtype": "Column Break",
+                "insert_after": "custom_fix_approver",
+                "hidden": 1,
+            },
+            {
+                "fieldname": "custom_copilot_coordinators",
+                "fieldtype": "Table",
+                "options": "HDS Copilot Person",
+                "label": "Project Coordinators (before Phase 23)",
+                "insert_after": "custom_copilot_column_people",
+                "hidden": 1,
+                "read_only": 1,
+            },
+            # closes the Copilot sections, so the customer's own contact fields that follow are not
+            # shown inside Copilot People
+            {
+                "fieldname": "custom_copilot_end_section",
+                "fieldtype": "Section Break",
+                "label": "Contact",
+                "insert_after": "custom_copilot_coordinators",
+            },
+        ],
         "HD Ticket": [
             {
                 "fieldname": "custom_qcs_connection",
@@ -543,9 +672,131 @@ def get_custom_fields():
                 "no_copy": 1,
             },
             {
+                # the status push remembers what the customer's ticket was last
+                # told, so unchanged tickets are not rewritten every five minutes
+                "fieldname": "custom_client_push_hash",
+                "fieldtype": "Data",
+                "label": "Client Push Hash",
+                "insert_after": "custom_sync_state",
+                "hidden": 1,
+                "read_only": 1,
+                "no_copy": 1,
+            },
+            # TBO Copilot: the ticket mirrors its latest run (helpdesk/copilot/runs.py)
+            {
+                "fieldname": "custom_copilot_run",
+                "fieldtype": "Link",
+                "options": "HDS Copilot Run",
+                "label": "Copilot Run",
+                "insert_after": "custom_client_push_hash",
+                "read_only": 1,
+                "no_copy": 1,
+            },
+            {
+                "fieldname": "custom_copilot_stage",
+                "fieldtype": "Data",
+                "label": "Copilot Stage",
+                "insert_after": "custom_copilot_run",
+                "read_only": 1,
+                "no_copy": 1,
+            },
+            {
+                "fieldname": "custom_root_cause",
+                "fieldtype": "Data",
+                "label": "Root Cause",
+                "insert_after": "custom_copilot_stage",
+                "read_only": 1,
+                "no_copy": 1,
+            },
+            {
+                "fieldname": "custom_customer_confirmation",
+                "fieldtype": "Select",
+                "options": "\nConfirmed\nReopened",
+                "label": "Customer Confirmation",
+                "insert_after": "custom_root_cause",
+                "read_only": 1,
+                "no_copy": 1,
+            },
+            {
+                "fieldname": "custom_copilot_source",
+                "fieldtype": "Select",
+                "options": "\nError watch",
+                "label": "Raised By Copilot",
+                "insert_after": "custom_customer_confirmation",
+                "read_only": 1,
+                "no_copy": 1,
+                "description": "Error watch: Copilot opened it for a new error on the customer's site; the customer hears nothing from Copilot until a person replies",
+            },
+            {
+                "fieldname": "custom_known_issue",
+                "fieldtype": "Link",
+                "options": "HDS Known Issue",
+                "label": "Known Issue",
+                "insert_after": "custom_copilot_source",
+                "read_only": 1,
+                "no_copy": 1,
+            },
+            {
+                "fieldname": "custom_away_assignee",
+                "fieldtype": "Link",
+                "options": "User",
+                "label": "Moved From (On Leave)",
+                "insert_after": "custom_known_issue",
+                "read_only": 1,
+                "no_copy": 1,
+                "description": "Whose ticket this was before it moved while they were on leave; it goes back to them when they return if nobody worked on it meanwhile (helpdesk.ticket_assignment)",
+            },
+            # chosen by a project coordinator (helpdesk.copilot.people): Copilot's person for this ticket
+            {
+                "fieldname": "custom_copilot_person",
+                "fieldtype": "Link",
+                "options": "User",
+                "label": "Copilot Person",
+                "insert_after": "custom_away_assignee",
+                "read_only": 1,
+                "no_copy": 1,
+                "description": "Chosen by a project coordinator: Copilot's approvals and news for this ticket go to them",
+            },
+            {
+                "fieldname": "custom_copilot_person_note",
+                "fieldtype": "Small Text",
+                "label": "Why This Person",
+                "insert_after": "custom_copilot_person",
+                "read_only": 1,
+                "no_copy": 1,
+            },
+            {
+                "fieldname": "custom_copilot_person_at",
+                "fieldtype": "Datetime",
+                "label": "Person Chosen At",
+                "insert_after": "custom_copilot_person_note",
+                "read_only": 1,
+                "no_copy": 1,
+                "hidden": 1,
+            },
+            {
+                "fieldname": "custom_copilot_waiting",
+                "fieldtype": "Check",
+                "label": "Waits for a Coordinator",
+                "insert_after": "custom_copilot_person_at",
+                "read_only": 1,
+                "no_copy": 1,
+                "hidden": 1,
+                "description": "Both developers were away and the coordinators were asked to choose; asked again each morning until one does",
+            },
+            {
+                "fieldname": "custom_moved_on",
+                "fieldtype": "Datetime",
+                "label": "Moved On",
+                "insert_after": "custom_away_assignee",
+                "read_only": 1,
+                "no_copy": 1,
+            },
+            {
                 "fieldname": "custom_triage_status",
                 "fieldtype": "Select",
-                "options": "Pending\nCompleted\nFailed",
+                # triage.py writes every one of these through db.set_value
+                "options": "Pending\nIn Progress\nCompleted\nSkipped\nFailed",
                 "label": "Triage Status",
                 "insert_after": "custom_conv_state",
             },
@@ -665,11 +916,36 @@ def get_custom_fields():
                 "insert_after": "custom_agreed_delivery",
                 "read_only": 1,
             },
+            # the written scope the customer approves (Phase 8: Copilot builds to it)
+            {
+                "fieldname": "custom_estimate_scope",
+                "fieldtype": "Long Text",
+                "label": "What We Will Build",
+                "insert_after": "custom_estimate_note",
+                "read_only": 1,
+            },
+            {
+                "fieldname": "custom_estimate_checks",
+                "fieldtype": "Small Text",
+                "label": "Done When",
+                "insert_after": "custom_estimate_scope",
+                "read_only": 1,
+                "description": "One check per line.",
+            },
+            {
+                "fieldname": "custom_estimate_scope_hash",
+                "fieldtype": "Data",
+                "label": "Approved Scope Hash",
+                "insert_after": "custom_estimate_checks",
+                "read_only": 1,
+                "hidden": 1,
+                "description": "The hours, scope and checks the customer approved; an edit afterwards no longer matches.",
+            },
             {
                 "fieldname": "custom_estimate_sent_on",
                 "fieldtype": "Datetime",
                 "label": "Estimate Sent On",
-                "insert_after": "custom_estimate_note",
+                "insert_after": "custom_estimate_scope_hash",
                 "read_only": 1,
                 "hidden": 1,
             },
@@ -993,38 +1269,3 @@ def add_index_if_not_exists(table, column, index_name):
             table=table, index_name=index_name, column=column
         )
     )
-
-
-def _create_form_script():
-    js_path = os.path.join(
-        os.path.dirname(__file__), "..", "hd_form_scripts", "ai_support_actions.js"
-    )
-
-    if not os.path.exists(js_path):
-        frappe.log_error("HD Form Script JS not found", js_path)
-        return
-
-    with open(js_path) as f:  # path is this app's own bundled file - nosemgrep
-        script_content = f.read()
-
-    if frappe.db.exists("HD Form Script", FORM_SCRIPT_NAME):
-        doc = frappe.get_doc("HD Form Script", FORM_SCRIPT_NAME)
-        doc.script = script_content
-        doc.enabled = 1
-        doc.save(ignore_permissions=True)
-        print(f"Updated HD Form Script: {FORM_SCRIPT_NAME}")
-    else:
-        doc = frappe.get_doc(
-            {
-                "doctype": "HD Form Script",
-                "name": FORM_SCRIPT_NAME,
-                "dt": "HD Ticket",
-                "apply_to": "Form",
-                "enabled": 1,
-                "script": script_content,
-            }
-        )
-        doc.insert(ignore_permissions=True)
-        print(f"Created HD Form Script: {FORM_SCRIPT_NAME}")
-
-    frappe.db.commit()  # install step - nosemgrep

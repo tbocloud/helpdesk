@@ -11,15 +11,19 @@
       <slot />
     </main>
     <Notifications />
+    <!-- the staff assistant's panel (Phase 6): the same chat as the TBO Copilot bot in Teams -->
+    <CopilotChatPanel v-if="!isCustomerPortal" />
     <PendingCalls v-if="authStore.canUseLeads" />
     <CallBox v-if="authStore.canUseLeads" />
   </div>
 </template>
 <script setup>
 import { Notifications } from "@/components";
+import CopilotChatPanel from "@/components/copilot/CopilotChatPanel.vue";
 import CallBox from "@/pages/leads/CallBox.vue";
 import PendingCalls from "@/pages/leads/PendingCalls.vue";
 import { useAuthStore } from "@/stores/auth";
+import { isCustomerPortal } from "@/utils";
 import AppHeader from "./AppHeader.vue";
 import Sidebar from "./Sidebar.vue";
 

@@ -4,9 +4,9 @@
 function setupForm({ doc, call, toast, $dialog }) {
   var actions = [];
 
-  // Login to Site - first button
-  actions.push({
-    label: "Login to Site",
+  // Login to Site
+  var loginItem = {
+    label: "Login to site",
     onClick: async function () {
       try {
         var connections = await call("helpdesk.api.get_connections");
@@ -47,13 +47,11 @@ function setupForm({ doc, call, toast, $dialog }) {
         console.error("Login error:", error);
       }
     },
-  });
+  };
 
-  // AI Triage - standalone button
-  actions.push({
+  // AI Triage: this ticket's triage
+  var triageItem = {
     label: "AI Triage",
-    theme: "blue",
-    variant: "subtle",
     onClick: async function () {
       try {
         var triage = await call("helpdesk.api.get_triage", {
@@ -71,69 +69,64 @@ function setupForm({ doc, call, toast, $dialog }) {
         console.error("Triage error:", error);
       }
     },
-  });
+  };
 
-  // AI Tools dropdown - grouped actions
-  actions.push({
-    group: "AI Tools",
-    buttonLabel: "AI Tools",
-    hideLabel: true,
-    items: [
-      {
-        label: "Start Investigation",
-        onClick: async function () {
-          try {
-            var connections = await call("helpdesk.api.get_connections");
-            showInvestigationDialog(connections, doc, call, toast, $dialog);
-          } catch (error) {
-            toast.error("Failed to load connections");
-            console.error("Connections error:", error);
-          }
-        },
+  // the AI tools
+  var aiTools = [
+    {
+      label: "Start Investigation",
+      onClick: async function () {
+        try {
+          var connections = await call("helpdesk.api.get_connections");
+          showInvestigationDialog(connections, doc, call, toast, $dialog);
+        } catch (error) {
+          toast.error("Failed to load connections");
+          console.error("Connections error:", error);
+        }
       },
-      {
-        label: "View Sessions",
-        onClick: async function () {
-          try {
-            var sessions = await call("helpdesk.api.get_sessions", {
-              ticket: doc.name,
-            });
-            showSessionsDialog(sessions, doc, call, toast, $dialog);
-          } catch (error) {
-            toast.error("Failed to load sessions");
-            console.error("Sessions error:", error);
-          }
-        },
+    },
+    {
+      label: "View Sessions",
+      onClick: async function () {
+        try {
+          var sessions = await call("helpdesk.api.get_sessions", {
+            ticket: doc.name,
+          });
+          showSessionsDialog(sessions, doc, call, toast, $dialog);
+        } catch (error) {
+          toast.error("Failed to load sessions");
+          console.error("Sessions error:", error);
+        }
       },
-      {
-        label: "Copy fix brief for AI",
-        onClick: async function () {
-          await shareFixBrief(doc, call, toast, "copy");
-        },
+    },
+    {
+      label: "Copy fix brief for AI",
+      onClick: async function () {
+        await shareFixBrief(doc, call, toast, "copy");
       },
-      {
-        label: "Download fix brief (.md)",
-        onClick: async function () {
-          await shareFixBrief(doc, call, toast, "download");
-        },
+    },
+    {
+      label: "Download fix brief (.md)",
+      onClick: async function () {
+        await shareFixBrief(doc, call, toast, "download");
       },
-      {
-        label: "Re-run Triage",
-        onClick: async function () {
-          try {
-            await call("helpdesk.api.run_triage_now", { ticket: doc.name });
-            toast.success("Triage queued. Refresh in a few seconds.");
-          } catch (error) {
-            toast.error("Failed to queue triage");
-            console.error("Retriage error:", error);
-          }
-        },
+    },
+    {
+      label: "Re-run Triage",
+      onClick: async function () {
+        try {
+          await call("helpdesk.api.run_triage_now", { ticket: doc.name });
+          toast.success("Triage queued. Refresh in a few seconds.");
+        } catch (error) {
+          toast.error("Failed to queue triage");
+          console.error("Retriage error:", error);
+        }
       },
-    ],
-  });
+    },
+  ];
 
-  // Pending Actions button
-  actions.push({
+  // Pending Actions
+  var approvalsItem = {
     label: "Approvals",
     onClick: async function () {
       try {
@@ -154,6 +147,24 @@ function setupForm({ doc, call, toast, $dialog }) {
         console.error("Approvals error:", error);
       }
     },
+  };
+
+  // the ticket opens in its chat (Phase 12): every action sits in the header's ⋯ menu, by group
+  function isSessions(item) {
+    return item.label === "View Sessions";
+  }
+  actions.push({
+    group: "Customer site",
+    items: [loginItem].concat(aiTools.filter(isSessions)),
+  });
+  actions.push({
+    group: "Copilot and AI",
+    items: [triageItem].concat(
+      aiTools.filter(function (item) {
+        return !isSessions(item);
+      }),
+      [approvalsItem]
+    ),
   });
 
   return { actions: actions };

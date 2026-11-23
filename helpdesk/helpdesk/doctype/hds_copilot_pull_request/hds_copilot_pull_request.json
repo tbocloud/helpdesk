@@ -1,0 +1,361 @@
+{
+ "actions": [],
+ "autoname": "TBO-PR-.YYYY.-.#####",
+ "creation": "2026-11-18 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "in_create": 1,
+ "links": [],
+ "modified": "2026-11-18 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Helpdesk",
+ "name": "HDS Copilot Pull Request",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "title",
+ "track_changes": 1,
+ "field_order": [
+  "pull_section",
+  "repo",
+  "number",
+  "title",
+  "url",
+  "head_branch",
+  "base_branch",
+  "column_break_pull",
+  "state",
+  "task",
+  "customer",
+  "developer",
+  "asked_at",
+  "when",
+  "note",
+  "review_section",
+  "head_sha",
+  "rounds",
+  "skip_coderabbit",
+  "skip_requested_by",
+  "coderabbit_asked_at",
+  "column_break_review",
+  "findings",
+  "last_round",
+  "handed_back",
+  "lease_section",
+  "worker_id",
+  "lease_token_hash",
+  "lease_expires",
+  "approval_section",
+  "assigned_to",
+  "assigned_at",
+  "reminded_at",
+  "needs_senior",
+  "risk_level",
+  "risk_reasons",
+  "payload_hash",
+  "column_break_approval",
+  "decided_by",
+  "decided_at",
+  "decided_via",
+  "decision_note",
+  "merge_section",
+  "merge_commit",
+  "merged_at",
+  "merge_error",
+  "release"
+ ],
+ "fields": [
+  {
+   "fieldname": "pull_section",
+   "fieldtype": "Section Break",
+   "label": "Pull request"
+  },
+  {
+   "fieldname": "repo",
+   "fieldtype": "Data",
+   "label": "Repository",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "number",
+   "fieldtype": "Int",
+   "label": "Number",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "label": "Title"
+  },
+  {
+   "fieldname": "url",
+   "fieldtype": "Data",
+   "label": "Link",
+   "options": "URL"
+  },
+  {
+   "fieldname": "head_branch",
+   "fieldtype": "Data",
+   "label": "Branch"
+  },
+  {
+   "fieldname": "base_branch",
+   "fieldtype": "Data",
+   "label": "Into"
+  },
+  {
+   "fieldname": "column_break_pull",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "state",
+   "fieldtype": "Select",
+   "label": "State",
+   "options": "Reviewing\nFixing\nReady for approval\nApproved\nMerged\nWith the developer\nRejected\nClosed",
+   "default": "Reviewing",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "task",
+   "fieldtype": "Link",
+   "label": "Task",
+   "options": "Task",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "HD Customer",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "developer",
+   "fieldtype": "Link",
+   "label": "Asked by",
+   "options": "User"
+  },
+  {
+   "fieldname": "asked_at",
+   "fieldtype": "Datetime",
+   "label": "Asked at"
+  },
+  {
+   "fieldname": "when",
+   "fieldtype": "Select",
+   "label": "Developer wants it live",
+   "options": "Tonight\nNow",
+   "default": "Tonight"
+  },
+  {
+   "fieldname": "note",
+   "fieldtype": "Small Text",
+   "label": "Developer's note"
+  },
+  {
+   "fieldname": "review_section",
+   "fieldtype": "Section Break",
+   "label": "Review and fixes"
+  },
+  {
+   "fieldname": "head_sha",
+   "fieldtype": "Data",
+   "label": "Head commit"
+  },
+  {
+   "fieldname": "rounds",
+   "fieldtype": "Int",
+   "label": "Copilot's fix rounds",
+   "default": "0"
+  },
+  {
+   "fieldname": "skip_coderabbit",
+   "fieldtype": "Check",
+   "label": "Without CodeRabbit"
+  },
+  {
+   "fieldname": "skip_requested_by",
+   "fieldtype": "Link",
+   "label": "Without CodeRabbit, asked by",
+   "options": "User"
+  },
+  {
+   "fieldname": "coderabbit_asked_at",
+   "fieldtype": "Datetime",
+   "label": "CodeRabbit asked at"
+  },
+  {
+   "fieldname": "column_break_review",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "findings",
+   "fieldtype": "Code",
+   "label": "What is left to fix",
+   "options": "JSON"
+  },
+  {
+   "fieldname": "last_round",
+   "fieldtype": "Code",
+   "label": "Last round",
+   "options": "JSON"
+  },
+  {
+   "fieldname": "handed_back",
+   "fieldtype": "Small Text",
+   "label": "Why it went back to the developer"
+  },
+  {
+   "fieldname": "lease_section",
+   "fieldtype": "Section Break",
+   "label": "Worker",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "worker_id",
+   "fieldtype": "Data",
+   "label": "Worker"
+  },
+  {
+   "fieldname": "lease_token_hash",
+   "fieldtype": "Data",
+   "label": "Lease",
+   "hidden": 1
+  },
+  {
+   "fieldname": "lease_expires",
+   "fieldtype": "Datetime",
+   "label": "Lease until"
+  },
+  {
+   "fieldname": "approval_section",
+   "fieldtype": "Section Break",
+   "label": "Approval"
+  },
+  {
+   "fieldname": "assigned_to",
+   "fieldtype": "Link",
+   "label": "Approver",
+   "options": "User"
+  },
+  {
+   "fieldname": "assigned_at",
+   "fieldtype": "Datetime",
+   "label": "Asked at"
+  },
+  {
+   "fieldname": "reminded_at",
+   "fieldtype": "Datetime",
+   "label": "Reminded at"
+  },
+  {
+   "fieldname": "needs_senior",
+   "fieldtype": "Check",
+   "label": "Needs a Senior"
+  },
+  {
+   "fieldname": "risk_level",
+   "fieldtype": "Select",
+   "label": "Risk",
+   "options": "\nlow\nmedium\nhigh\nunknown"
+  },
+  {
+   "fieldname": "risk_reasons",
+   "fieldtype": "Small Text",
+   "label": "Risk reasons"
+  },
+  {
+   "fieldname": "payload_hash",
+   "fieldtype": "Data",
+   "label": "Approved what",
+   "hidden": 1
+  },
+  {
+   "fieldname": "column_break_approval",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "decided_by",
+   "fieldtype": "Link",
+   "label": "Decided by",
+   "options": "User"
+  },
+  {
+   "fieldname": "decided_at",
+   "fieldtype": "Datetime",
+   "label": "Decided at"
+  },
+  {
+   "fieldname": "decided_via",
+   "fieldtype": "Data",
+   "label": "Decided via"
+  },
+  {
+   "fieldname": "decision_note",
+   "fieldtype": "Small Text",
+   "label": "Decision note"
+  },
+  {
+   "fieldname": "merge_section",
+   "fieldtype": "Section Break",
+   "label": "Merge and deploy"
+  },
+  {
+   "fieldname": "merge_commit",
+   "fieldtype": "Data",
+   "label": "Merge commit"
+  },
+  {
+   "fieldname": "merged_at",
+   "fieldtype": "Datetime",
+   "label": "Merged at"
+  },
+  {
+   "fieldname": "merge_error",
+   "fieldtype": "Small Text",
+   "label": "Merge blocked by"
+  },
+  {
+   "fieldname": "release",
+   "fieldtype": "Link",
+   "label": "Release",
+   "options": "HDS Deploy Request"
+  }
+ ],
+ "permissions": [
+  {
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Agent Manager",
+   "share": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Agent",
+   "share": 1
+  }
+ ]
+}

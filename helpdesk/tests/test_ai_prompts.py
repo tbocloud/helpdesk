@@ -1,16 +1,19 @@
 from frappe.tests.utils import FrappeTestCase
 
-from helpdesk import chatwoot_bridge, kb_drafts, work_summary
+from helpdesk import kb_drafts, work_summary
+from helpdesk.copilot import conversation
 
 
 class TestAiPrompts(FrappeTestCase):
     """The writing rules each AI prompt promises (and the safety rules they must keep)."""
 
     def test_chat_acknowledges_then_checks_back(self):
-        prompt = chatwoot_bridge.CHAT_SYSTEM_PROMPT
+        # the customer chat's engine, in the ERP and in TBO Chat (Copilot Phase 5)
+        prompt = conversation.PROMPT
         self.assertIn("acknowledge it in a few words", prompt)
         self.assertIn("asking whether it worked", prompt)
         self.assertIn("Never invent causes", prompt)
+        self.assertIn("Never promise a date", prompt)
 
     def test_weekly_summary_puts_impact_first(self):
         prompt = work_summary.SYSTEM_PROMPT

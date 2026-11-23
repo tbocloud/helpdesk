@@ -1,0 +1,48 @@
+{
+	"actions": [],
+	"creation": "2026-10-12 12:00:00.000000",
+	"doctype": "DocType",
+	"editable_grid": 1,
+	"engine": "InnoDB",
+	"field_order": [
+		"user",
+		"senior",
+		"active"
+	],
+	"fields": [
+		{
+			"fieldname": "user",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"label": "User",
+			"options": "User",
+			"reqd": 1
+		},
+		{
+			"default": "0",
+			"description": "May approve changes to sensitive areas: accounting and tax, stock, payroll, permissions, migrations, app hooks, doctype definitions, dependencies, CI",
+			"fieldname": "senior",
+			"fieldtype": "Check",
+			"in_list_view": 1,
+			"label": "Senior"
+		},
+		{
+			"default": "1",
+			"fieldname": "active",
+			"fieldtype": "Check",
+			"in_list_view": 1,
+			"label": "Active"
+		}
+	],
+	"istable": 1,
+	"links": [],
+	"modified": "2026-10-12 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HDS Copilot Approver",
+	"owner": "Administrator",
+	"permissions": [],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": []
+}

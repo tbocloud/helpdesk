@@ -1,0 +1,276 @@
+{
+	"actions": [],
+	"autoname": "TBO-CHG-.YYYY.-.#####",
+	"creation": "2026-10-13 12:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"run",
+		"ticket",
+		"connection",
+		"kind",
+		"status",
+		"column_break_head",
+		"risk_level",
+		"risk_reasons",
+		"site_environment",
+		"approval",
+		"undo_of",
+		"section_what",
+		"summary",
+		"customer_note",
+		"found_by",
+		"set_aside",
+		"section_items",
+		"items",
+		"section_result",
+		"total",
+		"ready_count",
+		"applied_count",
+		"column_break_result",
+		"skipped_count",
+		"refused_count",
+		"checked_at",
+		"column_break_when",
+		"applied_by",
+		"applied_at",
+		"error"
+	],
+	"fields": [
+		{
+			"fieldname": "run",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"label": "Copilot run",
+			"options": "HDS Copilot Run",
+			"read_only": 1,
+			"reqd": 1
+		},
+		{
+			"fieldname": "ticket",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"label": "Ticket",
+			"options": "HD Ticket",
+			"read_only": 1
+		},
+		{
+			"fieldname": "connection",
+			"fieldtype": "Link",
+			"label": "Connection",
+			"options": "HDS Support Connection",
+			"read_only": 1
+		},
+		{
+			"fieldname": "kind",
+			"fieldtype": "Select",
+			"in_list_view": 1,
+			"label": "Kind",
+			"options": "Config Change\nData Fix",
+			"read_only": 1
+		},
+		{
+			"default": "Prepared",
+			"fieldname": "status",
+			"fieldtype": "Select",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"label": "Status",
+			"options": "Prepared\nChecked\nApproved\nApplying\nApplied\nStopped\nRejected\nSuperseded\nUndone",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_head",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "risk_level",
+			"fieldtype": "Select",
+			"label": "Risk",
+			"options": "medium\nhigh",
+			"read_only": 1
+		},
+		{
+			"fieldname": "risk_reasons",
+			"fieldtype": "Small Text",
+			"label": "Why this risk",
+			"read_only": 1
+		},
+		{
+			"fieldname": "site_environment",
+			"fieldtype": "Data",
+			"label": "Site environment",
+			"read_only": 1
+		},
+		{
+			"fieldname": "approval",
+			"fieldtype": "Link",
+			"label": "Approval",
+			"options": "HDS Copilot Approval",
+			"read_only": 1
+		},
+		{
+			"fieldname": "undo_of",
+			"fieldtype": "Link",
+			"label": "Undoes",
+			"options": "HDS Copilot Change Set",
+			"read_only": 1
+		},
+		{
+			"fieldname": "section_what",
+			"fieldtype": "Section Break",
+			"label": "What it changes"
+		},
+		{
+			"fieldname": "summary",
+			"fieldtype": "Small Text",
+			"label": "Summary",
+			"read_only": 1
+		},
+		{
+			"fieldname": "customer_note",
+			"fieldtype": "Small Text",
+			"label": "Note for the customer",
+			"read_only": 1
+		},
+		{
+			"fieldname": "found_by",
+			"fieldtype": "Small Text",
+			"label": "How the records were found",
+			"read_only": 1
+		},
+		{
+			"description": "Records Copilot did not change, for a person: submitted documents, and records the site's check refused.",
+			"fieldname": "set_aside",
+			"fieldtype": "Code",
+			"label": "Set aside for a person",
+			"options": "JSON",
+			"read_only": 1
+		},
+		{
+			"fieldname": "section_items",
+			"fieldtype": "Section Break",
+			"label": "Records"
+		},
+		{
+			"fieldname": "items",
+			"fieldtype": "Table",
+			"label": "Records",
+			"options": "HDS Copilot Change Item",
+			"read_only": 1
+		},
+		{
+			"fieldname": "section_result",
+			"fieldtype": "Section Break",
+			"label": "Result"
+		},
+		{
+			"fieldname": "total",
+			"fieldtype": "Int",
+			"label": "Records",
+			"read_only": 1
+		},
+		{
+			"fieldname": "ready_count",
+			"fieldtype": "Int",
+			"label": "Ready",
+			"read_only": 1
+		},
+		{
+			"fieldname": "applied_count",
+			"fieldtype": "Int",
+			"label": "Applied",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_result",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "skipped_count",
+			"fieldtype": "Int",
+			"label": "Skipped (changed since)",
+			"read_only": 1
+		},
+		{
+			"fieldname": "refused_count",
+			"fieldtype": "Int",
+			"label": "Refused or failed",
+			"read_only": 1
+		},
+		{
+			"fieldname": "checked_at",
+			"fieldtype": "Datetime",
+			"label": "Checked at",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_when",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "applied_by",
+			"fieldtype": "Link",
+			"label": "Applied by",
+			"options": "User",
+			"read_only": 1
+		},
+		{
+			"fieldname": "applied_at",
+			"fieldtype": "Datetime",
+			"label": "Applied at",
+			"read_only": 1
+		},
+		{
+			"fieldname": "error",
+			"fieldtype": "Small Text",
+			"label": "Error",
+			"read_only": 1
+		}
+	],
+	"links": [],
+	"modified": "2026-10-13 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HDS Copilot Change Set",
+	"naming_rule": "Expression (old style)",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "System Manager",
+			"share": 1,
+			"write": 1
+		},
+		{
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent Manager",
+			"share": 1
+		},
+		{
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent",
+			"share": 1
+		}
+	],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": [],
+	"title_field": "ticket",
+	"track_changes": 1
+}

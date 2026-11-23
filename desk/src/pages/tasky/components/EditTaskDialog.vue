@@ -170,7 +170,19 @@
     </form>
 
     <template #actions="{ close }">
-      <div class="flex justify-end gap-2">
+      <div class="flex items-center gap-2">
+        <!-- testing fixes 7: the task in the desktop app, from the board and the checklist too -->
+        <Button
+          v-if="canOpenInCopilot"
+          variant="subtle"
+          :label="__('Open in TBO Copilot')"
+          @click="openInCopilot(taskName)"
+        >
+          <template #prefix>
+            <LucideLaptop class="size-4" aria-hidden="true" />
+          </template>
+        </Button>
+        <span class="flex-1" />
         <Button :label="__('Cancel')" @click="close" />
         <Button
           variant="solid"
@@ -186,6 +198,8 @@
 </template>
 
 <script setup lang="ts">
+import LucideLaptop from "~icons/lucide/laptop";
+import { mayOpenInCopilot, openInCopilot } from "../openInCopilot";
 import { useOnLeave } from "@/composables/onLeave";
 import { errorText } from "@/utils";
 import { __ } from "@/translation";
@@ -297,6 +311,11 @@ const canCoordinate = computed(
     !!projectDetail.data?.can_coordinate
 );
 const closed = computed(() => !!task.value && isClosed(task.value));
+const taskName = computed(() => task.value?.name || props.task?.name || "");
+const canOpenInCopilot = computed(
+  () =>
+    mayOpenInCopilot.value && !!taskName.value && !!task.value && !closed.value
+);
 
 const loaded = computed(
   () =>

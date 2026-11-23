@@ -23,7 +23,8 @@ from helpdesk.test_utils import (
 )
 
 REQUEST = "helpdesk.chatwoot_bridge.requests.request"
-CALL_AI = "helpdesk.chatwoot_bridge.call_haiku"
+# the bot's replies come from the customer chat's engine (helpdesk.copilot.conversation)
+CALL_AI = "helpdesk.ai_engine.call_haiku"
 AI_CONFIGURED = "helpdesk.chatwoot_bridge.is_ai_configured"
 
 
@@ -272,6 +273,75 @@ class TestAIFirstReply(ChatwootCase):
         ai = self.ask_ai(ai_chat_answer("Hello!"), status="open")
         ai.assert_not_called()
         self.assertEqual(self.api.calls, [])
+
+
+class TestTheSharedEngine(ChatwootCase):
+    """The bot answers through the customer chat's engine (Copilot Phase 5): the same checks, the same budget."""
+
+    ARTICLE = {
+        "name": "print-format",
+        "title": "Change the print format",
+        "url": "https://tbo.example.com/helpdesk/kb-public/articles/print-format",
+        "excerpt": "Open Print Settings and pick the format.",
+    }
+
+    def test_an_answer_quotes_a_matching_article_with_its_link(self):
+        with patch(
+            "helpdesk.chatwoot_bridge.find_related_articles",
+            return_value=[self.ARTICLE],
+        ):
+            self.ask_ai(
+                {
+                    "response": {
+                        "next": "answer",
+                        "text": "Open Print Settings and pick the format: "
+                        + self.ARTICLE["url"],
+                        "sources": ["print-format"],
+                    },
+                    "cost": 0.003,
+                }
+            )
+        self.assertEqual(
+            self.api.posted(),
+            ["Open Print Settings and pick the format: " + self.ARTICLE["url"]],
+        )
+        chat = frappe.get_doc(
+            "HDS Conversation", {"chat": self.row().name, "channel": "TBO Chat"}
+        )
+        self.assertAlmostEqual(chat.cost_usd, 0.003)  # counted in the AI budget
+
+    def test_an_answer_without_a_source_becomes_the_offer_to_raise_a_ticket(self):
+        self.ask_ai(
+            {
+                "response": {
+                    "next": "answer",
+                    "text": "Just delete it.",
+                    "sources": ["nope"],
+                }
+            }
+        )
+        self.assertIn("I couldn't find this in our guides", self.api.posted()[0])
+
+    def test_copilots_stages_reach_the_chat_of_its_ticket(self):
+        from helpdesk.copilot import conversation
+
+        self.ask_ai(
+            ai_chat_answer(
+                "Thanks, our team will look into it.",
+                "ticket",
+                ticket_subject="Invoice print shows wrong VAT",
+                ticket_summary="VAT on printed invoices is 5% instead of 15%.",
+            )
+        )
+        ticket = self.row().hd_ticket
+        conversation.tell_stage(
+            frappe._dict(ticket=ticket, name=None),
+            "Working on it",
+            "We found what is happening and are working on it.",
+        )
+        self.assertIn(
+            "We found what is happening and are working on it.", self.api.posted()[-1]
+        )
 
 
 class TestManualTicket(ChatwootCase):

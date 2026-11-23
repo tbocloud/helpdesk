@@ -15,10 +15,13 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from helpdesk.test_utils import (
+    create_customer,
+    hold_commits,
     make_diagnostics,
     make_download_response,
     make_puller_mcp,
     make_replay,
+    make_support_connection,
     make_ticket,
 )
 
@@ -70,11 +73,20 @@ class TestPendingTickets(FrappeTestCase):
 
 
 class TestCreateHDTicket(FrappeTestCase):
+    def setUp(self):
+        hold_commits(
+            self
+        )  # the code under test commits; keep the fixtures out of the site
+        # the connection is a real link on the ticket from the insert on
+        self.connection = make_support_connection(
+            create_customer("Puller Co").name
+        ).name
+
     def test_creates_hd_ticket_from_pulled_payload(self):
         from helpdesk.ticket_puller import _create_hd_ticket
 
         hd_name = _create_hd_ticket(
-            connection_name="QCS-CONN-TEST",
+            connection_name=self.connection,
             customer=None,
             ticket={
                 "name": "SUP-2026-00001",
@@ -87,13 +99,13 @@ class TestCreateHDTicket(FrappeTestCase):
         hd = frappe.get_doc("HD Ticket", hd_name)
         self.assertEqual(hd.subject, "Printer offline")
         self.assertEqual(hd.custom_client_ticket, "SUP-2026-00001")
-        self.assertEqual(hd.custom_qcs_connection, "QCS-CONN-TEST")
+        self.assertEqual(hd.custom_qcs_connection, self.connection)
 
     def test_already_imported_guard(self):
         from helpdesk.ticket_puller import _already_imported, _create_hd_ticket
 
         _create_hd_ticket(
-            connection_name="QCS-CONN-DUPE",
+            connection_name=self.connection,
             customer=None,
             ticket={
                 "name": "SUP-2026-00099",
@@ -102,8 +114,8 @@ class TestCreateHDTicket(FrappeTestCase):
             },
         )
 
-        self.assertTrue(_already_imported("QCS-CONN-DUPE", "SUP-2026-00099"))
-        self.assertFalse(_already_imported("QCS-CONN-DUPE", "SUP-2026-00100"))
+        self.assertTrue(_already_imported(self.connection, "SUP-2026-00099"))
+        self.assertFalse(_already_imported(self.connection, "SUP-2026-00100"))
 
 
 class TestAttachRecording(FrappeTestCase):
@@ -117,7 +129,9 @@ class TestAttachSessionFiles(FrappeTestCase):
     """The recorder's replay + diagnostics come through quietly, as private files."""
 
     def setUp(self):
-        self.addCleanup(frappe.db.rollback)
+        hold_commits(
+            self
+        )  # the code under test commits; keep the fixtures out of the site
         self.ticket = make_ticket(subject="Cannot save Sales Invoice")
 
     @patch("helpdesk.ticket_puller.requests.get")
@@ -243,9 +257,9 @@ class TestSchedulerWiring(FrappeTestCase):
 
 class TestConnectionHealth(FrappeTestCase):
     def setUp(self):
-        from helpdesk.test_utils import create_customer, make_support_connection
-
-        self.addCleanup(frappe.db.rollback)
+        hold_commits(
+            self
+        )  # the code under test commits; keep the fixtures out of the site
         create_customer("Harbour Foods LLC")
         self.conn = make_support_connection(
             "Harbour Foods LLC", connection_status="Error", last_error="503 at midnight"
@@ -358,4 +372,82 @@ class TestInstallFixes(FrappeTestCase):
                 "default",
             ),
             ("0", "1"),
+        )
+
+
+class TestPhase23FromTheCustomersSite(FrappeTestCase):
+    """A customer's comment and answer from their site are never lost (Phase 23, B4 and B5)."""
+
+    def setUp(self):
+        hold_commits(self)
+        self.customer = create_customer("Puller Phase 23 Co").name
+        self.conn = make_support_connection(self.customer)
+        self.ticket = make_ticket(subject="Rate is wrong", customer=self.customer)
+        frappe.db.set_value(
+            "HD Ticket",
+            self.ticket.name,
+            {"custom_qcs_connection": self.conn.name, "custom_client_ticket": "SUP-9"},
+        )
+
+    def test_a_comment_on_the_form_is_the_customers_reply(self):
+        from helpdesk.ticket_puller import _customer_reply
+
+        _customer_reply(
+            self.ticket.name,
+            {
+                "owner": "buyer@puller-p23.example",
+                "content": "<p>Still wrong</p><script>x</script>",
+            },
+        )
+        (row,) = frappe.get_all(
+            "Communication",
+            filters={
+                "reference_doctype": "HD Ticket",
+                "reference_name": self.ticket.name,
+                "sent_or_received": "Received",
+                "sender": "buyer@puller-p23.example",
+            },
+            fields=["content"],
+        )
+        self.assertIn("Still wrong", row.content)
+        self.assertNotIn("<script", row.content)
+
+    def test_a_failed_answer_keeps_the_cursor_until_it_applies(self):
+        from helpdesk import ticket_puller
+
+        frappe.cache().delete_keys("hds_client_confirmation_tries")
+        changes = {
+            "tickets": [
+                {
+                    "name": "SUP-9",
+                    "customer_confirmation": "Reopened",
+                    "confirmed_at": "2026-11-17 10:00:00",
+                    "confirmation_note": "Still broken",
+                }
+            ],
+            "server_time": "2026-11-17 10:05:00",
+        }
+        # the code rolls back a failed answer; here that would also undo the test's own records
+        with patch("helpdesk.client_api.hub_api", return_value=changes), patch(
+            "helpdesk.copilot.customer.decide_resolution",
+            side_effect=Exception("the hub was busy"),
+        ), patch.object(frappe.db, "rollback"):
+            ticket_puller._pull_client_changes(self.conn)
+        self.assertFalse(
+            frappe.db.get_value(
+                "HDS Support Connection", self.conn.name, "client_changes_cursor"
+            )
+        )
+        with patch("helpdesk.client_api.hub_api", return_value=changes), patch(
+            "helpdesk.copilot.customer.decide_resolution"
+        ) as decided:
+            ticket_puller._pull_client_changes(self.conn)
+        decided.assert_called_once()
+        self.assertEqual(
+            str(
+                frappe.db.get_value(
+                    "HDS Support Connection", self.conn.name, "client_changes_cursor"
+                )
+            ),
+            "2026-11-17 10:05:00",
         )

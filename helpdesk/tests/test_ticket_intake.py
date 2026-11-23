@@ -35,6 +35,7 @@ from helpdesk.test_utils import (
     make_intake_mail,
     make_mail_ticket,
     make_owned_customer,
+    make_support_connection,
     make_tasky_user,
     make_team,
     make_ticket,
@@ -536,10 +537,12 @@ class TestClientSiteImport(IntakeCase):
     def test_the_import_that_failed_now_links_the_contact(self):
         """A ping's pull runs as Guest; the sender wasn't a contact of the customer."""
         make_domain_customer("Thaqatal Intake")
+        # the ticket links its connection from the start, so it must exist
+        connection = make_support_connection("Thaqatal Intake").name
         frappe.set_user("Guest")
 
         name = _create_hd_ticket(
-            "QCS-CONN-INTAKE",
+            connection,
             "Thaqatal Intake",
             {
                 "name": "SUP-2026-90001",
@@ -558,9 +561,10 @@ class TestClientSiteImport(IntakeCase):
     def test_a_user_id_is_no_sender(self):
         customer = make_domain_customer("Adka Intake")
         customer.db_set("email_id", "it@adka-intake.example")
+        connection = make_support_connection("Adka Intake").name
 
         from_owner = _create_hd_ticket(
-            "QCS-CONN-INTAKE",
+            connection,
             "Adka Intake",
             {
                 "name": "SUP-2026-90002",
@@ -570,7 +574,7 @@ class TestClientSiteImport(IntakeCase):
             },
         )
         from_customer = _create_hd_ticket(
-            "QCS-CONN-INTAKE",
+            connection,
             "Adka Intake",
             {
                 "name": "SUP-2026-90003",
@@ -587,6 +591,58 @@ class TestClientSiteImport(IntakeCase):
         self.assertEqual(
             frappe.db.get_value("HD Ticket", from_customer, "raised_by"),
             "it@adka-intake.example",
+        )
+
+    def test_tbo_support_signed_in_on_the_site_is_no_sender(self):
+        customer = make_domain_customer("Hamra Intake")
+        customer.db_set("email_id", "it@hamra-intake.example")
+        connection = make_support_connection(
+            "Hamra Intake", support_user="support@teambackoffice.com"
+        ).name
+
+        name = _create_hd_ticket(
+            connection,
+            "Hamra Intake",
+            {
+                "name": "SUP-2026-90004",
+                "subject": "Report won't load",
+                "raised_by": "support@teambackoffice.com",
+                "owner": "support@teambackoffice.com",
+            },
+        )
+
+        self.assertEqual(
+            frappe.db.get_value("HD Ticket", name, "raised_by"),
+            "it@hamra-intake.example",
+        )
+
+    def test_the_first_message_is_the_customers(self):
+        make_domain_customer("Sadu Intake")
+        connection = make_support_connection("Sadu Intake").name
+
+        name = _create_hd_ticket(
+            connection,
+            "Sadu Intake",
+            {
+                "name": "SUP-2026-90005",
+                "subject": "Stock report is empty",
+                "description": "<p>The stock report shows nothing since Monday.</p>",
+                "raised_by": "noor@sadu-intake.example",
+            },
+        )
+
+        # not the automation user's, who imported the ticket
+        self.assertEqual(
+            frappe.get_all(
+                "Communication",
+                filters={
+                    "reference_doctype": "HD Ticket",
+                    "reference_name": name,
+                    "sent_or_received": "Received",
+                },
+                fields=["sender", "sender_full_name"],
+            ),
+            [{"sender": "noor@sadu-intake.example", "sender_full_name": "noor"}],
         )
 
 
