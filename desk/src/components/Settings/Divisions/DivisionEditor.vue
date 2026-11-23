@@ -421,7 +421,7 @@ const FIELDS = [
   "division_admin",
   "crm_source",
 ] as const;
-type Profile = Record<typeof FIELDS[number], string>;
+type Profile = Record<(typeof FIELDS)[number], string>;
 
 const blank = (): Profile =>
   Object.fromEntries(

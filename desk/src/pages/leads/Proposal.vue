@@ -439,10 +439,7 @@
               class="flex flex-col gap-3 rounded-xl border border-outline-gray-2 bg-surface-base p-4"
               :aria-labelledby="priceTitleId"
             >
-              <h2
-                :id="priceTitleId"
-                class="text-base font-semibold text-ink-gray-9"
-              >
+              <h2 :id="priceTitleId" class="text-base font-semibold text-ink-gray-9">
                 {{ __("Price") }}
               </h2>
               <fieldset
@@ -724,16 +721,15 @@ const form = reactive({
 const saved = ref("");
 
 /** The catalogue with each module's price as the proposal has it (an Item's rate, say). */
-const priceCatalogue = computed(
-  () =>
-    form.modules.map((m) => ({
-      ...options.value?.catalogue?.find((c) => c.module_name === m.module_name),
-      module_name: m.module_name,
-      default_price: m.rate_overridden
-        ? options.value?.catalogue?.find((c) => c.module_name === m.module_name)
-            ?.default_price || 0
-        : m.rate || 0,
-    })) as CatalogueModule[]
+const priceCatalogue = computed(() =>
+  form.modules.map((m) => ({
+    ...options.value?.catalogue?.find((c) => c.module_name === m.module_name),
+    module_name: m.module_name,
+    default_price: m.rate_overridden
+      ? options.value?.catalogue?.find((c) => c.module_name === m.module_name)
+          ?.default_price || 0
+      : m.rate || 0,
+  })) as CatalogueModule[]
 );
 
 /** The module prices set by hand, by name; the Price card writes them back onto the modules. */
