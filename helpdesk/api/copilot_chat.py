@@ -72,7 +72,8 @@ def attach():
     if not row:
         frappe.throw(_("That chat does not exist."), frappe.DoesNotExistError)
     if row.ticket:
-        allowed = frappe.has_permission(
+        # the answer decides `allowed`; nothing is shown without it
+        allowed = frappe.has_permission(  # nosemgrep
             "HD Ticket", "read", str(row.ticket)
         ) and thread.may_write(user, str(row.ticket))
     else:

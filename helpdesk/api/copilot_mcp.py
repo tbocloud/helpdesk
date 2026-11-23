@@ -26,7 +26,8 @@ from helpdesk.copilot.mcp.protocol import (
 from helpdesk.copilot.mcp.registry import message_of
 
 
-@frappe.whitelist(
+# Guest on purpose: the MCP server checks its own API key on every request before any tool runs.
+@frappe.whitelist(  # nosemgrep
     allow_guest=True, methods=["POST", "GET", "DELETE"]
 )  # the MCP server checks every caller itself - nosemgrep
 def handle() -> Response:

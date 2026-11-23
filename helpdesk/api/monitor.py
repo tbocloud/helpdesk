@@ -32,7 +32,7 @@ def alert(
     title: str = "",
     text: str = "",
     severity: str = "warning",
-    evidence=None,
+    evidence: dict | list | str | None = None,
     runbook: str | None = None,
     source: str = "watcher",
 ) -> dict:
@@ -101,8 +101,8 @@ def repair_started(
     level: str = "Automatic",
     target: str = "",
     attempt: int = 1,
-    evidence=None,
-    action=None,
+    evidence: dict | list | str | None = None,
+    action: dict | list | str | None = None,
 ) -> dict:
     monitor.monitor_only()
     return repairs.started(
@@ -118,7 +118,11 @@ def repair_started(
 
 @frappe.whitelist(methods=["POST"])
 def repair_finished(
-    repair: str, outcome: str, text: str = "", verify=None, escalate=False
+    repair: str,
+    outcome: str,
+    text: str = "",
+    verify: dict | list | str | None = None,
+    escalate: bool | int | str = False,
 ) -> dict:
     """The outcome; `escalate` gives the ticket to DevOps and tells the channel."""
     monitor.monitor_only()
@@ -135,7 +139,7 @@ def request_repair(
     title: str,
     why: str = "",
     details: str = "",
-    payload=None,
+    payload: dict | list | str | None = None,
     risk: str = "normal",
 ) -> dict:
     """An approval-level repair: the card goes to an approver; the same ask returns the live one."""
@@ -154,6 +158,6 @@ def approved_repairs() -> list[dict]:
 
 
 @frappe.whitelist(methods=["POST"])
-def repair_executed(approval: str, ok, log: str = "") -> dict:
+def repair_executed(approval: str, ok: bool | int | str, log: str = "") -> dict:
     monitor.monitor_only()
     return repairs.executed(approval, sbool(ok), log)

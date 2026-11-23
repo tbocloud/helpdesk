@@ -349,8 +349,9 @@ def _forget(connection: str, payload: dict):
 def _remember(connection: str, payload: dict, conversation: str | None):
     client_id = _client_id(payload)
     if client_id and conversation:
-        cache = frappe.cache()
-        cache.set(  # the site's own key (make_key) - nosemgrep
+        # the site's own key (make_key), so sites sharing a bench never meet
+        cache = frappe.cache()  # nosemgrep
+        cache.set(  # nosemgrep
             cache.make_key(REPEAT_KEY.format(connection=connection, id=client_id)),
             conversation,
             ex=2 * 24 * 3600,
@@ -453,7 +454,8 @@ def _pull_now(connection: str) -> None:
         )
     finally:
         if frappe.session.user != user:
-            frappe.set_user(user)
+            # the chat acts as the customer's own support user, with its own permissions
+            frappe.set_user(user)  # nosemgrep
 
 
 def _context(context: dict) -> dict:
@@ -539,7 +541,9 @@ def _known_facts(doc, context: dict) -> bool:
     error = kept.get("shown_error")
     if not error:
         return False
-    record = " ".join(filter(None, (kept.get("ref_doctype"), kept.get("ref_docname"))))
+    record = " ".join(
+        part for part in (kept.get("ref_doctype"), kept.get("ref_docname")) if part
+    )
     facts = {"actual": _("The system showed: {0}").format(error)}
     if record:
         facts["records"] = record
@@ -553,7 +557,9 @@ def _known_facts(doc, context: dict) -> bool:
 
 def _greet_error(doc, first: str):
     page = _page(doc)
-    record = " ".join(filter(None, (page.get("ref_doctype"), page.get("ref_docname"))))
+    record = " ".join(
+        part for part in (page.get("ref_doctype"), page.get("ref_docname")) if part
+    )
     if doc.language == "ar":
         text = (
             "مرحبًا {0}. لدي {1} والخطأ، فلا داعي لكتابتهما. منذ متى يحدث هذا؟".format(
@@ -579,8 +585,11 @@ def _greet(doc, context: dict, user: dict):
         return _greet_error(doc, first)
     where = ""
     if context.get("ref_doctype") and context.get("ref_docname"):
-        where = _("I see you are on {0} {1}. ").format(
-            _(context["ref_doctype"]), context["ref_docname"]
+        where = (
+            _("I see you are on {0} {1}.").format(
+                _(context["ref_doctype"]), context["ref_docname"]
+            )
+            + " "
         )
     if doc.language == "ar":
         text = "مرحبًا {0}، أنا مساعد TBO. {1}ما الذي حدث؟".format(first, where)
@@ -1107,7 +1116,8 @@ def _roles(roles: list) -> str:
     """At most 8 of the user's roles; the rest counted (an administrator has dozens)."""
     roles = [str(r) for r in roles if r]
     shown = ", ".join(roles[:8])
-    return shown + (_(" and {0} more").format(len(roles) - 8) if len(roles) > 8 else "")
+    more = " " + _("and {0} more").format(len(roles) - 8) if len(roles) > 8 else ""
+    return shown + more
 
 
 def _description(doc) -> str:
@@ -1126,7 +1136,9 @@ def _description(doc) -> str:
             (
                 _("Record"),
                 " ".join(
-                    filter(None, (page.get("ref_doctype"), page.get("ref_docname")))
+                    part
+                    for part in (page.get("ref_doctype"), page.get("ref_docname"))
+                    if part
                 ),
             ),
             (_("Error shown"), page.get("shown_error")),
@@ -1545,9 +1557,9 @@ def chatwoot_decision(row, chat_prompt: str, articles: list[dict]) -> dict | Non
         }
     if step == "record":
         text = " ".join(
-            filter(
-                None, (text, _("You can attach a screenshot or a short video here."))
-            )
+            part
+            for part in (text, _("You can attach a screenshot or a short video here."))
+            if part
         )
     return {
         "action": "answer",

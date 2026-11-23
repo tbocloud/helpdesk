@@ -1402,7 +1402,10 @@ def validate_customer(doc, method=None):
 
 @frappe.whitelist(methods=["POST"])
 def hand_over_places(
-    from_user: str, to_user: str, customer: str | None = None, dry_run=1
+    from_user: str,
+    to_user: str,
+    customer: str | None = None,
+    dry_run: bool | int | str = 1,
 ) -> dict:
     """Someone leaves or changes job: every row they hold (in the settings and on customers, or on
     one customer) goes to `to_user`, and their waiting fix approvals move along the chain. With
@@ -1578,7 +1581,7 @@ def _warnings(customers: list[str]) -> list[str]:
             _("{0}'s cover as {1}{2} has ended; remove the row.").format(
                 get_fullname(person) or person,
                 _(role),
-                _(" for {0}").format(customer) if customer else "",
+                " " + _("for {0}").format(customer) if customer else "",
             )
         )
     disabled = sorted(

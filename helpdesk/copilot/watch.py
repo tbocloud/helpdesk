@@ -350,7 +350,8 @@ def note_cap(card):
     from helpdesk.copilot import approvals, assistant
 
     key = frappe.cache.make_key(f"copilot:watch-capped:{today()}")
-    if not frappe.cache.set(key, 1, nx=True, ex=26 * 3600):
+    # SET NX on the site's own key (make_key above)
+    if not frappe.cache.set(key, 1, nx=True, ex=26 * 3600):  # nosemgrep
         return
     text = _(
         "The error watch reached its daily limit of tickets (at {0}); new errors are counted and wait for tomorrow."

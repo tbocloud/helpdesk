@@ -9,7 +9,9 @@ import frappe
 from werkzeug.wrappers import Response
 
 
-@frappe.whitelist(allow_guest=True, methods=["POST"])
+# Guest on purpose: a customer site calls it server to server; every request is signed with
+# the connection's key (HMAC over time, nonce and body) and refused otherwise.
+@frappe.whitelist(allow_guest=True, methods=["POST"])  # nosemgrep
 def message():
     """One message or button press from a chat on a paired customer site; the assistant's replies.
 

@@ -76,7 +76,9 @@ def worker_seen(worker_id: str) -> None:
 
 def changed() -> None:
     """Any run's change: open boards refresh (they ask again with the person's own permissions)."""
-    frappe.publish_realtime(BOARD_EVENT, {}, after_commit=True)
+    # an empty "refresh" ping to every open board; each board then asks again with its own
+    # person's permissions, so nothing is shown through this event
+    frappe.publish_realtime(BOARD_EVENT, {}, after_commit=True)  # nosemgrep
 
 
 def visible_tickets(names) -> set[str]:

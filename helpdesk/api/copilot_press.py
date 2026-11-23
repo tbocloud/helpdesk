@@ -120,7 +120,10 @@ def backup(site: str, ticket: str | None = None) -> dict:
 @frappe.whitelist(methods=["POST"])
 @agent_only
 def request_action(
-    action: str, target: str, extra=None, ticket: str | None = None
+    action: str,
+    target: str,
+    extra: dict | list | str | None = None,
+    ticket: str | None = None,
 ) -> dict:
     """An approval-level action: the card goes to an approver; the hub runs it after Approve and
     tells the caller. The same ask twice returns the live request."""
