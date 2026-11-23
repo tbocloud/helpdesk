@@ -552,6 +552,7 @@ class TestDivisionSalesRoles(DivisionCase):
         self.assertTrue(content_team.in_sales(ANN))
         self.assertTrue(content_team.in_sales(CARA))
 
+
     def test_a_division_admin_sets_up_lead_departments_on_their_divisions_site(self):
         from helpdesk.api import lead_bank as lead_bank_api
         from helpdesk.api import leads as leads_api
@@ -571,7 +572,6 @@ class TestDivisionSalesRoles(DivisionCase):
             sent, [("save_lead_department", CARA), ("save_referral_settings", CARA)]
         )
         self.assertIn("Sales Manager", self.roles(CARA))
-
 
 class TestDivisionAgents(DivisionCase):
     """A division's admins see its agents and bring people into it (docs/divisions.md,
