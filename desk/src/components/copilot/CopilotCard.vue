@@ -126,7 +126,8 @@ const values = reactive<Record<string, string>>(
 );
 
 const toneClass = computed(() => {
-  if (props.card.tone === "good") return "border-outline-green-2 bg-surface-green-1";
+  if (props.card.tone === "good")
+    return "border-outline-green-2 bg-surface-green-1";
   if (props.card.tone === "warning")
     return "border-outline-amber-2 bg-surface-amber-1";
   return "border-outline-gray-2 bg-surface-white";

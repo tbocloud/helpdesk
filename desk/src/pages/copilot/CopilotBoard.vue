@@ -118,7 +118,7 @@ type Summary = {
 };
 
 const TABS = ["work", "approvals", "releases", "sites", "issues"] as const;
-type Tab = (typeof TABS)[number];
+type Tab = typeof TABS[number];
 
 const route = useRoute();
 const router = useRouter();
@@ -171,12 +171,13 @@ const strip = computed(() => {
       text: online.length
         ? __("Worker online")
         : last
-        ? __("Worker not seen for {0} min", String(Math.round(last.minutes_ago)))
+        ? __(
+            "Worker not seen for {0} min",
+            String(Math.round(last.minutes_ago))
+          )
         : __("No worker has asked for work"),
       alert: !online.length,
-      title: s.workers
-        .map((w) => `${w.worker}: ${w.last_seen}`)
-        .join("\n"),
+      title: s.workers.map((w) => `${w.worker}: ${w.last_seen}`).join("\n"),
     });
   }
   parts.push({

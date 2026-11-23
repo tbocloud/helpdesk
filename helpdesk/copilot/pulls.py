@@ -17,6 +17,7 @@ this record's card, deploys now or tonight by risk (`approved_release`). Copilot
 without the approval, never force-pushes, and its worker pushes only to the pull request's branch.
 """
 
+import contextlib
 import hashlib
 import json
 
@@ -213,10 +214,9 @@ def take(task: str, user: str, when: str = "tonight", note: str = "") -> dict | 
         ],
         skip_button=True,
     )
-    try:
+    # GitHub could not be asked now: the 10-minute look tries again
+    with contextlib.suppress(GitHubError):
         evaluate(rec.name)
-    except GitHubError:
-        pass  # GitHub could not be asked now; the 10-minute look tries again
     return _answer(frappe.get_doc(PR, rec.name))
 
 
@@ -742,16 +742,17 @@ def authors(rec) -> set[str]:
 
     found = set(_people(rec))
     copilot_email = fixes.commit_email().lower()
-    try:
+    with contextlib.suppress(GitHubError):
         for commit in github.pull_commits(rec.repo, rec.number):
             email = (
                 ((commit.get("commit") or {}).get("author") or {}).get("email") or ""
             ).lower()
-            if email and email != copilot_email:
-                if user := frappe.db.get_value("User", {"email": email}):
-                    found.add(user)
-    except GitHubError:
-        pass
+            if (
+                email
+                and email != copilot_email
+                and (user := frappe.db.get_value("User", {"email": email}))
+            ):
+                found.add(user)
     return found
 
 
@@ -998,10 +999,8 @@ def skip_review(name: str, user: str):
         ).format(get_fullname(user), rec.number),
     )
     if rec.state == "Reviewing":
-        try:
+        with contextlib.suppress(GitHubError):
             evaluate(name)
-        except GitHubError:
-            pass
 
 
 # --- merge, and the release that follows -----------------------------------------------------------

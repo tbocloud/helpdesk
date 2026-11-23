@@ -28,10 +28,7 @@
         :key="m.name"
         :class="m.direction === 'In' ? 'flex flex-col items-end' : ''"
       >
-        <span
-          v-if="m.via === 'Teams'"
-          class="mb-0.5 text-xs text-ink-gray-5"
-        >
+        <span v-if="m.via === 'Teams'" class="mb-0.5 text-xs text-ink-gray-5">
           {{ __("in Teams") }}
         </span>
         <div

@@ -49,7 +49,9 @@
                   <span class="text-ink-gray-5">{{ app.branch }}</span>
                 </span>
                 <span class="flex shrink-0 items-center gap-1.5">
-                  <span class="font-mono text-ink-gray-6">{{ app.commit || "-" }}</span>
+                  <span class="font-mono text-ink-gray-6">{{
+                    app.commit || "-"
+                  }}</span>
                   <Badge
                     :label="__(app.drift)"
                     :theme="

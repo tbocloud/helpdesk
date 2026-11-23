@@ -241,7 +241,11 @@ class TestThePage(AISettingsCase):
     def test_one_row_per_job_with_a_model_and_shown_back(self):
         self.save(
             ai_jobs=[
-                {"job": "summary", "openai_model": "  gpt-6-luna-test ", "anthropic_model": ""},
+                {
+                    "job": "summary",
+                    "openai_model": "  gpt-6-luna-test ",
+                    "anthropic_model": "",
+                },
                 {"job": "triage", "openai_model": "", "anthropic_model": ""},
                 {"job": "not-a-job", "openai_model": "x"},
             ]
@@ -249,7 +253,13 @@ class TestThePage(AISettingsCase):
         result = call_as_user(MANAGER[0], API + "get_settings")
         self.assertEqual(
             result["settings"]["ai_jobs"],
-            [{"job": "summary", "openai_model": "gpt-6-luna-test", "anthropic_model": ""}],
+            [
+                {
+                    "job": "summary",
+                    "openai_model": "gpt-6-luna-test",
+                    "anthropic_model": "",
+                }
+            ],
         )
         # priced 0 until someone enters the price, so cost reports list it
         self.assertTrue(frappe.db.exists("HDS Model Pricing", "gpt-6-luna-test"))
@@ -257,6 +267,8 @@ class TestThePage(AISettingsCase):
     def test_a_save_without_the_table_keeps_it_and_an_empty_one_clears_it(self):
         self.save(ai_jobs=[{"job": "draft", "anthropic_model": "kimi-k2.7"}])
         self.save(ai_failover=1)
-        self.assertEqual([row.job for row in frappe.get_doc(SETTINGS).ai_jobs], ["draft"])
+        self.assertEqual(
+            [row.job for row in frappe.get_doc(SETTINGS).ai_jobs], ["draft"]
+        )
         self.save(ai_jobs=[])
         self.assertEqual(frappe.get_doc(SETTINGS).ai_jobs, [])

@@ -193,7 +193,7 @@ import SettingsSection from "../SettingsSection.vue";
 
 const SLOTS: ProviderSlot[] = ["OpenAI", "Anthropic-compatible"];
 const SECRETS = ["openai_api_key", "anthropic_api_key"] as const;
-type Secret = (typeof SECRETS)[number];
+type Secret = typeof SECRETS[number];
 type BaseUrlField = "openai_base_url" | "ai_base_url";
 
 // HDSHubSettings.validate starts its messages with these labels

@@ -35,7 +35,9 @@
                 :theme="r.check === 'Failed' ? 'red' : 'gray'"
                 size="sm"
               />
-              <span class="font-mono text-sm text-ink-gray-6">{{ r.name }}</span>
+              <span class="font-mono text-sm text-ink-gray-6">{{
+                r.name
+              }}</span>
             </div>
             <div class="truncate text-base text-ink-gray-9">
               {{ r.repository || r.source }}
@@ -55,10 +57,7 @@
         class="mx-4 mb-4 h-16 animate-pulse rounded-lg bg-surface-gray-1"
       />
     </SectionCard>
-    <ErrorMessage
-      v-if="releases.error"
-      :message="errorText(releases.error)"
-    />
+    <ErrorMessage v-if="releases.error" :message="errorText(releases.error)" />
   </div>
 </template>
 
