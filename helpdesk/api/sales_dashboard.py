@@ -10,11 +10,7 @@ from frappe.utils import add_days, cint, getdate, today
 
 from helpdesk.api import call_batches, leads
 from helpdesk.content_team import manages_sales, only_sales_team
-from helpdesk.integrations.crm.leads import (
-    LeadsError,
-    call_if_deployed,
-    require_leads,
-)
+from helpdesk.integrations.crm.leads import LeadsError, call_if_deployed, require_leads
 
 TEAM_PERIODS = ("today", "week", "month")
 # a day that has ended no longer changes, so its calls are kept for an hour

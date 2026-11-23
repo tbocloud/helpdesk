@@ -26,14 +26,13 @@ MAX_PAYLOAD_BYTES = 16 * 1024
 
 # who moves a run: the worker holding the lease, the hub itself, an agent, the customer
 WORKER, SYSTEM, AGENT, CUSTOMER = "worker", "system", "agent", "customer"
-# events the hub writes itself and reads back with a meaning: a stage is sent to the customer's
-# site, a state change and a review are the run's record (see add_event)
+# events only the hub writes, and reads back with a meaning: a stage is sent to the customer's site,
+# a state change and a review are the run's record (see worker_event_type)
 HUB_EVENTS = frozenset(
     {
         "stage",
         "state_change",
         "review",
-        "suspicious_instruction",
         "pull_request_ignored",
         "hand_over_skipped",
     }
@@ -294,6 +293,15 @@ def _move(doc, to: str, actor: str, note: str = "", **fields):
     return doc
 
 
+def worker_event_type(event_type: str) -> str:
+    """The name an event the worker sends is kept under: one the hub reads with a meaning (a stage
+    goes on to the customer's site) becomes `worker_<name>`, so the worker never speaks for the hub.
+    For the worker's own endpoints only; the hub's own events (a move the worker made, its state
+    change) are written by the hub."""
+    event_type = str(event_type or "note")
+    return f"worker_{event_type}" if event_type in HUB_EVENTS else event_type
+
+
 def add_event(
     run,
     event_type: str,
@@ -301,12 +309,7 @@ def add_event(
     actor: str = SYSTEM,
     seq: int | None = None,
 ) -> bool:
-    """Writes an event; a worker's `seq` makes it idempotent (a repeat is ignored and returns False).
-    A worker's event under a name the hub reads with a meaning (a stage goes on to the customer's
-    site) is kept under its own name instead, `worker_<name>`, so the worker can never speak for
-    the hub."""
-    if actor == WORKER and event_type in HUB_EVENTS:
-        event_type = f"worker_{event_type}"
+    """Writes an event; a worker's `seq` makes it idempotent (a repeat is ignored and returns False)."""
     name = run if isinstance(run, str) else run.name
     key = (
         f"{name}:w:{seq}"

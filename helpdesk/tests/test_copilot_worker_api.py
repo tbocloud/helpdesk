@@ -102,9 +102,11 @@ class TestWorkerApi(FrappeTestCase):
         self.assertEqual(
             [(e.event_type, e.actor) for e in stored], [("worker_stage", runs.WORKER)]
         )
+        # the hub's own stages (the claim sends one) stay the hub's
         self.assertFalse(
             frappe.db.exists(
-                "HDS Copilot Event", {"run": self.run.name, "event_type": "stage"}
+                "HDS Copilot Event",
+                {"run": self.run.name, "event_type": "stage", "actor": runs.WORKER},
             )
         )
 
