@@ -1,7 +1,10 @@
 # Copyright (c) 2026, Quark Cyber Systems FZC and contributors
 # For license information, please see license.txt
 
-"""Phase 25: Copilot on infrastructure starts on, with the demo bench as the only place it may change."""
+"""Phase 25: Copilot on infrastructure starts on, investigating and proposing; the places it may
+change start empty and are listed by a person in Copilot settings ("Copilot May Change"). No site
+or bench is named here: a site that runs this patch (the live TBO Support among them) must not
+inherit the test bench's names."""
 
 import frappe
 
@@ -10,7 +13,6 @@ DEFAULTS = {
     "infra_investigate": 1,
     "infra_propose": 1,
     "infra_dollar_cap": 1,
-    "infra_may_change": "bench-0015\ndemo-tbo.tbocloud.in\ndemo-alpha.tbocloud.in\ndemo-beta.tbocloud.in",
 }
 
 

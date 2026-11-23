@@ -92,8 +92,22 @@ def after_install():
     ensure_default_content_options()
     ensure_customization_ticket_type()
     ensure_intake_defaults()
+    ensure_copilot_roles_and_users()
     # Always keep this at last, because sql_ddl makes the db commit
     add_fts_index()
+
+
+def ensure_copilot_roles_and_users():
+    """The Copilot Worker role, the Teams bot user and the watcher's user (TBO Monitor), made at
+    install as well as on migrate (helpdesk.setup.after_migrate): a new site, a test site among
+    them, has them before its first migrate."""
+    from helpdesk.api.copilot_worker import ensure_role as ensure_worker_role
+    from helpdesk.copilot.teams import ensure_bot_user as ensure_teams_bot_user
+    from helpdesk.monitor import ensure_user as ensure_monitor_user
+
+    ensure_worker_role()
+    ensure_teams_bot_user()
+    ensure_monitor_user()
 
 
 def add_default_categories_and_articles():
