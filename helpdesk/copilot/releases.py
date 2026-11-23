@@ -378,10 +378,17 @@ def _remember(key, head: str) -> None:
     return None
 
 
+def compare_url(release) -> str:
+    """GitHub's view of the changes in the release's first app."""
+    app = release.apps[0]
+    return f"https://github.com/{release.repository}/compare/{app.from_commit[:12]}...{app.to_commit[:12]}"
+
+
 def _trouble(key, message: str):
     marker = frappe.cache().make_key(f"copilot_release_trouble:{_field_key(key)}")
-    # SET NX with an expiry: the same trouble is logged once every few hours - nosemgrep
-    if frappe.cache().set(marker, 1, ex=TROUBLE_HOURS * 3600, nx=True):
+    # SET NX with an expiry: the same trouble is logged once every few hours; the key comes
+    # from make_key above, so it is the site's own
+    if frappe.cache().set(marker, 1, ex=TROUBLE_HOURS * 3600, nx=True):  # nosemgrep
         frappe.log_error(
             title=_("Copilot could not read {0} {1} on GitHub").format(key[0], key[1]),
             message=message,
@@ -903,8 +910,7 @@ def release_card(release, viewer: str | None = None, ask=None) -> dict:
         links=[
             (
                 _("Open the changes"),
-                f"https://github.com/{release.repository}/compare/"
-                f"{release.apps[0].from_commit[:12]}...{release.apps[0].to_commit[:12]}",
+                compare_url(release),
             ),
             release_link(release, viewer),
         ],
@@ -1539,9 +1545,14 @@ def undo(release) -> list[dict]:
                     release.repository,
                     number,
                     f"Revert #{number}: release {release.name} failed its check",
-                    _(
-                        "TBO Support deployed release {0} and the check after it failed: {1}\n\nThis reverts #{2}."
-                    ).format(release.name, (release.error or "")[:500], number),
+                    "\n\n".join(
+                        (
+                            _(
+                                "TBO Support deployed release {0} and the check after it failed: {1}"
+                            ).format(release.name, (release.error or "")[:500]),
+                            _("This reverts #{0}.").format(number),
+                        )
+                    ),
                 )
             )
         except GitHubError as e:

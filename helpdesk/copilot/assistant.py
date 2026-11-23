@@ -268,11 +268,12 @@ def log_action(
 def as_user(user: str):
     """Act as the person: their permissions decide."""
     previous = frappe.session.user
-    frappe.set_user(user)
+    # run as the person who asked, so their own permissions apply; restored below
+    frappe.set_user(user)  # nosemgrep
     try:
         yield
     finally:
-        frappe.set_user(previous)
+        frappe.set_user(previous)  # nosemgrep
 
 
 # --- receiving a message ---------------------------------------------------------------------------
@@ -1027,7 +1028,7 @@ def help_card() -> dict:
                 'Ask Press for more: "restart the bench of galom", "update demoerp", "deploy bench group X"; an approver gets a card first.'
             ),
             _(
-                '"Pause auto-repair: migration tonight" stops the watcher\'s repairs; "resume auto-repair" starts them (the Infrastructure people and the Leaders).'
+                """"Pause auto-repair: migration tonight" stops the watcher's repairs; "resume auto-repair" starts them (the Infrastructure people and the Leaders)."""
             ),
             _(
                 '"Report a problem: …" tells the TBO Copilot team what went wrong; it becomes a task for them.'

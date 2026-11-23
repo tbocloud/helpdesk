@@ -169,7 +169,8 @@ def authenticate():
         frappe.clear_last_message()
         note_refusal(str(e), activity, header, keep=True)
         return  # Frappe answers 401
-    frappe.set_user(ensure_bot_user())
+    # Microsoft's token checked above: the request now acts as the bot's own user
+    frappe.set_user(ensure_bot_user())  # nosemgrep
 
 
 def note_refusal(

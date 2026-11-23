@@ -44,7 +44,7 @@ def request_action_approval(
     kind: str,
     title: str,
     details: str,
-    payload,
+    payload: dict | list | str,
     risk: str = "normal",
     via: str = "Desktop",
     ticket: str | None = None,
@@ -71,7 +71,7 @@ def get_action_approval(name: str) -> dict:
 
 @frappe.whitelist()
 @agent_only
-def approved_action(kind: str, payload) -> dict | None:
+def approved_action(kind: str, payload: dict | list | str) -> dict | None:
     """The caller's live approval of exactly this payload, if someone else approved it."""
     doc = actions.approved_for(kind, _payload(payload), frappe.session.user)
     return actions.as_dict(doc) if doc else None
@@ -79,7 +79,7 @@ def approved_action(kind: str, payload) -> dict | None:
 
 @frappe.whitelist(methods=["POST"])
 @agent_only
-def decide_action(name: str, approve, note: str = "") -> dict:
+def decide_action(name: str, approve: bool | int | str, note: str = "") -> dict:
     approve = bool(sbool(approve))
     if not approve and not (note or "").strip():
         frappe.throw(_("Write the reason to reject: the person who asked gets it."))
@@ -91,7 +91,7 @@ def decide_action(name: str, approve, note: str = "") -> dict:
 
 @frappe.whitelist(methods=["POST"])
 @agent_only
-def mark_action_executed(name: str, ok, log: str = "") -> dict:
+def mark_action_executed(name: str, ok: bool | int | str, log: str = "") -> dict:
     """Only the person who asked (they ran it) may say how it went."""
     doc = frappe.get_doc(actions.ACTION, name)
     if frappe.session.user != doc.requested_by and not frappe.has_permission(

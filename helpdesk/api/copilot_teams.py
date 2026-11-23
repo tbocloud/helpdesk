@@ -15,7 +15,9 @@ from werkzeug.wrappers import Response
 from helpdesk.copilot import teams
 
 
-@frappe.whitelist(allow_guest=True, methods=["POST"])
+# Guest on purpose: Microsoft's Bot Framework calls it, and each request is checked against
+# Microsoft's signed token before anything runs (helpdesk/copilot/teams.py).
+@frappe.whitelist(allow_guest=True, methods=["POST"])  # nosemgrep
 def messages():
     if not teams.enabled():
         return Response("The Teams bot is not set up.", status=404)
@@ -44,7 +46,9 @@ def messages():
     return Response(json.dumps(answer), status=200, content_type="application/json")
 
 
-@frappe.whitelist(allow_guest=True, methods=["GET"])
+# Guest on purpose: the link from the bot's card opens here before sign-in; the one-time code
+# is checked, and the account is only linked after the person signs in.
+@frappe.whitelist(allow_guest=True, methods=["GET"])  # nosemgrep
 def link(code: str = ""):
     """The page a one-time link from the Teams bot opens: whose Teams account, and a button to link it.
 
@@ -125,7 +129,7 @@ def app_package():
     """The "TBO Copilot" Teams app (manifest and icons) for the Microsoft 365 admin, with this site's bot."""
     frappe.only_for("System Manager")
     if not teams.app_id():
-        frappe.throw("Set the bot app ID in HDS Copilot Settings first.")
+        frappe.throw(_("Set the bot app ID in HDS Copilot Settings first."))
     frappe.local.response.filename = "tbo-copilot-teams-app.zip"
     frappe.local.response.filecontent = teams.app_package()
     frappe.local.response.type = "download"

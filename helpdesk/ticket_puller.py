@@ -425,10 +425,10 @@ def pull_connection(connection: str) -> int:
     if frappe.session.user == "Guest":
         # queued by the customer site's ping, which is a guest request; the
         # import must run as the hub's own user or every permission check fails
-        frappe.set_user(automation_user())
+        frappe.set_user(automation_user())  # nosemgrep
     lock_key = f"hds_pull_lock:{connection}"
     # site-prefixed like delete_value() below, so the release matches (as in triage.py)
-    if not frappe.cache.set(
+    if not frappe.cache.set(  # nosemgrep
         frappe.cache.make_key(lock_key), 1, nx=True, ex=PULL_LOCK_SECONDS
     ):
         return 0
