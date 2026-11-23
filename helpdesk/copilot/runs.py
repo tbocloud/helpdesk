@@ -26,6 +26,18 @@ MAX_PAYLOAD_BYTES = 16 * 1024
 
 # who moves a run: the worker holding the lease, the hub itself, an agent, the customer
 WORKER, SYSTEM, AGENT, CUSTOMER = "worker", "system", "agent", "customer"
+# events the hub writes itself and reads back with a meaning: a stage is sent to the customer's
+# site, a state change and a review are the run's record (see add_event)
+HUB_EVENTS = frozenset(
+    {
+        "stage",
+        "state_change",
+        "review",
+        "suspicious_instruction",
+        "pull_request_ignored",
+        "hand_over_skipped",
+    }
+)
 
 # nobody waits on Copilot in these states, so a new run may start for the ticket
 SETTLED_STATES = (
@@ -289,7 +301,12 @@ def add_event(
     actor: str = SYSTEM,
     seq: int | None = None,
 ) -> bool:
-    """Writes an event; a worker's `seq` makes it idempotent (a repeat is ignored and returns False)."""
+    """Writes an event; a worker's `seq` makes it idempotent (a repeat is ignored and returns False).
+    A worker's event under a name the hub reads with a meaning (a stage goes on to the customer's
+    site) is kept under its own name instead, `worker_<name>`, so the worker can never speak for
+    the hub."""
+    if actor == WORKER and event_type in HUB_EVENTS:
+        event_type = f"worker_{event_type}"
     name = run if isinstance(run, str) else run.name
     key = (
         f"{name}:w:{seq}"

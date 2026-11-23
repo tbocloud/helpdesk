@@ -27,9 +27,16 @@ frappe.ui.form.on("HDS Deploy Request", {
             group
           );
           if (release.may_deploy_now) {
+            // the customers' live sites, now, with their benches restarted: asked once more
             frm.add_custom_button(
               __("Approve and deploy now"),
-              () => decide(1, "now"),
+              () =>
+                frappe.confirm(
+                  __(
+                    "This release goes to the customers' live sites now, and Press restarts their benches. Deploy now?"
+                  ),
+                  () => decide(1, "now")
+                ),
               group
             );
           }
@@ -49,7 +56,8 @@ frappe.ui.form.on("HDS Deploy Request", {
             group
           );
         } else if (release.why_not) {
-          frm.dashboard.set_headline(release.why_not);
+          // as text: the reason can name a changed file's path, which came from GitHub
+          frm.dashboard.set_headline(frappe.utils.escape_html(release.why_not));
         }
         if (release.may_override_ci) {
           frm.add_custom_button(

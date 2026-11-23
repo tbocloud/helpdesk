@@ -173,6 +173,7 @@ import {
   PropType,
   provide,
   ref,
+  watch,
   watchEffect,
 } from "vue";
 
@@ -195,6 +196,7 @@ import TicketDetailsTab from "@/components/ticket-agent/TicketDetailsTab.vue";
 import CopilotIcon from "~icons/lucide/bot";
 import SetContactPhoneModal from "@/components/ticket/SetContactPhoneModal.vue";
 import { setupCustomizations } from "@/composables/formCustomisation";
+import { useActiveViewers } from "@/composables/realtime";
 import { useScreenSize } from "@/composables/screen";
 import { useActiveTabManager } from "@/composables/useActiveTabManager";
 import {
@@ -251,6 +253,18 @@ const props = defineProps({
     required: true,
   },
 });
+
+// the ticket's room, as on a computer: Copilot's chat and its news arrive while the ticket is open
+const { startViewing, stopViewing } = useActiveViewers(String(props.ticketId));
+watch(
+  () => props.ticketId,
+  (id, old) => {
+    if (old && old !== id) stopViewing(String(old));
+    if (id) startViewing(String(id));
+  },
+  { immediate: true }
+);
+onUnmounted(() => stopViewing(String(props.ticketId)));
 
 const ticketComposable = computed(() => useTicket(props.ticketId));
 const ticket = computed(() => ticketComposable.value.ticket);

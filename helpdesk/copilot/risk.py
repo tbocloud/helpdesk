@@ -13,6 +13,7 @@ import re
 from frappe import _
 
 LARGE_CHANGE_LINES = 300
+FILES_LISTED_MAX = 300  # github.pull_files reads 3 pages of 100; a compare lists 300
 
 # (reason, pattern on the file path); reasons are translated when a finding is written
 SENSITIVE_PATHS = [
@@ -20,7 +21,7 @@ SENSITIVE_PATHS = [
         "accounting and tax",
         re.compile(
             r"(^|/)(accounts?|accounting|payments?)(/|$)|invoice|payment_entry|journal_entry|"
-            + r"gl_entry|ledger|(^|[/_])tax|vat|zatca",
+            + r"gl_entry|ledger|(^|[/_])tax|(^|[/_])vat([/_.]|$)|zatca",
             re.IGNORECASE,
         ),
     ),
@@ -89,6 +90,15 @@ def assess(files: list[dict]) -> dict:
         if reason not in reasons:
             reasons.append(reason)
 
+    if len(files) >= FILES_LISTED_MAX:
+        # GitHub lists no more than this many (a pull request's file pages, a compare): the
+        # rest could not be checked, so a senior decides, as for files GitHub would not list
+        note(
+            _(
+                "changes {0} files or more: GitHub lists no more, so the rest were not checked"
+            ).format(FILES_LISTED_MAX),
+            True,
+        )
     for file in files:
         path = file.get("filename") or ""
         lines += int(file.get("additions") or 0) + int(file.get("deletions") or 0)

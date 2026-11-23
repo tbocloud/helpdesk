@@ -123,6 +123,15 @@ class TestStatusPush(HubApiSyncCase):
         ticket_puller.push_ticket_statuses()
         self.assertEqual(len(self.calls_to("update_ticket", "SUP-2026-00050")), 1)
 
+    def test_the_push_stops_in_time_and_goes_on_next_run(self):
+        # review of #342: with every linked ticket to send after an upgrade, a push past the
+        # scheduler's 300 s was killed and sent the same tickets again every five minutes
+        with patch.object(ticket_puller, "SYNC_BUDGET_SECONDS", -1):
+            self.assertEqual(ticket_puller.push_ticket_statuses(), 0)
+        self.assertEqual(self.calls_to("update_ticket", "SUP-2026-00050"), [])
+        ticket_puller.push_ticket_statuses()
+        self.assertEqual(len(self.calls_to("update_ticket", "SUP-2026-00050")), 1)
+
     def test_an_old_client_still_gets_set_values(self):
         old_customer = create_customer("Old Sync Co").name
         old_conn = make_support_connection(old_customer).name

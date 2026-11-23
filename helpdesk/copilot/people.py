@@ -1386,8 +1386,48 @@ def rows_from_old_customer(row) -> list[dict]:
 # --- a customer's rows -------------------------------------------------------------------------
 
 
+CUSTOMER_COPILOT_FIELDS = (
+    "custom_copilot_enabled",
+    "custom_copilot_level",
+    "custom_copilot_watch",
+)
+
+
+def _customer_copilot(doc) -> tuple:
+    """What a customer's Copilot settings say: on or off, how far, who; for telling a change. As
+    text, so a form's "0" or "2026-12-01" equals the stored 0 or date."""
+
+    def plain(value) -> str:
+        return "" if value is None else str(value)
+
+    return (
+        tuple(plain(doc.get(field)) for field in CUSTOMER_COPILOT_FIELDS),
+        tuple(
+            tuple(
+                plain(row.get(key))
+                for key in ("role", "person", "level", "active", "until")
+            )
+            for row in doc.get(CUSTOMER_TABLE) or []
+        ),
+    )
+
+
 def validate_customer(doc, method=None):
-    """HD Customer validate: its Copilot People hold only the customer's own roles."""
+    """HD Customer validate: its Copilot People hold only the customer's own roles, and only TBO
+    Support's agents change its Copilot settings (a customer's own manager may edit the rest of
+    their record, never how far Copilot goes or who approves its fixes)."""
+    from helpdesk.utils import is_agent
+
+    before = None if doc.is_new() else doc.get_doc_before_save()
+    if (
+        before
+        and _customer_copilot(before) != _customer_copilot(doc)
+        and not is_agent()
+    ):
+        frappe.throw(
+            _("Only TBO Support agents change a customer's Copilot settings."),
+            frappe.PermissionError,
+        )
     for row in doc.get(CUSTOMER_TABLE) or []:
         if row.role and row.role not in CUSTOMER_ROLES:
             frappe.throw(

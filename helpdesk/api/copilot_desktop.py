@@ -8,8 +8,6 @@ used, else the role TBO Copilot Desktop. A site without the tbo_desktop app: nob
 
 import frappe
 
-from helpdesk.utils import agent_only
-
 SETTINGS = "TBO Desktop Settings"
 ROLE = "TBO Copilot Desktop"
 
@@ -37,7 +35,8 @@ def may_use_desktop(user: str | None = None) -> bool:
 
 
 @frappe.whitelist()
-@agent_only
 def desktop() -> dict:
-    """Whether this person gets "Open in TBO Copilot" on tasks."""
+    """Whether this person gets "Open in TBO Copilot" on tasks. Every desk user asks (the Task
+    form does, on every open task); someone who is not an active agent simply gets False, never
+    a "Not Allowed" message."""
     return {"may_use": may_use_desktop()}

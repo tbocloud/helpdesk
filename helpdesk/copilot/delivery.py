@@ -17,7 +17,7 @@ import time
 import frappe
 from frappe.utils import add_to_date, now_datetime
 
-from helpdesk.copilot import customer
+from helpdesk.copilot import customer, runs
 
 MESSAGE = "HDS Conversation Message"
 CONVERSATION = "HDS Conversation"
@@ -128,7 +128,11 @@ def _stages(since, before, deadline: float) -> int:
     newest = {}
     for event in frappe.get_all(
         EVENT,
-        filters={"event_type": "stage", "creation": [">=", since]},
+        filters={
+            "event_type": "stage",
+            "actor": runs.SYSTEM,
+            "creation": [">=", since],
+        },
         fields=["name", "run", "payload", "creation"],
         order_by="creation desc",
         limit=BATCH * 5,

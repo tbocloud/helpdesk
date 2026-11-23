@@ -573,7 +573,13 @@ def push_ticket_statuses() -> int:
 
     pushed = 0
     skip = unreachable_connections()
+    # the scheduler stops a job after 300 s: stop in time and keep each push as it is made, so
+    # the next run goes on from there instead of sending the same tickets again (the first run
+    # after an upgrade has every linked ticket to send)
+    deadline = time.monotonic() + SYNC_BUDGET_SECONDS
     for connection_name, tickets in by_connection.items():
+        if time.monotonic() > deadline:
+            break
         if connection_name in skip:
             continue
         conn = frappe.get_doc("HDS Support Connection", connection_name)
@@ -585,6 +591,8 @@ def push_ticket_statuses() -> int:
                 continue
 
         for row in tickets:
+            if time.monotonic() > deadline:
+                break
             values = _status_payload(row, raw=use_hub_api)
             digest = _payload_hash(values)
             if digest == (row.custom_client_push_hash or ""):
@@ -598,6 +606,7 @@ def push_ticket_statuses() -> int:
                     digest,
                     update_modified=False,
                 )
+                frappe.db.commit()  # the site has it: keep that, one ticket at a time - nosemgrep
                 pushed += 1
             except Exception:
                 _log_once(

@@ -283,13 +283,22 @@ def jobs(
     )
 
 
+def _redacted(value):
+    """Press's output with passwords, tokens and credentials in URLs taken out (a failed job's
+    output can carry a database URL, a trace a Redis password), for every reader: a person, their
+    AI client, the worker (helpdesk.copilot.infra.redact)."""
+    from helpdesk.copilot.infra import redact
+
+    return redact(value)
+
+
 def job(name: str) -> dict:
-    """One Agent Job with its steps and their output, clipped."""
+    """One Agent Job with its steps and their output, clipped, secrets taken out."""
     doc = press.call("press.api.site.job", job=name) or {}
     for step in doc.get("steps") or []:
         if isinstance(step, dict) and step.get("output"):
             step["output"] = str(step["output"])[-CLIP:]
-    return doc
+    return _redacted(doc)
 
 
 def failed_jobs(hours: int = 24) -> list[dict]:
@@ -319,15 +328,17 @@ def list_servers() -> list[dict]:
 
 
 def site_logs(site: str) -> list:
-    return press.call("press.api.site.logs", name=site) or []
+    return _redacted(press.call("press.api.site.logs", name=site) or [])
 
 
 def site_log(site: str, log: str) -> str:
-    return str(press.call("press.api.site.log", name=site, log=log) or "")[-CLIP * 4 :]
+    return _redacted(
+        str(press.call("press.api.site.log", name=site, log=log) or "")[-CLIP * 4 :]
+    )
 
 
 def bench_logs(group: str, bench: str) -> list:
-    return press.call("press.api.bench.logs", name=group, bench=bench) or []
+    return _redacted(press.call("press.api.bench.logs", name=group, bench=bench) or [])
 
 
 # --- actions ---------------------------------------------------------------------------------
@@ -432,6 +443,31 @@ def run(
     }
 
 
+def as_copilot_asks(approval, payload: dict) -> bool:
+    """Whether the approved payload is exactly what `run` (or Copilot's infrastructure proposal)
+    builds for its action and target, at the action's own risk: the card the approver read came
+    from the same action, so what runs is what they approved."""
+    action = payload.get("action")
+    rule = ACTIONS.get(action) if isinstance(action, str) else None
+    target = payload.get("target")
+    args = payload.get("args")
+    if (
+        not rule
+        or not target
+        or not isinstance(args, dict)
+        or payload.get("method") != rule["method"]
+        or rule["method"] in NEVER
+        or approval.risk != (rule.get("risk") or "normal")
+    ):
+        return False
+    extra = {key: args.get(key) for key in rule.get("extra") or ()}
+    try:
+        expected = arguments(action, target, extra)
+    except frappe.ValidationError:
+        return False
+    return args == expected
+
+
 def execute_approved(name: str):
     """Background, right after Approve: the exact approved payload goes to Press, the job is
     followed, the outcome is written on the record and told to the person who asked."""
@@ -442,12 +478,16 @@ def execute_approved(name: str):
         return
     payload = frappe.parse_json(approval.payload or "{}") or {}
     action, args = payload.get("action"), payload.get("args") or {}
-    rule = spec(action)
-    if rule["method"] != payload.get("method") or rule["method"] in NEVER:
+    if not as_copilot_asks(approval, payload):
         actions.mark_executed(
-            name, False, _("The approved method is not one Copilot runs.")
+            name,
+            False,
+            _(
+                "The approved request is not one Copilot asks for this action, so nothing ran."
+            ),
         )
         return
+    rule = ACTIONS[action]
     try:
         if action == "deploy":
             result = deploy_group(args["name"])

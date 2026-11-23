@@ -75,6 +75,29 @@ class TestApprovalLock(FrappeTestCase):
                 approval.execute_approved_actions(self.request)
         self.assertEqual(mcp.call_tool.call_count, 1)
 
+    def test_a_site_that_cannot_be_reached_leaves_the_request_to_run_again(self):
+        # review of #342: the claim was kept when the site's connection failed before any write,
+        # and a request in "Executing" could never run, be rejected or be approved again
+        approval.approve_actions(self.request)
+        with patch.object(
+            approval, "MCPClient", side_effect=frappe.ValidationError("unreachable")
+        ):
+            with self.assertRaises(frappe.ValidationError):
+                approval.execute_approved_actions(self.request)
+        self.assertEqual(
+            frappe.db.get_value("HDS Support Action Request", self.request, "status"),
+            "Approved",
+        )
+        mcp = MagicMock()
+        mcp.call_tool.return_value = {
+            "content": [{"type": "text", "text": "ok"}],
+            "isError": False,
+        }
+        with patch.object(approval, "MCPClient", return_value=mcp):
+            self.assertEqual(
+                approval.execute_approved_actions(self.request)["status"], "Executed"
+            )
+
     def test_a_site_that_checks_writes_gets_the_approved_actions_signed(self):
         conn = frappe.get_doc("HDS Support Connection", self.conn)
         conn.approval_key = "site-key"

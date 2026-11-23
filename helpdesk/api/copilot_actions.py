@@ -50,6 +50,16 @@ def request_action_approval(
     ticket: str | None = None,
 ) -> dict:
     """Asks for an approval of exactly `payload`; the same ask twice returns the live request."""
+    from helpdesk.copilot import press_tools
+
+    if kind == press_tools.KIND:
+        # the hub runs a Press approval itself, so Copilot writes its card and payload from the
+        # action (helpdesk.api.copilot_press.request_action); a card written here could say one
+        # thing while the payload does another
+        frappe.throw(
+            _("Ask for a Press action with Copilot's Press tools."),
+            frappe.PermissionError,
+        )
     doc = actions.request(
         kind,
         title,

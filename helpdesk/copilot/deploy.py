@@ -600,7 +600,28 @@ def _offer(info: dict, request) -> str:
 
 
 def _already_running(request, run):
-    """The bench already runs it (deployed by hand): straight to the check."""
+    """The bench already runs it (deployed by hand): straight to the check. A run that moved on
+    meanwhile (a release of the same commit deployed and resolved it) has nothing left to deploy:
+    the request is closed and the lock let go."""
+    if run and run.state != "Merged":
+        request.db_set(
+            {
+                "status": "Cancelled",
+                "finished_at": now_datetime(),
+                "waiting_since": None,
+                "error": _(
+                    "The bench already runs the commit and the run is {0}: nothing to deploy."
+                ).format(_(run.state)),
+            }
+        )
+        _release_lock(request.name)
+        runs.add_event(
+            run,
+            "deploy_not_needed",
+            {"request": request.name, "state": run.state},
+            runs.SYSTEM,
+        )
+        return
     request.db_set(
         {"status": "Checking", "started_at": now_datetime(), "waiting_since": None}
     )
@@ -663,6 +684,11 @@ def _start(request):
     except PressError as e:
         _release_lock(request.name)
         return _wait(request, _("Press: {0}").format(e.message))
+    except Exception:
+        # anything else rolls this request back (run_due): it must not keep every other
+        # deploy waiting behind its lock until the lock expires
+        _release_lock(request.name)
+        raise
     for member in train:
         member.db_set(
             {
