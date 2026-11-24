@@ -98,20 +98,19 @@ def is_sales_employee(user: str | None = None) -> bool:
 
 
 def is_sales_bd_role(user: str | None = None) -> bool:
-    """A salesperson by role: a Division Sales User (a Division Admin manages instead), or a
-    Sales Employee who is not a System Manager, Agent Manager or Sales Manager. Whether they
+    """A salesperson by role: a Sales Employee who is not a System Manager, Agent Manager or
+    Sales Manager. A Division Admin or Division Sales User of the active division never is:
+    both get the whole CRM, and the ERP site keeps a Division Sales User to their own leads
+    (docs/divisions.md). Whether they
     also head a department is known on the ERP site only (`helpdesk.api.leads.is_bd`
     settles it); a BD sees Today's calls, their own leads and follow-ups, nothing of the
     team's (docs/leads.md)."""
-    from helpdesk.divisions import DIVISION_SALES_USER, leads_role
+    from helpdesk.divisions import leads_role
     from helpdesk.tasky.permissions import is_tasky_admin
 
     user = user or frappe.session.user
-    if is_tasky_admin(user):
+    if is_tasky_admin(user) or leads_role(user):
         return False
-    division_role = leads_role(user)
-    if division_role:
-        return division_role == DIVISION_SALES_USER
     return is_sales_employee(user) and "Sales Manager" not in frappe.get_roles(user)
 
 

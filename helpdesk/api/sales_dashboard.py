@@ -66,7 +66,7 @@ def get_team_dashboard(
     department only (they aren't counted per lead). The overview is required; the rest are
     optional, with their messages in `errors`. Not for BDs."""
     require_leads()
-    leads.refuse_bd()
+    leads.refuse_team()
     if period not in TEAM_PERIODS:
         frappe.throw(_("Pick today, this week or this month."))
     owner = owner or None
