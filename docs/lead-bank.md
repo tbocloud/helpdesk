@@ -82,7 +82,10 @@ leads or any money except your own.
   second one for the gallery, as the lead photos do. The location is the lead's place (a Maps link
   and its pin). The app's manifest has an **Add a lead** shortcut, so long-pressing the installed
   icon opens the form. Photos are shrunk in the browser (`preparePhoto`, 2000 px JPEG) and sent to
-  the hub twice: to be read, then to be saved on the lead.
+  the hub twice: to be read, then to be saved on the lead. The reading starts as soon as a photo
+  is ready; it never waits for the location (owner, 2026-11-24: it used to wait up to 4 s for it,
+  on every photo when the location was refused). The position, when it comes, names the country
+  only if nothing did before it; a phone number found in the photos still wins.
 
 ## Decisions
 
