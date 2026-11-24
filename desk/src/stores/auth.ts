@@ -119,6 +119,14 @@ export const useAuthStore = defineStore("auth", () => {
       divisions.value.find((d) => d.name === activeDivision.value)?.role ===
         "Division Admin"
   );
+  // a Division Sales User of the active division works their own and allocated leads and
+  // sees none of the team's figures (docs/divisions.md)
+  const isDivisionSalesUser: ComputedRef<boolean> = computed(
+    () =>
+      !isSuperAdmin.value &&
+      divisions.value.find((d) => d.name === activeDivision.value)?.role ===
+        "Division Sales User"
+  );
   const canViewDivisionOverview: ComputedRef<boolean> = computed(
     () => !!user__.value.can_view_division_overview
   );
@@ -246,6 +254,7 @@ export const useAuthStore = defineStore("auth", () => {
     isSuperAdmin,
     canManageDivisions,
     isActiveDivisionAdmin,
+    isDivisionSalesUser,
     canViewDivisionOverview,
     canAssignSalesTargets,
     hasSalesTargets,

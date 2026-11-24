@@ -20,7 +20,11 @@ from frappe.utils import (
 from helpdesk import lead_mirror_read, whatsapp_outreach
 from helpdesk.api import pending_calls
 from helpdesk.content_team import is_sales_bd_role, only_sales_team
-from helpdesk.divisions import active_division, on_crm_connection
+from helpdesk.divisions import (
+    active_division,
+    is_division_sales_user,
+    on_crm_connection,
+)
 from helpdesk.integrations.crm.leads import (
     LeadsError,
     LeadsNotDeployedError,
@@ -121,6 +125,17 @@ def refuse_bd() -> None:
     if is_bd():
         frappe.throw(
             _("This is for managers. Use Today's calls and My leads."),
+            frappe.PermissionError,
+        )
+
+
+def refuse_team() -> None:
+    """For the team's figures (Overview, Business, the team dashboard): not for a BD, nor a
+    Division Sales User, who works their own and allocated leads (docs/divisions.md)."""
+    refuse_bd()
+    if is_division_sales_user():
+        frappe.throw(
+            _("This is for managers. Use your leads."),
             frappe.PermissionError,
         )
 
@@ -378,7 +393,7 @@ def get_overview(
     """The Overview: the pipeline, the funnel and the period's figures for the
     leads the signed-in person may see (theirs, their team's or everyone's)."""
     require_leads()
-    refuse_bd()
+    refuse_team()
     check_period(period, from_date, to_date)
     return read_overview(period, from_date, to_date, owner, fresh)
 
@@ -430,7 +445,7 @@ def get_lead_intake(fresh: int | str = 0) -> dict:
     daily target from HD CRM Settings (0: none). `available` is false while the ERP
     site's TBO Smart is older than this, so the page leaves the strip out."""
     require_leads()
-    refuse_bd()
+    refuse_team()
     return read_lead_intake(fresh)
 
 
@@ -483,7 +498,7 @@ def get_proposal_money(
     period, and every payment split still to come in. `available` is false while the
     ERP site's TBO Smart is older than this."""
     require_leads()
-    refuse_bd()
+    refuse_team()
     check_period(period, from_date, to_date)
     return read_proposal_money(period, from_date, to_date, owner, fresh)
 
@@ -515,7 +530,7 @@ def get_business_overview(
     (System Manager or its TBO Management role) and nowhere else: a refusal there is a
     403 here. `available` is false while the ERP site's TBO Smart is older than this."""
     require_leads()
-    refuse_bd()
+    refuse_team()
     start, end = business_range(period, from_date, to_date)
     params = {
         "from_date": str(start),
@@ -604,7 +619,7 @@ def get_overview_page(
     another here instead of as parallel requests that wait on each other. The last three
     are optional: one that fails leaves the overview whole and says why in `errors`."""
     require_leads()
-    refuse_bd()
+    refuse_team()
     check_period(period, from_date, to_date)
     page = {
         "overview": read_overview(period, from_date, to_date, owner, fresh),

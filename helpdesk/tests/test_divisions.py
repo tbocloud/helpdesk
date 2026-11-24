@@ -7,6 +7,7 @@ from frappe.utils import add_days, getdate
 from helpdesk import content_team, division_overview, divisions
 from helpdesk.api import division_overview as overview_api
 from helpdesk.api import divisions as divisions_api
+from helpdesk.api import leads as leads_api
 from helpdesk.crm_dashboard import sync
 from helpdesk.helpdesk.doctype.hd_crm_source.hd_crm_source import HDCRMSource
 from helpdesk.integrations.crm import leads
@@ -535,9 +536,18 @@ class TestDivisionSalesRoles(DivisionCase):
         self.assertTrue(content_team.is_sales_employee(ANN))
         self.assertTrue(content_team.is_sales_employee(CARA))
         self.assertFalse(content_team.is_sales_employee(DEV), "a Super Admin")
-        # the sales user gets their own leads and calls, the admin the team's view
-        self.assertTrue(content_team.is_sales_bd_role(ANN))
+        # neither is a BD, so the sales user's lists hold their own and allocated leads (the
+        # ERP site's Sales User rule); the team's figures stay the admin's
+        self.assertFalse(content_team.is_sales_bd_role(ANN))
         self.assertFalse(content_team.is_sales_bd_role(CARA))
+        self.assertTrue(divisions.is_division_sales_user(ANN))
+        self.assertFalse(divisions.is_division_sales_user(CARA))
+        self.assertFalse(divisions.is_division_sales_user(DEV), "a Super Admin")
+        frappe.set_user(ANN)
+        self.assertRaises(frappe.PermissionError, leads_api.refuse_team)
+        frappe.set_user(CARA)
+        leads_api.refuse_team()
+        frappe.set_user("Administrator")
         self.assertEqual(divisions.scoreboard_people(ANN), {ANN})
         self.assertEqual(divisions.scoreboard_people(CARA), {ANN, CARA})
         self.assertIsNone(divisions.scoreboard_people(DEV))
