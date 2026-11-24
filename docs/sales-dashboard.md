@@ -55,7 +55,7 @@ lead drops out. *Leads handed out today* follows the department only: the batche
 counted per lead, so with a source picked the card says so. Every link to the Leads list carries
 both. They go to the ERP site's `get_overview` and `get_lead_analysis` only when picked
 (`leads.narrowing`), and the answer must say them back (`narrowed`, TBO Smart's
-`hub-leads-api.md` v1.36; `leads.applied`). An older TBO Smart silently drops arguments it
+`hub-leads-api.md` v1.37; `leads.applied`). An older TBO Smart silently drops arguments it
 doesn't know and answers with everyone's figures, so those are refused: the page says the ERP
 site can't narrow by department or source yet, and the filter card stays to clear it. Without a
 filter the page works on any TBO Smart. The selects are `sm:w-*`, since frappe-ui's FormControl
