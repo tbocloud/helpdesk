@@ -1,10 +1,7 @@
 <template>
-  <!-- only Super Admins see which division they're in and switch it; everyone else
-       works in their own division without the card -->
-  <Dropdown
-    v-if="auth.isSuperAdmin && auth.divisions.length"
-    :options="options"
-  >
+  <!-- Super Admins and managers of several divisions see which division they're in and
+       switch it; everyone else works in their own division without the card -->
+  <Dropdown v-if="auth.canSwitchDivision" :options="options">
     <button
       type="button"
       class="flex h-11 w-full items-center gap-2.5 rounded-[10px] border border-outline-gray-2 bg-surface-base px-3 text-start transition-colors hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
@@ -83,16 +80,23 @@ const options = computed(() => {
     {
       group: __("Switch division"),
       items: [
-        {
-          label: __("All divisions"),
-          icon: mark(!active.value),
-          onClick: () => pick(null),
-        },
-        ...auth.divisions.map((d) => ({
-          label: d.division_name,
-          icon: mark(d.name === auth.activeDivision),
-          onClick: () => pick(d.name),
-        })),
+        // only a Super Admin sees every division at once
+        ...(auth.isSuperAdmin
+          ? [
+              {
+                label: __("All divisions"),
+                icon: mark(!active.value),
+                onClick: () => pick(null),
+              },
+            ]
+          : []),
+        ...auth.divisions
+          .filter((d) => d.can_switch)
+          .map((d) => ({
+            label: d.division_name,
+            icon: mark(d.name === auth.activeDivision),
+            onClick: () => pick(d.name),
+          })),
       ],
     },
   ];
