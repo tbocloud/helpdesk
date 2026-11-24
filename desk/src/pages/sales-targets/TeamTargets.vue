@@ -2,7 +2,11 @@
   <div class="flex h-full flex-col">
     <LayoutHeader
       :title="__('Team targets')"
-      :subtitle="__('Everyone\'s targets for the month, side by side.')"
+      :subtitle="
+        view === 'scoreboard'
+          ? __('Who\'s closest to their targets this month.')
+          : __('Everyone\'s targets for the month, side by side.')
+      "
     >
       <template #right-header>
         <TabButtons
@@ -227,6 +231,15 @@
           </div>
         </template>
 
+        <!-- the month's ranking by how much of their targets each person reached -->
+        <TeamScoreboard
+          v-else-if="view === 'scoreboard'"
+          :rows="rows"
+          :month="month"
+          :pace="pace"
+          @open="openPerson"
+        />
+
         <!-- person by person: the team on the left, the one picked on the right -->
         <div
           v-else
@@ -420,6 +433,7 @@ import MonthStepper from "./MonthStepper.vue";
 import OverallProgress from "./OverallProgress.vue";
 import TeamPaceHero from "./TeamPaceHero.vue";
 import TeamPersonTargets from "./TeamPersonTargets.vue";
+import TeamScoreboard from "./TeamScoreboard.vue";
 import TeamTargetsMatrix from "./TeamTargetsMatrix.vue";
 import TeamTotals from "./TeamTotals.vue";
 import {
@@ -429,6 +443,7 @@ import {
   monthTitle,
   monthValue,
   overallOf,
+  uncountedText,
   type Criterion,
   type Progress,
   type TeamFilter,
@@ -441,6 +456,7 @@ const MONTHS = monthOptions();
 const VIEWS = [
   { label: __("Whole team"), value: "team" },
   { label: __("Person by person"), value: "person" },
+  { label: __("Scoreboard"), value: "scoreboard" },
 ];
 // the wide summary on the left, its companion card on the right
 const SPLIT =
@@ -466,7 +482,9 @@ const month = computed(() => {
   return MONTHS.some((m) => m.value === asked) ? asked : monthValue();
 });
 const view = computed(() =>
-  route.query.view === "person" ? "person" : "team"
+  VIEWS.some((v) => v.value === route.query.view)
+    ? String(route.query.view)
+    : "team"
 );
 const selected = computed(() => String(route.query.employee || ""));
 function pickMonth(value: string) {
@@ -519,12 +537,6 @@ const people = computed(() => team.data?.people ?? []);
 const withTargets = computed(() => people.value.filter((p) => p.target));
 const withoutTargets = computed(() => people.value.filter((p) => !p.target));
 const pace = computed(() => monthPace(month.value));
-
-function uncountedText(progress: Progress) {
-  if (progress.state === "not_started") return __("Not begun");
-  if (progress.state === "unavailable") return __("Couldn't count");
-  return __("Nothing counted");
-}
 
 // ---------- each person's month, and where they stand ----------
 

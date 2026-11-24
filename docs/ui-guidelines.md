@@ -220,7 +220,9 @@ means nothing is noise. The mapping is fixed:
 - **The sidebar rail** is dark in both themes with neutral icons; only the selected area is
   filled in `brand`. There are no tinted icon tiles; the old per-group tones are gone.
 - **Champion gold** (`champion`, `champion-soft`, `champion-border`) is only for the
-  Scoreboard's champion card, with a trophy and a badge: it marks an award, not a status.
+  Scoreboard's champion card (`ChampionCard`) and Team targets' Scoreboard leader
+  (`ScoreboardLeader`, with the first rank's square), with a trophy: it marks an award, not
+  a status.
 - Everything else stays neutral: decorative and section
   icons, and tiles whose number isn't a status. Still no gradients, rainbow cards or
   decorative colour, and every tone keeps an icon or text next to it.

@@ -462,8 +462,9 @@ export function leadsLink(
 
 /**
  * The month overall, for the team list: each counted target's share reached (capped at
- * 100%) and each KPI (confirmed 100%, else 0), averaged; and how many are behind. Targets
- * that are information only (Industry, Location) are left out.
+ * 100%) and each KPI (confirmed 100%, else 0), averaged; how many are behind and how many
+ * are reached (a confirmed KPI is reached). Targets that are information only (Industry,
+ * Location) are left out.
  */
 export function overallOf(
   target: Target,
@@ -472,10 +473,13 @@ export function overallOf(
 ) {
   const shares: number[] = [];
   let behind = 0;
+  let reached = 0;
   for (const criterion of target.criteria) {
     if (criterion.value_type === "Text") {
-      if (isKpi(criterion))
-        shares.push(criterion.kpi_status === "Confirmed" ? 100 : 0);
+      if (!isKpi(criterion)) continue;
+      const confirmed = criterion.kpi_status === "Confirmed";
+      shares.push(confirmed ? 100 : 0);
+      if (confirmed) reached++;
       continue;
     }
     const measured =
@@ -484,11 +488,12 @@ export function overallOf(
     const result = progressOf(criterion, measured, progress, currency);
     if (result.percent !== null) shares.push(Math.min(result.percent, 100));
     if (["behind", "short", "below"].includes(result.standing)) behind++;
+    if (result.standing === "done") reached++;
   }
   const percent = shares.length
     ? Math.round(shares.reduce((a, b) => a + b, 0) / shares.length)
     : null;
-  return { percent, behind, counted: shares.length };
+  return { percent, behind, reached, counted: shares.length };
 }
 
 /**
@@ -610,4 +615,66 @@ export function uncountedNote(criterion: Criterion, progress: Progress | null) {
   if (progress.state === "unavailable")
     return __("Couldn't count it: {0}", progress.reason || "");
   return __("Counts {0}.", label);
+}
+
+/** Why a person's month has no overall, in a few words. */
+export function uncountedText(progress: Progress) {
+  if (progress.state === "not_started") return __("Not begun");
+  if (progress.state === "unavailable") return __("Couldn't count");
+  return __("Nothing counted");
+}
+
+/** One person on the Scoreboard: their counted month overall and their rank. */
+export interface RankedRow {
+  row: TeamRow;
+  overall: ReturnType<typeof overallOf> & { percent: number };
+  rank: number;
+}
+
+/**
+ * The Scoreboard's order: highest month overall first; level on that, more targets reached
+ * first. People level on both share a rank (1, 2, 2, 4). Only those with an overall.
+ */
+export function rankRows(rows: TeamRow[]): RankedRow[] {
+  const sorted = rows
+    .filter((r) => r.overall?.percent != null)
+    .map((row) => ({ row, overall: row.overall as RankedRow["overall"] }))
+    .sort(
+      (a, b) =>
+        b.overall.percent - a.overall.percent ||
+        b.overall.reached - a.overall.reached ||
+        a.row.person.full_name.localeCompare(b.row.person.full_name)
+    );
+  const ranked: RankedRow[] = [];
+  sorted.forEach((entry, i) => {
+    const before = ranked[i - 1];
+    const level =
+      before &&
+      before.overall.percent === entry.overall.percent &&
+      before.overall.reached === entry.overall.reached;
+    ranked.push({ ...entry, rank: level ? before.rank : i + 1 });
+  });
+  return ranked;
+}
+
+/**
+ * A ranked person against the month: behind (any target behind pace), ahead (none behind
+ * and the overall at or past today's pace), else on pace. A month over has no pace.
+ */
+export function paceStatus(
+  overall: RankedRow["overall"],
+  pace: ReturnType<typeof monthPace>
+): "behind" | "ahead" | "on_pace" {
+  if (overall.behind) return "behind";
+  if (pace.state === "running" && overall.percent >= pace.percent)
+    return "ahead";
+  return "on_pace";
+}
+
+/** "1st", "2nd", "3rd", "4th"… */
+export function ordinal(rank: number) {
+  if (rank === 1) return __("1st");
+  if (rank === 2) return __("2nd");
+  if (rank === 3) return __("3rd");
+  return __("{0}th", String(rank));
 }
