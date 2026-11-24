@@ -80,19 +80,36 @@
       </div>
     </PanelSection>
 
-    <PanelSection :title="__('Contact')">
+    <!-- the rest folds away, each with a line saying what is inside (Phase 12) -->
+    <PanelSection
+      v-model:opened="openedSections.contact"
+      :title="__('Contact')"
+      :summary="ticket.doc?.contact || ticket.doc?.raised_by"
+      collapsible
+    >
       <TicketContact />
     </PanelSection>
 
-    <TicketSlaSection />
+    <TicketSlaSection
+      v-model:opened="openedSections.sla"
+      :summary="slaSummary"
+      collapsible
+    />
 
     <template v-if="ticketId">
       <TicketLinkedWork
+        v-model:opened="openedSections.work"
         :ticket-id="ticketId"
         :ticket-subject="ticket.doc?.subject"
+        collapsible
       />
       <MeetingsCard reference-doctype="HD Ticket" :reference-name="ticketId" />
-      <SessionReplayCard :ticket-id="ticketId" />
+      <SessionReplayCard
+        v-model:opened="openedSections.replay"
+        :ticket-id="ticketId"
+        :summary="__('What the customer did')"
+        collapsible
+      />
 
       <PanelSection
         v-model:opened="openedSections.ai"
@@ -323,6 +340,20 @@ const customFields = computed(() => {
   return _customFields;
 });
 
+// the SLA's next due time, for its folded line
+const slaSummary = computed(() => {
+  const doc = ticket.value?.doc;
+  if (!doc) return "";
+  if (!doc.first_responded_on && doc.response_by)
+    return __("Reply by {0}", dayjs(doc.response_by).format("D MMM, HH:mm"));
+  if (doc.resolution_by)
+    return __(
+      "Resolve by {0}",
+      dayjs(doc.resolution_by).format("D MMM, HH:mm")
+    );
+  return "";
+});
+
 const openedSections = useStorage(
   "openedSections",
   {
@@ -330,6 +361,10 @@ const openedSections = useStorage(
     recentTickets: false,
     similarTickets: false,
     ai: true,
+    contact: false,
+    sla: false,
+    work: false,
+    replay: false,
   },
   localStorage,
   { mergeDefaults: true }

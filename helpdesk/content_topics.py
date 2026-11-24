@@ -56,7 +56,7 @@ def fill_topics(package: str, placeholders: dict):
     )
     if not posts:
         return
-    result = call_haiku(SYSTEM_PROMPT, build_prompt(plan, posts))
+    result = call_haiku(SYSTEM_PROMPT, build_prompt(plan, posts), job="draft")
     ideas = parse_ideas(result.get("response") or {})
     for number, row in enumerate(posts, 1):
         idea = ideas.get(number)

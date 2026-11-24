@@ -14,6 +14,9 @@
 		"link_kind",
 		"author",
 		"head_branch",
+		"head_sha",
+		"base_branch",
+		"merge_commit_sha",
 		"status_section",
 		"state",
 		"review_state",
@@ -87,6 +90,25 @@
 			"label": "Branch"
 		},
 		{
+			"description": "The commit at the head of the pull request at its last event",
+			"fieldname": "head_sha",
+			"fieldtype": "Data",
+			"label": "Head Commit",
+			"read_only": 1
+		},
+		{
+			"fieldname": "base_branch",
+			"fieldtype": "Data",
+			"label": "Base Branch",
+			"read_only": 1
+		},
+		{
+			"fieldname": "merge_commit_sha",
+			"fieldtype": "Data",
+			"label": "Merge Commit",
+			"read_only": 1
+		},
+		{
 			"fieldname": "status_section",
 			"fieldtype": "Section Break",
 			"label": "Status"
@@ -154,7 +176,7 @@
 	"in_create": 1,
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-09-30 12:00:00.000000",
+	"modified": "2026-10-12 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Pull Request",

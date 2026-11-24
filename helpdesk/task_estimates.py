@@ -195,7 +195,9 @@ def fallback_estimate(task, project_type: str | None, history: dict) -> dict:
 def ai_estimate(task, project, history: dict, max_days: int) -> dict | None:
     try:
         result = call_haiku(
-            SYSTEM_PROMPT, build_prompt(task, project, history, max_days)
+            SYSTEM_PROMPT,
+            build_prompt(task, project, history, max_days),
+            job="task",
         )
     except Exception:  # noqa: BLE001 - provider errors vary; the fallback still sets a date
         frappe.log_error(

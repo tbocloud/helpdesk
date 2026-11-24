@@ -185,6 +185,8 @@ import { computed, ref, watch, type Ref } from "vue";
 import { useIntervalFn } from "@vueuse/core";
 import { useRouter } from "vue-router";
 import LucideArrowRight from "~icons/lucide/arrow-right";
+import LucideLaptop from "~icons/lucide/laptop";
+import { mayOpenInCopilot, openInCopilot } from "../openInCopilot";
 import LucideCalendarClock from "~icons/lucide/calendar-clock";
 import LucideCheckCheck from "~icons/lucide/check-check";
 import LucideCircleCheck from "~icons/lucide/circle-check";
@@ -541,6 +543,17 @@ const dialogActions = computed(() => {
         onClick: () => handOff(planningTask),
       });
     }
+  }
+  // Phase 22: the task in the TBO Copilot desktop app, with the folders linked to it there;
+  // testing fixes 7: for everyone who may use the desktop app, on any open task
+  if (open && mayOpenInCopilot.value) {
+    actions.push({
+      label: __("Open in TBO Copilot"),
+      iconLeft: LucideLaptop,
+      variant: "subtle",
+      tooltip: __("Open this task in the TBO Copilot desktop app"),
+      onClick: () => openInCopilot(d.name),
+    });
   }
   if (props.mine && open) {
     // done work goes through the Complete dialog, which logs the hours to a timesheet

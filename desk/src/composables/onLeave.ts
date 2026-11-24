@@ -38,11 +38,18 @@ export function useOnLeave() {
     onLeave.fetch();
 
   function leaveOf(user: string | null | undefined): LeaveToday | null {
-    return (user && (onLeave.data as Record<string, LeaveToday>)?.[user]) || null;
+    return (
+      (user && (onLeave.data as Record<string, LeaveToday>)?.[user]) || null
+    );
   }
 
   return {
     /** The marker text for `user`, or "" when they're working. */
     leaveLabel: (user: string | null | undefined) => leaveText(leaveOf(user)),
+    /** On leave the whole day: not offered for new work (a half day still works). */
+    awayAllDay: (user: string | null | undefined) => {
+      const leave = leaveOf(user);
+      return Boolean(leave && !leave.half_day);
+    },
   };
 }

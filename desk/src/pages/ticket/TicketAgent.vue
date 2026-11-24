@@ -10,8 +10,8 @@
       <div
         class="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
       >
-        <!-- Tabs & Communication Area -->
-        <TicketActivityPanel />
+        <!-- Chat (first), Customer and Activity (Phase 12) -->
+        <TicketViews />
       </div>
 
       <!-- Side panel: inline with a resizer from lg, a sheet below -->
@@ -53,7 +53,8 @@
 import TicketIcon from "@/components/icons/TicketIcon.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import LucideArrowLeft from "~icons/lucide/arrow-left";
-import TicketActivityPanel from "@/components/ticket-agent/TicketActivityPanel.vue";
+import TicketViews from "@/components/ticket-agent/TicketViews.vue";
+import { ticketView } from "@/pages/ticket/modalStates";
 import TicketHeader from "@/components/ticket-agent/TicketHeader.vue";
 import TicketSidebar from "@/components/ticket-agent/TicketSidebar.vue";
 import SetContactPhoneModal from "@/components/ticket/SetContactPhoneModal.vue";
@@ -187,6 +188,8 @@ watch(
 
     if (oldTicketId) stopViewing(oldTicketId as string);
     startViewing(newTicketId as string);
+    // every ticket opens on its chat
+    ticketView.value = "chat";
 
     // Switching to an already-visited ticket: show its cached conversation and
     // refresh it in the background in case it changed while we were elsewhere.
