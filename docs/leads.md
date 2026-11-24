@@ -56,7 +56,7 @@ user exists there with a sales role, applies what they may see, and records writ
 | Method | HTTP | Arguments | Returns |
 | --- | --- | --- | --- |
 | `get_options` | GET | | `{stages: [{name, label, type, color}], sources, segments, owners: [{email, full_name}], territories, industries, org_sizes, states, kerala_districts, districts_by_state, can_call, departments: [{name, lead_type, is_active, is_head, is_member}], lead_types}` (the last two from the departments release of TBO Smart) |
-| `list_leads` | GET | `search, stage, owner, segment, department, industry, state, district, org_size, product, last_call_result, last_reply_class, source, temperature, metric, period, from_date, to_date, view, start, page_length` | `{rows: [{name, lead_name, company_name, email_id, mobile_no, tbo_stage, segment, lead_owner, owner_name, score, next_follow_up, modified, latest_quotation, latest_proposal, tbo_department, tbo_lead_type, product, industry, state, district, org_size}], total}` |
+| `list_leads` | GET | `search, stage, owner, segment, department, industry, state, district, org_size, product, last_call_result, last_reply_class, source, temperature, metric, period, from_date, to_date, view, start, page_length` | `{rows: [{name, lead_name, company_name, email_id, mobile_no, tbo_stage, segment, lead_owner, owner_name, score, next_follow_up, modified, latest_quotation, latest_proposal, tbo_department, tbo_lead_type, product, source, industry, state, district, org_size}], total}` |
 | `get_category_counts` | GET | | `{industry, state, district, org_size, product}`, each `{value: leads}` (TBO Smart v1.14, `hub-leads-api.md` §2.14) |
 | `add_industry` | POST | `name` | `{name, created}`; managers only |
 | `bulk_set_lead_category` | POST | `leads, values` | `{updated, skipped}`; managers only (a department head may set `product`) |
@@ -272,7 +272,9 @@ from the hub's copy. They took the place of the *Your calls* strip on My leads, 
 "contacted" (answered calls) and stage names read as one another.
 
 **The list tabs** (All, My leads, Call today, Follow-up, Called): one toolbar row of Search,
-Stage, Owner, Follow-up date (My leads and Follow-up), **Created**, Product (and Created by or
+Stage, Owner, Follow-up date (My leads and Follow-up), **Created**, Product, **Source** (the
+ERP site's sources; a source opened from the Overview's By source shows in it, not as a chip)
+(and Created by or
 Last called where they apply), **More filters** (a dialog with Segment, Department, Industry, State, District, Organisation size, Last call
 and Replied) and **Select leads**. Under the toolbar a results row
 starts with the number of leads, in bold: "404 leads", or "71 of 404 leads match" while a filter
@@ -281,7 +283,8 @@ answer when there is one, else from one extra `list_leads` call of that tab with
 1, kept per tab until Refresh; the pill once showed the filtered number, which read as the tab's
 size. What narrows the list beyond the toolbar follows in that row as removable chips, with **Clear
 all** at its right end while any filter is on. The leads are a table: lead (name, company, department, segment,
-category, number, score), stage, owner, product, last call, next follow-up, updated, and the call
+category, number, score), stage, owner, product, source (where the lead came from; the column
+stays out while an older TBO Smart sends no `source` with the rows), last call, next follow-up, updated, and the call
 button; on a phone the stage, follow-up and owner fold in under the name. Every filter and URL
 parameter works as before.
 
@@ -1343,7 +1346,10 @@ the same reads: [sales-dashboard.md](sales-dashboard.md).
 - **Lead** (`/helpdesk/leads/<name>`, `Lead.vue`): details, *Move stage* (the primary
   action; only `allowed_stages`, with an optional note), *Edit* (the same dialog, sending
   only changed fields), a note composer and the timeline, and the quotations read-only
-  (`LeadQuotations.vue`).
+  (`LeadQuotations.vue`). The lead's **source** (where it came from: Website, Phone call,
+  Staff referral, Prospecting – <provider>, Meta Lead Ads, or the one picked on the form)
+  shows in the header line after the ID, department and product, and always in Details,
+  where an empty one reads *Not set* so it can be filled in with Edit.
 - **AI suggests** on the lead page (`LeadAISuggests.vue`, its own component under Details):
   - the AI's summary, sentiment and intent (badges with icons; an unhappy customer amber),
     the phrases that show it, and the **next step** with its channel and day (already the

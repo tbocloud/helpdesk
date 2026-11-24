@@ -43,8 +43,23 @@ The page reads again every two minutes; Refresh sends `fresh=1`.
 
 The team's figures, under Team in the sidebar for everyone with Leads **except BDs**
 (`salesManagersOnly`; the server refuses a BD with "This is for managers…", `refuse_bd`).
-`get_team_dashboard(period, owner, fresh)`; `period` is today, week or month and, with `owner`,
-in the URL.
+`get_team_dashboard(period, owner, department, source, fresh)`; `period` is today, week or month
+and, with `owner`, `department` and `source`, in the URL.
+
+**Department and Source** (selects beside the person, from `get_options`: the active lead
+departments, shown only when there are two or more, and the ERP site's lead sources) keep every
+figure to the leads of that lead department and lead source: the tiles, the pipeline, the funnel,
+Needs a nudge (the AI's counts too), and the calls (the team table, the week chart, the
+leaderboard), where only batch calls and logged calls on those leads count, so a logged call on no
+lead drops out. *Leads handed out today* follows the department only: the batches report isn't
+counted per lead, so with a source picked the card says so. Every link to the Leads list carries
+both. They go to the ERP site's `get_overview` and `get_lead_analysis` only when picked
+(`leads.narrowing`), and the answer must say them back (`narrowed`, TBO Smart's
+`hub-leads-api.md` v1.37; `leads.applied`). An older TBO Smart silently drops arguments it
+doesn't know and answers with everyone's figures, so those are refused: the page says the ERP
+site can't narrow by department or source yet, and the filter card stays to clear it. Without a
+filter the page works on any TBO Smart. The selects are `sm:w-*`, since frappe-ui's FormControl
+adds `w-full`, which a plain width loses to.
 
 | Card | Figure | Source |
 | --- | --- | --- |

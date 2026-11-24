@@ -48,21 +48,28 @@ def get_my_dashboard(fresh: int | str = 0) -> dict:
 
 @frappe.whitelist()
 def get_team_dashboard(
-    period: str = "today", owner: str | None = None, fresh: int | str = 0
+    period: str = "today",
+    owner: str | None = None,
+    fresh: int | str = 0,
+    department: str | None = None,
+    source: str | None = None,
 ) -> dict:
     """The team's figures for `period` (today, week or month), everyone's or one person's:
     `overview` (the Leads Overview's totals, pipeline, funnel and AI counts), `people` (each
     salesperson's calls in the period), `week` (each one's calls per day since Monday) and
-    `handed_out` (today's call batches by slot). The overview is required; the rest are
+    `handed_out` (today's call batches by slot). `department` and `source` keep every figure
+    to the leads of that lead department and lead source; the batches handed out follow the
+    department only (they aren't counted per lead). The overview is required; the rest are
     optional, with their messages in `errors`. Not for BDs."""
     require_leads()
     leads.refuse_bd()
     if period not in TEAM_PERIODS:
         frappe.throw(_("Pick today, this week or this month."))
     owner = owner or None
+    narrow = {"department": department or None, "source": source or None}
     page = {
         "period": period,
-        "overview": team_overview(period, owner, fresh),
+        "overview": team_overview(period, owner, fresh, **narrow),
         "people": None,
         "week": None,
         "handed_out": None,
@@ -70,9 +77,9 @@ def get_team_dashboard(
     page["errors"] = read_parts(
         page,
         (
-            ("people", lambda: team_calls(period, owner, fresh)),
-            ("week", lambda: week_calls(owner, fresh)),
-            ("handed_out", handed_out_today),
+            ("people", lambda: team_calls(period, owner, fresh, **narrow)),
+            ("week", lambda: week_calls(owner, fresh, **narrow)),
+            ("handed_out", lambda: handed_out_today(narrow["department"])),
         ),
     )
     return page
@@ -116,9 +123,13 @@ def own_follow_ups(user: str, fresh) -> dict:
     }
 
 
-def team_overview(period: str, owner: str | None, fresh) -> dict:
+def team_overview(
+    period: str, owner: str | None, fresh, department=None, source=None
+) -> dict:
     """The Overview's figures for the period, with the owner picker cut to the sales team."""
-    overview = leads.read_overview(period, None, None, owner, fresh)
+    overview = leads.read_overview(
+        period, None, None, owner, fresh, source=source, department=department
+    )
     ai = overview.get("ai") or {}
     people, _empty = only_sales_team(overview.get("people") or [], keep=(owner,))
     return {
@@ -136,17 +147,23 @@ def team_overview(period: str, owner: str | None, fresh) -> dict:
     }
 
 
-def team_calls(period: str, owner: str | None, fresh) -> list[dict] | None:
+def team_calls(
+    period: str, owner: str | None, fresh, department=None, source=None
+) -> list[dict] | None:
     """Each salesperson's calls in the period: handed out (`given`), `called` and
     `contacted` (someone answered). None while the ERP site is older than this."""
-    analysis = leads.read_lead_analysis(period, None, None, owner, fresh)
+    analysis = leads.read_lead_analysis(
+        period, None, None, owner, fresh, source=source, department=department
+    )
     if not analysis.get("available"):
         return None
     rows, _empty = only_sales_team(analysis.get("calling") or [], keep=(owner,))
     return [calling_row(row) for row in rows]
 
 
-def week_calls(owner: str | None, fresh, own: bool = False) -> dict | None:
+def week_calls(
+    owner: str | None, fresh, own: bool = False, department=None, source=None
+) -> dict | None:
     """Called and contacted per person for each day from Monday to today, counted as Today's
     calls counts them (the ERP site's calling analysis, one day at a time). `own` keeps only
     the signed-in person; otherwise the sales team. None while the ERP site is older."""
@@ -154,7 +171,12 @@ def week_calls(owner: str | None, fresh, own: bool = False) -> dict | None:
     days = [add_days(day, -offset) for offset in range(day.weekday(), -1, -1)]
     people: dict[str, dict] = {}
     for index, date in enumerate(days):
-        answer = day_analysis(date, owner, fresh if date == day else 0)
+        answer = day_analysis(
+            date,
+            owner,
+            fresh if date == day else 0,
+            leads.narrowing(source, department),
+        )
         if answer is None:
             return None
         rows = answer.get("calling") or []
@@ -177,16 +199,23 @@ def week_calls(owner: str | None, fresh, own: bool = False) -> dict | None:
     return {"days": [str(d) for d in days], "people": list(people.values())}
 
 
-def day_analysis(date, owner: str | None, fresh) -> dict | None:
-    """The ERP site's calling analysis for one day; a day that has ended is kept an hour."""
+def day_analysis(
+    date, owner: str | None, fresh, narrow: dict | None = None
+) -> dict | None:
+    """The ERP site's calling analysis for one day; a day that has ended is kept an hour.
+    `narrow`: the lead source and department picked (`leads.narrowing`)."""
     ttl = leads.READ_TTL if date == getdate(today()) else CLOSED_DAY_TTL
     params = {"period": "custom", "from_date": str(date), "to_date": str(date)}
+    narrow = narrow or {}
     return leads.cached_read(
         "analysis_day",
-        {**params, "owner": owner},
+        {**params, "owner": owner, **narrow},
         ttl,
         fresh,
-        lambda: call_if_deployed("get_lead_analysis", **params, owner=owner),
+        lambda: leads.applied(
+            call_if_deployed("get_lead_analysis", **params, owner=owner, **narrow),
+            narrow,
+        ),
         keep=lambda answer: answer is not None,
     )
 
@@ -201,14 +230,17 @@ def calling_row(row: dict) -> dict:
     }
 
 
-def handed_out_today() -> list[dict] | None:
+def handed_out_today(department: str | None = None) -> list[dict] | None:
     """Today's call batches by slot and department, in the order the slots start: the leads
-    handed out and how many were called. None while the ERP site is older than this."""
+    handed out and how many were called; only `department`'s when given. None while the ERP
+    site is older than this."""
     report = call_batches.get_call_batches_report()
     if not report.get("available"):
         return None
     slots: dict[tuple, dict] = {}
     for person in report.get("people") or []:
+        if department and person.get("department") != department:
+            continue
         for batch in person.get("batches") or []:
             key = (batch.get("slot"), person.get("department"))
             slot = slots.setdefault(

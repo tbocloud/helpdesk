@@ -383,15 +383,45 @@ def get_overview(
     return read_overview(period, from_date, to_date, owner, fresh)
 
 
-def read_overview(period, from_date, to_date, owner, fresh) -> dict:
+def read_overview(
+    period, from_date, to_date, owner, fresh, source=None, department=None
+) -> dict:
     when = erp_period(period, from_date, to_date)
+    narrow = narrowing(source, department)
     return cached_read(
         "overview",
-        {**when, "owner": owner or None},
+        {**when, "owner": owner or None, **narrow},
         READ_TTL,
         fresh,
-        lambda: call("get_overview", **when, owner=owner or None) or {},
+        lambda: applied(
+            call("get_overview", **when, owner=owner or None, **narrow) or {}, narrow
+        ),
     )
+
+
+def narrowing(source: str | None, department: str | None) -> dict:
+    """The lead source and lead department the ERP site's figures keep to, only those picked:
+    a TBO Smart older than these refuses an argument it doesn't know."""
+    return {
+        key: value
+        for key, value in (("source", source), ("department", department))
+        if value
+    }
+
+
+def applied(answer, narrow: dict):
+    """`answer`, once the ERP site says it kept to the source and department asked for. An
+    older TBO Smart drops arguments it doesn't know and answers with everyone's figures, so
+    those are refused rather than shown as if they were narrowed."""
+    if narrow and answer is not None:
+        said = answer.get("narrowed") or {}
+        if any(said.get(key) != value for key, value in narrow.items()):
+            raise LeadsUnavailableError(
+                _(
+                    "The ERP site can't narrow these figures by department or source yet. Update TBO Smart there, or clear the filter."
+                )
+            )
+    return answer
 
 
 @frappe.whitelist()
@@ -538,16 +568,24 @@ def business_range(period: str, from_date: str | None, to_date: str | None) -> t
     return getdate(f"{year}-{FY_START_MONTH:02d}-01"), now
 
 
-def read_lead_analysis(period, from_date, to_date, owner, fresh) -> dict:
+def read_lead_analysis(
+    period, from_date, to_date, owner, fresh, source=None, department=None
+) -> dict:
     """The Overview's Calling performance and Lead quality. `available` is false while
     the ERP site's TBO Smart is older than this."""
     when = erp_period(period, from_date, to_date)
+    narrow = narrowing(source, department)
     result = cached_read(
         "analysis",
-        {**when, "owner": owner or None},
+        {**when, "owner": owner or None, **narrow},
         READ_TTL,
         fresh,
-        lambda: call_if_deployed("get_lead_analysis", **when, owner=owner or None),
+        lambda: applied(
+            call_if_deployed(
+                "get_lead_analysis", **when, owner=owner or None, **narrow
+            ),
+            narrow,
+        ),
         keep=lambda answer: answer is not None,
     )
     return {**result, "available": True} if result is not None else {"available": False}
