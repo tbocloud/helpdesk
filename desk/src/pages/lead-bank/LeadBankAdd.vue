@@ -461,12 +461,12 @@ async function onPick(event: Event) {
   } finally {
     preparing.value = false;
   }
-  // a slow or refused GPS must not hold the reading back
+  // the reading starts at once: the position, when it comes, names the country if the
+  // photos' phone numbers don't (a slow or refused GPS used to hold the reading up to 4 s)
   if (!place.value)
-    await Promise.race([
-      findPlace(true),
-      new Promise((r) => setTimeout(r, 4000)),
-    ]);
+    findPlace(true).then(() => {
+      if (!region.value) detectRegion();
+    });
   scan();
 }
 
@@ -525,9 +525,10 @@ async function findPlace(quiet = false) {
   }
 }
 
-/** The phone's country code names the region, unless the person already chose one. */
+/** The phone's country code, else the position, names the region, unless the person
+ * already chose one. */
 async function detectRegion() {
-  if (regionChosen || !form.mobile_no.trim()) return;
+  if (regionChosen || !(form.mobile_no.trim() || place.value)) return;
   try {
     const found = await call("helpdesk.api.lead_bank.detect_region", {
       phones: [form.mobile_no, form.phone].filter(Boolean),
