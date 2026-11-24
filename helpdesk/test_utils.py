@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import frappe
 from frappe.core.doctype.communication.test_communication import create_email_account
-from frappe.utils import add_to_date, get_datetime, getdate, now_datetime
+from frappe.utils import add_to_date, get_datetime, getdate, now_datetime, nowdate
 
 from helpdesk.api.settings.field_dependency import create_update_field_dependency
 from helpdesk.integrations.erpnext.utils import create_customer_field
@@ -6666,6 +6666,35 @@ def make_division(
         }
     )
     doc.insert(ignore_permissions=True)
+    return doc
+
+
+def make_report_lead(
+    source: str,
+    lead: str,
+    status: str,
+    category: str = "Open",
+    created_on=None,
+    **values,
+):
+    """Writes one lead of the reporting copy (`HD CRM Report Lead`) of `source`'s ERP site
+    as its sync would, without a site: `values` set the other columns (employee,
+    lead_source, expected_revenue, won_value, ...)."""
+    created_on = getdate(created_on or nowdate())
+    doc = frappe.get_doc(
+        {
+            "doctype": "HD CRM Report Lead",
+            "name": f"{source}::{lead}",
+            "source": source,
+            "remote_name": lead,
+            "status": status,
+            "category": category,
+            "created_on": created_on,
+            "created_month": created_on.strftime("%Y-%m"),
+            **values,
+        }
+    )
+    doc.db_insert()
     return doc
 
 

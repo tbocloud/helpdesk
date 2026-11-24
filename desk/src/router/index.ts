@@ -211,9 +211,31 @@ const portalRoutes = [
   },
   // the central and per-division overview and reports (docs/divisions.md)
   {
+    path: "/divisions",
+    name: "DivisionsHome",
+    component: () => import("@/pages/divisions/DivisionsHome.vue"),
+    beforeEnter: () =>
+      useAuthStore().canViewDivisionOverview || { name: "Home" },
+  },
+  {
+    path: "/divisions/:division",
+    name: "DivisionDashboard",
+    component: () => import("@/pages/divisions/DivisionDashboard.vue"),
+    props: true,
+    beforeEnter: () =>
+      useAuthStore().canViewDivisionOverview || { name: "Home" },
+  },
+  {
     path: "/business-overview",
     name: "DivisionOverview",
     component: () => import("@/pages/divisions/DivisionOverview.vue"),
+    beforeEnter: () =>
+      useAuthStore().canViewDivisionOverview || { name: "Home" },
+  },
+  {
+    path: "/lead-status",
+    name: "DivisionLeads",
+    component: () => import("@/pages/divisions/DivisionLeads.vue"),
     beforeEnter: () =>
       useAuthStore().canViewDivisionOverview || { name: "Home" },
   },

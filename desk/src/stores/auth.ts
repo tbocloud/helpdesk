@@ -111,6 +111,10 @@ export const useAuthStore = defineStore("auth", () => {
   const canManageDivisions: ComputedRef<boolean> = computed(
     () => !!user__.value.can_manage_divisions
   );
+  // a Super Admin, or a manager of several divisions (divisions.can_switch_division)
+  const canSwitchDivision: ComputedRef<boolean> = computed(
+    () => !!user__.value.can_switch_division
+  );
   // a Division Admin of the active division is a Sales Manager on its ERP site
   // (divisions.ERP_SALES_ROLES), so they set up its lead departments; a Group Admin isn't
   const isActiveDivisionAdmin: ComputedRef<boolean> = computed(
@@ -121,6 +125,10 @@ export const useAuthStore = defineStore("auth", () => {
   );
   const canViewDivisionOverview: ComputedRef<boolean> = computed(
     () => !!user__.value.can_view_division_overview
+  );
+  // where the overview and reports open: the active division when its figures are theirs
+  const overviewDivision: ComputedRef<string | null> = computed(
+    () => user__.value.overview_division || null
   );
   // the Sales area of the sidebar: sales, presales and their heads and managers only
   const inSales: ComputedRef<boolean> = computed(() => !!user__.value.in_sales);
@@ -245,8 +253,10 @@ export const useAuthStore = defineStore("auth", () => {
     activeDivision,
     isSuperAdmin,
     canManageDivisions,
+    canSwitchDivision,
     isActiveDivisionAdmin,
     canViewDivisionOverview,
+    overviewDivision,
     canAssignSalesTargets,
     hasSalesTargets,
     inSales,

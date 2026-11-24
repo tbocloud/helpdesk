@@ -175,11 +175,27 @@ def request_division() -> str | None:
     return None
 
 
+def switchable_divisions(user: str | None = None) -> list[str]:
+    """The divisions the user may switch to: every active one for a Super Admin; for
+    anyone else, the ones they manage (an overview role). Employees and sales users work
+    in their own division and don't switch."""
+    if is_super_admin(user):
+        return user_divisions(user)
+    return [d for d, role in memberships(user).items() if role in OVERVIEW_ROLES]
+
+
+def can_switch_division(user: str | None = None) -> bool:
+    """A Super Admin (with divisions), or a manager of more than one division."""
+    if is_super_admin(user):
+        return divisions_on()
+    return len(switchable_divisions(user)) > 1
+
+
 def active_division(user: str | None = None) -> str | None:
-    """The division the user is working in: the one whose URL they came in on, else (a Super
-    Admin) the one they picked last, else their first. None means every division (a Super
-    Admin's default) or that there are no divisions. Only Super Admins switch: everyone
-    else works in their own division."""
+    """The division the user is working in: the one whose URL they came in on, else the
+    one they picked last (a Super Admin, or a manager among the divisions they manage),
+    else (not a Super Admin) their first. None means every division (a Super Admin's
+    default) or that there are no divisions."""
     user = user or frappe.session.user
     if user == "Guest" or not divisions_on():
         return None
@@ -187,24 +203,32 @@ def active_division(user: str | None = None) -> str | None:
     by_host = request_division()
     if by_host in mine:
         return by_host
-    if not is_super_admin(user):
-        return mine[0] if mine else None
     picked = frappe.defaults.get_user_default(ACTIVE_DEFAULT, user)
-    return picked if picked in mine else None
+    if is_super_admin(user):
+        return picked if picked in mine else None
+    if picked and picked in switchable_divisions(user):
+        return picked
+    return mine[0] if mine else None
 
 
 def set_active_division(division: str | None, user: str | None = None):
     user = user or frappe.session.user
-    if not is_super_admin(user):
+    super_admin = is_super_admin(user)
+    if not super_admin and not can_switch_division(user):
         frappe.throw(
             _(
-                "Only Super Admins switch divisions; you work in your own. Ask one to move you."
+                "Only Super Admins and managers of several divisions switch; you work in your own. Ask a Super Admin to move you."
             ),
             frappe.PermissionError,
         )
-    if division and division not in user_divisions(user):
+    if not division and not super_admin:
         frappe.throw(
-            _("There's no active {0} division.").format(division),
+            _("Only Super Admins see all divisions at once. Pick one of yours."),
+            frappe.PermissionError,
+        )
+    if division and division not in switchable_divisions(user):
+        frappe.throw(
+            _("You can't switch to the {0} division.").format(division),
             frappe.PermissionError,
         )
     frappe.defaults.set_user_default(ACTIVE_DEFAULT, division or "", user)
@@ -357,6 +381,9 @@ def division_info(user: str | None = None) -> dict:
     user = user or frappe.session.user
     super_admin = is_super_admin(user)
     mine = memberships(user)
+    switchable = set(switchable_divisions(user))
+    active = active_division(user)
+    overview = overview_divisions(user)
     return {
         "divisions": [
             {
@@ -366,13 +393,18 @@ def division_info(user: str | None = None) -> dict:
                 "currency": d.currency,
                 "workspace_url": d.workspace_url,
                 "role": mine.get(d.name),
+                "can_switch": d.name in switchable,
             }
             for d in active_divisions()
             if super_admin or d.name in mine
         ],
-        "active_division": active_division(user),
+        "active_division": active,
+        # the overview and reports open on the active division when the person may see
+        # its figures; else on every division they may see
+        "overview_division": active if active in overview else None,
         "is_super_admin": super_admin,
+        "can_switch_division": can_switch_division(user),
         "can_manage_divisions": super_admin
         or any(role in MANAGE_ROLES for role in mine.values()),
-        "can_view_division_overview": bool(overview_divisions(user)),
+        "can_view_division_overview": bool(overview),
     }

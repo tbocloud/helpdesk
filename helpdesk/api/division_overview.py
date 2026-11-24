@@ -22,6 +22,41 @@ def get_overview(
 
 
 @frappe.whitelist()
+def get_lead_status(
+    division: str | None = None,
+    from_date: str | None = None,
+    to_date: str | None = None,
+    group: str | None = None,
+    status: str | None = None,
+    employee: str | None = None,
+    lead_source: str | None = None,
+) -> dict:
+    return overview_data.lead_status(
+        division or None,
+        from_date,
+        to_date,
+        group or None,
+        status or None,
+        employee or None,
+        lead_source or None,
+    )
+
+
+@frappe.whitelist()
+def get_division_cards(
+    from_date: str | None = None, to_date: str | None = None
+) -> dict:
+    return overview_data.division_cards(from_date, to_date)
+
+
+@frappe.whitelist()
+def get_division_dashboard(
+    division: str, from_date: str | None = None, to_date: str | None = None
+) -> dict:
+    return overview_data.division_dashboard(division, from_date, to_date)
+
+
+@frappe.whitelist()
 def get_reports() -> dict:
     """The reports and the divisions they can be run for."""
     overview_data.scope(None)

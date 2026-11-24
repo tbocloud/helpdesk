@@ -38,6 +38,8 @@ import LucideUserRoundCog from "~icons/lucide/user-round-cog";
 import LucideActivity from "~icons/lucide/activity";
 import LucideVideo from "~icons/lucide/video";
 import LucideFileChartColumn from "~icons/lucide/file-chart-column";
+import LucideBuilding2 from "~icons/lucide/building-2";
+import LucideChartPie from "~icons/lucide/chart-pie";
 import LucideGlobe from "~icons/lucide/globe";
 
 /** A page in the sidebar. The flags are the role rules; see `isNavItemVisible`. */
@@ -505,10 +507,25 @@ export const agentNavAreas: NavArea[] = [
         items: [
           // across divisions (docs/divisions.md)
           {
+            id: "divisions",
+            label: __("Divisions"),
+            icon: LucideBuilding2,
+            to: "DivisionsHome",
+            also: ["DivisionDashboard"],
+            divisionOverviewOnly: true,
+          },
+          {
             id: "business-overview",
             label: __("Business overview"),
             icon: LucideGlobe,
             to: "DivisionOverview",
+            divisionOverviewOnly: true,
+          },
+          {
+            id: "lead-status",
+            label: __("Lead status"),
+            icon: LucideChartPie,
+            to: "DivisionLeads",
             divisionOverviewOnly: true,
           },
           {
