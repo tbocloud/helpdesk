@@ -330,6 +330,22 @@ def _work_goes_to(customer: str) -> dict:
     }
 
 
+def _people_rows(doc) -> list[dict]:
+    """The customer's own Copilot People, as set."""
+    return [
+        {
+            "role": row.role,
+            "person": row.person,
+            "full_name": get_fullname(row.person) if row.person else "",
+            "level": row.level or people.LEVELS[0],
+            "active": bool(row.active),
+            "until": str(row.until) if row.until else "",
+            "note": row.note or "",
+        }
+        for row in doc.get(people.CUSTOMER_TABLE) or []
+    ]
+
+
 def customer_setup(customer: str) -> dict:
     """Everything the customer page's Copilot tab shows, and what the person may change."""
     frappe.has_permission(CUSTOMER, "read", customer, throw=True)
@@ -356,6 +372,11 @@ def customer_setup(customer: str) -> dict:
             "shadow": copilot_settings.is_shadow(),
         },
         "work_goes_to": _work_goes_to(customer),
+        "people": {
+            "rows": _people_rows(doc),
+            "roles": list(people.CUSTOMER_ROLES),
+            "levels": list(people.LEVELS),
+        },
         "connections": conns,
         "cards": cards,
         "checks": found,
@@ -450,6 +471,62 @@ def save_switches(customer: str, values: dict) -> dict:
         else:
             value = 1 if frappe.utils.sbool(value) else 0
         doc.set(SWITCHES[key], value)
+    doc.save()
+    return customer_setup(customer)
+
+
+def _clean_person(i: int, row) -> dict:
+    if not isinstance(row, dict):
+        frappe.throw(_("Row {0} must be an object").format(i))
+    role = row.get("role")
+    person = (row.get("person") or "").strip()
+    level = row.get("level") or people.LEVELS[0]
+    if role not in people.CUSTOMER_ROLES:
+        frappe.throw(
+            _("Row {0}: choose {1}").format(
+                i, ", ".join(_(r) for r in people.CUSTOMER_ROLES)
+            )
+        )
+    if not person:
+        frappe.throw(_("Row {0}: choose a person").format(i))
+    # Copilot's people work in TBO Support: they get its cards, approve and answer there
+    if not frappe.db.exists("HD Agent", {"user": person, "is_active": 1}):
+        frappe.throw(
+            _("Row {0}: {1} is not an active TBO Support agent").format(i, person)
+        )
+    if level not in people.LEVELS:
+        frappe.throw(_("Row {0}: unknown level {1}").format(i, level))
+    until = row.get("until") or None
+    if until:
+        until = str(frappe.utils.getdate(until))
+    return {
+        "role": role,
+        "person": person,
+        "full_name": get_fullname(person),
+        "level": level,
+        "active": 1 if frappe.utils.sbool(row.get("active", 1)) else 0,
+        "until": until,
+        "note": (row.get("note") or "").strip()[:140],
+    }
+
+
+def save_people(customer: str, rows) -> dict:
+    """The customer's own Copilot People (Developer, Fix Approver, Project Coordinator), replaced
+    as a whole through the customer's own save (people.validate_customer applies)."""
+    frappe.has_permission(CUSTOMER, "write", customer, throw=True)
+    if not isinstance(rows, list):
+        frappe.throw(_("rows must be a list"))
+    clean = [_clean_person(i, row) for i, row in enumerate(rows, 1)]
+    seen = set()
+    for row in clean:
+        key = (row["role"], row["person"])
+        if key in seen:
+            frappe.throw(
+                _("{0} is listed twice as {1}").format(row["full_name"], _(row["role"]))
+            )
+        seen.add(key)
+    doc = frappe.get_doc(CUSTOMER, customer)
+    doc.set(people.CUSTOMER_TABLE, clean)
     doc.save()
     return customer_setup(customer)
 

@@ -4447,13 +4447,13 @@ def set_customer_people(
 def make_copilot_settings(templates: dict[str, str] | None = None, **values):
     """Saves HDS Copilot Settings with `values`; `templates` maps a stage to its message text.
 
-    Shadow mode is off and customers default to the Correct level unless asked for, so a
+    Shadow mode is off and customers default to the Fix and data level unless asked for, so a
     test sees what a live customer would.
     """
     from helpdesk.copilot import people
 
     values.setdefault("shadow_mode", 0)
-    values.setdefault("default_copilot_level", "Correct")
+    values.setdefault("default_copilot_level", "Fix and data")
     # before Phase 11 a person asked for every fix and pressed every deploy; tests of that flow keep it
     values.setdefault("ask_before_every_fix", 1)
     values.setdefault("deploy_needs_a_press", 1)

@@ -92,15 +92,16 @@
             :label="__('Copilot level')"
             :options="levelOptions"
             :disabled="!data.can.switches || saving.loading"
-            :description="
-              data.copilot.shadow
-                ? __(
-                    'Shadow mode is on, so every customer stays at Diagnose only for now.'
-                  )
-                : __('How far Copilot may go on this customer\'s tickets.')
-            "
+            :description="levelHelp"
             @update:model-value="change('level', $event)"
           />
+          <p v-if="data.copilot.shadow" class="-mt-3 text-p-xs text-ink-gray-5">
+            {{
+              __(
+                "Shadow mode is on, so every customer stays at Diagnose only for now."
+              )
+            }}
+          </p>
 
           <Switch
             :model-value="data.switches.watch"
@@ -133,12 +134,24 @@
               <dt class="text-ink-gray-5">{{ __("Project Coordinator") }}</dt>
               <dd class="text-ink-gray-8">{{ coordinatorsText }}</dd>
             </dl>
-            <a
-              :href="`/app/hd-customer/${encodeURIComponent(customer)}`"
-              class="self-start text-p-sm text-ink-gray-6 underline underline-offset-2 hover:text-ink-gray-8"
+            <p v-if="data.people.rows.length" class="text-p-xs text-ink-gray-5">
+              {{
+                __(
+                  "{0} of this customer's own Copilot People set",
+                  data.people.rows.length
+                )
+              }}
+            </p>
+            <Button
+              v-if="data.can.switches"
+              class="self-start"
+              :label="__('Edit people')"
+              @click="peopleDialog = true"
             >
-              {{ __("Change Copilot People in Desk") }}
-            </a>
+              <template #prefix>
+                <LucideUsers class="size-4" aria-hidden="true" />
+              </template>
+            </Button>
           </div>
         </section>
 
@@ -395,6 +408,13 @@
       </section>
     </template>
 
+    <CopilotPeopleDialog
+      v-if="data"
+      v-model="peopleDialog"
+      :customer="customer"
+      :people="data.people"
+      @saved="setup.setData($event)"
+    />
     <SiteCardDialog
       v-model="cardDialog"
       :customer="customer"
@@ -405,6 +425,7 @@
 </template>
 
 <script setup lang="ts">
+import CopilotPeopleDialog from "@/components/copilot/CopilotPeopleDialog.vue";
 import SiteCardDialog from "@/components/copilot/SiteCardDialog.vue";
 import {
   CHECK_LOOK,
@@ -433,6 +454,7 @@ import LucideCircleX from "~icons/lucide/circle-x";
 import LucideInfo from "~icons/lucide/info";
 import LucidePlus from "~icons/lucide/plus";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
+import LucideUsers from "~icons/lucide/users";
 
 const props = defineProps<{ customer: string }>();
 
@@ -481,6 +503,27 @@ const levelOptions = computed(() => [
     value: level,
   })),
 ]);
+
+// what each level allows; each one also allows what the ones before it do
+const LEVEL_HELP: Record<string, string> = {
+  "Diagnose only": __(
+    "Diagnose only: Copilot investigates each new ticket and writes its diagnosis for the team. The customer sees nothing from Copilot."
+  ),
+  Explain: __(
+    "Explain: the customer also sees the stages on their ticket and the explanations agents send."
+  ),
+  Fix: __(
+    "Fix: Copilot also writes code fixes as pull requests. One person approves each, and Press deploys it."
+  ),
+  "Fix and data": __(
+    "Fix and data: a senior may also approve changes to the customer's settings and data, which can be undone."
+  ),
+};
+const levelHelp = computed(() => {
+  const d = data.value;
+  if (!d) return "";
+  return LEVEL_HELP[d.switches.level || d.default_level] || "";
+});
 
 function names(people: Person[]): string {
   return people.map((p) => p.name).join(", ");
@@ -547,6 +590,7 @@ function change(key: "enabled" | "level" | "watch", value: unknown) {
 
 // --- site cards ------------------------------------------------------------------------------
 
+const peopleDialog = ref(false);
 const cardDialog = ref(false);
 const cardName = ref("");
 function openCard(name: string) {

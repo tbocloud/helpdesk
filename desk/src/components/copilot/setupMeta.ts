@@ -41,6 +41,16 @@ export type SetupCard = {
 
 export type Person = { user: string; name: string };
 
+export type PeopleRow = {
+  role: string;
+  person: string;
+  full_name: string;
+  level: string;
+  active: boolean;
+  until: string;
+  note: string;
+};
+
 export type CopilotSetup = {
   customer: string;
   switches: { enabled: boolean; level: string; watch: boolean };
@@ -54,6 +64,7 @@ export type CopilotSetup = {
     coordinators: Person[];
     coordinators_from: "customer" | "common";
   };
+  people: { rows: PeopleRow[]; roles: string[]; levels: string[] };
   connections: SetupConnection[];
   cards: SetupCard[];
   checks: SetupCheck[];
