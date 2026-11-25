@@ -15,7 +15,7 @@
         </div>
 
         <div
-          v-if="setup.loading && !setup.data"
+          v-if="forCustomer && !ready && !problem"
           class="h-48 animate-pulse rounded-lg bg-surface-gray-2"
           :aria-label="__('Loading')"
         />
@@ -118,7 +118,7 @@
           variant="solid"
           :label="__('Save site card')"
           :loading="save.loading"
-          :disabled="!current"
+          :disabled="!current || setup.loading"
           @click="submit"
         />
       </div>
@@ -186,8 +186,13 @@ const setup = createResource({
     problem.value = errorText(err, __("Couldn't read the customer"));
   },
 });
+// true once the form holds this opening's values: until then the last card's values may still
+// be in it, so nothing is shown or saved (review of #351)
+const ready = ref(false);
 const current = computed(() =>
-  forCustomer.value ? (setup.data as CopilotSetup | undefined) : undefined
+  forCustomer.value && ready.value
+    ? (setup.data as CopilotSetup | undefined)
+    : undefined
 );
 const connections = computed<SetupConnection[]>(
   () => current.value?.connections ?? []
@@ -200,6 +205,7 @@ const connectionOptions = computed(() =>
 );
 
 function fill(data: CopilotSetup) {
+  ready.value = true;
   const card: SetupCard | undefined = props.cardName
     ? data.cards.find((c) => c.name === props.cardName)
     : undefined;
@@ -244,6 +250,7 @@ watch(
   [show, forCustomer],
   ([open, customer]) => {
     problem.value = "";
+    ready.value = false;
     if (open && customer) setup.reload();
   },
   { immediate: true }

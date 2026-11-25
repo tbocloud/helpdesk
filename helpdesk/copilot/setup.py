@@ -164,8 +164,17 @@ def _check(key: str, state: str, detail: str) -> dict:
 
 def checks(customer: str, enabled: bool, conns: list[dict], cards: list[dict]) -> list:
     """What the customer has and lacks, in the order a person sets it up."""
-    connected = next((c for c in conns if c["status"] == "Connected"), None)
     production = next((c for c in cards if c["environment"] == PRODUCTION), None)
+    on_card = None
+    if production and production["connection"]:
+        on_card = next(
+            (c for c in conns if c["name"] == production["connection"]), None
+        )
+    if on_card:
+        # the Production card's own connection is the one Copilot reads and checks
+        conns = [on_card]
+    # before a card: the first Connected connection
+    connected = next((c for c in conns if c["status"] == "Connected"), None)
     found = []
 
     if connected:
@@ -490,7 +499,10 @@ def _clean_person(i: int, row) -> dict:
     if not person:
         frappe.throw(_("Row {0}: choose a person").format(i))
     # Copilot's people work in TBO Support: they get its cards, approve and answer there
-    if not frappe.db.exists("HD Agent", {"user": person, "is_active": 1}):
+    # and an enabled account: people.groups leaves a disabled user out, so work would not reach them
+    if not frappe.db.exists(
+        "HD Agent", {"user": person, "is_active": 1}
+    ) or not frappe.db.get_value("User", person, "enabled"):
         frappe.throw(
             _("Row {0}: {1} is not an active TBO Support agent").format(i, person)
         )

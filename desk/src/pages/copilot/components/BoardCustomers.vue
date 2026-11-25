@@ -36,7 +36,7 @@
       :aria-label="__('Loading')"
     />
     <ErrorMessage
-      v-else-if="list.error && !list.data"
+      v-else-if="list.error"
       :message="errorText(list.error, __('Couldn\'t read the customers'))"
     />
     <template v-else>
