@@ -153,6 +153,10 @@
                 :error="health.error"
                 @retry="health.reload()"
               />
+              <CustomerCopilotTab
+                v-else-if="tab.hash === 'copilot'"
+                :customer="props.id"
+              />
             </div>
           </template>
         </Tabs>
@@ -189,6 +193,7 @@
 
 <script setup lang="ts">
 import CustomerContactTab from "@/components/customer/CustomerContactTab.vue";
+import CustomerCopilotTab from "@/components/customer/CustomerCopilotTab.vue";
 import CustomerHealthTab from "@/components/customer/CustomerHealthTab.vue";
 import CustomerProjectsTab from "@/components/customer/CustomerProjectsTab.vue";
 import CustomerSupportHoursTab from "@/components/customer/CustomerSupportHoursTab.vue";
@@ -225,6 +230,7 @@ import {
 } from "frappe-ui";
 import { computed, h, markRaw, onMounted, provide, ref } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
+import LucideBot from "~icons/lucide/bot";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleX from "~icons/lucide/circle-x";
 import LucideEllipsis from "~icons/lucide/ellipsis";
@@ -339,6 +345,13 @@ const tabs = computed(() => [
     hash: "health",
     count: undefined,
     icon: markRaw(LucideHeartPulse),
+  },
+  // TBO Copilot for this customer: its switches, site cards and what it still lacks (Phase 30)
+  {
+    label: __("Copilot"),
+    hash: "copilot",
+    count: undefined,
+    icon: markRaw(LucideBot),
   },
 ]);
 
