@@ -380,7 +380,7 @@ def check_and_ask(change_set: str):
             run.ticket,
             frappe.utils.escape_html(
                 _(
-                    "Copilot prepared a correction ({0}); it is shown only, because the customer is at the {1} level (corrections need Correct)."
+                    "Copilot prepared a correction ({0}); it is shown only, because the customer is at the {1} level (corrections need Fix and data)."
                 ).format(doc.name, copilot_settings.level_of(run.customer))
             ),
         )

@@ -113,6 +113,18 @@ class TestChecklist(SetupCase):
         )
         self.assertEqual(self.states()["press"], "done")
 
+    def test_the_client_is_checked_on_the_production_cards_connection(self):
+        # an older connection first, then the one with the new client
+        modern = make_support_connection(
+            self.customer, site_url="https://new.example.com", **NEW_CLIENT
+        ).name
+        self.assertEqual(self.states()["client"], "missing")
+
+        make_site_registry(
+            self.customer, connection=modern, site_url="https://new.example.com"
+        )
+        self.assertEqual(self.states()["client"], "done")
+
     def test_a_customer_without_a_connected_site(self):
         bare = create_customer("Setup Bare Co").name
         states = self.states(bare)
@@ -331,10 +343,14 @@ class TestPeople(SetupCase):
 
     def test_rows_that_are_refused(self):
         outsider = create_user("setup.outsider@example.com").name
+        # an agent record left active for someone whose account was disabled (offboarding)
+        gone = create_agent("setup.gone@example.com", "Setup", "Gone").name
+        frappe.db.set_value("User", gone, "enabled", 0)
         for rows in (
             [{"role": "Senior", "person": self.owner}],
             [{"role": "Developer", "person": ""}],
             [{"role": "Developer", "person": outsider}],
+            [{"role": "Developer", "person": gone}],
             [{"role": "Developer", "person": self.owner, "level": "Fallback 9"}],
             [
                 {"role": "Developer", "person": self.owner},
