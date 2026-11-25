@@ -118,7 +118,7 @@
           variant="solid"
           :label="__('Save site card')"
           :loading="save.loading"
-          :disabled="!current || setup.loading"
+          :disabled="!current"
           @click="submit"
         />
       </div>
@@ -132,6 +132,7 @@ import { __ } from "@/translation";
 import { errorText } from "@/utils";
 import {
   Button,
+  call,
   createResource,
   Dialog,
   ErrorMessage,
@@ -178,21 +179,30 @@ const form = reactive({
 });
 const problem = ref("");
 
-const setup = createResource({
-  url: `${SETUP_API}.customer`,
-  makeParams: () => ({ name: forCustomer.value }),
-  onSuccess: (data: CopilotSetup) => fill(data),
-  onError: (err: unknown) => {
+// Each opening reads the customer afresh, and only the read of the current opening fills the
+// form: a slower read from an earlier opening (another card, or another customer) is ignored,
+// so its values can never be saved onto this card (review of #351). Until this opening's read
+// has filled the form, nothing is shown and Save stays off.
+let opening = 0;
+const loaded = ref<CopilotSetup | null>(null);
+const ready = computed(() => !!loaded.value);
+
+async function load(customer: string, mine: number) {
+  try {
+    const data = (await call(`${SETUP_API}.customer`, {
+      name: customer,
+    })) as CopilotSetup;
+    if (mine !== opening) return;
+    fill(data);
+    loaded.value = data;
+  } catch (err) {
+    if (mine !== opening) return;
     problem.value = errorText(err, __("Couldn't read the customer"));
-  },
-});
-// true once the form holds this opening's values: until then the last card's values may still
-// be in it, so nothing is shown or saved (review of #351)
-const ready = ref(false);
+  }
+}
+
 const current = computed(() =>
-  forCustomer.value && ready.value
-    ? (setup.data as CopilotSetup | undefined)
-    : undefined
+  forCustomer.value ? loaded.value ?? undefined : undefined
 );
 const connections = computed<SetupConnection[]>(
   () => current.value?.connections ?? []
@@ -205,7 +215,6 @@ const connectionOptions = computed(() =>
 );
 
 function fill(data: CopilotSetup) {
-  ready.value = true;
   const card: SetupCard | undefined = props.cardName
     ? data.cards.find((c) => c.name === props.cardName)
     : undefined;
@@ -247,11 +256,13 @@ watch(
 );
 
 watch(
-  [show, forCustomer],
+  [show, forCustomer, () => props.cardName],
   ([open, customer]) => {
+    // a new opening (or a closed dialog) makes every earlier read stale
+    opening += 1;
     problem.value = "";
-    ready.value = false;
-    if (open && customer) setup.reload();
+    loaded.value = null;
+    if (open && customer) load(customer, opening);
   },
   { immediate: true }
 );
