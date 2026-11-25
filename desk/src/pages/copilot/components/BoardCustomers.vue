@@ -176,12 +176,12 @@ import { errorText } from "@/utils";
 import {
   Badge,
   Button,
-  createResource,
+  call,
   ErrorMessage,
   FormControl,
   TabButtons,
 } from "frappe-ui";
-import { computed, ref, watch } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 import LucideInfo from "~icons/lucide/info";
 import { useBoardRefresh } from "../boardMeta";
 
@@ -193,12 +193,35 @@ const filters = [
   { label: __("Not ready"), value: "not_ready" },
 ];
 
-const list = createResource({
-  url: `${SETUP_API}.customers`,
-  makeParams: () => ({ show: show.value }),
-  auto: true,
+// Only the latest request fills the table: switching filters quickly must never leave the
+// answer of an earlier filter on screen (review of #351).
+const list = reactive({
+  loading: false,
+  data: null as SetupRow[] | null,
+  error: null as unknown,
+  reload: load,
 });
-watch(show, () => list.reload());
+let latest = 0;
+
+async function load() {
+  const mine = ++latest;
+  list.loading = true;
+  try {
+    const data = (await call(`${SETUP_API}.customers`, {
+      show: show.value,
+    })) as SetupRow[];
+    if (mine !== latest) return;
+    list.data = data;
+    list.error = null;
+  } catch (err) {
+    if (mine === latest) list.error = err;
+  } finally {
+    if (mine === latest) list.loading = false;
+  }
+}
+
+load();
+watch(show, () => load());
 useBoardRefresh(list);
 
 const rows = computed(() => {
