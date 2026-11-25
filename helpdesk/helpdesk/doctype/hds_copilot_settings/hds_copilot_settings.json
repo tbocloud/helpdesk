@@ -510,9 +510,9 @@
    "fieldname": "default_copilot_level",
    "fieldtype": "Select",
    "label": "Default Copilot level",
-   "options": "Diagnose only\nExplain\nFix\nCorrect",
+   "options": "Diagnose only\nExplain\nFix\nFix and data",
    "default": "Diagnose only",
-   "description": "For customers whose Copilot level is blank. Diagnose only: the team sees the diagnosis, the customer nothing. Explain: the customer sees the stages and the explanations agents send. Fix: Copilot also writes fixes. Correct: a senior may also approve setting and data corrections. Shadow mode holds everyone at Diagnose only."
+   "description": "For customers whose Copilot level is blank. Diagnose only: the team sees the diagnosis, the customer nothing. Explain: the customer sees the stages and the explanations agents send. Fix: Copilot also writes fixes. Fix and data: a senior may also approve corrections to the customer's settings and data. Shadow mode holds everyone at Diagnose only."
   },
   {
    "fieldname": "monthly_ai_budget_usd",
@@ -853,7 +853,7 @@
  ],
  "issingle": 1,
  "links": [],
- "modified": "2026-11-18 14:00:00.000000",
+ "modified": "2026-11-25 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "Helpdesk",
  "name": "HDS Copilot Settings",

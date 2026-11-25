@@ -1,12 +1,25 @@
 <template>
   <div class="flex flex-col gap-4">
-    <div class="sm:w-72">
-      <Link
-        v-model="customer"
-        doctype="HD Customer"
-        :label="__('Customer')"
-        :placeholder="__('Every customer')"
-      />
+    <div class="flex flex-wrap items-end justify-between gap-3">
+      <div class="w-full sm:w-72">
+        <Link
+          v-model="customer"
+          doctype="HD Customer"
+          :label="__('Customer')"
+          :placeholder="__('Every customer')"
+        />
+      </div>
+      <!-- a site card says where Copilot deploys: System Managers add and change them (Phase 30) -->
+      <Button
+        v-if="canChange"
+        variant="solid"
+        :label="__('Add site card')"
+        @click="openCard(customer, '')"
+      >
+        <template #prefix>
+          <LucidePlus class="size-4" aria-hidden="true" />
+        </template>
+      </Button>
     </div>
     <div
       v-if="rows.length"
@@ -22,6 +35,13 @@
         )}`"
       >
         <template #actions>
+          <Button
+            v-if="canChange"
+            variant="ghost"
+            size="sm"
+            :label="__('Edit')"
+            @click="openCard(site.customer, site.name)"
+          />
           <a
             :href="site.link"
             class="rounded text-p-sm text-ink-gray-6 hover:text-ink-gray-8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
@@ -119,16 +139,25 @@
       class="h-40 animate-pulse rounded-xl border border-outline-gray-2 bg-surface-gray-1"
     />
     <ErrorMessage v-else-if="sites.error" :message="errorText(sites.error)" />
+    <SiteCardDialog
+      v-model="cardDialog"
+      :customer="cardCustomer || undefined"
+      :card-name="cardName || undefined"
+      @saved="sites.reload()"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { Link } from "@/components";
+import SiteCardDialog from "@/components/copilot/SiteCardDialog.vue";
 import SectionCard from "@/components/SectionCard.vue";
+import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
-import { Badge, createResource, ErrorMessage } from "frappe-ui";
+import { Badge, Button, createResource, ErrorMessage } from "frappe-ui";
 import { computed, ref, watch } from "vue";
+import LucidePlus from "~icons/lucide/plus";
 import { BOARD_API, useBoardRefresh } from "../boardMeta";
 
 type Site = {
@@ -155,4 +184,15 @@ const sites = createResource({
 watch(customer, () => sites.reload());
 useBoardRefresh(sites);
 const rows = computed(() => (sites.data as Site[] | undefined) || []);
+
+const auth = useAuthStore();
+const canChange = computed(() => auth.isAdmin);
+const cardDialog = ref(false);
+const cardCustomer = ref("");
+const cardName = ref("");
+function openCard(forCustomer: string, name: string) {
+  cardCustomer.value = forCustomer;
+  cardName.value = name;
+  cardDialog.value = true;
+}
 </script>

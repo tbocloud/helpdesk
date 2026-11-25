@@ -74,6 +74,7 @@
           <BoardApprovals v-else-if="tab === 'approvals'" />
           <BoardReleases v-else-if="tab === 'releases'" />
           <BoardSites v-else-if="tab === 'sites'" />
+          <BoardCustomers v-else-if="tab === 'customers'" />
           <BoardKnownIssues v-else />
         </div>
       </div>
@@ -95,6 +96,7 @@ import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideScanSearch from "~icons/lucide/scan-search";
 import { BOARD_API, useBoardRefresh } from "./boardMeta";
 import BoardApprovals from "./components/BoardApprovals.vue";
+import BoardCustomers from "./components/BoardCustomers.vue";
 import BoardKnownIssues from "./components/BoardKnownIssues.vue";
 import BoardReleases from "./components/BoardReleases.vue";
 import BoardSites from "./components/BoardSites.vue";
@@ -117,7 +119,14 @@ type Summary = {
   month_budget_usd?: number;
 };
 
-const TABS = ["work", "approvals", "releases", "sites", "issues"] as const;
+const TABS = [
+  "work",
+  "approvals",
+  "releases",
+  "sites",
+  "customers",
+  "issues",
+] as const;
 type Tab = typeof TABS[number];
 
 const route = useRoute();
@@ -130,6 +139,8 @@ const tabs = [
   { label: __("Approvals"), value: "approvals" },
   { label: __("Releases"), value: "releases" },
   { label: __("Sites"), value: "sites" },
+  // adding a customer to Copilot: who is ready, and what each still lacks (Phase 30)
+  { label: __("Customers"), value: "customers" },
   { label: __("Known issues"), value: "issues" },
 ];
 function go(value: string) {
