@@ -788,7 +788,9 @@ def add_lead(counts: dict, row: dict):
 
 
 def with_conversion(counts: dict) -> dict:
-    counts["conversion_rate"] = rate(counts["won"] + counts["converted"], counts["total"])
+    counts["conversion_rate"] = rate(
+        counts["won"] + counts["converted"], counts["total"]
+    )
     return counts
 
 
@@ -830,10 +832,13 @@ def lead_status(
             expected += flt(r.expected)
         won_value += flt(r.won_value)
         entry = statuses.setdefault(
-            r.status, {"status": r.status, "group": r.group, "total": 0, "divisions": {}}
+            r.status,
+            {"status": r.status, "group": r.group, "total": 0, "divisions": {}},
         )
         entry["total"] += r["count"]
-        entry["divisions"][r.division] = entry["divisions"].get(r.division, 0) + r["count"]
+        entry["divisions"][r.division] = (
+            entry["divisions"].get(r.division, 0) + r["count"]
+        )
         add_lead(
             people.setdefault(
                 (r.division, r.employee or ""),
@@ -843,7 +848,8 @@ def lead_status(
         )
         add_lead(
             lead_sources.setdefault(
-                r.lead_source or "", {"lead_source": r.lead_source or "", **lead_counts()}
+                r.lead_source or "",
+                {"lead_source": r.lead_source or "", **lead_counts()},
             ),
             r,
         )
@@ -852,14 +858,18 @@ def lead_status(
 
     names = {d.name: d.division_name for d in meta}
     employees = {r.employee for r in all_rows if r.employee}
-    full_names = dict(
-        frappe.get_all(
-            "User",
-            filters={"name": ("in", list(employees))},
-            fields=["name", "full_name"],
-            as_list=True,
+    full_names = (
+        dict(
+            frappe.get_all(
+                "User",
+                filters={"name": ("in", list(employees))},
+                fields=["name", "full_name"],
+                as_list=True,
+            )
         )
-    ) if employees else {}
+        if employees
+        else {}
+    )
     order = {g: i for i, g in enumerate(LEAD_GROUPS)}
     for person in people.values():
         person["division_name"] = names[person["division"]]
@@ -895,7 +905,8 @@ def lead_status(
             for d in meta
         ],
         "statuses": sorted(
-            statuses.values(), key=lambda s: (order[s["group"]], -s["total"], s["status"])
+            statuses.values(),
+            key=lambda s: (order[s["group"]], -s["total"], s["status"]),
         ),
         "people": sorted(people.values(), key=lambda p: (-p["total"], p["name"])),
         "lead_sources": sorted(
@@ -906,10 +917,7 @@ def lead_status(
         "filters": {
             "statuses": sorted({r.status for r in all_rows}),
             "employees": sorted(
-                (
-                    {"value": e, "label": full_names.get(e) or e}
-                    for e in employees
-                ),
+                ({"value": e, "label": full_names.get(e) or e} for e in employees),
                 key=lambda e: e["label"].lower(),
             ),
             "lead_sources": sorted({r.lead_source for r in all_rows if r.lead_source}),

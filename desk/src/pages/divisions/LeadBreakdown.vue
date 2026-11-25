@@ -41,7 +41,10 @@
             :key="row.id"
             class="h-12 border-b border-outline-gray-1 last:border-0 hover:bg-surface-gray-1"
           >
-            <th scope="row" class="max-w-[14rem] pl-4 pr-3 text-left font-medium">
+            <th
+              scope="row"
+              class="max-w-[14rem] pl-4 pr-3 text-left font-medium"
+            >
               <button
                 v-if="row.key"
                 type="button"
@@ -76,9 +79,7 @@
       >
         <Button
           variant="ghost"
-          :label="
-            expanded ? __('Show fewer') : __('Show all {0}', rows.length)
-          "
+          :label="expanded ? __('Show fewer') : __('Show all {0}', rows.length)"
           :aria-expanded="expanded"
           @click="expanded = !expanded"
         />
@@ -110,7 +111,11 @@ const shown = computed(() =>
 );
 
 const count = (v: number) => formatValue("count", v, null);
-const COLUMNS: { key: string; label: string; value: (r: BreakdownRow) => string }[] = [
+const COLUMNS: {
+  key: string;
+  label: string;
+  value: (r: BreakdownRow) => string;
+}[] = [
   { key: "total", label: __("Leads"), value: (r) => count(r.total) },
   { key: "open", label: __("Open"), value: (r) => count(r.open) },
   { key: "won", label: __("Won"), value: (r) => count(r.won + r.converted) },

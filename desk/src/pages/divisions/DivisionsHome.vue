@@ -2,7 +2,9 @@
   <div class="flex h-full flex-col">
     <LayoutHeader
       :title="__('Divisions')"
-      :subtitle="__('Every division at a glance; open one for its own dashboard.')"
+      :subtitle="
+        __('Every division at a glance; open one for its own dashboard.')
+      "
     >
       <template #right-header>
         <Button
@@ -18,7 +20,10 @@
         <Button
           size="md"
           :label="__('Compare')"
-          :route="{ name: 'DivisionOverview', query: { ...route.query, division: '' } }"
+          :route="{
+            name: 'DivisionOverview',
+            query: { ...route.query, division: '' },
+          }"
         >
           <template #prefix>
             <LucideGlobe class="size-[18px]" aria-hidden="true" />
