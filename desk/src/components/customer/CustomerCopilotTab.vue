@@ -44,12 +44,6 @@
         <LucideInfo class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
         <span>
           {{ settingsNote }}
-          <a
-            href="/app/hds-copilot-settings"
-            class="underline underline-offset-2"
-          >
-            {{ __("Open HDS Copilot Settings") }}
-          </a>
         </span>
       </p>
 
