@@ -173,12 +173,12 @@ def checks(customer: str, enabled: bool, conns: list[dict], cards: list[dict]) -
             _check(
                 "connection",
                 DONE,
-                _("{0} is Connected").format(connected["site_url"])
-                + (
-                    _(" (checked {0})").format(connected["checked"])
-                    if connected["checked"]
-                    else ""
-                ),
+                # one whole sentence each: a translated string never starts or ends with a space
+                _("{0} is Connected (checked {1})").format(
+                    connected["site_url"], connected["checked"]
+                )
+                if connected["checked"]
+                else _("{0} is Connected").format(connected["site_url"]),
             )
         )
     elif conns:
