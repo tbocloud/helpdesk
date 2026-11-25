@@ -111,7 +111,9 @@
               aria-hidden="true"
             />
             <span>{{ scopeText }}</span>
-            <span v-if="syncText" class="text-ink-gray-6">· {{ syncText }}</span>
+            <span v-if="syncText" class="text-ink-gray-6"
+              >· {{ syncText }}</span
+            >
           </p>
 
           <div

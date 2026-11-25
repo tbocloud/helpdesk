@@ -24,8 +24,14 @@
       </span>
     </header>
 
-    <dl class="grid grid-cols-3 gap-px border-y border-outline-gray-1 bg-surface-gray-1">
-      <div v-for="figure in figures" :key="figure.label" class="bg-surface-base px-4 py-3">
+    <dl
+      class="grid grid-cols-3 gap-px border-y border-outline-gray-1 bg-surface-gray-1"
+    >
+      <div
+        v-for="figure in figures"
+        :key="figure.label"
+        class="bg-surface-base px-4 py-3"
+      >
         <dt class="text-xs text-ink-gray-6">{{ figure.label }}</dt>
         <dd
           class="mt-0.5 font-mono text-lg font-semibold tabular-nums"
@@ -38,7 +44,10 @@
 
     <ul class="flex flex-1 flex-col gap-2 px-5 py-4 text-p-sm text-ink-gray-7">
       <li class="flex items-center gap-2">
-        <LucideShieldUser class="size-4 shrink-0 text-ink-gray-6" aria-hidden="true" />
+        <LucideShieldUser
+          class="size-4 shrink-0 text-ink-gray-6"
+          aria-hidden="true"
+        />
         <span class="truncate">
           {{
             card.admins.length
@@ -48,7 +57,10 @@
         </span>
       </li>
       <li class="flex items-center gap-2">
-        <LucideUsers class="size-4 shrink-0 text-ink-gray-6" aria-hidden="true" />
+        <LucideUsers
+          class="size-4 shrink-0 text-ink-gray-6"
+          aria-hidden="true"
+        />
         <span>{{ peopleText }}</span>
       </li>
       <li class="flex items-center gap-2">
