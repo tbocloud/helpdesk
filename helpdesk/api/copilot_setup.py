@@ -4,6 +4,8 @@
 """Adding a customer to Copilot from the helpdesk screens (Phase 30): for agents, each change
 checked against the document's own permission (helpdesk.copilot.setup)."""
 
+import json
+
 import frappe
 
 from helpdesk.copilot import setup
@@ -29,6 +31,18 @@ def customer(name: str) -> dict:
 def save_switches(name: str, values: dict | str) -> dict:
     """Copilot Enabled, the Copilot level and Watch Errors for one customer."""
     return setup.save_switches(name, setup.parse(values))
+
+
+@frappe.whitelist(methods=["POST"])
+@agent_only
+def save_people(name: str, rows: list | str) -> dict:
+    """The customer's own Copilot People: Developer, Fix Approver, Project Coordinator."""
+    if isinstance(rows, str):
+        try:
+            rows = json.loads(rows)
+        except ValueError:
+            frappe.throw(frappe._("rows must be JSON"))
+    return setup.save_people(name, rows)
 
 
 @frappe.whitelist(methods=["POST"])

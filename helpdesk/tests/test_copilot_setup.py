@@ -287,3 +287,100 @@ class TestBoard(SetupCase):
         self.assertNotIn(self.customer, on)
         with self.assertRaises(frappe.ValidationError):
             setup.customers("everything")
+
+
+class TestPeople(SetupCase):
+    def test_the_customers_people_are_saved_and_followed(self):
+        result = setup.save_people(
+            self.customer,
+            [
+                {"role": "Developer", "person": self.owner, "level": "Main"},
+                {
+                    "role": "Fix Approver",
+                    "person": self.agent,
+                    "level": "Fallback 1",
+                    "until": "2099-01-31",
+                    "note": " cover ",
+                },
+            ],
+        )
+
+        rows = result["people"]["rows"]
+        self.assertEqual(
+            [(r["role"], r["person"], r["level"]) for r in rows],
+            [
+                ("Developer", self.owner, "Main"),
+                ("Fix Approver", self.agent, "Fallback 1"),
+            ],
+        )
+        self.assertEqual(rows[1]["until"], "2099-01-31")
+        self.assertEqual(rows[1]["note"], "cover")
+        self.assertEqual(result["work_goes_to"]["developers_from"], "customer")
+        self.assertEqual(result["work_goes_to"]["developers"][0]["user"], self.owner)
+        self.assertEqual(result["work_goes_to"]["fix_approvers"][0]["user"], self.agent)
+        self.assertEqual(
+            result["people"]["roles"],
+            ["Developer", "Fix Approver", "Project Coordinator"],
+        )
+
+        # an empty list clears them, and the Ticket Owner takes the developer's place again
+        frappe.db.set_value("HD Customer", self.customer, "ticket_owner", self.agent)
+        result = setup.save_people(self.customer, [])
+        self.assertEqual(result["people"]["rows"], [])
+        self.assertEqual(result["work_goes_to"]["developers_from"], "owner")
+
+    def test_rows_that_are_refused(self):
+        outsider = create_user("setup.outsider@example.com").name
+        for rows in (
+            [{"role": "Senior", "person": self.owner}],
+            [{"role": "Developer", "person": ""}],
+            [{"role": "Developer", "person": outsider}],
+            [{"role": "Developer", "person": self.owner, "level": "Fallback 9"}],
+            [
+                {"role": "Developer", "person": self.owner},
+                {"role": "Developer", "person": self.owner, "level": "Fallback 1"},
+            ],
+        ):
+            with self.assertRaises(frappe.ValidationError, msg=rows):
+                setup.save_people(self.customer, rows)
+        self.assertFalse(
+            frappe.get_all(
+                "HDS Copilot Role Person",
+                filters={"parenttype": "HD Customer", "parent": self.customer},
+            )
+        )
+
+    def test_an_agent_cannot_change_the_people(self):
+        with self.assertRaises(frappe.PermissionError):
+            run_as_user(
+                self.agent,
+                lambda: api.save_people(
+                    self.customer,
+                    json.dumps([{"role": "Developer", "person": self.agent}]),
+                ),
+            )
+
+
+class TestLevelName(SetupCase):
+    def test_the_old_level_name_moves_over(self):
+        from helpdesk.patches.v16_0_3 import copilot_level_fix_and_data
+
+        self.assertEqual(setup.copilot_settings.CORRECT, "Fix and data")
+        frappe.db.sql(
+            "update `tabHD Customer` set custom_copilot_level = 'Correct' where name = %s",
+            self.customer,
+        )
+        frappe.db.set_single_value(
+            "HDS Copilot Settings", "default_copilot_level", "Correct"
+        )
+
+        copilot_level_fix_and_data.execute()
+
+        self.assertEqual(
+            frappe.db.get_value("HD Customer", self.customer, "custom_copilot_level"),
+            "Fix and data",
+        )
+        self.assertEqual(
+            frappe.db.get_single_value("HDS Copilot Settings", "default_copilot_level"),
+            "Fix and data",
+        )

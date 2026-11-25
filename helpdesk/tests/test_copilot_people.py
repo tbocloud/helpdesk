@@ -250,7 +250,7 @@ class TestCopilotPeople(FrappeTestCase):
         frappe.set_user(manager)
         frappe.get_doc("HD Customer", CUSTOMER).save(ignore_permissions=True)
         for change in (
-            {"custom_copilot_level": "Correct"},
+            {"custom_copilot_level": "Fix and data"},
             {"custom_copilot_enabled": 1},
         ):
             doc = frappe.get_doc("HD Customer", CUSTOMER)
@@ -263,11 +263,11 @@ class TestCopilotPeople(FrappeTestCase):
             doc.save(ignore_permissions=True)
         frappe.set_user("Administrator")
         doc = frappe.get_doc("HD Customer", CUSTOMER)
-        doc.custom_copilot_level = "Correct"
+        doc.custom_copilot_level = "Fix and data"
         doc.save(ignore_permissions=True)
         self.assertEqual(
             frappe.db.get_value("HD Customer", CUSTOMER, "custom_copilot_level"),
-            "Correct",
+            "Fix and data",
         )
 
     def test_a_hub_that_never_had_copilot_migrates_past_the_owner_patch(self):
