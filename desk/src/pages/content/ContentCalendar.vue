@@ -92,6 +92,31 @@
           </template>
         </Link>
         <Select
+          v-if="branchOptions.length"
+          v-model="filters.branch"
+          :class="[CONTROL_SELECT, 'flex-1 sm:flex-none']"
+          :options="[
+            { label: __('All branches'), value: '' },
+            ...branchOptions,
+          ]"
+          :aria-label="__('Branch')"
+        >
+          <template #trigger="{ displayValue }">
+            <span :class="CONTROL_TILE" aria-hidden="true">
+              <LucideStore class="size-3.5" />
+            </span>
+            <span
+              class="min-w-0 flex-1 truncate text-left"
+              :class="filters.branch ? 'text-ink-gray-9' : 'text-ink-gray-6'"
+              >{{ displayValue || __("All branches") }}</span
+            >
+            <LucideChevronDown
+              class="size-3.5 shrink-0 text-ink-gray-5"
+              aria-hidden="true"
+            />
+          </template>
+        </Select>
+        <Select
           v-model="filters.channel"
           :class="[CONTROL_SELECT, 'flex-1 sm:flex-none']"
           :options="[{ label: __('All channels'), value: '' }, ...platforms]"
@@ -469,7 +494,7 @@
                 @click="openPost(p.name)"
               >
                 {{ copyOf(p) }}
-                <span class="text-xs text-ink-gray-6">· {{ p.customer }}</span>
+                <span class="text-xs text-ink-gray-6">· {{ clientOf(p) }}</span>
               </button>
             </li>
           </ul>
@@ -553,6 +578,7 @@
     <AddEntryDialog
       v-model:open="addOpen"
       :customer="filters.customer"
+      :branch="filters.branch"
       :date="addDate"
       :special-day="addSpecialDay"
       @saved="refresh"
@@ -564,7 +590,11 @@
       :role="actionRole"
       @done="refresh"
     />
-    <SharePortalDialog v-model:open="shareOpen" :customer="filters.customer" />
+    <SharePortalDialog
+      v-model:open="shareOpen"
+      :customer="filters.customer"
+      :branch="filters.branch"
+    />
   </div>
 </template>
 
@@ -602,6 +632,7 @@ import LucideSheet from "~icons/lucide/sheet";
 import LucideCalendarSync from "~icons/lucide/calendar-sync";
 import LucideSparkles from "~icons/lucide/sparkles";
 import LucideStar from "~icons/lucide/star";
+import LucideStore from "~icons/lucide/store";
 import LucideCalendarX from "~icons/lucide/calendar-x";
 import LucideUser from "~icons/lucide/user";
 import LucideUsers from "~icons/lucide/users";
@@ -618,9 +649,11 @@ import {
   STATUSES,
   TEAM_ROLES,
   type TeamRole,
+  clientOf,
   copyOf,
 } from "./constants";
 import { useContentOptions } from "./contentOptions";
+import { useCustomerBranches } from "./branches";
 import { useToday } from "@/composables/today";
 import AddEntryDialog from "./components/AddEntryDialog.vue";
 import ContentBoard from "./components/ContentBoard.vue";
@@ -841,7 +874,25 @@ function shiftPeriod(by: number) {
     .format("YYYY-MM-DD");
 }
 
-const filters = reactive({ customer: "", channel: "", status: "", person: "" });
+const filters = reactive({
+  customer: "",
+  branch: "",
+  channel: "",
+  status: "",
+  person: "",
+});
+const { branchesOf } = useCustomerBranches();
+const branchOptions = computed(() =>
+  branchesOf(filters.customer, filters.branch).map((b) => ({
+    label: b.branch_name,
+    value: b.name,
+  }))
+);
+// a branch belongs to one customer, so picking another customer drops it
+watch(
+  () => filters.customer,
+  () => (filters.branch = "")
+);
 const range = ref<{ start: string; end: string } | null>(null);
 const myPostsOn = computed(() => filters.person === auth.userId);
 const userStore = useUserStore();
@@ -855,7 +906,13 @@ const personLabel = computed(() => {
 });
 const hasFilters = computed(
   () =>
-    !!(filters.customer || filters.channel || filters.status || filters.person)
+    !!(
+      filters.customer ||
+      filters.branch ||
+      filters.channel ||
+      filters.status ||
+      filters.person
+    )
 );
 
 /** Posts the chosen person is on, in any role, each listed once. */
@@ -876,6 +933,7 @@ function personQuery() {
 function baseFilters() {
   const f: Record<string, unknown> = {};
   if (filters.customer) f.customer = filters.customer;
+  if (filters.branch) f.branch = filters.branch;
   // a post can go out on several platforms; channel is only the first
   if (filters.channel) f.platforms = ["like", `%${filters.channel}%`];
   // cancelled posts stay off the calendar unless asked for
@@ -891,6 +949,7 @@ const FIELDS = [
   "channel",
   "platforms",
   "customer",
+  "branch",
   "special_day",
   "publish_on",
   "meta_publish_on",
@@ -957,13 +1016,14 @@ const monthPosts = createResource({
 const auth = useAuthStore();
 const { platforms } = useContentOptions();
 
-// festivals and national days in the period; a customer's package picks its regions
+// festivals and national days in the period; a customer's (or branch's) package picks its regions
 const occasions = createResource({
   url: "helpdesk.api.content_board.get_occasions",
   makeParams: () => ({
     start: fetchStart.value.format("YYYY-MM-DD"),
     end: fetchEnd.value.format("YYYY-MM-DD"),
     customer: filters.customer || undefined,
+    branch: filters.branch || undefined,
   }),
 });
 const occasionsInRange = computed<ContentOccasion[]>(() =>
@@ -990,7 +1050,7 @@ const events = computed(() =>
             )}`
           : ""
       }${p.meta_boosted ? ` · ${__("Boosted")}` : ""}`,
-      participant: `${p.status}${clientLabel(p.status)} · ${p.customer}`,
+      participant: `${p.status}${clientLabel(p.status)} · ${clientOf(p)}`,
       fromDate: start.format("YYYY-MM-DD"),
       toDate: start.format("YYYY-MM-DD"),
       fromTime: start.format("HH:mm"),
@@ -1023,7 +1083,7 @@ const undated = createResource({
   url: "frappe.client.get_list",
   makeParams: () => ({
     doctype: "HD Content Post",
-    fields: ["name", "title", "format", "customer"],
+    fields: ["name", "title", "format", "customer", "branch"],
     filters: {
       ...baseFilters(),
       // a cancelled post needs no date, so it never needs fixing
@@ -1075,6 +1135,7 @@ const contentTasks = createResource({
         ? range.value!.end.slice(0, 10)
         : rangeEnd.value.format("YYYY-MM-DD"),
       customer: filters.customer || undefined,
+      branch: filters.branch || undefined,
       channel: filters.channel || undefined,
       status: filters.status || undefined,
     };
@@ -1134,7 +1195,13 @@ function openMyTasks() {
 }
 
 function clearFilters() {
-  Object.assign(filters, { customer: "", channel: "", status: "", person: "" });
+  Object.assign(filters, {
+    customer: "",
+    branch: "",
+    channel: "",
+    status: "",
+    person: "",
+  });
 }
 
 // Dragging a post to another day or time reschedules it; roll back if the server refuses

@@ -27,6 +27,7 @@ HOURS_FIELDS = tuple(f"{role}_hours" for role in TEAM_FIELDS)
 ENTRY_FIELDS = (
     "title",
     "customer",
+    "branch",
     "campaign",
     "special_day",
     "format",
@@ -87,11 +88,15 @@ def add_entries(
 
 
 @frappe.whitelist()
-def get_team_defaults(customer: str) -> dict:
-    """Everyone on this customer's most recent post, by role, to pre-fill a new entry."""
+def get_team_defaults(customer: str, branch: str | None = None) -> dict:
+    """Everyone on this customer's (or branch's) most recent post, by role, to pre-fill a
+    new entry."""
+    filters = {"customer": customer}
+    if branch:
+        filters["branch"] = branch
     latest = frappe.get_list(
         "HD Content Post",
-        filters={"customer": customer},
+        filters=filters,
         pluck="name",
         order_by="creation desc",
         limit=1,
@@ -102,12 +107,12 @@ def get_team_defaults(customer: str) -> dict:
 
 
 @frappe.whitelist()
-def get_content_project(customer: str) -> dict | None:
+def get_content_project(customer: str, branch: str | None = None) -> dict | None:
     """The project this customer's post tasks go to, for the post dialogs to show:
     {name, project_name}, {name: None, hidden: True} when the caller can't read it, or
     {name: None, missing} when there is none."""
     frappe.has_permission("HD Content Post", "read", throw=True)
-    project = content_project_for(customer)
+    project = content_project_for(customer, branch)
     if not project:
         return {
             "name": None,
@@ -271,15 +276,26 @@ def user_full_names(users: set[str]) -> dict[str, str]:
 
 
 @frappe.whitelist()
-def get_occasions(start: str, end: str, customer: str | None = None) -> list[dict]:
-    """Occasions between two dates; for one customer, only its package's regions."""
+def get_occasions(
+    start: str, end: str, customer: str | None = None, branch: str | None = None
+) -> list[dict]:
+    """Occasions between two dates; for one customer (or branch), only its package's
+    regions. A branch without a plan of its own goes by the customer's."""
     frappe.has_permission("HD Content Post", "read", throw=True)
     if date_diff(end, start) > 400:
         frappe.throw(_("Pick a range of at most a year."))
     regions = None
-    if customer and frappe.db.exists("HD Content Package", customer):
+    package = (
+        branch and frappe.db.exists("HD Content Package", {"branch": branch})
+    ) or (
+        customer
+        and frappe.db.exists(
+            "HD Content Package", {"customer": customer, "branch": ("is", "not set")}
+        )
+    )
+    if package:
         regions = frappe.get_cached_doc(
-            "HD Content Package", customer
+            "HD Content Package", package
         ).occasion_regions()
     return [
         {

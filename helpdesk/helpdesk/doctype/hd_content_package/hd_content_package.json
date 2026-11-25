@@ -5,6 +5,7 @@
 	"engine": "InnoDB",
 	"field_order": [
 		"customer",
+		"branch",
 		"enabled",
 		"posts_per_month",
 		"column_break_1",
@@ -38,9 +39,18 @@
 			"label": "Customer",
 			"options": "HD Customer",
 			"reqd": 1,
-			"unique": 1,
 			"in_list_view": 1,
 			"in_standard_filter": 1
+		},
+		{
+			"fieldname": "branch",
+			"fieldtype": "Link",
+			"label": "Branch",
+			"options": "HD Customer Branch",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"set_only_once": 1,
+			"description": "A plan for one branch. Empty: the plan is for the customer as a whole."
 		},
 		{
 			"fieldname": "enabled",
@@ -196,7 +206,7 @@
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-10-04 23:00:00.000000",
+	"modified": "2026-11-25 10:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Content Package",
@@ -205,8 +215,8 @@
 	"sort_order": "DESC",
 	"states": [],
 	"track_changes": 1,
-	"autoname": "field:customer",
-	"naming_rule": "By fieldname",
+	"autoname": "",
+	"naming_rule": "By script",
 	"title_field": "customer",
 	"search_fields": "customer",
 	"permissions": [

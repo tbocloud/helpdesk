@@ -2,7 +2,12 @@ import frappe
 from frappe.sessions import get_csrf_token
 
 from helpdesk.api.config import get_config
-from helpdesk.api.content_portal import get_portal_posts, get_session, portal_enabled
+from helpdesk.api.content_portal import (
+    get_portal_posts,
+    get_session,
+    portal_enabled,
+    session_accounts,
+)
 
 no_cache = 1
 
@@ -28,16 +33,19 @@ def build_portal_data() -> dict:
     if not session:
         return {**data, "signed_in": False}
 
-    customers = session["customers"]
+    # the page calls every account a customer: a whole customer, or a branch it approves for
+    accounts = session_accounts(session)
+    if not accounts:
+        return {**data, "signed_in": False}
     requested = frappe.form_dict.get("customer")
-    customer = requested if requested in customers else customers[0]
+    account = requested if requested in accounts else accounts[0]
     return {
         **data,
         "signed_in": True,
         "email": session["email"],
-        "customers": customers,
-        "customer": customer,
-        "posts": get_portal_posts(customer),
+        "customers": accounts,
+        "customer": account,
+        "posts": get_portal_posts(account, session),
     }
 
 

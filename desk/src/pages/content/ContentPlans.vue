@@ -134,7 +134,7 @@
                   :id="`plan-${plan.name}`"
                   class="truncate text-base font-semibold text-ink-gray-9"
                 >
-                  {{ plan.customer }}
+                  {{ clientOf(plan) }}
                 </h2>
                 <p class="mt-0.5 text-[12px] text-ink-gray-6">
                   {{ __(plan.posting_days) }} ·
@@ -230,7 +230,7 @@
                 <Button
                   size="sm"
                   variant="ghost"
-                  :aria-label="__('More actions for {0}', plan.customer)"
+                  :aria-label="__('More actions for {0}', clientOf(plan))"
                 >
                   <LucideEllipsis class="size-4" aria-hidden="true" />
                 </Button>
@@ -379,7 +379,7 @@
         title: __('Delete this plan?'),
         message: __(
           'Posts already planned stay on the calendar. Nothing new is planned for {0}.',
-          deletingPlan?.customer || ''
+          deletingPlan ? clientOf(deletingPlan) : ''
         ),
         actions: [
           {
@@ -424,7 +424,7 @@ import LucidePlus from "~icons/lucide/plus";
 import LucideRepeat from "~icons/lucide/repeat";
 import LucideSparkles from "~icons/lucide/sparkles";
 import LucideTrash2 from "~icons/lucide/trash-2";
-import { TEAM_ROLES } from "./constants";
+import { clientOf, TEAM_ROLES } from "./constants";
 import OccasionDialog, { type Occasion } from "./components/OccasionDialog.vue";
 import PlanDialog, { type ContentPlan } from "./components/PlanDialog.vue";
 

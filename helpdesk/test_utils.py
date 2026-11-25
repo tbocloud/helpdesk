@@ -990,6 +990,27 @@ def make_content_project(customer: str) -> str:
     return project
 
 
+def make_customer_branch(
+    customer: str,
+    branch_name: str,
+    project: str | None = None,
+    approvers: list[str] | None = None,
+    **kwargs,
+):
+    """Creates an HD Customer Branch ("<customer> - <branch_name>"), optionally with its
+    own project and the emails that approve its posts."""
+    return frappe.get_doc(
+        {
+            "doctype": "HD Customer Branch",
+            "customer": customer,
+            "branch_name": branch_name,
+            "project": project,
+            "approvers": [{"email": email} for email in approvers or []],
+            **kwargs,
+        }
+    ).insert(ignore_permissions=True)
+
+
 def make_content_post(
     title: str, customer: str | None = None, with_project: bool = True, **kwargs
 ):

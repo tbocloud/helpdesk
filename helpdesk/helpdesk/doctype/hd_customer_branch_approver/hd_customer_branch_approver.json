@@ -1,0 +1,39 @@
+{
+	"actions": [],
+	"creation": "2026-11-25 10:00:00.000000",
+	"doctype": "DocType",
+	"editable_grid": 1,
+	"engine": "InnoDB",
+	"field_order": [
+		"email",
+		"full_name"
+	],
+	"fields": [
+		{
+			"fieldname": "email",
+			"fieldtype": "Data",
+			"label": "Email",
+			"options": "Email",
+			"reqd": 1,
+			"in_list_view": 1
+		},
+		{
+			"fieldname": "full_name",
+			"fieldtype": "Data",
+			"label": "Name",
+			"in_list_view": 1
+		}
+	],
+	"istable": 1,
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-11-25 10:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Customer Branch Approver",
+	"owner": "Administrator",
+	"permissions": [],
+	"sort_field": "creation",
+	"sort_order": "DESC",
+	"states": []
+}
