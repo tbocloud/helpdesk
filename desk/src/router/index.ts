@@ -279,6 +279,13 @@ const portalRoutes = [
     component: () => import("@/pages/sales-targets/TeamTargets.vue"),
     beforeEnter: () => useAuthStore().canAssignSalesTargets || { name: "Home" },
   },
+  // the sales team a Sales Head adds to, changes and removes from (docs/sales-team.md)
+  {
+    path: "/sales-team",
+    name: "SalesTeam",
+    component: () => import("@/pages/sales-team/SalesTeam.vue"),
+    beforeEnter: () => useAuthStore().canAssignSalesTargets || { name: "Home" },
+  },
   {
     path: "/my-targets",
     name: "MyTargets",

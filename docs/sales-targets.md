@@ -10,7 +10,7 @@ sees their own on **Sales targets**.
 
 | Role | What they get |
 | --- | --- |
-| `Sales Head` (or System Manager) | **Assign sales targets** (Sales → Team): picks people and assigns the month's targets. **Team targets** (Sales → Team): how everyone is doing against them. |
+| `Sales Head` (or System Manager) | **Assign sales targets** (Sales → Team): picks people and assigns the month's targets. **Team targets** (Sales → Team): how everyone is doing against them. **Sales team** (Sales → Team): adds, changes and removes the team's people (docs/sales-team.md). |
 | `Presales Executive`, `Sales User` | **Sales targets** (Sales): their own targets as cards, month by month, read-only. |
 
 `Sales Head` and `Presales Executive` are created on migrate (`ensure_role` in

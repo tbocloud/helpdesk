@@ -55,6 +55,7 @@ export const SALES_EMPLOYEE_ROUTES = new Set([
   "DivisionReports",
   "SalesTargets",
   "TeamTargets",
+  "SalesTeam",
   "MyTargets",
   "Expenses",
   "TeamDashboard",
