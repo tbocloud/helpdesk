@@ -47,11 +47,10 @@
               :label="__('Role')"
               :options="roleOptions"
             />
-            <Link
+            <RecordCombobox
               v-model="row.person"
               doctype="HD Agent"
               :filters="{ is_active: 1 }"
-              hide-me
               :label="__('Person')"
               :placeholder="__('Choose an agent')"
             />
@@ -108,7 +107,7 @@
         <Button
           variant="solid"
           :label="__('Save people')"
-          :loading="save.loading"
+          :loading="savingFor === opening"
           @click="submit"
         />
       </div>
@@ -117,12 +116,11 @@
 </template>
 
 <script setup lang="ts">
-import { Link } from "@/components";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
 import {
   Button,
-  createResource,
+  call,
   Dialog,
   ErrorMessage,
   FormControl,
@@ -131,6 +129,7 @@ import {
 import { computed, ref, watch } from "vue";
 import LucidePlus from "~icons/lucide/plus";
 import LucideTrash2 from "~icons/lucide/trash-2";
+import RecordCombobox from "./RecordCombobox.vue";
 import { SETUP_API, type CopilotSetup, type PeopleRow } from "./setupMeta";
 
 const props = defineProps<{
@@ -154,9 +153,12 @@ const levelOptions = computed(() =>
 );
 
 // a fresh copy each time it opens, so Cancel leaves the saved people as they were
+// each opening (and each close) is a new opening: a save from an earlier one does not close this one
+const opening = ref(0);
 watch(
   show,
   (open) => {
+    opening.value += 1;
     if (!open) return;
     problem.value = "";
     rows.value = props.people.rows.map((r) => ({
@@ -184,32 +186,35 @@ function add() {
   });
 }
 
-const save = createResource({
-  url: `${SETUP_API}.save_people`,
-  onSuccess: (data: CopilotSetup) => {
+const savingFor = ref<number | null>(null);
+
+async function submit() {
+  const mine = opening.value;
+  problem.value = "";
+  savingFor.value = mine;
+  try {
+    const data = (await call(`${SETUP_API}.save_people`, {
+      name: props.customer,
+      rows: JSON.stringify(
+        rows.value.map((r) => ({
+          role: r.role,
+          person: r.person,
+          level: r.level,
+          active: r.active ? 1 : 0,
+          until: r.until || null,
+          note: r.note,
+        }))
+      ),
+    })) as CopilotSetup;
     toast.success(__("Copilot People saved"));
     emit("saved", data);
-    show.value = false;
-  },
-  onError: (err: unknown) => {
-    problem.value = errorText(err, __("Copilot People were not saved"));
-  },
-});
-
-function submit() {
-  problem.value = "";
-  save.submit({
-    name: props.customer,
-    rows: JSON.stringify(
-      rows.value.map((r) => ({
-        role: r.role,
-        person: r.person,
-        level: r.level,
-        active: r.active ? 1 : 0,
-        until: r.until || null,
-        note: r.note,
-      }))
-    ),
-  });
+    if (mine === opening.value) show.value = false;
+  } catch (err) {
+    if (mine === opening.value) {
+      problem.value = errorText(err, __("Copilot People were not saved"));
+    }
+  } finally {
+    if (savingFor.value === mine) savingFor.value = null;
+  }
 }
 </script>

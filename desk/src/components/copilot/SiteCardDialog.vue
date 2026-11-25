@@ -2,7 +2,7 @@
   <Dialog v-model:open="show" :title="title">
     <template #default>
       <div class="flex flex-col gap-4">
-        <Link
+        <RecordCombobox
           v-if="!customer"
           v-model="chosen"
           doctype="HD Customer"
@@ -117,7 +117,7 @@
         <Button
           variant="solid"
           :label="__('Save site card')"
-          :loading="save.loading"
+          :loading="savingFor === opening"
           :disabled="!current"
           @click="submit"
         />
@@ -127,13 +127,11 @@
 </template>
 
 <script setup lang="ts">
-import { Link } from "@/components";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
 import {
   Button,
   call,
-  createResource,
   Dialog,
   ErrorMessage,
   FormControl,
@@ -147,6 +145,7 @@ import {
   type SetupCard,
   type SetupConnection,
 } from "./setupMeta";
+import RecordCombobox from "./RecordCombobox.vue";
 
 const props = defineProps<{
   /** the customer the card is for; empty: the person chooses one */
@@ -183,7 +182,7 @@ const problem = ref("");
 // form: a slower read from an earlier opening (another card, or another customer) is ignored,
 // so its values can never be saved onto this card (review of #351). Until this opening's read
 // has filled the form, nothing is shown and Save stays off.
-let opening = 0;
+const opening = ref(0);
 const loaded = ref<CopilotSetup | null>(null);
 const ready = computed(() => !!loaded.value);
 
@@ -192,11 +191,11 @@ async function load(customer: string, mine: number) {
     const data = (await call(`${SETUP_API}.customer`, {
       name: customer,
     })) as CopilotSetup;
-    if (mine !== opening) return;
+    if (mine !== opening.value) return;
     fill(data);
     loaded.value = data;
   } catch (err) {
-    if (mine !== opening) return;
+    if (mine !== opening.value) return;
     problem.value = errorText(err, __("Couldn't read the customer"));
   }
 }
@@ -259,27 +258,21 @@ watch(
   [show, forCustomer, () => props.cardName],
   ([open, customer]) => {
     // a new opening (or a closed dialog) makes every earlier read stale
-    opening += 1;
+    opening.value += 1;
     problem.value = "";
     loaded.value = null;
-    if (open && customer) load(customer, opening);
+    if (open && customer) load(customer, opening.value);
   },
   { immediate: true }
 );
 
-const save = createResource({
-  url: `${SETUP_API}.save_site_card`,
-  onSuccess: (data: CopilotSetup) => {
-    toast.success(__("Site card saved"));
-    emit("saved", data);
-    show.value = false;
-  },
-  onError: (err: unknown) => {
-    problem.value = errorText(err, __("The site card was not saved"));
-  },
-});
+// A save belongs to the opening that started it: if the dialog was closed and opened again
+// (another card) before the save answered, that answer neither closes nor marks the new one
+// (review of #351). The saved card still reaches the page, which shows the newer state.
+const savingFor = ref<number | null>(null);
 
-function submit() {
+async function submit() {
+  const mine = opening.value;
   problem.value = "";
   const values: Record<string, unknown> = {
     environment: form.environment,
@@ -290,9 +283,21 @@ function submit() {
     shared_group: form.shared_group ? 1 : 0,
   };
   if (!editing.value) values.customer_name = forCustomer.value;
-  save.submit({
-    values: JSON.stringify(values),
-    name: props.cardName || undefined,
-  });
+  savingFor.value = mine;
+  try {
+    const data = (await call(`${SETUP_API}.save_site_card`, {
+      values: JSON.stringify(values),
+      name: props.cardName || undefined,
+    })) as CopilotSetup;
+    toast.success(__("Site card saved"));
+    emit("saved", data);
+    if (mine === opening.value) show.value = false;
+  } catch (err) {
+    if (mine === opening.value) {
+      problem.value = errorText(err, __("The site card was not saved"));
+    }
+  } finally {
+    if (savingFor.value === mine) savingFor.value = null;
+  }
 }
 </script>
