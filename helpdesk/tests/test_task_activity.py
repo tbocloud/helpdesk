@@ -27,6 +27,7 @@ from helpdesk.test_utils import (
     use_date_format,
 )
 from helpdesk.utils import add_assignment, remove_assignment
+from helpdesk.work_calendar import previous_working_day
 
 CUSTOMER = "Bayt Al Khaleej Foods"
 PM = ("leena.varghese@task-activity.example", "Leena Varghese")
@@ -161,7 +162,8 @@ class TestTaskActivity(TaskActivityCase):
 
     def test_a_due_date_moved_earlier_is_its_own_item(self):
         old_due = str(frappe.db.get_value("Task", self.task, "exp_end_date"))
-        new_due = add_days(old_due, -2)
+        # a working day: a due date on a day off would be moved, and the history would show that
+        new_due = previous_working_day(add_days(old_due, -2))
         save_task_as(LEAD[0], self.task, exp_end_date=new_due)
 
         due = get_task_activity_as(DEV[0], self.task, "due")
