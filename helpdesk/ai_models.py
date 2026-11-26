@@ -1087,15 +1087,14 @@ def write_all() -> dict:
         if key:
             _key_to_gateway(account.name, key, account.base_url or "")
             keys += 1
-    models = 0
-    for name in frappe.get_all(
+    models = frappe.get_all(
         PRICING, filters={"ai_provider": ["is", "set"]}, pluck="name"
-    ):
+    )
+    for name in models:
         _write_model(name)
-        models += 1
     for job in ai_engine.DESKTOP_GATEWAY_NAMES:
         write_level(job)
-    return {**job_settings(), "written": {"keys": keys, "models": models}}
+    return {**job_settings(), "written": {"keys": keys, "models": len(models)}}
 
 
 def remove_provider(name: str) -> dict:
