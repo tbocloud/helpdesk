@@ -162,6 +162,7 @@ def job_plan(settings=None) -> list[dict]:
                 "job": job,
                 "application": ai_engine.application_of(job),
                 "label": ai_engine.purpose_label(job),
+                "gateway_name": ai_engine.DESKTOP_GATEWAY_NAMES.get(job, ""),
                 "coming": coming,
                 "own_only": job in ai_engine.OWN_MODEL_JOBS,
                 "primary": steps[0] if steps else None,
@@ -616,6 +617,8 @@ def save_job(job: str, values: dict) -> dict:
     if not changes:
         return job_settings()
     doc.save(ignore_permissions=True)
+    if job in ai_engine.DESKTOP_GATEWAY_NAMES and admin_ready():
+        write_level(job)
     for field, before, value in changes:
         frappe.get_doc(
             {
@@ -1022,6 +1025,78 @@ def _write_model(name: str) -> None:
         frappe.db.set_value(PRICING, name, "on_gateway", on, update_modified=False)
 
 
+DESKTOP_SETTINGS = "TBO Desktop Settings"
+
+
+def admin_ready() -> bool:
+    """TBO Support may write into the gateway: it has its address and an admin key."""
+    return bool(ai_gateway.base_url() and ai_gateway.admin_key())
+
+
+def _ensure_credential(account: str) -> None:
+    """The gateway can call `account`'s models: today's OpenAI section uses the gateway's own
+    key and Bedrock its AWS role; any other account's key is written as a credential when only
+    TBO Support has it (it stays here too while TBO Support calls the providers itself)."""
+    if account == ai_engine.ANTHROPIC_SLOT:
+        _section_credential()
+    if account in ai_engine.SLOTS:
+        return
+    doc = frappe.db.get_value(
+        PROVIDER, account, ["api_style", "base_url", "key_on_gateway"], as_dict=True
+    )
+    if not doc or doc.api_style == BEDROCK or doc.key_on_gateway:
+        return
+    key = get_decrypted_password(PROVIDER, account, "api_key", raise_exception=False)
+    if key:
+        ai_gateway.save_credential(account, _credential_values(key, doc.base_url or ""))
+
+
+def write_level(job: str) -> None:
+    """A desktop level on the gateway: one name (tbo-simple …) with the level's model first
+    and its backup second, so a person's key needs only the level's name and the backup
+    answers when the model can't. Without a model the name leaves the gateway."""
+    name = ai_engine.DESKTOP_GATEWAY_NAMES[job]
+    row = ai_engine.job_row(job)
+    chosen = [m for m in ((row.model, row.backup_model) if row else ()) if m]
+    try:
+        for order in (1, 2):
+            ai_gateway.delete_model(f"{name}:{order}")
+        for order, model in enumerate(chosen, start=1):
+            account = model_section(model)
+            _ensure_credential(account)
+            ai_gateway.save_model(
+                name,
+                {**gateway_params(model, account), "order": order},
+                f"{name}:{order}",
+            )
+    except ai_gateway.GatewayError as e:
+        frappe.throw(_("The gateway did not take {0}: {1}").format(name, str(e)))
+    _desktop_names(name, add=bool(chosen))
+
+
+def merged_names(text: str | None, name: str, add: bool) -> str | None:
+    """TBO Desktop Settings' list of gateway names with `name` added or taken out; None when
+    nothing changes. An empty list means tbo-default, as the desktop app module reads it."""
+    names = [line.strip() for line in (text or "").splitlines() if line.strip()]
+    names = names or ["tbo-default"]
+    if add == (name in names):
+        return None
+    names = names + [name] if add else [n for n in names if n != name]
+    return "\n".join(names)
+
+
+def _desktop_names(name: str, add: bool) -> None:
+    """The level's name in the list of names people's desktop keys may use, when the desktop
+    app module is on this site (it updates the keys of everyone signed in)."""
+    if not frappe.db.exists("DocType", DESKTOP_SETTINGS):
+        return
+    doc = frappe.get_single(DESKTOP_SETTINGS)
+    names = merged_names(doc.get("models"), name, add)
+    if names is not None:
+        doc.models = names
+        doc.save(ignore_permissions=True)
+
+
 def write_all() -> dict:
     """Everything into the gateway: the accounts' keys (then forgotten here), and every allowed
     model; a model no longer allowed leaves it."""
@@ -1042,6 +1117,8 @@ def write_all() -> dict:
     ):
         _write_model(name)
         models += 1
+    for job in ai_engine.DESKTOP_GATEWAY_NAMES:
+        write_level(job)
     return {**job_settings(), "written": {"keys": keys, "models": models}}
 
 

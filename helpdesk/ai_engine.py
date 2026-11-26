@@ -414,7 +414,7 @@ APPLICATIONS = (
     },
     {
         "name": "Desktop app",
-        "note": "The desktop assistant's levels, through the TBO AI gateway. The app follows them once the gateway connection is built with DevOps; until then the gateway's own models answer.",
+        "note": "The desktop assistant's levels. Each is written to the TBO AI gateway as tbo-simple … tbo-very-hard, its model first and its backup second; the desktop app shows them as TBO AI · Simple … Very hard once its update is installed.",
         "purposes": (
             "desktop_simple",
             "desktop_medium",
@@ -431,6 +431,13 @@ APPLICATIONS = (
         "coming": True,
     },
 )
+# a desktop level's name on the gateway, the one the desktop app asks for
+DESKTOP_GATEWAY_NAMES = {
+    "desktop_simple": "tbo-simple",
+    "desktop_medium": "tbo-medium",
+    "desktop_hard": "tbo-hard",
+    "desktop_very_hard": "tbo-very-hard",
+}
 PURPOSE_LABELS = {
     "desktop_simple": "Simple",
     "desktop_medium": "Medium",

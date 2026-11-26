@@ -214,22 +214,23 @@ def model_id(name: str) -> str:
     return MODEL_ID_PREFIX + name
 
 
-def save_model(name: str, params: dict) -> None:
-    """A model the gateway serves under `name`; written again from scratch each time."""
-    delete_model(name)
+def save_model(name: str, params: dict, key: str | None = None) -> None:
+    """A model the gateway serves under `name`; written again from scratch each time. `key`
+    tells apart several models under one name (a desktop level: its model and its backup)."""
+    delete_model(key or name)
     _admin(
         "POST",
         "/model/new",
         {
             "model_name": name,
             "litellm_params": params,
-            "model_info": {"id": model_id(name), "written_by": "TBO Support"},
+            "model_info": {"id": model_id(key or name), "written_by": "TBO Support"},
         },
     )
 
 
-def delete_model(name: str) -> None:
-    _admin("POST", "/model/delete", {"id": model_id(name)}, missing_ok=True)
+def delete_model(key: str) -> None:
+    _admin("POST", "/model/delete", {"id": model_id(key)}, missing_ok=True)
 
 
 def watch() -> str:

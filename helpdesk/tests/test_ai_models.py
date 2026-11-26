@@ -1054,6 +1054,110 @@ class TestEverythingThroughTheGateway(ModelsCase):
         self.assertEqual(sum(t["requests"] for t in totals.values()), 2)
 
 
+class TestDesktopLevels(ModelsCase):
+    def setUp(self):
+        super().setUp()
+        doc = frappe.get_doc("HDS Hub Settings")
+        doc.update(
+            {"gateway_url": GATEWAY, "gateway_admin_key": "sk-gateway-admin-0001"}
+        )
+        doc.save(ignore_permissions=True)
+        add_provider()
+        add_model("deepseek-chat", DEEPSEEK)
+        add_model("gpt-test-model", "OpenAI")
+        self.admin = patch("requests.request", return_value=answered())
+        self.calls = self.admin.start()
+        self.addCleanup(self.admin.stop)
+
+    def sent(self, path):
+        return [
+            c.kwargs["json"]
+            for c in self.calls.call_args_list
+            if c.args[1] == GATEWAY + path
+        ]
+
+    def test_a_level_is_one_gateway_name_with_its_model_then_its_backup(self):
+        from frappe.utils.password import get_decrypted_password
+
+        result = ai_models.save_job(
+            "desktop_simple",
+            {"model": "deepseek-chat", "backup_model": "gpt-test-model"},
+        )
+
+        self.assertEqual(
+            self.sent("/model/delete"),
+            [
+                {"id": "tbo-support:tbo-simple:1"},
+                {"id": "tbo-support:tbo-simple:2"},
+                {"id": "tbo-support:tbo-simple:1"},
+                {"id": "tbo-support:tbo-simple:2"},
+            ],
+        )
+        written = self.sent("/model/new")
+        self.assertEqual(
+            [w["model_name"] for w in written], ["tbo-simple", "tbo-simple"]
+        )
+        self.assertEqual(
+            [w["litellm_params"] for w in written],
+            [
+                {
+                    "model": "openai/deepseek-chat",
+                    "litellm_credential_name": DEEPSEEK,
+                    "order": 1,
+                },
+                {
+                    "model": "openai/gpt-test-model",
+                    "api_key": "os.environ/OPENAI_API_KEY",
+                    "order": 2,
+                },
+            ],
+        )
+        self.assertEqual(
+            [w["model_info"]["id"] for w in written],
+            ["tbo-support:tbo-simple:1", "tbo-support:tbo-simple:2"],
+        )
+        # DeepSeek's key reached the gateway; TBO Support still calls DeepSeek itself, so it keeps it too
+        self.assertEqual(self.sent("/credentials")[0]["credential_name"], DEEPSEEK)
+        self.assertTrue(
+            get_decrypted_password(
+                "HDS AI Provider", DEEPSEEK, "api_key", raise_exception=False
+            )
+        )
+        simple = next(j for j in result["jobs"] if j["job"] == "desktop_simple")
+        self.assertEqual(simple["gateway_name"], "tbo-simple")
+
+    def test_a_cleared_level_leaves_the_gateway(self):
+        ai_models.save_job("desktop_hard", {"model": "deepseek-chat"})
+        self.calls.reset_mock()
+
+        ai_models.save_job("desktop_hard", {"model": ""})
+
+        self.assertEqual(
+            self.sent("/model/delete"),
+            [{"id": "tbo-support:tbo-hard:1"}, {"id": "tbo-support:tbo-hard:2"}],
+        )
+        self.assertEqual(self.sent("/model/new"), [])
+
+    def test_without_an_admin_key_nothing_is_sent(self):
+        frappe.db.set_single_value("HDS Hub Settings", "gateway_url", "")
+        ai_models.save_job("desktop_medium", {"model": "deepseek-chat"})
+        self.assertEqual(self.calls.call_count, 0)
+        self.assertEqual(ai_engine.job_row("desktop_medium").model, "deepseek-chat")
+
+    def test_the_names_peoples_desktop_keys_may_use(self):
+        self.assertEqual(
+            ai_models.merged_names("", "tbo-simple", True), "tbo-default\ntbo-simple"
+        )
+        self.assertIsNone(
+            ai_models.merged_names("tbo-default\ntbo-simple", "tbo-simple", True)
+        )
+        self.assertEqual(
+            ai_models.merged_names("tbo-default\ntbo-simple", "tbo-simple", False),
+            "tbo-default",
+        )
+        self.assertIsNone(ai_models.merged_names("tbo-default", "tbo-hard", False))
+
+
 FULL_MARKS = [{**REPORT[0]}, {**REPORT[1], "right": True}]
 
 
