@@ -373,7 +373,8 @@ def _key_alias(row: dict) -> str:
 
 def real_model(row: dict) -> str:
     """The model behind the gateway's name, without the provider's prefix:
-    `openai/gpt-5.6-luna` is gpt-5.6-luna, `bedrock/converse/deepseek.v3.2` is deepseek.v3.2."""
+    `openai/gpt-5.6-luna` is gpt-5.6-luna; an older Bedrock row's `bedrock/converse/deepseek.v3.2`
+    is deepseek.v3.2."""
     model = str(row.get("model") or "").strip()
     return model.rsplit("/", 1)[-1] if model else ""
 

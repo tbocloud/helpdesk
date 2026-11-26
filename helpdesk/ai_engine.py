@@ -635,7 +635,7 @@ def account_provider(account: str, model: str, settings=None) -> AIProvider | No
         ["name", "api_style", "base_url", "enabled", "json_mode"],
         as_dict=True,
     )
-    if not doc or not doc.enabled or doc.api_style == "AWS Bedrock":
+    if not doc or not doc.enabled:
         return None
     from frappe.utils.password import get_decrypted_password
 

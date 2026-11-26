@@ -24,8 +24,8 @@ class HDSAIProvider(Document):
             frappe.throw(
                 _("Use an https:// address, so the API key isn't sent in the clear.")
             )
-        # Anthropic's own API needs no address, and AWS Bedrock is reached through the gateway
-        if not url and self.api_style not in ("Anthropic", "AWS Bedrock"):
+        # Anthropic's own API needs no address
+        if not url and self.api_style != "Anthropic":
             frappe.throw(_("Give the provider's API address."))
         self.base_url = url
 

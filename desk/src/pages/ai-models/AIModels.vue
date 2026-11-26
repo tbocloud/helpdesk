@@ -1801,18 +1801,6 @@
             :options="STYLE_OPTIONS"
           />
           <FormControl
-            v-if="prov.style === 'AWS Bedrock'"
-            v-model="prov.region"
-            type="text"
-            :label="__('AWS region')"
-            :description="
-              __(
-                'Reached through the TBO AI gateway only; its AWS role signs the calls, so there is no key.'
-              )
-            "
-          />
-          <FormControl
-            v-if="prov.style !== 'AWS Bedrock'"
             v-model="prov.url"
             type="text"
             :label="__('Address')"
@@ -1823,7 +1811,6 @@
             "
           />
           <FormControl
-            v-if="prov.style !== 'AWS Bedrock'"
             v-model="prov.key"
             type="password"
             :label="__('API key')"
@@ -1995,7 +1982,6 @@ const STYLE_OPTIONS = [
   "OpenAI-compatible",
   "Anthropic",
   "Anthropic-compatible",
-  "AWS Bedrock",
 ].map((style) => ({ label: style, value: style }));
 // the changes that can give a Copilot job another first model
 const MODEL_FIELDS = [
@@ -2150,7 +2136,6 @@ type Provider = {
   section: boolean;
   style: string;
   url: string;
-  region?: string;
   key_set: boolean;
   key_on_gateway?: boolean;
   enabled: boolean;
@@ -2181,7 +2166,6 @@ type Preset = {
   style: string;
   url: string;
   note: string;
-  region?: string;
 };
 type Guard = {
   job: string;
@@ -2699,7 +2683,6 @@ function askTwice(name: string) {
   return false;
 }
 function keyLabel(p: Provider) {
-  if (p.style === "AWS Bedrock") return __("the gateway's AWS role");
   if (!p.key_set) return __("none yet");
   const where = p.key_on_gateway ? __("on the gateway") : __("saved");
   return p.enabled ? where : __("{0}, off", where);
@@ -2725,7 +2708,6 @@ const prov = reactive({
   jsonMode: true,
   enabled: true,
   note: "",
-  region: "ap-south-1",
 });
 const presetOptions = computed(() => [
   ...(settings.value?.presets || []).map((p) => ({
@@ -2742,7 +2724,6 @@ function usePreset(name: string) {
     style: preset ? preset.style : "OpenAI-compatible",
     url: preset ? preset.url : "",
     note: preset ? preset.note : "",
-    region: preset?.region || "ap-south-1",
   });
 }
 function openProvider(p?: Provider) {
@@ -2764,7 +2745,6 @@ function openProvider(p?: Provider) {
       style: p.style,
       url: p.url,
       note: p.note,
-      region: p.region || "ap-south-1",
     });
   else usePreset(settings.value?.presets[0]?.name || "");
   provOpen.value = true;
@@ -2782,8 +2762,7 @@ async function saveProvider() {
     : {
         name: prov.name.trim(),
         style: prov.style,
-        url: prov.style === "AWS Bedrock" ? "" : prov.url,
-        region: prov.region,
+        url: prov.url,
         enabled: prov.enabled ? 1 : 0,
         json_mode: prov.jsonMode ? 1 : 0,
         note: prov.note,

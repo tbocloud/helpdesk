@@ -774,14 +774,17 @@ class TestEveryApplication(ModelsCase):
         self.assertEqual(ai_engine.job_row("desktop_medium").model, "deepseek-chat")
         self.assertEqual(ai_engine.job_row("chat").openai_model, "gpt-6-luna")
 
-    def test_a_provider_keeps_its_note_and_bedrock_is_a_preset(self):
+    def test_a_provider_keeps_its_note_and_bedrock_is_gone(self):
         result = add_provider("Mine", note="The data stays in our account.")
 
         mine = next(p for p in result["providers"] if p["name"] == "Mine")
         self.assertEqual(mine["note"], "The data stays in our account.")
         presets = {p["name"]: p for p in result["presets"]}
-        self.assertEqual(presets["AWS Bedrock"]["style"], "AWS Bedrock")
+        self.assertNotIn("AWS Bedrock", presets)
+        self.assertNotIn("AWS Bedrock", ai_models.STYLES)
         self.assertIn("China", presets["DeepSeek"]["note"])
+        with self.assertRaises(frappe.ValidationError):
+            add_provider("Bedrock", "AWS Bedrock", "", "")
 
 
 GATEWAY = "https://gw.test"
@@ -984,7 +987,6 @@ class TestEverythingThroughTheGateway(ModelsCase):
 
     def test_an_allowed_model_is_written_and_an_unticked_one_leaves(self):
         add_provider()
-        add_provider("Bedrock", "AWS Bedrock", "", "")
         add_model("deepseek-chat", DEEPSEEK)
         self.assertEqual(
             self.admin_body("/model/new"),
@@ -1006,15 +1008,6 @@ class TestEverythingThroughTheGateway(ModelsCase):
         self.assertEqual(
             self.admin_body("/model/new")["litellm_params"],
             {"model": "openai/gpt-x", "api_key": "os.environ/OPENAI_API_KEY"},
-        )
-        self.admin_calls.reset_mock()
-        add_model("deepseek.v3.2", "Bedrock")
-        self.assertEqual(
-            self.admin_body("/model/new")["litellm_params"],
-            {
-                "model": "bedrock/converse/deepseek.v3.2",
-                "aws_region_name": "ap-south-1",
-            },
         )
         self.admin_calls.reset_mock()
         ai_models.save_model({"model": "deepseek-chat", "listed": 0})

@@ -63,9 +63,8 @@ Each purpose gets a model and a backup. A new application or purpose is one entr
   on/off, whether the provider supports JSON mode and a token budget, and a note shown under its
   name, for example where its data goes. An account can be switched on or off in its row.
   - API styles: OpenAI, OpenAI-compatible, Anthropic or Anthropic-compatible.
-  - Presets fill in the address and the note:
-    - the TBO AI gateway (its address and a key come from DevOps; DeepSeek on AWS Bedrock, so
-      customer data stays in TBO's AWS account);
+  - Presets fill in the address and the note (there is no AWS Bedrock: the owner turned Bedrock
+    off on 26 Nov 2026, and DeepSeek goes through its own API):
     - DeepSeek (`https://api.deepseek.com`; data goes to DeepSeek's servers in China);
     - Qwen (`https://dashscope-intl.aliyuncs.com/compatible-mode/v1`; Alibaba Cloud's Singapore
       region, and keys work only in their own region);
@@ -151,7 +150,6 @@ one)
 | An allowed model | `/model/new` with the id `tbo-support:<model>` |
 | An unticked or removed model | `/model/delete` |
 | A model of today's OpenAI section | the gateway's own `OPENAI_API_KEY` |
-| A model of an AWS Bedrock account | `bedrock/converse/<model>` in its region, signed by the gateway's AWS role; no key, and only through the gateway |
 
 - **Write all to the gateway** writes everything again: the keys still held here (then forgotten here), and every
   model.
@@ -246,8 +244,10 @@ log:
 `/spend/logs/v2` with a read-only key and keeps totals per day, model and person in HDS Gateway
 Usage Day.
 
-The desktop app sees only TBO's names for its models, for example `tbo-default` for GPT-5.6
-Luna and `tbo-deepseek` for DeepSeek V3.2 on AWS Bedrock (the gateway's `litellm-config.yaml`).
+The desktop app sees only TBO's names for its models: `tbo-default` for GPT-5.6 Luna (the
+gateway's `litellm-config.yaml`) and the levels `tbo-simple` … `tbo-very-hard`, which this page
+writes. (Older usage rows may show `tbo-deepseek`, DeepSeek V3.2 on AWS Bedrock, removed on 26 Nov
+2026.)
 TBO Support keeps the real model (`model`, without the provider's prefix) and puts the gateway's
 name beside it (`gateway_alias`, `gateway_provider`). So the desktop app's calls add up with TBO
 Support's own calls to the same model, and the pages say "Desktop app calls it tbo-default".

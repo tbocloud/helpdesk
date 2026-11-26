@@ -693,8 +693,8 @@ PRICING = "HDS Model Pricing"
 PROVIDER = "HDS AI Provider"
 # a wrong model here changes what Copilot tells a customer or writes as a fix
 GUARDED_JOBS = ai_engine.WORKER_JOBS
-STYLES = (*ai_engine.STYLE_KINDS, "AWS Bedrock")
-BEDROCK = "AWS Bedrock"
+# no "AWS Bedrock": the owner turned Bedrock off on 2026-11-26 (DeepSeek goes through its own API)
+STYLES = tuple(ai_engine.STYLE_KINDS)
 # how the gateway names a provider's models (LiteLLM's prefixes)
 LITELLM_PREFIX = {
     "OpenAI": "openai",
@@ -724,17 +724,9 @@ PRESETS = (
         "url": ai_engine.OPENAI_BASE_URL,
         "note": "OpenAI's own API.",
     },
-    {
-        "name": "AWS Bedrock",
-        "style": "AWS Bedrock",
-        "url": "",
-        "region": "ap-south-1",
-        "note": "Amazon's AI service in TBO's own AWS account (Mumbai): DeepSeek and others, with the data kept in that account. Through the TBO AI gateway only: its AWS role signs the calls, so there is no key.",
-    },
 )
 # HDS Model Pricing's older `provider` field (cost reports), from the account's API style
 PRICING_PROVIDER = {
-    "AWS Bedrock": "OpenAI",
     "OpenAI": "OpenAI",
     "OpenAI-compatible": "OpenAI",
     "Anthropic": "Anthropic",
@@ -826,7 +818,6 @@ def provider_list(settings=None) -> list[dict]:
             "enabled",
             "json_mode",
             "notes",
-            "region",
             "key_on_gateway",
         ],
         order_by="creation asc",
@@ -834,18 +825,16 @@ def provider_list(settings=None) -> list[dict]:
         local_key = bool(
             get_decrypted_password(PROVIDER, doc.name, "api_key", raise_exception=False)
         )
-        bedrock = doc.api_style == BEDROCK
         if through_gateway:
-            ready = bool(doc.enabled and (doc.key_on_gateway or bedrock))
+            ready = bool(doc.enabled and doc.key_on_gateway)
         else:
-            ready = bool(doc.enabled and local_key and not bedrock)
+            ready = bool(doc.enabled and local_key)
         out.append(
             {
                 "name": doc.name,
                 "section": False,
                 "style": doc.api_style,
                 "url": doc.base_url or "",
-                "region": doc.region or "",
                 "key_set": local_key or bool(doc.key_on_gateway),
                 "key_on_gateway": bool(doc.key_on_gateway),
                 "enabled": bool(doc.enabled),
@@ -937,18 +926,13 @@ def save_provider(values: dict) -> dict:
         doc.provider_name = name
     moved = exists and (doc.base_url or "") != url
     doc.api_style = style
-    doc.base_url = "" if style == BEDROCK else url
-    doc.region = (
-        str(values.get("region") or doc.get("region") or "ap-south-1").strip()
-        if style == BEDROCK
-        else ""
-    )
+    doc.base_url = url
     doc.enabled = 1 if sbool(values.get("enabled", True)) else 0
     doc.json_mode = 1 if sbool(values.get("json_mode", True)) else 0
     if "note" in values:
         doc.notes = str(values.get("note") or "").strip()[:500]
     # through the gateway a key lives only there (the owner's decision for Phase 37)
-    to_gateway = ai_gateway.for_all() and style != BEDROCK
+    to_gateway = ai_gateway.for_all()
     if to_gateway and not key and doc.key_on_gateway and moved:
         frappe.throw(_("Enter the key again: the gateway keeps it with the address."))
     if key and not to_gateway:
@@ -978,20 +962,12 @@ def _key_to_gateway(account: str, key: str, url: str) -> None:
 
 def gateway_params(model: str, account: str) -> dict:
     """How the gateway calls `model` of `account`: today's OpenAI section with the gateway's own
-    OpenAI key, Bedrock with the gateway's AWS role, any other through its gateway credential."""
+    OpenAI key, any other through its gateway credential."""
     if account == ai_engine.OPENAI_SLOT:
         return {"model": f"openai/{model}", "api_key": "os.environ/OPENAI_API_KEY"}
     if account == ai_engine.ANTHROPIC_SLOT:
         return {"model": f"anthropic/{model}", "litellm_credential_name": account}
-    style, region = frappe.db.get_value(PROVIDER, account, ["api_style", "region"]) or (
-        "",
-        "",
-    )
-    if style == BEDROCK:
-        return {
-            "model": f"bedrock/converse/{model}",
-            "aws_region_name": region or "ap-south-1",
-        }
+    style = frappe.db.get_value(PROVIDER, account, "api_style") or ""
     prefix = LITELLM_PREFIX.get(style, "openai")
     return {"model": f"{prefix}/{model}", "litellm_credential_name": account}
 
@@ -1035,7 +1011,7 @@ def admin_ready() -> bool:
 
 def _ensure_credential(account: str) -> None:
     """The gateway can call `account`'s models: today's OpenAI section uses the gateway's own
-    key and Bedrock its AWS role; any other account's key is written as a credential when only
+    key; any other account's key is written as a credential when only
     TBO Support has it (it stays here too while TBO Support calls the providers itself)."""
     if account == ai_engine.ANTHROPIC_SLOT:
         _section_credential()
@@ -1044,7 +1020,7 @@ def _ensure_credential(account: str) -> None:
     doc = frappe.db.get_value(
         PROVIDER, account, ["api_style", "base_url", "key_on_gateway"], as_dict=True
     )
-    if not doc or doc.api_style == BEDROCK or doc.key_on_gateway:
+    if not doc or doc.key_on_gateway:
         return
     key = get_decrypted_password(PROVIDER, account, "api_key", raise_exception=False)
     if key:
@@ -1108,7 +1084,7 @@ def write_all() -> dict:
         key = get_decrypted_password(
             PROVIDER, account.name, "api_key", raise_exception=False
         )
-        if key and account.api_style != BEDROCK:
+        if key:
             _key_to_gateway(account.name, key, account.base_url or "")
             keys += 1
     models = 0
