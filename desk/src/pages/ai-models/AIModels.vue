@@ -1508,7 +1508,7 @@
             </div>
           </SectionCard>
 
-          <div class="grid grid-cols-1 gap-3 lg:grid-cols-3">
+          <div class="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:items-start">
             <SectionCard
               :title="__('Alerts')"
               :description="__('Checked every hour on the last hour of calls')"
@@ -1576,22 +1576,13 @@
                 }}
               </p>
             </SectionCard>
-            <SectionCard :title="__('Customer data')">
-              <p class="px-4 pb-4 text-p-sm text-ink-gray-6">
-                {{
-                  __(
-                    "DeepSeek's and Qwen's own APIs run on their own servers (DeepSeek's in China, Alibaba Cloud's in Singapore). For purposes with customer text, the safer route is DeepSeek on AWS Bedrock in TBO's own AWS account, through the TBO AI gateway."
-                  )
-                }}
-              </p>
-            </SectionCard>
           </div>
 
           <SectionCard
             :title="__('AI gateway (desktop app)')"
             :description="
               __(
-                'Read every hour with a read-only key, as totals per day. A message is never read.'
+                'The desktop app\'s AI goes through the TBO AI gateway. Every hour TBO Support reads its totals per day (calls, cost, errors, people) with a read-only key, so the desktop app\'s models show on these pages beside TBO Support\'s own. A message is never read.'
               )
             "
           >
@@ -1606,7 +1597,9 @@
                           settings.gateway.note
                         )
                       : settings.gateway.note || __("Not read yet.")
-                    : __("Off: the desktop app's models are not shown.")
+                    : __(
+                        "Off: the desktop app's models are not shown. DevOps gives the gateway's address and a read-only key."
+                      )
                 }}
               </p>
               <form
