@@ -127,8 +127,11 @@ so with an empty table every job runs as before. A change applies from the job's
   (`AIProvider.key`), so a mistyped job model pauses only that job, not its section.
 - **Phase 31:** a job row may also choose its own first section (`primary_section`) and switch
   its own fallback On or Off (`allow_fallback`); blank follows the settings. `provider_order`
-  applies them, and the AI models page (Model settings) sets them with a change history and a
-  test-set guard for the worker's jobs. See [ai-models.md](ai-models.md).
+  applies them. A job may instead have its own **model and backup** from the model list, each
+  called through its provider account (HDS AI Provider: DeepSeek, Qwen, Claude, GPT or any
+  other, each with its own key), with an optional monthly token limit per model. The AI models
+  page (Model settings) sets all of it, with a change history and a test-set guard for the
+  worker's jobs. See [ai-models.md](ai-models.md).
 - `HDSHubSettings.validate` refuses a second row for the same job (`check_job_rows`).
 - **The worker's jobs:** `run_context.models` (`ai_engine.worker_models()`) lists, for
   `investigate`, `fix` and `review`, each set-up section in the hub's order with the job's

@@ -30,27 +30,68 @@ Rows written before the deploy have only the cost. The pages show this as "recor
 - **Paused:** its circuit is open after a key, billing or model failure.
 - **Degraded:** 5% or more of its calls failed, with at least 20 calls in the period.
 - **Not used:** it has no calls in the period.
-- **Candidate:** it has no calls, and no job uses it.
+- **Candidate:** it is allowed for jobs, has no calls, and no job uses it.
 - **Healthy:** none of the above.
 
 ## Model settings
 
-- **Each job**, in HDS AI Job:
-  - `primary_section` (blank means the settings' primary);
-  - `allow_fallback` (On, Off, or blank for the settings' failover);
-  - a model for each section.
+Three parts, top to bottom. Only System Managers change them.
 
-  `ai_engine.provider_order(settings, job)` applies these, and `worker_models()` sends the same
-  order to the worker.
+**1. Providers and keys**
+- Today's two sections, OpenAI and Anthropic-compatible, stay in HDS Hub Settings and show as
+  the first two rows. Editing one here goes through `api.ai_settings.save_settings`.
+- **HDS AI Provider** adds provider accounts: name, API style, address (https), encrypted key,
+  on/off, and whether the provider supports JSON mode and a token budget.
+  - API styles: OpenAI, OpenAI-compatible, Anthropic or Anthropic-compatible.
+  - Presets fill in DeepSeek (`https://api.deepseek.com`), Qwen
+    (`https://dashscope-intl.aliyuncs.com/compatible-mode/v1`; keys work only in their own
+    region), Claude (the SDK's address) and GPT.
+  - A provider may not take a section's name.
+- **Keys:** a key is sent only to replace the saved one. The page and the API return only
+  whether one is saved.
+- **Test:** one tiny call with the provider's first model (`ai_models.test_provider`).
+
+**2. The model list** (HDS Model Pricing)
+- Each model in the list has:
+  - `ai_provider`: a section or a provider account;
+  - `listed`: allowed for jobs;
+  - `monthly_token_limit`: in millions, 0 means none;
+  - its prices.
+- **This month's use** (`ai_engine.month_tokens`) is the input plus output tokens in the usage
+  log since the 1st, TBO Support's calls and the worker's. It is cached for 5 minutes.
+- **Allowed models:** a model a job uses can't be unticked or removed.
+- **Removing:** a model that was never called and has no test-set run is deleted. Otherwise it
+  only leaves the list, and its prices stay for the cost reports.
+- **Candidate:** a listed model that no job uses.
+- **Patch:** `v16_0_3.ai_model_list_from_sections` starts the list with the models today's
+  sections use, allowed and called through their section.
+
+**3. Model and backup per job** (HDS AI Job `model`, `backup_model`)
+- **With a model set,** `ai_engine.job_chain` calls the model and then the backup, each through
+  its provider (`model_provider`, `account_provider`). A model whose provider is off or has no
+  key is skipped.
+- **With both empty,** the job follows the sections as before: `primary_section`,
+  `allow_fallback`, and a model per section.
+- **When the backup answers:** only for the failures that fail over today (balance, key, model
+  missing, rate limit, server error, timeout).
+- **A used-up monthly limit:** a model past its limit is never called
+  (`ai_engine.within_limits`). When it is the job's first model, the job stops with a clear
+  message and the backup is not used, so the limit really caps spending.
+- **Saving:** the backup needs a model and must be another model. Clearing the model clears the
+  backup too. The older Settings → AI providers page keeps both (`ai_settings.JOB_CHOICES`).
+- **The worker:** `worker_models()` sends the worker each job's providers by name and model,
+  never a key. The worker uses only the providers it holds its own key for:
+  - `TBO_PROVIDER_DEEPSEEK_API_KEY`, `_QWEN_`, `_CLAUDE_` and `_GPT_` (tbo-worker `config.ts`),
+    so DevOps adds the same providers' keys there;
+  - a model whose provider the worker has no key for goes to the backup.
+
+**Also on this view**
 - **Try:** one tiny call with the job's first model.
-- **Change history:** HDS Model Change records who changed which setting of which job, and the
-  old and new values.
-- **Guard** (`ai_models.guard`): only for `investigate`, `fix` and `review`. It compares the newest
-  test-set score of the first model after the change with that of the current one. If the new
-  model has no score or a lower one, the page asks before saving. The guard itself saves nothing.
-- **Candidates:** an HDS Model Pricing row with `candidate` ticked, added to be tested before a
-  job uses it. When a candidate is removed, its row is deleted only if nothing ever used it.
-  Otherwise only the tick goes.
+- **Change history:** HDS Model Change records the job, the setting, the old and new values, and
+  who changed it.
+- **Guard** (`ai_models.guard`): only for `investigate`, `fix` and `review`. If the job's new
+  first model has no test-set score, or a lower one than the current model, the page asks before
+  saving.
 
 ## Quality signals
 
@@ -113,6 +154,7 @@ log:
 |---|---|
 | A model is failing | a model with 10 or more calls has an error rate at or above `model_alert_error_rate` (default 20) |
 | The fallback is answering | of 10 or more answered calls, the share answered by the fallback is at or above `model_alert_fallback_rate` (default 30) |
+| A monthly limit | a model reaches 80%, and then 100%, of its monthly token limit (each once a month) |
 
 - **Off:** a limit of 0 turns that alert off.
 - **Repeats:** each model alerts at most once in 6 hours (cache key `ai_models:alerted:*`).
@@ -125,7 +167,14 @@ log:
 
 `ai_gateway.sync` runs every hour at :20 when switched on. It reads the gateway's
 `/spend/logs/v2` with a read-only key and keeps totals per day, model and person in HDS Gateway
-Usage Day. These models then appear beside TBO Support's own.
+Usage Day.
+
+The desktop app sees only TBO's names for its models, for example `tbo-default` for GPT-5.6
+Luna and `tbo-deepseek` for DeepSeek V3.2 on AWS Bedrock (the gateway's `litellm-config.yaml`).
+TBO Support keeps the real model (`model`, without the provider's prefix) and puts the gateway's
+name beside it (`gateway_alias`, `gateway_provider`). So the desktop app's calls add up with TBO
+Support's own calls to the same model, and the pages say "Desktop app calls it tbo-default".
+Which real model is behind each name is still set in the gateway's own settings.
 
 **Settings:** `gateway_url` (must be https), `gateway_viewer_key` and `gateway_sync`. A failed read
 is noted on the settings and never raised.
