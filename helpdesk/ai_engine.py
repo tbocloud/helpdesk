@@ -399,9 +399,66 @@ def job_row(job: str | None, settings=None):
     return next((r for r in settings.get("ai_jobs") or [] if r.job == job), None)
 
 
-# The AI jobs (docs/ai-providers.md, Models per job): TBO Support's own, then the Copilot worker's
-JOBS = ("triage", "draft", "summary", "task", "chat", "investigate", "fix", "review")
+# Every application that uses AI, with its purposes (docs/ai-models.md). Each purpose gets a model
+# and a backup on the AI models page; a new application or purpose is one entry here.
+APPLICATIONS = (
+    {
+        "name": "TBO Support",
+        "note": "TBO Support's own AI: triage, drafts, summaries, tasks and chat.",
+        "purposes": ("triage", "draft", "summary", "task", "chat"),
+    },
+    {
+        "name": "Copilot worker",
+        "note": "Copilot's investigations, fixes and reviews, on the worker server.",
+        "purposes": ("investigate", "fix", "review"),
+    },
+    {
+        "name": "Desktop app",
+        "note": "The desktop assistant's levels, through the TBO AI gateway. The app follows them once the gateway connection is built with DevOps; until then the gateway's own models answer.",
+        "purposes": (
+            "desktop_simple",
+            "desktop_medium",
+            "desktop_hard",
+            "desktop_very_hard",
+        ),
+        # a level has its own model or none: no sections and no fallback order
+        "own_models_only": True,
+    },
+    {
+        "name": "Inbox",
+        "note": "Facebook, Instagram, WhatsApp and email (phases 32 to 35): these purposes arrive with those phases.",
+        "purposes": ("inbox_reply", "inbox_purpose", "inbox_voice", "inbox_files"),
+        "coming": True,
+    },
+)
+PURPOSE_LABELS = {
+    "desktop_simple": "Simple",
+    "desktop_medium": "Medium",
+    "desktop_hard": "Hard",
+    "desktop_very_hard": "Very hard",
+    "inbox_reply": "Auto reply",
+    "inbox_purpose": "Purpose of a message",
+    "inbox_voice": "Voice notes",
+    "inbox_files": "Pictures and files",
+}
+# every purpose (the Models per job rows); TBO Support's own, then the Copilot worker's, then the rest
+JOBS = tuple(job for app in APPLICATIONS for job in app["purposes"])
 WORKER_JOBS = ("investigate", "fix", "review")
+OWN_MODEL_JOBS = tuple(
+    job for app in APPLICATIONS if app.get("own_models_only") for job in app["purposes"]
+)
+# shown on the page before their phase builds them; no model can be chosen yet
+COMING_JOBS = tuple(
+    job for app in APPLICATIONS if app.get("coming") for job in app["purposes"]
+)
+
+
+def application_of(job: str | None) -> str:
+    return next((a["name"] for a in APPLICATIONS if job in a["purposes"]), "")
+
+
+def purpose_label(job: str) -> str:
+    return PURPOSE_LABELS.get(job, job)
 
 
 def job_models(job: str | None, settings=None) -> dict[str, str]:
@@ -433,12 +490,17 @@ def job_chain(job: str | None = None, settings=None) -> list[AIProvider]:
     """A job with its own model (Phase 31) tries it, then its backup, each through its provider
     account; a model whose provider is off or has no key is left out. Any other job tries the
     sections in its order (`provider_order`), each with the job's model for that section,
-    leaving out sections without a key."""
+    leaving out sections without a key. A purpose with its own models only (a desktop level)
+    has nothing without one, and a coming purpose has nothing yet."""
     settings = settings or get_hub_settings()
+    if job in COMING_JOBS:
+        return []
     row = job_row(job, settings)
     if row and row.get("model"):
         chosen = (row.model, row.get("backup_model"))
         return [p for p in (model_provider(m, settings) for m in chosen if m) if p]
+    if job in OWN_MODEL_JOBS:
+        return []
     providers = configured_providers(settings)
     models = job_models(job, settings)
     return [

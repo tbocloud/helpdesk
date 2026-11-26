@@ -112,7 +112,16 @@ def save_settings(values: dict | str) -> dict:
             doc.set(fieldname, str(values[fieldname]).strip())
     if isinstance(values.get("ai_jobs"), list):
         existing = {r.job: r.as_dict() for r in doc.get("ai_jobs") or []}
-        doc.set("ai_jobs", job_rows(values["ai_jobs"], existing))
+        rows = job_rows(values["ai_jobs"], existing)
+        # the purposes this page doesn't show (the desktop levels, set on the AI models page) keep
+        # their rows; any other job not sent is cleared, as before
+        sent = {r.get("job") for r in values["ai_jobs"] if isinstance(r, dict)}
+        rows += [
+            {f: was.get(f) or "" for f in ("job", *JOB_FIELDS, *JOB_CHOICES)}
+            for job, was in existing.items()
+            if job not in sent and job in ai_engine.OWN_MODEL_JOBS
+        ]
+        doc.set("ai_jobs", rows)
     if doc.ai_provider in (ANTHROPIC, ANTHROPIC_COMPATIBLE, None, ""):
         # a base URL is what makes the Messages API endpoint Anthropic-compatible
         doc.ai_provider = ANTHROPIC_COMPATIBLE if doc.ai_base_url else ANTHROPIC

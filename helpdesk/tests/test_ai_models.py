@@ -687,6 +687,92 @@ class TestModelAndBackupPerJob(ModelsCase):
             self.assertNotIn(secret, frappe.as_json(result))
 
 
+class TestEveryApplication(ModelsCase):
+    def setUp(self):
+        super().setUp()
+        add_provider()
+        add_model("deepseek-chat", DEEPSEEK)
+        add_model("kimi-k2.6", "Anthropic-compatible")
+
+    def test_the_page_shows_every_application_and_its_purposes(self):
+        result = ai_models.job_settings()
+
+        self.assertEqual(
+            [a["name"] for a in result["applications"]],
+            ["TBO Support", "Copilot worker", "Desktop app", "Inbox"],
+        )
+        jobs = {j["job"]: j for j in result["jobs"]}
+        simple = jobs["desktop_simple"]
+        self.assertEqual(
+            (simple["application"], simple["label"]), ("Desktop app", "Simple")
+        )
+        # a level without a model leaves the gateway's own models; nothing of the sections
+        self.assertIsNone(simple["primary"])
+        self.assertTrue(jobs["inbox_reply"]["coming"])
+        self.assertIsNone(jobs["inbox_reply"]["primary"])
+        # TBO Support's jobs still follow the sections
+        self.assertEqual(jobs["triage"]["primary"]["model"], "gpt-test-model")
+
+    def test_a_desktop_level_takes_a_model_and_a_backup_only(self):
+        result = ai_models.save_job(
+            "desktop_hard", {"model": "deepseek-chat", "backup_model": "kimi-k2.6"}
+        )
+
+        hard = next(j for j in result["jobs"] if j["job"] == "desktop_hard")
+        self.assertEqual(
+            (hard["primary"]["model"], hard["fallback"]["model"]),
+            ("deepseek-chat", "kimi-k2.6"),
+        )
+        with self.assertRaises(frappe.ValidationError):
+            ai_models.save_job("desktop_hard", {"primary_section": "OpenAI"})
+        # the model list says where each model is used, per application
+        used = {m["model"]: m["used_by"] for m in result["catalog"]}
+        self.assertIn(
+            {"application": "Desktop app", "first": ["Hard"], "backup": []},
+            used["deepseek-chat"],
+        )
+        self.assertIn(
+            {"application": "Desktop app", "first": [], "backup": ["Hard"]},
+            used["kimi-k2.6"],
+        )
+        # and the comparison names the level with its application
+        listed = {m["model"]: m for m in ai_models.overview(30)["models"]}
+        self.assertIn(
+            "Desktop app: Hard", listed["deepseek-chat"]["used_for"]["primary"]
+        )
+
+    def test_an_inbox_purpose_waits_for_its_phase(self):
+        with self.assertRaises(frappe.ValidationError):
+            ai_models.save_job("inbox_reply", {"model": "deepseek-chat"})
+        with self.assertRaises(frappe.ValidationError):
+            ai_models.try_job("inbox_reply")
+        self.assertEqual(ai_engine.get_providers("inbox_reply"), [])
+
+    def test_trying_a_level_without_a_model_says_so(self):
+        self.assertIn("Choose a model", ai_models.try_job("desktop_simple")["message"])
+        self.assertEqual(ai_engine.get_providers("desktop_simple"), [])
+
+    def test_the_older_settings_page_keeps_the_desktop_levels(self):
+        from helpdesk.api import ai_settings
+
+        ai_models.save_job("desktop_medium", {"model": "deepseek-chat"})
+        ai_settings.save_settings(
+            {"ai_jobs": [{"job": "chat", "openai_model": "gpt-6-luna"}]}
+        )
+
+        self.assertEqual(ai_engine.job_row("desktop_medium").model, "deepseek-chat")
+        self.assertEqual(ai_engine.job_row("chat").openai_model, "gpt-6-luna")
+
+    def test_a_provider_keeps_its_note_and_the_gateway_is_a_preset(self):
+        result = add_provider("Mine", note="The data stays in our account.")
+
+        mine = next(p for p in result["providers"] if p["name"] == "Mine")
+        self.assertEqual(mine["note"], "The data stays in our account.")
+        presets = {p["name"]: p for p in result["presets"]}
+        self.assertIn("TBO AI gateway", presets)
+        self.assertIn("China", presets["DeepSeek"]["note"])
+
+
 FULL_MARKS = [{**REPORT[0]}, {**REPORT[1], "right": True}]
 
 

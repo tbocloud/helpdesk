@@ -120,14 +120,16 @@ def _figures(rows: list) -> dict:
 
 
 def job_plan(settings=None) -> list[dict]:
-    """Each job's providers in the order it tries them, with the model of each: its own model
-    and backup when it has them, else the sections in its order."""
+    """Each purpose's providers in the order it tries them, with the model of each: its own
+    model and backup when it has them, else the sections in its order. A desktop level without
+    a model, and a coming purpose, have none."""
     settings = settings or ai_engine.get_hub_settings()
     providers = ai_engine.configured_providers(settings)
     plan = []
     for job in ai_engine.JOBS:
         row = ai_engine.job_row(job, settings)
-        own = (row.get("model") if row else "") or ""
+        coming = job in ai_engine.COMING_JOBS
+        own = "" if coming else (row.get("model") if row else "") or ""
         if own:
             steps = [
                 {
@@ -138,6 +140,8 @@ def job_plan(settings=None) -> list[dict]:
                 for model in (own, row.get("backup_model"))
                 if model
             ]
+        elif coming or job in ai_engine.OWN_MODEL_JOBS:
+            steps = []
         else:
             models = ai_engine.job_models(job, settings)
             steps = [
@@ -152,6 +156,10 @@ def job_plan(settings=None) -> list[dict]:
         plan.append(
             {
                 "job": job,
+                "application": ai_engine.application_of(job),
+                "label": ai_engine.purpose_label(job),
+                "coming": coming,
+                "own_only": job in ai_engine.OWN_MODEL_JOBS,
                 "primary": steps[0] if steps else None,
                 "fallback": steps[1] if len(steps) > 1 else None,
                 "primary_section": (row.get("primary_section") if row else "") or "",
@@ -159,10 +167,35 @@ def job_plan(settings=None) -> list[dict]:
                 "openai_model": (row.get("openai_model") if row else "") or "",
                 "anthropic_model": (row.get("anthropic_model") if row else "") or "",
                 "model": own,
-                "backup_model": (row.get("backup_model") if row else "") or "",
+                "backup_model": ""
+                if coming
+                else (row.get("backup_model") if row else "") or "",
             }
         )
     return plan
+
+
+def _purpose_name(job: dict) -> str:
+    """A purpose as the pages name it: TBO Support's and the worker's by their job, the others
+    with their application, for example "Desktop app: Simple"."""
+    if job["application"] in ("TBO Support", "Copilot worker"):
+        return job["job"]
+    return f"{job['application']}: {job['label']}"
+
+
+def _used_by(plan: list[dict]) -> dict[str, list[dict]]:
+    """Per model, one entry per application: the purposes that use it first, and those it
+    backs up."""
+    out: dict[str, dict] = {}
+    for job in plan:
+        for role, step in (("first", job["primary"]), ("backup", job["fallback"])):
+            if step and step["model"]:
+                entry = out.setdefault(step["model"], {}).setdefault(
+                    job["application"],
+                    {"application": job["application"], "first": [], "backup": []},
+                )
+                entry[role].append(job["label"])
+    return {model: list(apps.values()) for model, apps in out.items()}
 
 
 def _section_model(slot: str, settings, providers) -> str:
@@ -181,7 +214,7 @@ def _used_for(plan: list[dict]) -> dict[str, dict]:
             if step and step["model"]:
                 used.setdefault(step["model"], {"primary": [], "fallback": []})[
                     role
-                ].append(job["job"])
+                ].append(_purpose_name(job))
     return used
 
 
@@ -421,6 +454,15 @@ def job_settings(days: int = 30) -> dict:
             or ai_engine.ANTHROPIC_SLOT,
             "failover": bool(settings.get("ai_failover")),
         },
+        "applications": [
+            {
+                "name": app["name"],
+                "note": _(app["note"]),
+                "coming": bool(app.get("coming")),
+                "own_only": bool(app.get("own_models_only")),
+            }
+            for app in ai_engine.APPLICATIONS
+        ],
         "providers": provider_list(settings),
         "catalog": catalog(plan),
         "presets": list(PRESETS),
@@ -471,7 +513,16 @@ SETTING_LABELS = {
 def _clean_job(job: str, values: dict) -> dict:
     if job not in ai_engine.JOBS:
         frappe.throw(_("Unknown AI job {0}").format(job))
-    unknown = set(values) - set(JOB_SETTINGS)
+    if job in ai_engine.COMING_JOBS:
+        frappe.throw(
+            _("{0} comes with its phase; its model is chosen then.").format(
+                ai_engine.purpose_label(job)
+            )
+        )
+    allowed = (
+        ("model", "backup_model") if job in ai_engine.OWN_MODEL_JOBS else JOB_SETTINGS
+    )
+    unknown = set(values) - set(allowed)
     if unknown:
         frappe.throw(_("{0} cannot be changed here").format(", ".join(sorted(unknown))))
     clean = {k: str(v or "").strip() for k, v in values.items()}
@@ -585,8 +636,17 @@ def try_job(job: str) -> dict:
         frappe.throw(
             _("Only System Managers test a job's model."), frappe.PermissionError
         )
-    if job not in ai_engine.JOBS:
+    if job not in ai_engine.JOBS or job in ai_engine.COMING_JOBS:
         frappe.throw(_("Unknown AI job {0}").format(job))
+    if job in ai_engine.OWN_MODEL_JOBS and not (ai_engine.job_row(job) or {}).get(
+        "model"
+    ):
+        return {
+            "ok": False,
+            "message": _("Choose a model for {0} first.").format(
+                ai_engine.purpose_label(job)
+            ),
+        }
     providers = ai_engine.get_providers(job)
     if not providers:
         return {
@@ -630,17 +690,30 @@ STYLES = tuple(ai_engine.STYLE_KINDS)
 # what "Add a provider" fills in; the Copilot worker knows the same names (tbo-worker config.ts)
 PRESETS = (
     {
+        "name": "TBO AI gateway",
+        "style": "OpenAI-compatible",
+        "url": "",
+        "note": "TBO's own gateway: DeepSeek on AWS Bedrock in TBO's AWS account, so the data stays there. Its address and a key come from DevOps.",
+    },
+    {
         "name": "DeepSeek",
         "style": "OpenAI-compatible",
         "url": "https://api.deepseek.com",
+        "note": "DeepSeek's own API: the data goes to DeepSeek's servers in China.",
     },
     {
         "name": "Qwen",
         "style": "OpenAI-compatible",
         "url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+        "note": "Alibaba Cloud's API: the data goes to its Singapore region. A key works only in its own region.",
     },
-    {"name": "Claude", "style": "Anthropic", "url": ""},
-    {"name": "GPT", "style": "OpenAI", "url": ai_engine.OPENAI_BASE_URL},
+    {"name": "Claude", "style": "Anthropic", "url": "", "note": "Anthropic's own API."},
+    {
+        "name": "GPT",
+        "style": "OpenAI",
+        "url": ai_engine.OPENAI_BASE_URL,
+        "note": "OpenAI's own API.",
+    },
 )
 # HDS Model Pricing's older `provider` field (cost reports), from the account's API style
 PRICING_PROVIDER = {
@@ -722,11 +795,12 @@ def provider_list(settings=None) -> list[dict]:
                 "json_mode": slot == ai_engine.OPENAI_SLOT,
                 "default_model": _section_model(slot, settings, ready),
                 "models": listed.count(slot),
+                "note": "",
             }
         )
     for doc in frappe.get_all(
         PROVIDER,
-        fields=["name", "api_style", "base_url", "enabled", "json_mode"],
+        fields=["name", "api_style", "base_url", "enabled", "json_mode", "notes"],
         order_by="creation asc",
     ):
         key_set = bool(
@@ -744,6 +818,7 @@ def provider_list(settings=None) -> list[dict]:
                 "json_mode": bool(doc.json_mode),
                 "default_model": "",
                 "models": listed.count(doc.name),
+                "note": doc.notes or "",
             }
         )
     return out
@@ -754,6 +829,7 @@ def catalog(plan: list[dict] | None = None) -> list[dict]:
     monthly limit and this month's use, its newest test-set score and the jobs using it."""
     plan = plan or job_plan()
     used = _used_for(plan)
+    used_by = _used_by(plan)
     scores = latest_scores()
     ready = {p["name"]: p["ready"] for p in provider_list()}
     rows = frappe.get_all(
@@ -786,6 +862,7 @@ def catalog(plan: list[dict] | None = None) -> list[dict]:
                 "output_price": row.output_cost_per_1m or 0,
                 "benchmark": scores.get(row.name),
                 "used_for": jobs,
+                "used_by": used_by.get(row.name, []),
                 "in_use": bool(jobs["primary"] or jobs["fallback"]),
             }
         )
@@ -825,6 +902,8 @@ def save_provider(values: dict) -> dict:
     doc.base_url = url
     doc.enabled = 1 if sbool(values.get("enabled", True)) else 0
     doc.json_mode = 1 if sbool(values.get("json_mode", True)) else 0
+    if "note" in values:
+        doc.notes = str(values.get("note") or "").strip()[:500]
     if key:
         doc.api_key = key
     doc.save(ignore_permissions=True)

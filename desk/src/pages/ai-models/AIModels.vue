@@ -939,17 +939,17 @@
             {{
               settings.can_change
                 ? __(
-                    "Add each AI provider with its own key, allow the models TBO Support may use, then choose a model and a backup for each job."
+                    "Add each AI provider with its own key, allow the models TBO may use, then choose a model and a backup for each purpose of each application."
                   )
                 : __("Only System Managers change these.")
             }}
           </p>
 
           <SectionCard
-            :title="__('Providers and keys')"
+            :title="__('1. Providers and keys')"
             :description="
               __(
-                'A key is stored encrypted, and is never shown again or sent to the browser.'
+                'One row per provider account. A key is stored encrypted and never shown again; it never reaches the browser or the Copilot worker.'
               )
             "
           >
@@ -993,6 +993,9 @@
                       <th scope="col" class="px-3 py-1.5 font-medium">
                         {{ __("Key") }}
                       </th>
+                      <th scope="col" class="px-3 py-1.5 font-medium">
+                        {{ __("On") }}
+                      </th>
                       <th
                         scope="col"
                         class="px-3 py-1.5 text-right font-medium"
@@ -1017,10 +1020,13 @@
                         <div v-if="p.section" class="text-ink-gray-5">
                           {{
                             __(
-                              "Today's section. Default model: {0}",
+                              "Today's section, unchanged. Default model: {0}",
                               p.default_model || "-"
                             )
                           }}
+                        </div>
+                        <div v-if="p.note" class="max-w-xs text-ink-gray-6">
+                          {{ p.note }}
                         </div>
                       </td>
                       <td class="px-3 py-2">{{ p.style }}</td>
@@ -1035,6 +1041,27 @@
                           "
                           size="sm"
                         />
+                      </td>
+                      <td class="px-3 py-2">
+                        <span v-if="p.section" class="text-ink-gray-5">
+                          {{ p.ready ? __("on") : __("no key") }}
+                        </span>
+                        <Switch
+                          v-else
+                          :model-value="p.enabled"
+                          :disabled="
+                            !settings.can_change ||
+                            !p.key_set ||
+                            switching === p.name
+                          "
+                          @update:model-value="toggleProvider(p, $event)"
+                        >
+                          <template #label>
+                            <span class="sr-only">{{
+                              __("{0} on", p.name)
+                            }}</span>
+                          </template>
+                        </Switch>
                       </td>
                       <td class="px-3 py-2 text-right tabular-nums">
                         {{ p.models }}
@@ -1080,10 +1107,10 @@
           </SectionCard>
 
           <SectionCard
-            :title="__('Models')"
+            :title="__('2. Models')"
             :description="
               __(
-                'Only allowed models can be chosen for a job. A monthly token limit is optional.'
+                'Tick a model to allow it: only ticked models can be chosen for a purpose. A monthly token limit is optional; empty means none.'
               )
             "
           >
@@ -1128,7 +1155,7 @@
                         {{ __("Provider") }}
                       </th>
                       <th scope="col" class="px-3 py-1.5 font-medium">
-                        {{ __("Allowed") }}
+                        {{ __("Tick to allow") }}
                       </th>
                       <th scope="col" class="px-3 py-1.5 font-medium">
                         {{ __("Monthly limit (millions)") }}
@@ -1246,8 +1273,19 @@
                       <td class="px-3 py-2 text-right tabular-nums">
                         {{ m.benchmark ? pct(m.benchmark.accuracy) : "-" }}
                       </td>
-                      <td class="px-3 py-2">
-                        <span v-if="m.in_use">{{ usedByText(m) }}</span>
+                      <td class="min-w-[16rem] px-3 py-2">
+                        <template v-if="m.used_by.length">
+                          <div
+                            v-for="u in m.used_by"
+                            :key="u.application"
+                            class="leading-5"
+                          >
+                            <span class="text-base-medium text-ink-gray-8"
+                              >{{ __(u.application) }}:</span
+                            >
+                            {{ usedByLine(u) }}
+                          </div>
+                        </template>
                         <Badge
                           v-else-if="m.listed"
                           :label="__('Candidate')"
@@ -1289,10 +1327,10 @@
           </SectionCard>
 
           <SectionCard
-            :title="__('Model and backup for each job')"
+            :title="__('3. Model and backup for each purpose')"
             :description="
               __(
-                'The backup answers only when the first model\'s provider can\'t. Both empty: the job works as today.'
+                'Every application\'s purposes on one page, each chosen from the same model list. The backup answers only when the first model\'s provider can\'t (no balance, key refused, rate limit, server error, no answer in time). Both empty: the purpose works as today.'
               )
             "
           >
@@ -1314,7 +1352,7 @@
                   <thead>
                     <tr class="text-left text-ink-gray-5">
                       <th scope="col" class="py-1.5 pr-3 font-medium">
-                        {{ __("Job") }}
+                        {{ __("Purpose") }}
                       </th>
                       <th scope="col" class="px-3 py-1.5 font-medium">
                         {{ __("Model") }}
@@ -1352,142 +1390,202 @@
                     </tr>
                   </thead>
                   <tbody>
-                    <tr
-                      v-for="job in settings.jobs"
-                      :key="`${job.job}-${formKey}`"
-                      class="border-t border-outline-gray-1 align-top"
+                    <template
+                      v-for="app in settings.applications"
+                      :key="app.name"
                     >
-                      <td class="py-2 pr-3">
-                        <div class="text-base-medium text-ink-gray-9">
-                          {{ job.job }}
-                        </div>
-                        <div class="text-ink-gray-5">{{ chainText(job) }}</div>
-                        <div
-                          v-if="settings.guarded_jobs.includes(job.job)"
-                          class="text-ink-gray-5"
-                        >
-                          {{
-                            job.score
-                              ? __("test set {0}", pct(job.score.accuracy))
-                              : __("not run on the test set")
-                          }}
-                        </div>
-                      </td>
-                      <td class="w-64 px-3 py-2">
-                        <FormControl
-                          type="select"
-                          :aria-label="__('Model for {0}', job.job)"
-                          :model-value="job.model"
-                          :options="jobModelOptions()"
-                          :disabled="!settings.can_change || saving"
-                          @update:model-value="save(job.job, { model: $event })"
-                        />
-                      </td>
-                      <td class="w-64 px-3 py-2">
-                        <FormControl
-                          type="select"
-                          :aria-label="__('Backup for {0}', job.job)"
-                          :model-value="job.backup_model"
-                          :options="backupOptions(job)"
-                          :disabled="
-                            !settings.can_change || saving || !job.model
-                          "
-                          @update:model-value="
-                            save(job.job, { backup_model: $event })
-                          "
-                        />
-                      </td>
-                      <td class="px-3 py-2 text-right tabular-nums">
-                        {{ job.calls.toLocaleString() }}
-                      </td>
-                      <td class="px-3 py-2 text-right tabular-nums">
-                        {{ pct(job.error_rate) }}
-                      </td>
-                      <td class="px-3 py-2 text-right tabular-nums">
-                        {{ pct(job.fallback_rate) }}
-                      </td>
-                      <td class="px-3 py-2 text-right tabular-nums">
-                        {{ money(job.cost) }}
-                      </td>
-                      <td class="py-2 pl-3 text-right">
-                        <Button
-                          v-if="settings.can_change"
-                          :label="__('Try')"
-                          :loading="trying === job.job"
-                          :disabled="!!trying"
-                          @click="tryJob(job.job)"
-                        />
-                      </td>
-                    </tr>
+                      <tr
+                        class="border-t border-outline-gray-1 bg-surface-gray-1"
+                      >
+                        <td colspan="8" class="px-3 py-2">
+                          <span class="text-base-medium text-ink-gray-9">{{
+                            __(app.name)
+                          }}</span>
+                          <span class="ml-2 text-ink-gray-5">{{
+                            app.note
+                          }}</span>
+                        </td>
+                      </tr>
+                      <tr
+                        v-for="job in jobsOf(app.name)"
+                        :key="`${job.job}-${formKey}`"
+                        class="border-t border-outline-gray-1 align-top"
+                      >
+                        <td class="py-2 pr-3">
+                          <div class="text-base-medium text-ink-gray-9">
+                            {{ __(job.label) }}
+                          </div>
+                          <div class="text-ink-gray-5">
+                            {{ chainText(job) }}
+                          </div>
+                          <div
+                            v-if="settings.guarded_jobs.includes(job.job)"
+                            class="text-ink-gray-5"
+                          >
+                            {{
+                              job.score
+                                ? __("test set {0}", pct(job.score.accuracy))
+                                : __("not run on the test set")
+                            }}
+                          </div>
+                        </td>
+                        <td class="w-64 px-3 py-2">
+                          <FormControl
+                            type="select"
+                            :aria-label="__('Model for {0}', __(job.label))"
+                            :model-value="job.model"
+                            :options="jobModelOptions(job)"
+                            :disabled="
+                              !settings.can_change || saving || job.coming
+                            "
+                            @update:model-value="
+                              save(job.job, { model: $event })
+                            "
+                          />
+                        </td>
+                        <td class="w-64 px-3 py-2">
+                          <FormControl
+                            type="select"
+                            :aria-label="__('Backup for {0}', __(job.label))"
+                            :model-value="job.backup_model"
+                            :options="backupOptions(job)"
+                            :disabled="
+                              !settings.can_change ||
+                              saving ||
+                              !job.model ||
+                              job.coming
+                            "
+                            @update:model-value="
+                              save(job.job, { backup_model: $event })
+                            "
+                          />
+                        </td>
+                        <template v-if="job.coming">
+                          <td
+                            v-for="n in 4"
+                            :key="n"
+                            class="px-3 py-2 text-right text-ink-gray-5"
+                          >
+                            -
+                          </td>
+                          <td />
+                        </template>
+                        <template v-else>
+                          <td class="px-3 py-2 text-right tabular-nums">
+                            {{ job.calls.toLocaleString() }}
+                          </td>
+                          <td class="px-3 py-2 text-right tabular-nums">
+                            {{ pct(job.error_rate) }}
+                          </td>
+                          <td class="px-3 py-2 text-right tabular-nums">
+                            {{ pct(job.fallback_rate) }}
+                          </td>
+                          <td class="px-3 py-2 text-right tabular-nums">
+                            {{ money(job.cost) }}
+                          </td>
+                          <td class="py-2 pl-3 text-right">
+                            <Button
+                              v-if="settings.can_change"
+                              :label="__('Try')"
+                              :loading="trying === job.job"
+                              :disabled="!!trying"
+                              @click="tryJob(job.job)"
+                            />
+                          </td>
+                        </template>
+                      </tr>
+                    </template>
                   </tbody>
                 </table>
               </div>
               <p class="text-p-xs text-ink-gray-5">
                 {{
                   __(
-                    "Copilot's jobs (investigate, fix, review) run on the Copilot worker, which needs the same provider's key in its own settings. A job set to As today follows the sections and their fallback, as before."
+                    "Copilot's jobs (investigate, fix, review) run on the Copilot worker, which needs the same provider's key in its own settings. A TBO Support or worker purpose set to As today follows the sections and their fallback, as before."
                   )
                 }}
               </p>
             </div>
           </SectionCard>
 
-          <SectionCard
-            :title="__('Alerts')"
-            :description="__('Checked every hour on the last hour of calls')"
-          >
-            <div class="flex flex-col gap-3 px-4 pb-4">
-              <p class="text-p-sm text-ink-gray-6">
+          <div class="grid grid-cols-1 gap-3 lg:grid-cols-3">
+            <SectionCard
+              :title="__('Alerts')"
+              :description="__('Checked every hour on the last hour of calls')"
+            >
+              <div class="flex flex-col gap-3 px-4 pb-4">
+                <p class="text-p-sm text-ink-gray-6">
+                  {{
+                    __(
+                      "The managers are told when, in one hour, a model fails or the backup gives the answer at least this share of the time (from 10 calls; 0 turns it off), and when a model reaches 80% and 100% of its monthly token limit."
+                    )
+                  }}
+                </p>
+                <p
+                  v-if="alertNotice"
+                  role="status"
+                  class="rounded-lg px-3 py-2 text-p-sm"
+                  :class="
+                    alertNotice.ok
+                      ? 'bg-success-soft text-success'
+                      : 'bg-warning-soft text-warning'
+                  "
+                >
+                  {{ alertNotice.text }}
+                </p>
+                <form
+                  v-if="settings.can_change"
+                  class="grid grid-cols-1 items-end gap-3 sm:grid-cols-2"
+                  @submit.prevent="saveAlerts"
+                >
+                  <FormControl
+                    v-model="alertForm.error_rate"
+                    type="number"
+                    :label="__('Errors, % of calls')"
+                  />
+                  <FormControl
+                    v-model="alertForm.fallback_rate"
+                    type="number"
+                    :label="__('Fallback answers, %')"
+                  />
+                  <div>
+                    <Button
+                      type="submit"
+                      :label="__('Save')"
+                      :loading="alertBusy"
+                    />
+                  </div>
+                </form>
+                <p v-else class="text-p-sm tabular-nums">
+                  {{
+                    __(
+                      "Errors: {0}. Fallback answers: {1}.",
+                      limitText(settings.alerts.error_rate),
+                      limitText(settings.alerts.fallback_rate)
+                    )
+                  }}
+                </p>
+              </div>
+            </SectionCard>
+            <SectionCard :title="__('When a monthly limit is used up')">
+              <p class="px-4 pb-4 text-p-sm text-ink-gray-6">
                 {{
                   __(
-                    "The System and Agent Managers are told when a model fails, or the fallback gives the answer, at least this share of the time in an hour (from 10 calls). 0 turns an alert off. A model alerts at most once in 6 hours. They are also told when a model reaches 80% and 100% of its monthly token limit."
+                    "That model stops for the rest of the month and the managers are told; the backup is not used, so a limit really caps spending. A System Manager can raise the limit at any time."
                   )
                 }}
               </p>
-              <p
-                v-if="alertNotice"
-                role="status"
-                class="rounded-lg px-3 py-2 text-p-sm"
-                :class="
-                  alertNotice.ok
-                    ? 'bg-success-soft text-success'
-                    : 'bg-warning-soft text-warning'
-                "
-              >
-                {{ alertNotice.text }}
-              </p>
-              <form
-                v-if="settings.can_change"
-                class="grid grid-cols-1 items-end gap-3 sm:grid-cols-[12rem_12rem_auto]"
-                @submit.prevent="saveAlerts"
-              >
-                <FormControl
-                  v-model="alertForm.error_rate"
-                  type="number"
-                  :label="__('Errors, % of calls')"
-                />
-                <FormControl
-                  v-model="alertForm.fallback_rate"
-                  type="number"
-                  :label="__('Fallback answers, %')"
-                />
-                <Button
-                  type="submit"
-                  :label="__('Save')"
-                  :loading="alertBusy"
-                />
-              </form>
-              <p v-else class="text-p-sm tabular-nums">
+            </SectionCard>
+            <SectionCard :title="__('Customer data')">
+              <p class="px-4 pb-4 text-p-sm text-ink-gray-6">
                 {{
                   __(
-                    "Errors: {0}. Fallback answers: {1}.",
-                    limitText(settings.alerts.error_rate),
-                    limitText(settings.alerts.fallback_rate)
+                    "DeepSeek's and Qwen's own APIs run on their own servers (DeepSeek's in China, Alibaba Cloud's in Singapore). For purposes with customer text, the safer route is DeepSeek on AWS Bedrock in TBO's own AWS account, through the TBO AI gateway."
                   )
                 }}
               </p>
-            </div>
-          </SectionCard>
+            </SectionCard>
+          </div>
 
           <SectionCard
             :title="__('AI gateway (desktop app)')"
@@ -1674,6 +1772,17 @@
           />
           <FormControl
             v-if="!prov.section"
+            v-model="prov.note"
+            type="textarea"
+            :label="__('Note')"
+            :description="
+              __(
+                'Shown under the provider\'s name, for example where its data goes.'
+              )
+            "
+          />
+          <FormControl
+            v-if="!prov.section"
             v-model="prov.enabled"
             type="checkbox"
             :label="__('On')"
@@ -1780,6 +1889,7 @@ import {
   call,
   Dialog,
   FormControl,
+  Switch,
   TabButtons,
   usePageMeta,
 } from "frappe-ui";
@@ -1943,8 +2053,19 @@ type JobRow = Figures & {
   anthropic_model: string;
   model: string;
   backup_model: string;
+  application: string;
+  label: string;
+  coming: boolean;
+  own_only: boolean;
   score: Score | null;
 };
+type Application = {
+  name: string;
+  note: string;
+  coming: boolean;
+  own_only: boolean;
+};
+type UsedBy = { application: string; first: string[]; backup: string[] };
 type Provider = {
   name: string;
   section: boolean;
@@ -1956,6 +2077,7 @@ type Provider = {
   json_mode: boolean;
   default_model: string;
   models: number;
+  note: string;
 };
 type CatalogModel = {
   model: string;
@@ -1969,9 +2091,10 @@ type CatalogModel = {
   output_price: number;
   benchmark: Score | null;
   used_for: UsedFor;
+  used_by: UsedBy[];
   in_use: boolean;
 };
-type Preset = { name: string; style: string; url: string };
+type Preset = { name: string; style: string; url: string; note: string };
 type Guard = {
   job: string;
   model: string;
@@ -1992,6 +2115,7 @@ type Settings = {
   jobs: JobRow[];
   sections: Step[];
   defaults: { primary_section: string; failover: boolean };
+  applications: Application[];
   providers: Provider[];
   catalog: CatalogModel[];
   presets: Preset[];
@@ -2173,9 +2297,21 @@ const notice = ref<{ ok: boolean; text: string } | null>(null);
 function allowedModels() {
   return (settings.value?.catalog || []).filter((m) => m.listed);
 }
-function jobModelOptions() {
+function jobLabel(job: string) {
+  const row = (settings.value?.jobs || []).find((j) => j.job === job);
+  return row ? __(row.label) : job;
+}
+function jobsOf(app: string) {
+  return (settings.value?.jobs || []).filter((j) => j.application === app);
+}
+function jobModelOptions(job: JobRow) {
+  const empty = job.coming
+    ? __("Chosen in its phase")
+    : job.own_only
+    ? __("As today (the gateway's own models)")
+    : __("As today (the sections)");
   return [
-    { label: __("As today (the sections)"), value: "" },
+    { label: empty, value: "" },
     ...allowedModels().map((m) => ({
       label: `${m.name} · ${m.provider}`,
       value: m.model,
@@ -2191,6 +2327,9 @@ function backupOptions(job: JobRow) {
   ];
 }
 function chainText(job: JobRow) {
+  if (job.coming) return __("comes with its phase");
+  if (!job.primary && job.own_only)
+    return __("the gateway's own models, as today");
   if (!job.primary) return __("not set up");
   return job.fallback
     ? `${job.primary.model} → ${job.fallback.model}`
@@ -2258,7 +2397,7 @@ async function store(job: string, values: Record<string, string>) {
   notice.value = null;
   try {
     await call(`${API}.save_job`, { job, values: JSON.stringify(values) });
-    notice.value = { ok: true, text: __("Saved: {0}", job) };
+    notice.value = { ok: true, text: __("Saved: {0}", jobLabel(job)) };
   } catch (err) {
     notice.value = { ok: false, text: errorText(err, __("Not saved")) };
     formKey.value++;
@@ -2276,7 +2415,7 @@ async function tryJob(job: string) {
       ok: boolean;
       message: string;
     };
-    notice.value = { ok: r.ok, text: `${job}: ${r.message}` };
+    notice.value = { ok: r.ok, text: `${jobLabel(job)}: ${r.message}` };
   } catch (err) {
     notice.value = {
       ok: false,
@@ -2490,6 +2629,7 @@ const prov = reactive({
   defaultModel: "",
   jsonMode: true,
   enabled: true,
+  note: "",
 });
 const presetOptions = computed(() => [
   ...(settings.value?.presets || []).map((p) => ({
@@ -2505,6 +2645,7 @@ function usePreset(name: string) {
     name: preset ? preset.name : "",
     style: preset ? preset.style : "OpenAI-compatible",
     url: preset ? preset.url : "",
+    note: preset ? preset.note : "",
   });
 }
 function openProvider(p?: Provider) {
@@ -2525,6 +2666,7 @@ function openProvider(p?: Provider) {
       name: p.name,
       style: p.style,
       url: p.url,
+      note: p.note,
     });
   else usePreset(settings.value?.presets[0]?.name || "");
   provOpen.value = true;
@@ -2545,6 +2687,7 @@ async function saveProvider() {
         url: prov.url,
         enabled: prov.enabled ? 1 : 0,
         json_mode: prov.jsonMode ? 1 : 0,
+        note: prov.note,
         new: prov.existing ? 0 : 1,
       };
   if (prov.key) values.key = prov.key;
@@ -2559,6 +2702,37 @@ async function saveProvider() {
     if (at === provOpening) provError.value = errorText(err, __("Not saved"));
   } finally {
     provSaving.value = false;
+    load();
+  }
+}
+// the On switch of a provider account: its other settings stay as they are
+const switching = ref("");
+async function toggleProvider(p: Provider, on: boolean) {
+  switching.value = p.name;
+  provNotice.value = null;
+  try {
+    await call(`${API}.save_provider`, {
+      values: JSON.stringify({
+        name: p.name,
+        style: p.style,
+        url: p.url,
+        enabled: on ? 1 : 0,
+        json_mode: p.json_mode ? 1 : 0,
+      }),
+    });
+    provNotice.value = {
+      ok: true,
+      text: on
+        ? __("{0} is on.", p.name)
+        : __(
+            "{0} is off: the purposes using its models go to their backup.",
+            p.name
+          ),
+    };
+  } catch (err) {
+    provNotice.value = { ok: false, text: errorText(err, __("Not saved")) };
+  } finally {
+    switching.value = "";
     load();
   }
 }
@@ -2715,11 +2889,15 @@ function limitTone(m: CatalogModel) {
   if (share >= 100) return "bg-danger";
   return share >= 80 ? "bg-warning" : "bg-surface-gray-7";
 }
-function usedByText(m: CatalogModel) {
+function usedByLine(u: UsedBy) {
   return [
-    ...m.used_for.primary,
-    ...m.used_for.fallback.map((job) => __("{0} (backup)", job)),
-  ].join(", ");
+    u.first.map((label) => __(label)).join(", "),
+    u.backup.length
+      ? __("backup for {0}", u.backup.map((label) => __(label)).join(", "))
+      : "",
+  ]
+    .filter(Boolean)
+    .join("; ");
 }
 
 const alertForm = reactive({ error_rate: 0, fallback_rate: 0 });
