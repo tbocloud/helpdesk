@@ -125,6 +125,10 @@ so with an empty table every job runs as before. A change applies from the job's
 - `get_providers(job)` gives each section with the job's model. A provider with its own
   model has `override` set, and its pause, failure and alert keys are `<section>|<model>`
   (`AIProvider.key`), so a mistyped job model pauses only that job, not its section.
+- **Phase 31:** a job row may also choose its own first section (`primary_section`) and switch
+  its own fallback On or Off (`allow_fallback`); blank follows the settings. `provider_order`
+  applies them, and the AI models page (Model settings) sets them with a change history and a
+  test-set guard for the worker's jobs. See [ai-models.md](ai-models.md).
 - `HDSHubSettings.validate` refuses a second row for the same job (`check_job_rows`).
 - **The worker's jobs:** `run_context.models` (`ai_engine.worker_models()`) lists, for
   `investigate`, `fix` and `review`, each set-up section in the hub's order with the job's
