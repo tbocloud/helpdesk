@@ -282,11 +282,13 @@ def report_eval(
     model = str(model or "").strip()
     # the job as store_eval keeps it
     job = job if job in ai_engine.JOBS else "investigate"
+    # locked while it is checked and answered: two copies of one report never both store a run
     named = request and frappe.db.get_value(
         ai_models.EVAL_REQUEST,
         request,
         ["name", "model", "job", "status", "eval_run"],
         as_dict=True,
+        for_update=True,
     )
     if named and (named.model, named.job) != (model, job):
         frappe.throw(
@@ -310,7 +312,16 @@ def report_eval(
         # long (a late report still answers it); a report sent again answers nothing
         late = named and named.status == "Failed" and not named.eval_run
         waiting = named and named.status in OPEN_EVAL_REQUEST
-        answered = [named.name] if waiting or late else []
+        # a manager's import answered it first: the worker's own run takes its place, so a
+        # copy of this report sent again is recognised
+        replaced = (
+            named
+            and named.status == "Done"
+            and named.eval_run
+            and frappe.db.get_value(ai_models.EVAL_RUN, named.eval_run, "source")
+            == "Imported"
+        )
+        answered = [named.name] if waiting or late or replaced else []
     else:
         answered = frappe.get_all(
             ai_models.EVAL_REQUEST,

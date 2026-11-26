@@ -229,15 +229,17 @@ def save_credential(name: str, values: dict) -> None:
         "credential_values": values,
         "credential_info": {"written_by": "TBO Support"},
     }
-    # the gateway merges a change into what it has: without an address of its own, an earlier
-    # address would stay, so that credential is written new instead
-    if "api_base" in values:
-        try:
-            _admin("PATCH", f"/credentials/{name}", body)
-            return
-        except GatewayError as e:
-            if e.status not in (404, 405):
-                raise
+    if "api_base" not in values:
+        # the gateway merges a change into what it has: an earlier address goes explicitly
+        body["credential_values_to_delete"] = ["api_base"]
+    try:
+        _admin("PATCH", f"/credentials/{name}", body)
+        return
+    except GatewayError as e:
+        if e.status not in (404, 405):
+            raise
+    # none there yet (or no change in place on this gateway): written new
+    body.pop("credential_values_to_delete", None)
     _admin("DELETE", f"/credentials/{name}", missing_ok=True)
     _admin("POST", "/credentials", body)
 
