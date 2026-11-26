@@ -8,7 +8,7 @@ from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 import frappe
-from frappe.utils import get_system_timezone
+from frappe.utils import get_datetime, get_system_timezone
 
 from helpdesk.api import copilot as api
 from helpdesk.copilot import deploy, fixes
@@ -299,7 +299,9 @@ class TestTheHubOnTheBench(DeployCase):
             (request.requested_by, request.other_sites),
             (self.approver, frappe.local.site),
         )
-        self.cron(riyadh(21, 5))
+        # five minutes into the window it was given: tonight's, or tomorrow night's when the
+        # test runs after tonight's window has begun
+        self.cron(get_datetime(request.scheduled_for) + timedelta(minutes=5))
         self.assertEqual(
             [site["name"] for site in self.press.deploys[0]["sites"]],
             ["site1.example.com"],
