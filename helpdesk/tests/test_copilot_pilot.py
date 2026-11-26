@@ -81,7 +81,7 @@ class TestTheLevel(PilotCase):
         self.assertFalse(runs.start_run(self.ticket("Another")).shadow)
 
     def test_shadow_mode_holds_everyone_at_diagnose_only(self):
-        self.at("Correct")
+        self.at("Fix and data")
         make_copilot_settings(enabled=1, shadow_mode=1)
         self.assertEqual(copilot_settings.level_of(self.customer), "Diagnose only")
         self.assertTrue(runs.start_run(self.ticket()).shadow)

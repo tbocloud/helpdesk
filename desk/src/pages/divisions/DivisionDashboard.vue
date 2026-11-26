@@ -75,9 +75,7 @@
           <Button
             :label="noAccess ? __('Back to divisions') : __('Try again')"
             @click="
-              noAccess
-                ? router.push({ name: 'DivisionsHome' })
-                : dash.reload()
+              noAccess ? router.push({ name: 'DivisionsHome' }) : dash.reload()
             "
           />
         </TaskyState>
@@ -244,9 +242,7 @@
                         ({{ GROUP_LOOK[s.group].label }})
                       </span>
                     </span>
-                    <span
-                      class="font-mono tabular-nums text-ink-gray-9"
-                    >
+                    <span class="font-mono tabular-nums text-ink-gray-9">
                       {{ count(s.total) }}
                     </span>
                   </li>
@@ -455,13 +451,7 @@ import StatTile from "@/components/StatTile.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
-import {
-  Badge,
-  Button,
-  createResource,
-  dayjs,
-  usePageMeta,
-} from "frappe-ui";
+import { Badge, Button, createResource, dayjs, usePageMeta } from "frappe-ui";
 import { computed, watch, type Component } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import LucideArrowLeft from "~icons/lucide/arrow-left";
@@ -727,7 +717,9 @@ const units = computed(() => [
   {
     label: __("Teams"),
     items: data.value?.teams || [],
-    empty: __("No teams yet. A Super Admin moves them in Settings → Divisions."),
+    empty: __(
+      "No teams yet. A Super Admin moves them in Settings → Divisions."
+    ),
   },
   {
     label: __("Departments"),

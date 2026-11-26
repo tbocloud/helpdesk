@@ -66,13 +66,15 @@ def is_shadow() -> bool:
     return bool(get_settings().shadow_mode)
 
 
-# a customer's Copilot level (HD Customer), each one allowing what the ones before it do
+# a customer's Copilot level (HD Customer), each one allowing what the ones before it do; the last
+# was called "Correct" until Phase 30 (patch copilot_level_fix_and_data)
 DIAGNOSE, EXPLAIN, FIX, CORRECT = LEVELS = (
     "Diagnose only",
     "Explain",
     "Fix",
-    "Correct",
+    "Fix and data",
 )
+OLD_CORRECT = "Correct"
 
 
 def level_of(customer: str | None) -> str:

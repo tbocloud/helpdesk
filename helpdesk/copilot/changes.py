@@ -369,7 +369,7 @@ def check_and_ask(change_set: str):
     if run.shadow:
         return  # shown to the team on the card; a shadow run never changes a customer's data
     if not copilot_settings.allows(run.customer, copilot_settings.CORRECT):
-        # shown to the team on the card, never approved below the Correct level
+        # shown to the team on the card, never approved below the Fix and data level
         runs.add_event(
             run,
             "change_set_held",
@@ -380,7 +380,7 @@ def check_and_ask(change_set: str):
             run.ticket,
             frappe.utils.escape_html(
                 _(
-                    "Copilot prepared a correction ({0}); it is shown only, because the customer is at the {1} level (corrections need Correct)."
+                    "Copilot prepared a correction ({0}); it is shown only, because the customer is at the {1} level (corrections need Fix and data)."
                 ).format(doc.name, copilot_settings.level_of(run.customer))
             ),
         )
@@ -468,7 +468,7 @@ def apply(change_set: str, user: str):
             {
                 "status": "Stopped",
                 "error": _(
-                    "Not applied: the customer is no longer at the Correct level."
+                    "Not applied: the customer is no longer at the Fix and data level."
                 ),
             }
         )
@@ -871,7 +871,7 @@ def prepare_correction(ticket: str, user: str):
     if not copilot_settings.allows(latest.customer, copilot_settings.CORRECT):
         frappe.throw(
             _(
-                "Copilot prepares corrections only for customers at the Correct level ({0} is at {1})."
+                "Copilot prepares corrections only for customers at the Fix and data level ({0} is at {1})."
             ).format(
                 latest.customer or _("no customer"),
                 copilot_settings.level_of(latest.customer),
