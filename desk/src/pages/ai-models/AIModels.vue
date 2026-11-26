@@ -3157,12 +3157,17 @@ async function saveGateway() {
   if (gw.key) values.key = gw.key;
   if (gw.callKey) values.call_key = gw.callKey;
   if (gw.adminKey) values.admin_key = gw.adminKey;
+  // what was sent: a key typed while the save is on its way is a new one, and stays
+  const sent = { key: gw.key, callKey: gw.callKey, adminKey: gw.adminKey };
   const ok = await gatewayCall(
     "save_gateway",
     { values: JSON.stringify(values) },
     __("AI gateway saved.")
   );
-  if (ok) Object.assign(gw, { key: "", callKey: "", adminKey: "" });
+  if (!ok) return;
+  for (const field of ["key", "callKey", "adminKey"] as const) {
+    if (gw[field] === sent[field]) gw[field] = "";
+  }
 }
 function readGateway() {
   gatewayCall("sync_gateway", {}, __("Read."));

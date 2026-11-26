@@ -841,7 +841,12 @@ def cut_for_safety(raw: str, text: str) -> bool:
     def squeezed(value: str) -> str:
         return re.sub(r"\s+", " ", re.sub(r"\*\*|__", "", value)).strip()
 
-    return len(squeezed(text)) < len(squeezed(raw))
+    kept, said = squeezed(text), squeezed(raw)
+    if len(text) >= MAX_TEXT:
+        # cut at the length limit, which isn't for safety: only something taken out before
+        # that point counts
+        return not said.startswith(kept)
+    return len(kept) < len(said)
 
 
 def _offer(doc) -> str:

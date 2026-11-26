@@ -306,6 +306,24 @@ class TestAModelTheGatewayRefuses(GatewayCase):
 
         self.assertIn("could not be written back", str(refused.exception))
 
+    def test_write_all_keeps_a_model_the_gateway_refuses_again(self):
+        refusals = []
+
+        def answer(method, url, **kwargs):
+            if (method, url) == ("POST", GATEWAY + "/model/new") and not refusals:
+                refusals.append(kwargs["json"]["model_info"]["id"])
+                return answered(503)
+            return answered()
+
+        self.admin.side_effect = answer
+        with self.assertRaises(frappe.ValidationError):
+            ai_models.write_all()
+
+        refused = refusals[0]
+        written = [w["model_info"]["id"] for w in posted(self.admin, "/model/new")]
+        # the refused model is written back, so it keeps answering
+        self.assertEqual(written[:2], [refused, refused])
+
     def test_a_new_model_has_nothing_to_write_back(self):
         refuse_new_models(self.admin, lambda params: True)
 
@@ -350,6 +368,33 @@ class TestALevelTheGatewayRefuses(ReviewCase):
                 ("tbo-support:tbo-simple:1", "openai/deepseek-chat"),
             ],
         )
+
+    def test_a_first_level_refused_half_way_leaves_nothing_on_the_gateway(self):
+        refuse_new_models(
+            self.admin, lambda params: params["model"] == "openai/deepseek-chat"
+        )
+
+        with self.assertRaises(frappe.ValidationError):
+            ai_models.save_job(
+                "desktop_medium",
+                {"model": "gpt-test-model", "backup_model": "deepseek-chat"},
+            )
+
+        calls = [
+            (c.args[0], (c.kwargs.get("json") or {}).get("id"))
+            for c in self.admin.call_args_list
+        ]
+        # the model that got on (tbo-medium:1) is taken off after the backup was refused
+        last_write = max(
+            i
+            for i, (method, _id) in enumerate(calls)
+            if method == "POST" and _id is None
+        )
+        removed_after = {
+            _id for method, _id in calls[last_write + 1 :] if _id  # noqa: E203
+        }
+        self.assertIn("tbo-support:tbo-medium:1", removed_after)
+        self.assertIn("tbo-support:tbo-medium:2", removed_after)
 
     def test_a_level_not_written_back_says_how_to_repair_it(self):
         refuse_new_models(self.admin, lambda params: True)
@@ -407,6 +452,31 @@ class TestCustomerAnswersPerRun(ReviewCase):
         frappe.db.set_value("HD Ticket", ticket, "custom_copilot_run", first.name)
         self.assertEqual(answers("model-a"), (1, 1))
         self.assertEqual(answers("model-b"), (0, 0))
+
+
+class TestCustomerAnswersInThePeriod(ReviewCase):
+    def test_an_answer_about_a_run_before_the_period_does_not_count(self):
+        ticket = make_ticket(subject="An old run").name
+        old = make_copilot_run(ticket, "Explaining", model_used="model-a")
+        frappe.db.set_value(
+            "HDS Copilot Run",
+            old.name,
+            "creation",
+            add_to_date(now_datetime(), days=-40),
+            update_modified=False,
+        )
+        new = make_copilot_run(ticket, "Explaining", model_used="model-a")
+        frappe.db.set_value(
+            "HD Ticket", ticket, "custom_customer_confirmation", "Confirmed"
+        )
+
+        def answers():
+            return ai_models.quality("model-a", 30)["copilot"]["customer_answers"]
+
+        frappe.db.set_value("HD Ticket", ticket, "custom_copilot_run", old.name)
+        self.assertEqual(answers(), 0)
+        frappe.db.set_value("HD Ticket", ticket, "custom_copilot_run", new.name)
+        self.assertEqual(answers(), 1)
 
 
 class TestGatewayCallsInTheFigures(ReviewCase):
@@ -470,6 +540,11 @@ class TestANewGatewayAddressIsChecked(GatewayCase):
         self.assertIn("does not answer", str(refused.exception))
         self.assertIn("Nothing was changed", str(refused.exception))
         self.assertTrue(get.call_args.args[0].startswith("https://other-gw.test"))
+        # the refused address's "down" isn't left for the gateway that stays in use
+        self.assertIsNone(frappe.cache.get_value(ai_gateway.ALIVE_KEY, expires=True))
+        self.assertIsNone(
+            frappe.cache.get_value(ai_gateway.KEY_WORKS_KEY, expires=True)
+        )
 
     def test_a_new_call_key_the_gateway_refuses_is_refused(self):
         with patch("requests.get", side_effect=[answered(), answered(401)]):

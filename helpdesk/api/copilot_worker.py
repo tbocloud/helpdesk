@@ -336,17 +336,25 @@ def give_up_stale_eval_requests() -> int:
         filters={"status": "Running", "modified": ["<", cutoff]},
         pluck="name",
     )
-    for name in stale:
-        frappe.db.set_value(
-            ai_models.EVAL_REQUEST,
-            name,
-            {
-                "status": "Failed",
-                "error": _(
-                    "No report came back within {0} hours. Ask for a run again."
-                ).format(EVAL_RUN_HOURS),
-            },
+    if not stale:
+        return 0
+    # one update that touches only requests still Running and still stale: a report that
+    # came in meanwhile (Done) is never turned into Failed
+    request = frappe.qb.DocType(ai_models.EVAL_REQUEST)
+    (
+        frappe.qb.update(request)
+        .set(request.status, "Failed")
+        .set(
+            request.error,
+            _("No report came back within {0} hours. Ask for a run again.").format(
+                EVAL_RUN_HOURS
+            ),
         )
+        .set(request.modified, now_datetime())
+        .where(request.name.isin(stale))
+        .where(request.status == "Running")
+        .where(request.modified < cutoff)
+    ).run()
     return len(stale)
 
 

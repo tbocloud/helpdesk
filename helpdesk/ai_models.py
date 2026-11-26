@@ -1096,6 +1096,11 @@ def write_level(job: str, previous: tuple = ()) -> None:
                 message += " " + _(
                     "Its earlier models could not be written back either: use Write all to the gateway once it answers."
                 )
+        else:
+            # a first save that failed half way: take off whatever got on, so the gateway
+            # serves nothing the (rolled back) settings don't show
+            with contextlib.suppress(ai_gateway.GatewayError):
+                _level_to_gateway(name, [])
         frappe.throw(message)
     _desktop_names(name, add=bool(chosen))
 
@@ -1144,7 +1149,8 @@ def write_all() -> dict:
         PRICING, filters={"ai_provider": ["is", "set"]}, pluck="name"
     )
     for name in models:
-        _write_model(name)
+        # what the gateway serves now is written back if it refuses the replacement
+        _write_model(name, _served(name))
     for job in ai_engine.DESKTOP_GATEWAY_NAMES:
         write_level(job)
     return {**job_settings(), "written": {"keys": keys, "models": len(models)}}
@@ -1906,21 +1912,24 @@ def _customer_answers(model: str, runs: list) -> dict:
     )
     if not answers:
         return counts
-    model_of: dict[str, str] = {}
+    known: set[str] = set()
     newest: dict[str, str] = {}
     for run in frappe.get_all(
         "HDS Copilot Run",
         filters={"ticket": ["in", [a.name for a in answers]]},
-        fields=["name", "ticket", "model_used"],
+        fields=["name", "ticket"],
         order_by="creation asc",
         limit=0,
     ):
-        model_of[run.name] = run.model_used or ""
-        newest[run.ticket] = run.model_used or ""
+        known.add(run.name)
+        newest[run.ticket] = run.name
+    # `runs` are this model's runs in the period: an answer counts only when the run it is
+    # about is one of them, never for a run of another model or from before the period
+    in_period = {r.name for r in runs}
     for answer in answers:
         run = answer.get("custom_copilot_run")
-        about = model_of[run] if run in model_of else newest.get(answer.name)
-        if about == model:
+        about = run if run in known else newest.get(answer.name)
+        if about in in_period:
             counts[answer.custom_customer_confirmation] += 1
     return counts
 
@@ -2263,7 +2272,10 @@ def save_gateway(values: dict) -> dict:
         elif not ai_gateway.key_works():
             problem = _("The gateway refused TBO Support's key.")
         if problem:
-            # the error rolls the save back, so the earlier settings stay
+            # the error rolls the save back, so the earlier settings stay; the flags just
+            # written are about the refused address or key, so they go too, and the next call
+            # checks the gateway it really uses
+            frappe.cache.delete_value([ai_gateway.ALIVE_KEY, ai_gateway.KEY_WORKS_KEY])
             frappe.throw(
                 problem
                 + " "

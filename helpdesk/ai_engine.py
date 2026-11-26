@@ -4,6 +4,7 @@
 """The hub's AI calls: OpenAI and Anthropic-compatible providers with failover,
 prompt caching and token tracking (docs/ai-providers.md)."""
 
+import contextlib
 import json
 import re
 from dataclasses import dataclass, field, replace
@@ -1277,13 +1278,15 @@ def log_usage(
     fallback: bool = False,
     duration_ms: int | None = None,
     error: "AIProviderError | None" = None,
+    at: str | None = None,
 ):
     """Log API usage to HDS AI Usage Log. Without `provider` it is an
     investigation's call: those always run on an Anthropic-compatible provider.
     `error` makes it a Failed row with the error's kind and the provider's own words
-    (key masked, clipped): never the prompt."""
+    (key masked, clipped): never the prompt. `at` is when the call happened, for a row
+    written later (a failed attempt's row is written by a job of its own)."""
     try:
-        frappe.get_doc(
+        row = frappe.get_doc(
             {
                 "doctype": "HDS AI Usage Log",
                 "session": session_name,
@@ -1310,6 +1313,9 @@ def log_usage(
                 "estimated_cost_usd": estimate_cost(model, usage),
             }
         ).insert(ignore_permissions=True)
+        if at:
+            # the call's own time, so a fallback that answered after it still sorts after it
+            row.db_set("creation", at, update_modified=False)
     except Exception:
         frappe.log_error("Failed to log AI usage")
 
@@ -1325,6 +1331,7 @@ def keep_failed_attempt(provider: AIProvider, error: AIProviderError, **row):
             now=frappe.flags.in_test,
             attempt={
                 **row,
+                "at": str(now_datetime()),
                 "model": provider.model,
                 "provider": provider.slot,
                 "kind": error.kind,
@@ -1333,7 +1340,9 @@ def keep_failed_attempt(provider: AIProvider, error: AIProviderError, **row):
             },
         )
     except Exception:
-        frappe.log_error("Failed to log AI usage")
+        # even the Error Log may be down: the caller fails over whatever happens here
+        with contextlib.suppress(Exception):
+            frappe.log_error("Failed to log AI usage")
 
 
 def log_failed_attempt(attempt: dict):
@@ -1351,6 +1360,7 @@ def log_failed_attempt(attempt: dict):
             status=attempt.get("status"),
             detail=attempt.get("detail"),
         ),
+        at=attempt.get("at"),
     )
 
 
