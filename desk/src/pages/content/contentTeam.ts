@@ -63,6 +63,9 @@ export const SALES_EMPLOYEE_ROUTES = new Set([
   "TeamDashboard",
   // their meetings, holidays and leave; the server lists them no tasks
   "WorkCalendar",
+  // their own meetings (no Team view) and the meeting types, to schedule calls
+  "MeetingCalendar",
+  "MeetingTypes",
   "Notifications",
   "Invalid Page",
   ...LEAD_BANK_ROUTES,
