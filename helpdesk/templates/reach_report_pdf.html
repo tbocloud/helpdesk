@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>{{ title|e }}</title>
+    <style>
+      @page {
+        size: A4 landscape;
+        margin: 14mm;
+      }
+      body {
+        font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+        color: #1f2430;
+        font-size: 10px;
+        margin: 0;
+      }
+      h1 {
+        font-size: 18px;
+        margin: 0 0 2px;
+      }
+      h2 {
+        font-size: 12px;
+        margin: 18px 0 6px;
+      }
+      .meta {
+        color: #5d6472;
+        margin: 0 0 4px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th {
+        text-align: left;
+        font-weight: 600;
+        color: #5d6472;
+        border-bottom: 1.5px solid #c9cdd6;
+        padding: 5px 6px;
+      }
+      td {
+        border-bottom: 1px solid #e4e6eb;
+        padding: 5px 6px;
+        vertical-align: top;
+      }
+      th.num,
+      td.num {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      .note {
+        color: #5d6472;
+      }
+      /* daily reach as bars: one cell per day, the bar sits on the bottom */
+      table.bars td {
+        border: none;
+        padding: 0 1px;
+        vertical-align: bottom;
+        height: 84px;
+      }
+      table.bars td div {
+        background: #17657f;
+      }
+      table.bars tr.labels td {
+        height: auto;
+        color: #8a90a0;
+        font-size: 8px;
+        text-align: center;
+        padding-top: 2px;
+      }
+      .caption {
+        max-width: 360px;
+      }
+      .empty {
+        color: #5d6472;
+        padding: 12px 0;
+      }
+      .foot {
+        margin-top: 14px;
+        color: #8a90a0;
+        font-size: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>{{ title|e }}</h1>
+    <p class="meta">{{ customer|e }} · {{ period|e }}</p>
+    <p class="meta">{{ accounts|e }}</p>
+
+    <h2>{{ _("Summary") }}</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>{{ _("Platform") }}</th>
+          <th class="num">{{ _("Reach") }}</th>
+          <th class="num">{{ _("Views") }}</th>
+          <th class="num">{{ _("Engagements") }}</th>
+          <th class="num">{{ _("Followers") }}</th>
+          <th class="num">{{ _("Net new followers") }}</th>
+          <th class="num">{{ _("Posts") }}</th>
+          <th class="num">{{ _("Engagement rate") }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in report.platforms %}
+        <tr>
+          <td>{{ _(p.platform) }}</td>
+          <td class="num">{{ "{:,}".format(p.current.reach) }}</td>
+          <td class="num">{{ "{:,}".format(p.current.views) }}</td>
+          <td class="num">{{ "{:,}".format(p.current.engagements) }}</td>
+          <td class="num">
+            {{ "{:,}".format(p.followers) if p.followers is not none else "—" }}
+          </td>
+          <td class="num">{{ "{:+,}".format(p.current.net_follows) }}</td>
+          <td class="num">{{ p.posts }}</td>
+          <td class="num">
+            {{ (p.engagement_rate ~ "%") if p.engagement_rate is not none else
+            "—" }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="note">
+      {{ _("Reach is added up day by day, so a person reached on two days counts
+      twice.") }}
+    </p>
+
+    {% for p in bars %}
+    <h2>{{ _("Daily reach on {0}").format(_(p.platform)) }}</h2>
+    {% if p.top %}
+    <table class="bars">
+      <tr>
+        {% for bar in p.bars %}
+        <td title="{{ bar.label|e }}: {{ bar.value }}">
+          <div style="height: {{ bar.height }}px"></div>
+        </td>
+        {% endfor %}
+      </tr>
+      <tr class="labels">
+        {% for bar in p.bars %}
+        <td>
+          {{ bar.label|e if loop.first or loop.last or bar.marked else "" }}
+        </td>
+        {% endfor %}
+      </tr>
+    </table>
+    <p class="note">{{ _("Highest day: {0}").format("{:,}".format(p.top)) }}</p>
+    {% else %}
+    <p class="empty">{{ _("No reach recorded in this period.") }}</p>
+    {% endif %} {% endfor %}
+
+    <h2>{{ _("By kind of post") }}</h2>
+    {% if report.kinds %}
+    <table>
+      <thead>
+        <tr>
+          <th>{{ _("Kind") }}</th>
+          <th class="num">{{ _("Posts") }}</th>
+          <th class="num">{{ _("Average reach") }}</th>
+          <th class="num">{{ _("Interactions") }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for k in report.kinds %}
+        <tr>
+          <td>{{ _(k.kind) }}</td>
+          <td class="num">{{ k.posts }}</td>
+          <td class="num">{{ "{:,}".format(k.average_reach) }}</td>
+          <td class="num">{{ "{:,}".format(k.interactions) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="empty">{{ _("No posts in this period.") }}</p>
+    {% endif %}
+
+    <h2>{{ _("Top posts") }}</h2>
+    {% if top_posts %}
+    <table>
+      <thead>
+        <tr>
+          <th>{{ _("Posted") }}</th>
+          <th>{{ _("Platform") }}</th>
+          <th>{{ _("Kind") }}</th>
+          <th>{{ _("Post") }}</th>
+          <th class="num">{{ _("Reach") }}</th>
+          <th class="num">{{ _("Views") }}</th>
+          <th class="num">{{ _("Interactions") }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for post in top_posts %}
+        <tr>
+          <td>{{ post.posted|e }}</td>
+          <td>{{ _(post.platform) }}</td>
+          <td>{{ _(post.kind or "Other") }}</td>
+          <td class="caption">
+            {{ (post.caption or "")|truncate(120)|e }}{% if post.permalink %}
+            <br /><span class="note">{{ post.permalink|e }}</span>{% endif %}
+          </td>
+          <td class="num">{{ "{:,}".format(post.reach or 0) }}</td>
+          <td class="num">{{ "{:,}".format(post.views or 0) }}</td>
+          <td class="num">{{ "{:,}".format(post.interactions or 0) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="empty">{{ _("No posts in this period.") }}</p>
+    {% endif %}
+
+    <p class="foot">
+      {{ _("Numbers from Meta. Generated {0} by {1}").format(generated_on,
+      generated_by)|e }}
+    </p>
+    {% if auto_print %}
+    <script>
+      window.addEventListener("load", function () {
+        window.print();
+      });
+    </script>
+    {% endif %}
+  </body>
+</html>

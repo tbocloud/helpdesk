@@ -61,16 +61,50 @@ site can't narrow by department or source yet, and the filter card stays to clea
 filter the page works on any TBO Smart. The selects are `sm:w-*`, since frappe-ui's FormControl
 adds `w-full`, which a plain width loses to.
 
+Redesigned 2026-11-25 from the owner's photos of a "CRM Intelligence Command Center": the same
+cards in the same order, neon on near-black in the dark theme and the same design light in the
+light theme ([ui-guidelines.md](ui-guidelines.md) §8, *the command center look*: the `--cc-*`
+palette, `cc-card` with one colour each; the rest of the app now shares it).
+
 | Card | Figure | Source |
 | --- | --- | --- |
-| Tiles | New leads, Contacted (% of new), Hot leads, Overdue follow-ups (with the leads gone quiet for the stale days), Open pipeline (with the win rate); each opens its leads (`metric`) | ERP `get_overview(period, owner)` `totals` |
-| Team calls this week | each salesperson's calls per day since Monday, one line each in the chart palette, up to five (those who called most) | `get_lead_analysis` per day |
-| Pipeline by stage | the four biggest open stages and the rest as *Other open stages* | `get_overview` `pipeline` |
-| Your team (today / this week / this month) | per salesperson: called of handed out, contacted, contact rate; for a **Sales Head** also the month's target progress (`overallOf`, as the Assign sales targets page) and On track / Behind | `get_lead_analysis(period)` `calling`; `get_team` and `get_team_progress` |
-| Lead funnel | new, contacted, meetings held, proposals sent, won, each as a share of the step before, and the biggest drop in words | `get_overview` `funnel` |
-| Calls this week (leaderboard) | the week's calls per person, ranked | the week |
+| Won revenue vs target (pink, `RevenueHero`) | a half gauge: the period's won value against the team's (or the person's) **won value target**, summed from the Sales targets (`measure = won_value`; month view, Sales Heads only) **of the people on this page only** (a target set for anyone else, such as a test account, would inflate it), what is still to go and the target; without a target the won value, deals won and the period before. Won leads with no amount (`won_unpriced`) aren't in the won value, so the card says how many there are | `get_overview` `totals.won_value`; `get_team` |
+| Top revenue by salesperson (amber) | the top three by won value, then deals won, on a podium (first in the middle with the crown), level ones sharing a place; everyone who won a deal is on it, even at ₹0 when their won leads have no amount; each opens their won leads. Everyone's view only | `revenue` |
+| Four small cards | the period's won value and deals won, each with the change against the same days before (arrow and %); Collected (receipts posted in the period) and To collect (outstanding **now**, not the period) | `previous`, `money` |
+| Forecasted revenue (orange) | a running month only: won value ÷ days gone × days in the month, the rate per day now and the rate per day the target still needs | `forecastOf` |
+| Active pipeline stages (blue) | every open stage holding leads, in the ERP site's order: its leads (the bar) and their value; each opens its leads | `get_overview` `pipeline` (`count`, `value`) |
+| Team calls this week (cyan) | each salesperson's calls per day since Monday, one line each in the chart palette, up to five (those who called most) | `get_lead_analysis` per day |
+| Period performance (violet, `PeriodCompare`) | new leads, contacted, meetings, proposals, won and won value, now and on the same days before, with the change | `previous` |
+| Number cards (`CcStat`) | Total leads, Active pipeline (its value), Hot leads, Contacted (% of new), Proposals sent (their value), Converted (its value, or how many have no amount), Conversion ratio (the ERP site's `conversion_rate`: leads created in the period that are won now; with the win rate), Sales target (with what's to go), Revenue received (in the period), Total receivables and Payments overdue (both now), Overdue follow-ups; the lead counts open their leads (`metric`) | `get_overview` `totals`; `money`; the target |
+| Lead funnel (violet) | new, contacted, meetings held, proposals sent, won, each as a share of the step before, and the biggest drop in words | `get_overview` `funnel` |
+| Stage pipeline (amber, `StageBars`) | the open stages as upright bars, one colour each, the count on top; a bar opens its leads | `get_overview` `pipeline` |
+| Sales executive performance & target leaderboard (`TeamLeaderboard`) | everyone in the sales team with calls **or** leads in the period (someone who only held meetings has no call row), ranked by won value, then deals won, answered and called: called of handed out, **Answered** (call-list leads where someone answered, and its share of those called; not the Contacted card, which counts every touch), talk time per **answered** call (calls − missed; "—" when the call log has no talk time, never 0s), meetings, proposals, won, won value; for a **Sales Head** also the month's target progress (`overallOf`) and On track / Behind | `people` (`get_lead_analysis(period)` `calling`), `overview.by_owner`, `revenue`; `get_team` and `get_team_progress` |
+| Calls this week (green, leaderboard) | the week's calls per person, ranked | the week |
 | Leads handed out today | today's batches by slot and department, in the order they start: called of handed out | `get_call_batches_report` |
 | Needs a nudge | overdue follow-ups, leads gone quiet, and the AI's high intent, unhappy and stage moves to check; each opens its leads | `get_overview` `totals`, `ai` |
+
+**Checked against the live ERP site (2026-11-25)**, as a Sales Head: per-person won deals match
+TBO Smart's own `get_sales_activity`; the open stages add up to `totals.open` and `open_value`;
+the comparison dates are like for like. The Won and Converted totals count everyone in the
+viewer's sales scope, so they can be more than the leaderboard's sum (leads won by people
+outside the sales team).
+
+**The parts the API adds for the redesign** (`get_team_dashboard`):
+
+- `previous`: the Overview's totals for the **same days of the period before**
+  (`previous_bounds`), so a running period is compared like for like: yesterday for today, last
+  week's Monday to the same weekday, last month's 1st to the same date (its last day when that
+  month is shorter). One more `get_overview` read, narrowed like the rest.
+- `revenue`: each salesperson's won value. The Overview counts won leads per person
+  (`by_owner`) but their value only for everyone together, so each person **who won something**
+  is read on their own (`get_overview(owner=…)`, cached a minute); nobody else is asked. Left
+  out (null) when one person is picked: the overview is then theirs alone.
+- `money`: `get_proposal_money`'s collected (`advances`), still to collect, overdue and
+  proposals' value. **Not read while a department or source is picked**: the ERP site doesn't
+  count money that way, and showing everyone's money beside narrowed figures would mislead; the
+  panel says so.
+- `people` rows also carry the call log's `calls`, `missed`, `talk_seconds` and `overdue`;
+  `overview` carries `currency` and `by_owner` (cut to the sales team).
 
 The people (the owner picker, the team table, the week) are cut to the **sales team** (enabled
 users with the Sales Employee role, `only_sales_team`), as the New leads strip is, plus a person
@@ -91,6 +125,15 @@ person (`cached_read`). A day of the week that has ended is kept for an hour
 (`CLOSED_DAY_TTL`, part `analysis_day`), since it no longer changes; Refresh renews today only.
 `get_my_calls` is never cached.
 
+**In the browser** (`useLiveRead` and `dropOnLeave` in `salesDashboard.ts`, both pages and the
+targets card): a page reads again every two minutes, and when the person comes back to its tab
+only if its figures are older than that. Leaving the page **drops the reads still on their way**:
+the team dashboard's read takes 20–35 s against the live ERP site (eight ERP calls one after
+another) and a Sales Head's target progress another ~17 s, and a browser keeps only six requests
+open per site across its tabs, so left running they queued the next page's requests: a card
+opened onto a Leads list that stayed loading until a refresh (2026-11-25). Changing a filter
+drops the read on its way too, so only the latest answer lands.
+
 ## Left out of the mockups, on purpose
 
 - **Best time to reach leads** (contact rate by weekday and hour): the ERP site has no call
@@ -100,13 +143,26 @@ person (`cached_read`). A day of the week that has ended is kept for an hour
 - **"Not handed out" slots** on Leads handed out today: the batches report lists only the
   batches that were made.
 - **The team chart's "goal 100" line**: the call plan per person isn't part of these reads.
+- From the command-center photos (2026-11-25), each needs a TBO Smart endpoint first:
+  - **Revenue day by day** (the cumulative "this month vs last month vs target pace" line and
+    the daily lead creation and won chart): there is no per-day series of won value or new
+    leads; Period performance compares the totals instead (`previous`), and the big chart is
+    the team's calls per day.
+  - **Warm and cold leads**: the Overview counts only hot leads.
+  - **Unassigned leads** and **collections by department**: neither is counted.
+  - **Average time to attend a lead** and **follow-ups per lead**: not counted per person.
+  - **Efficiency score and grades** ("Solid contributor", "Needs coaching"): no agreed formula;
+    the leaderboard ranks by won value instead.
+  - **Recent deals feed**: the Overview lists no won deals with their amounts.
 
 ## Code
 
 - API: `helpdesk/api/sales_dashboard.py`; tests `helpdesk/tests/test_sales_dashboard.py`.
 - Pages: `desk/src/pages/sales-dashboard/` — `SalesDashboard.vue`, `SalesTeamDashboard.vue`,
-  `MyTargetsCard.vue`, the charts `DonutChart.vue`, `WeekLineChart.vue`, `Sparkline.vue` (ECharts
+  `RevenueHero.vue`, `PeriodCompare.vue`, `TeamLeaderboard.vue`, `StageBars.vue`, the card
+  parts `CcCard.vue` and `CcStat.vue`, `MyTargetsCard.vue`, the charts `DonutChart.vue`, `WeekLineChart.vue`, `Sparkline.vue` (ECharts
   with `pages/performance/chartTheme.ts`), `CardLink.vue`, `PartError.vue`, types and helpers in
   `salesDashboard.ts`.
-- Shared: `stageColors` (`pages/leads/callBatches.ts`, also used by Today's calls), `TargetRing`'s
+- Shared: `fullAmount` / `shortAmount` / `rangeText`
+  (`pages/leads/business/businessFormat.ts`), `stageColors` (`pages/leads/callBatches.ts`, also used by Today's calls), `TargetRing`'s
   `text` prop, `token` exported from `chartTheme.ts`.

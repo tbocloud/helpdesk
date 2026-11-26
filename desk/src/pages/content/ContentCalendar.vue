@@ -41,6 +41,16 @@
           }}</span>
         </Button>
         <Button
+          size="md"
+          :route="{ name: 'ContentReach' }"
+          :title="__('Reach report')"
+        >
+          <template #prefix>
+            <LucideRadio class="size-[18px]" aria-hidden="true" />
+          </template>
+          <span class="sr-only lg:not-sr-only">{{ __("Reach report") }}</span>
+        </Button>
+        <Button
           v-if="auth.canEditContent"
           variant="solid"
           size="md"
@@ -626,6 +636,7 @@ import LucideCircleDot from "~icons/lucide/circle-dot";
 import LucideLayoutList from "~icons/lucide/layout-list";
 import LucideListChecks from "~icons/lucide/list-checks";
 import LucidePlus from "~icons/lucide/plus";
+import LucideRadio from "~icons/lucide/radio";
 import LucideMail from "~icons/lucide/mail";
 import LucideShare2 from "~icons/lucide/share-2";
 import LucideSheet from "~icons/lucide/sheet";

@@ -490,6 +490,10 @@ export interface LeadDetail {
       /** the WhatsApp conversation (TBO Smart's hub-leads-api.md §2.19) */
       whatsapp?: LeadWhatsApp;
       whatsapp_box?: LeadWhatsAppBox;
+      /** what it was won for, asked at Closed – Won; null before, absent from an older TBO Smart */
+      won_amount?: number | null;
+      /** its latest quotations' total (0 without one): the won amount's starting value */
+      quoted_amount?: number;
     };
   timeline: LeadTimelineEntry[];
   quotations: LeadQuotation[];
@@ -721,6 +725,9 @@ export function stageIcon(stage?: string): Component | undefined {
  * room to read them. Scheduling and the three meetings are one step. A stage the ERP site
  * doesn't have is left out, and every stage off the path (Not Responding, On Hold, Closed –
  * Lost…) is a side stage, reached from the Move to menu. */
+/** Moving here asks what the lead was won for: its won value on Sales targets. */
+export const CLOSED_WON = "Closed – Won";
+
 export const STAGE_PATH: { stages: string[]; label?: string }[] = [
   { stages: ["New Lead"] },
   { stages: ["Contacted"] },
@@ -735,7 +742,7 @@ export const STAGE_PATH: { stages: string[]; label?: string }[] = [
   },
   { stages: ["Proposal Sent"] },
   { stages: ["Negotiation"] },
-  { stages: ["Closed – Won"] },
+  { stages: [CLOSED_WON] },
 ];
 
 // full class strings, so Tailwind finds them

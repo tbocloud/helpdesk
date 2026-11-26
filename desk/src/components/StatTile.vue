@@ -9,7 +9,8 @@
         ? { type: 'button', 'aria-pressed': pressed }
         : {}
     "
-    class="flex min-w-0 border text-left"
+    class="flex min-w-0 border border-t-[3px] border-t-[color:var(--accent,var(--cc-blue))] text-left"
+    :style="accent ? { '--accent': `var(--cc-${accent})` } : undefined"
     :class="[
       compact
         ? 'items-start rounded-xl px-3 py-2.5'
@@ -33,9 +34,10 @@
       v-if="!compact"
       class="flex w-full items-center justify-between gap-2"
     >
-      <span class="min-w-0 text-[12px] font-medium text-ink-gray-6">{{
-        label
-      }}</span>
+      <span
+        class="min-w-0 text-[11px] font-bold uppercase tracking-[0.06em] text-ink-gray-7"
+        >{{ label }}</span
+      >
       <LucideChevronRight
         v-if="to && !icon"
         class="size-4 shrink-0 text-ink-gray-4"
@@ -76,7 +78,7 @@
             ? 'text-5xl font-bold leading-tight tracking-[-0.02em]'
             : compact
             ? 'text-xl'
-            : 'text-[22px] font-bold leading-none tracking-[-0.02em]',
+            : 'cc-glow font-mono text-[22px] font-bold leading-none tracking-[-0.02em]',
           valueTone === 'neutral' ? 'text-ink-gray-9' : INK[valueTone],
         ]"
       >
@@ -202,17 +204,35 @@ const circleClass = computed(() =>
     : props.iconTone === "hot"
     ? "bg-warning-soft text-hot"
     : props.iconTone === "neutral"
-    ? "bg-surface-gray-2 text-ink-gray-7"
+    ? "cc-soft"
     : TONE_CLASSES[props.iconTone]
 );
 const iconInk = computed(() =>
   props.iconTone === "neutral"
-    ? "text-ink-gray-5"
+    ? "cc-ink"
     : props.iconTone === "brand"
     ? "text-brand-ink"
     : props.iconTone === "hot"
     ? "text-hot"
     : INK[props.iconTone]
+);
+
+// the tile's colour in the command center palette (its top edge, and its icon when neutral):
+// from the tone, so a colour that means something keeps it; a neutral tile takes its turn
+// through the palette from theme.css
+const ACCENT: Record<string, string> = {
+  info: "blue",
+  success: "green",
+  danger: "red",
+  warning: "amber",
+  brand: "cyan",
+  hot: "orange",
+};
+const accent = computed(
+  () =>
+    ACCENT[props.iconTone] ??
+    (props.tint ? ACCENT[props.tint] : undefined) ??
+    (props.valueTone !== "neutral" ? ACCENT[props.valueTone] : undefined)
 );
 
 // full class strings, so Tailwind finds them

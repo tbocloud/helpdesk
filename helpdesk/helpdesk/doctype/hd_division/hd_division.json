@@ -17,6 +17,7 @@
 		"division_admin",
 		"connection_section",
 		"crm_source",
+		"weekly_lead_report",
 		"members_section",
 		"members"
 	],
@@ -108,6 +109,13 @@
 			"description": "The data source of this division's ERP site (Settings \u2192 Divisions \u2192 ERP sites): its leads, customers and quotations are read and written there."
 		},
 		{
+			"default": "0",
+			"description": "Sales \u2192 Lead report: each salesperson's leads created or updated in a week, in the KSA template, read from this site.",
+			"fieldname": "weekly_lead_report",
+			"fieldtype": "Check",
+			"label": "Lead report"
+		},
+		{
 			"fieldname": "members_section",
 			"fieldtype": "Section Break",
 			"label": "Members"
@@ -121,7 +129,7 @@
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-11-16 12:00:00.000000",
+	"modified": "2026-11-26 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Division",

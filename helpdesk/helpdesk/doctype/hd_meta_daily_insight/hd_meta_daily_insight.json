@@ -1,0 +1,129 @@
+{
+	"actions": [],
+	"creation": "2026-11-22 12:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"project",
+		"customer",
+		"platform",
+		"day",
+		"numbers_section",
+		"reach",
+		"views",
+		"engagements",
+		"column_break_numbers",
+		"engaged_accounts",
+		"follows",
+		"unfollows",
+		"followers"
+	],
+	"fields": [
+		{
+			"fieldname": "project",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"label": "Project",
+			"options": "Project",
+			"reqd": 1
+		},
+		{
+			"fieldname": "customer",
+			"fieldtype": "Link",
+			"in_standard_filter": 1,
+			"label": "Customer",
+			"options": "HD Customer"
+		},
+		{
+			"fieldname": "platform",
+			"fieldtype": "Select",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"label": "Platform",
+			"options": "Facebook\nInstagram",
+			"reqd": 1
+		},
+		{
+			"fieldname": "day",
+			"fieldtype": "Date",
+			"in_list_view": 1,
+			"label": "Day",
+			"reqd": 1
+		},
+		{
+			"fieldname": "numbers_section",
+			"fieldtype": "Section Break",
+			"label": "Numbers"
+		},
+		{
+			"description": "Accounts that saw the Page's or account's content that day (unique)",
+			"fieldname": "reach",
+			"fieldtype": "Int",
+			"label": "Reach"
+		},
+		{
+			"description": "Times the content was played or shown",
+			"fieldname": "views",
+			"fieldtype": "Int",
+			"label": "Views"
+		},
+		{
+			"description": "Facebook: post engagements. Instagram: total interactions",
+			"fieldname": "engagements",
+			"fieldtype": "Int",
+			"label": "Engagements"
+		},
+		{
+			"fieldname": "column_break_numbers",
+			"fieldtype": "Column Break",
+			"label": ""
+		},
+		{
+			"description": "Instagram only: accounts that interacted",
+			"fieldname": "engaged_accounts",
+			"fieldtype": "Int",
+			"label": "Engaged Accounts"
+		},
+		{
+			"fieldname": "follows",
+			"fieldtype": "Int",
+			"label": "Follows"
+		},
+		{
+			"fieldname": "unfollows",
+			"fieldtype": "Int",
+			"label": "Unfollows"
+		},
+		{
+			"description": "Total followers, recorded on the day it was synced; 0 for days filled in later",
+			"fieldname": "followers",
+			"fieldtype": "Int",
+			"label": "Followers"
+		}
+	],
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-11-22 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Meta Daily Insight",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"export": 1,
+			"read": 1,
+			"report": 1,
+			"role": "System Manager",
+			"share": 1,
+			"write": 1
+		}
+	],
+	"read_only": 1,
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": [],
+	"title_field": "project"
+}

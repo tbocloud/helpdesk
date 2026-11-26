@@ -84,7 +84,7 @@ user exists there with a sales role, applies what they may see, and records writ
 | `get_stale_leads` | GET | `days` | `[{name, lead_name, company_name, lead_owner, tbo_department, tbo_stage, last_activity_on, idle_days}]` idle for `days` or more, scoped to the acting user's visibility |
 | `create_lead` | POST | `data, allow_duplicate` (1 only after the person confirmed) | the lead (at least `name`); an email another lead has is refused with DuplicateEntryError "Possible duplicate of <lead> (<owner>)" unless `allow_duplicate`; a number another lead has always ("... it already has the number <number>, and a number belongs to one lead.", [One lead per number](#one-lead-per-number)) |
 | `update_lead` | POST | `name, data` | the lead |
-| `set_stage` | POST | `name, stage, note` | the lead |
+| `set_stage` | POST | `name, stage, note, won_amount` (Closed – Won only, above 0) | the lead; `won_amount_not_kept` when the ERP site dropped the amount |
 | `add_note` | POST | `name, note` | the note |
 
 - `metric` (`new`, `intake`, `contacted`, `meetings`, `quotations`, `won`, `lost`, `stale`,
@@ -253,7 +253,7 @@ of the row lists the ones the ERP site allows from here, and a lead in a side st
 lead: a step opens the Move stage dialog with its first allowed stage picked (the current Meeting
 step, the next meeting), and the others stay dimmed but focusable (`aria-disabled`) with the reason
 as a tooltip. The dialog itself is unchanged: an optional note, and the ERP site's message when it
-refuses a move. A path stage the ERP site doesn't have is left out. On a phone the row is one
+refuses a move. Picking **Closed – Won** adds a required **Won amount** (see *Won amount* below). A path stage the ERP site doesn't have is left out. On a phone the row is one
 **Stage: Contacted** button that opens the same dialog. Left: the AI suggests and WhatsApp cards
 and the **Activity** timeline with the add-note box. Right (first on a phone): the duplicate
 notice (unchanged: Open and Merge), **Next step** (the follow-up date), **Numbers**
@@ -287,6 +287,23 @@ category, number, score), stage, owner, product, source (where the lead came fro
 stays out while an older TBO Smart sends no `source` with the rows), last call, next follow-up, updated, and the call
 button; on a phone the stage, follow-up and owner fold in under the name. Every filter and URL
 parameter works as before.
+
+### Won amount (2026-11-23)
+
+Moving a lead to **Closed – Won** asks what it was won for: a required **Won amount** in the
+Move stage dialog, above 0. It starts from the lead's latest quotation total (`quoted_amount`)
+when there is one, and the hint says so; the move button stays off until there is an amount.
+The amount is saved on the ERP site as the lead's `tbo_won_amount`, shows in Details, and is the
+lead's won value for **Sales targets** (Target Amount, counted for the lead's owner) and the
+overview, ahead of its quotation, deal or Sales Orders (TBO Smart `lead-pipeline.md`, *Won
+amount*). Leads won before keep counting their quotation, deal or Sales Orders.
+
+The ERP site enforces it for every path into Closed – Won: the mobile app, the MOM's lead stage
+and the ERPNext desk refuse the move without an amount; a quotation or proposal accepted wins the
+lead with the quotation's total. The hub checks the amount too, so an older TBO Smart, which
+silently drops a parameter it doesn't know, can't move a lead without one; when the reply lacks
+`won_amount` the hub says `won_amount_not_kept` and the page warns that the ERP site needs the
+latest TBO Smart.
 
 ## Calls through MyOperator
 
@@ -1344,7 +1361,8 @@ the same reads: [sales-dashboard.md](sales-dashboard.md).
   box only if it's still that lead and the text wasn't changed meanwhile. Edit lead has no
   Remarks; the lead page's note composer does that.
 - **Lead** (`/helpdesk/leads/<name>`, `Lead.vue`): details, *Move stage* (the primary
-  action; only `allowed_stages`, with an optional note), *Edit* (the same dialog, sending
+  action; only `allowed_stages`, with an optional note, and a required won amount for
+  Closed – Won), *Edit* (the same dialog, sending
   only changed fields), a note composer and the timeline, and the quotations read-only
   (`LeadQuotations.vue`). The lead's **source** (where it came from: Website, Phone call,
   Staff referral, Prospecting – <provider>, Meta Lead Ads, or the one picked on the form)

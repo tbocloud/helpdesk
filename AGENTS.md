@@ -77,7 +77,8 @@ Frappe Helpdesk is an open-source ticket management tool built on the [Frappe Fr
   - `note` / `note-border` for internal notes.
   - `champion` (`text-champion`, `bg-champion-soft`, `border-champion-border`) — warm gold, only for the Scoreboard's champion card.
   - A soft status circle behind an icon only where the colour means something (done = success, overdue/risk = danger, time/hours = info); see `docs/ui-guidelines.md` §8. Segmented controls are frappe-ui `TabButtons` (active option brand-filled by `theme.css`).
-  - Everything else stays neutral gray. No gradients, no decorative color.
+  - **Command center look, app-wide** (`docs/ui-guidelines.md` §8, 2026-11-25): navy cards on a near-black canvas in dark, white cards on `#eef2f7` in light; every card (`rounded-xl border-outline-gray-2 bg-surface-base`) gets a 3px top edge from the `--cc-*` palette (blue, violet, cyan, green, amber, orange, pink, red; neon in dark, with a glow), taking turns side by side or set by `--accent` where the colour means something. `StatTile` takes its colour from its tone. Card headings (`h2.text-base.font-semibold`) render small uppercase.
+  - Otherwise no gradients and no decorative color beyond that palette.
 - Fonts: Geist (`font-sans`) and Geist Mono (`font-mono`) for IDs, emails, counts and durations; use `tabular-nums` for numbers.
 - Implement mobile-first, responsive design with CSS Grid and Flexbox
 - Ensure styles are accessible (contrast ≥ 4.5:1, visible `:focus-visible` rings, keyboard reachable)

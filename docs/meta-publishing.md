@@ -73,7 +73,9 @@ version**. To upgrade, change the setting; nothing else is edited.
 Scopes: `pages_show_list`, `pages_read_engagement`, `pages_manage_posts`, `instagram_basic`,
 `instagram_content_publish`, `business_management` (`SCOPES`). With **Enable ads** on in the
 settings, `ADS_SCOPES` (`ads_management`, `ads_read`) are asked for too (`connect.scopes()`);
-clients without ads keep exactly these Phase 1 ones.
+clients without ads keep exactly these Phase 1 ones. With **Enable reach reports** on,
+`INSIGHTS_SCOPES` (`read_insights`, `instagram_manage_insights`) are asked for as well, for the
+Reach report; declining them doesn't stop the connection (docs/meta-insights.md).
 
 ## Publishing
 

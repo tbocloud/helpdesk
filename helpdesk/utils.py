@@ -509,3 +509,42 @@ def csv_safe(value):
     if isinstance(value, str) and value.startswith(CSV_FORMULA_PREFIXES):
         return f"'{value}"
     return value
+
+
+# === Report downloads ===
+
+
+def send_report_pdf(template: str, context: dict, filename: str):
+    """Answers the request with `template` as an A4 landscape PDF named `filename`.
+
+    Frappe renders PDFs with wkhtmltopdf. Where it is not installed, the same page is
+    returned ready to print (the template's `auto_print` opens the print dialog), and the
+    browser saves it as a PDF. Adds `generated_on`, `generated_by` and `auto_print` to the
+    context."""
+    import shutil
+
+    from frappe.utils import format_datetime, now_datetime
+
+    can_render_pdf = bool(shutil.which("wkhtmltopdf"))
+    html = frappe.render_template(  # the app's own fixed templates, not user input - nosemgrep
+        template,
+        {
+            **context,
+            "generated_on": format_datetime(now_datetime()),
+            "generated_by": frappe.utils.get_fullname(frappe.session.user),
+            "auto_print": not can_render_pdf,
+        },
+    )
+    if can_render_pdf:
+        from frappe.utils.pdf import get_pdf
+
+        frappe.response.filename = f"{filename}.pdf"
+        frappe.response.filecontent = get_pdf(
+            html, {"orientation": "Landscape", "page-size": "A4"}
+        )
+        frappe.response.type = "pdf"
+        return
+    frappe.response.filename = f"{filename}.html"
+    frappe.response.filecontent = html
+    frappe.response.type = "download"
+    frappe.response.display_content_as = "inline"

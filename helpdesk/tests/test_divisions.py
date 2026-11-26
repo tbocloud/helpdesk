@@ -22,6 +22,7 @@ from helpdesk.test_utils import (
     make_crm_source,
     make_division,
     make_project,
+    make_report_lead,
     make_task,
     make_tasky_user,
     make_team,
@@ -163,19 +164,53 @@ class TestDivisionIsolation(DivisionCase):
 
 
 class TestActiveDivision(DivisionCase):
-    def test_only_super_admins_switch_divisions(self):
+    def test_employees_in_several_divisions_dont_switch(self):
         self.make_india_and_ksa()
         self.india.append("members", {"user": BOB, "role": divisions.EMPLOYEE})
         self.india.save()
-        # Bob is in India and KSA: he works in his first, and can't switch, not even to his own
+        # Bob is in India and KSA but manages neither: he works in his first
         self.assertEqual(divisions.active_division(BOB), "IND")
+        self.assertFalse(divisions.division_info(BOB)["can_switch_division"])
         frappe.set_user(BOB)
         for division in ("KSA", "IND", None):
             with self.assertRaisesRegex(frappe.PermissionError, "Only Super Admins"):
                 divisions_api.switch_division(division)
-        # a pick saved earlier no longer moves him
+        # a pick saved for him doesn't move him either
         frappe.defaults.set_user_default(divisions.ACTIVE_DEFAULT, "KSA", BOB)
         self.assertEqual(divisions.active_division(BOB), "IND")
+
+    def test_a_manager_of_several_divisions_switches_between_them(self):
+        self.make_india_and_ksa()
+        self.ksa.append(
+            "members", {"user": CARA, "role": divisions.DIVISION_MANAGER}
+        )
+        self.ksa.save()
+        uae = make_division("UAE", "UAE", members=[(CARA, divisions.EMPLOYEE)])
+        info = divisions.division_info(CARA)
+        self.assertTrue(info["can_switch_division"])
+        self.assertEqual(
+            {d["name"]: d["can_switch"] for d in info["divisions"]},
+            {"IND": True, "KSA": True, uae.name: False},
+        )
+        self.assertEqual(info["overview_division"], "IND")
+
+        frappe.set_user(CARA)
+        divisions_api.switch_division("KSA")
+        self.assertEqual(divisions.active_division(CARA), "KSA")
+        self.assertEqual(divisions.division_info(CARA)["overview_division"], "KSA")
+        # not a division she only works in, and not every division at once
+        with self.assertRaisesRegex(frappe.PermissionError, "can't switch to"):
+            divisions_api.switch_division(uae.name)
+        with self.assertRaisesRegex(frappe.PermissionError, "Only Super Admins see"):
+            divisions_api.switch_division(None)
+        self.assertEqual(divisions.active_division(CARA), "KSA")
+
+    def test_a_manager_of_one_division_doesnt_switch(self):
+        self.make_india_and_ksa()
+        self.assertFalse(divisions.division_info(CARA)["can_switch_division"])
+        frappe.set_user(CARA)
+        with self.assertRaisesRegex(frappe.PermissionError, "Only Super Admins"):
+            divisions_api.switch_division("IND")
 
     def test_super_admin_starts_on_all_divisions_and_may_pick_any(self):
         self.make_india_and_ksa()
@@ -205,6 +240,11 @@ class TestActiveDivision(DivisionCase):
         self.assertFalse(info["can_view_division_overview"])
         self.assertTrue(divisions.division_info(CARA)["can_manage_divisions"])
         self.assertEqual(len(divisions.division_info(DEV)["divisions"]), 2)
+        self.assertTrue(divisions.division_info(DEV)["can_switch_division"])
+        # a Super Admin on "All divisions" opens the overview consolidated
+        self.assertIsNone(divisions.division_info(DEV)["overview_division"])
+        # Ann's division is hers to work in, but its overview isn't
+        self.assertIsNone(divisions.division_info(ANN)["overview_division"])
 
 
 class TestDivisionLeadsConnection(DivisionCase):
@@ -400,6 +440,115 @@ class TestDivisionOverview(DivisionCase):
                 {"subject": ("like", "Exported Division-wise quotations%")},
             )
         )
+
+
+class TestDivisionDashboards(DivisionCase):
+    def setUp(self):
+        super().setUp()
+        self.make_india_and_ksa()
+        india = make_crm_source("India ERP")
+        ksa = make_crm_source("KSA ERP")
+        self.india.db_set("crm_source", india.name)
+        self.ksa.db_set("crm_source", ksa.name)
+        today = getdate()
+        for lead, status, category, employee, source in (
+            ("I1", "Lead", "Open", ANN, "Website"),
+            ("I2", "Interested", "Open", ANN, "Cold Calling"),
+            ("I3", "Converted", "Converted", CARA, "Website"),
+            ("I4", "Do Not Contact", "Lost", CARA, "Website"),
+        ):
+            make_report_lead(
+                india.name,
+                lead,
+                status,
+                category,
+                today,
+                employee=employee,
+                lead_source=source,
+                expected_revenue=100,
+            )
+        make_report_lead(ksa.name, "K1", "Lead", "Open", today, employee=BOB)
+        make_report_lead(ksa.name, "K2", "Meeting", "", today, employee=BOB)
+        # out of the period
+        make_report_lead(ksa.name, "K3", "Lead", "Open", add_days(today, -800))
+
+    def test_every_status_per_division(self):
+        frappe.set_user(DEV)
+        result = overview_api.get_lead_status()
+        kpis = result["kpis"]
+        self.assertEqual(kpis["total"], 6)
+        self.assertEqual((kpis["open"], kpis["converted"], kpis["lost"]), (3, 1, 1))
+        # a status the site's mapping leaves out is counted, never dropped
+        self.assertEqual(kpis["other"], 1)
+        self.assertEqual(kpis["open_value"], 200)
+        lead = next(s for s in result["statuses"] if s["status"] == "Lead")
+        self.assertEqual(lead["divisions"], {"IND": 1, "KSA": 1})
+        self.assertEqual(result["statuses"][-1]["group"], "Other")
+        india = next(d for d in result["divisions"] if d["name"] == "IND")
+        self.assertEqual(india["conversion_rate"], 25.0)
+        ann = next(p for p in result["people"] if p["employee"] == ANN)
+        self.assertEqual((ann["name"], ann["total"]), ("Ann India", 2))
+
+    def test_filters_narrow_the_leads_not_the_choices(self):
+        frappe.set_user(DEV)
+        result = overview_api.get_lead_status(division="IND", lead_source="Website")
+        self.assertEqual(result["kpis"]["total"], 3)
+        self.assertEqual([d["name"] for d in result["divisions"]], ["IND"])
+        self.assertEqual(
+            result["filters"]["lead_sources"], ["Cold Calling", "Website"]
+        )
+        self.assertEqual(overview_api.get_lead_status(group="Lost")["kpis"]["total"], 1)
+        only = overview_api.get_lead_status(status="Lead", employee=BOB)
+        self.assertEqual(only["kpis"]["total"], 1)
+        self.assertEqual(only["people"][0]["division"], "KSA")
+
+    def test_only_the_divisions_a_manager_may_see(self):
+        frappe.set_user(CARA)
+        result = overview_api.get_lead_status()
+        self.assertEqual([d["name"] for d in result["divisions"]], ["IND"])
+        self.assertNotIn(BOB, [p["employee"] for p in result["people"]])
+        with self.assertRaises(frappe.PermissionError):
+            overview_api.get_lead_status(division="KSA")
+        frappe.set_user(ANN)
+        with self.assertRaises(frappe.PermissionError):
+            overview_api.get_lead_status()
+
+    def test_a_card_per_division(self):
+        project = make_project("Div Card Project", members=[(ANN, "Developer")])
+        project.db_set("division", "IND")
+        late = make_task(project.name, "Div card late", exp_end_date=add_days(getdate(), -2))
+        make_assignment("Task", late.name, ANN)
+        frappe.set_user(DEV)
+        cards = {c["name"]: c for c in overview_api.get_division_cards()["cards"]}
+        self.assertEqual(set(cards), {"IND", "KSA"})
+        india = cards["IND"]
+        self.assertEqual(india["admins"], ["Cara Admin"])
+        self.assertEqual((india["people"], india["leads"]), (2, 4))
+        self.assertEqual((india["active_projects"], india["overdue_tasks"]), (1, 1))
+        self.assertEqual(india["site"]["name"], "India ERP")
+        self.assertEqual(cards["KSA"]["admins"], [])
+        # a manager gets only their own division's card
+        frappe.set_user(CARA)
+        cards = overview_api.get_division_cards()["cards"]
+        self.assertEqual([c["name"] for c in cards], ["IND"])
+
+    def test_a_divisions_dashboard(self):
+        project = make_project("Div Dash Project", members=[(ANN, "Developer")])
+        project.db_set("division", "IND")
+        frappe.set_user(CARA)
+        dash = overview_api.get_division_dashboard("IND")
+        self.assertEqual(dash["card"]["name"], "IND")
+        self.assertEqual([p["name"] for p in dash["projects"]], [project.name])
+        self.assertEqual(
+            dash["lead_groups"],
+            {"Open": 2, "Won": 0, "Converted": 1, "Lost": 1, "Other": 0},
+        )
+        ann = next(p for p in dash["people"] if p["user"] == ANN)
+        self.assertEqual((ann["role"], ann["leads"]), (divisions.EMPLOYEE, 2))
+        cara = next(p for p in dash["people"] if p["user"] == CARA)
+        self.assertEqual(cara["won_leads"], 1)
+        with self.assertRaises(frappe.PermissionError):
+            overview_api.get_division_dashboard("KSA")
 
 
 class TestDivisionSiteRoles(DivisionCase):

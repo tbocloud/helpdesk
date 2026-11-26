@@ -10,7 +10,7 @@ sees their own on **Sales targets**.
 
 | Role | What they get |
 | --- | --- |
-| `Sales Head` (or System Manager) | **Assign sales targets** (Sales → Team): picks people and assigns the month's targets. **Team targets** (Sales → Team): how everyone is doing against them. |
+| `Sales Head` (or System Manager) | **Assign sales targets** (Sales → Team): picks people and assigns the month's targets. **Team targets** (Sales → Team): how everyone is doing against them. **Sales team** (Sales → Team): adds, changes and removes the team's people (docs/sales-team.md). |
 | `Presales Executive`, `Sales User` | **Sales targets** (Sales): their own targets as cards, month by month, read-only. |
 
 `Sales Head` and `Presales Executive` are created on migrate (`ensure_role` in
@@ -96,9 +96,9 @@ of a target card; the pill always names the kind.
 `desk/src/pages/sales-targets/TeamTargets.vue`, redesigned the same day to the owner's mockup:
 everyone's targets for the month side by side, so the head doesn't have to open each person.
 Same people, targets and progress as the Assign page (`get_team`, `get_team_progress`); nothing
-new on the server. The month (`?month=`), the view (`?view=person`) and the person open
-(`?employee=`) are in the URL. The header has the view switch (**Whole team** / **Person by
-person**, `TabButtons`), Refresh (reads the ERP site past the minute's cache, `fresh=1`), the
+new on the server. The month (`?month=`), the view (`?view=person` / `?view=scoreboard`) and
+the person open (`?employee=`) are in the URL. The header has the view switch (**Whole team** /
+**Person by person** / **Scoreboard**, `TabButtons`), Refresh (reads the ERP site past the minute's cache, `fresh=1`), the
 month stepper and **Assign targets** (the Assign page for the month).
 
 Each person's standing for the month: *behind* (at least one counted target behind pace),
@@ -139,6 +139,34 @@ and, on the right, **the person picked** (`TeamPersonTargets.vue`): avatar, name
 targets and when, **Edit targets** (or **Assign targets**, solid), the month overall with the
 days counted, then every target as a card (`TargetFigure`: kind colour, Target N, figure, progress), with
 **Confirm it's done** / **Reopen** on each KPI (`KpiStatus`, head mode).
+
+**Scoreboard** (`TeamScoreboard.vue`, 2026-11-24, to the owner's mockup): the month's ranking
+by the month overall, for Sales Heads only (the owner chose not to show salespeople each other's
+standing). The page subtitle reads *Who's closest to their targets this month.*
+
+- **Order** (`rankRows`): highest overall first; level on that, more targets reached first
+  (`overallOf`'s `reached`: counted targets at *Target reached* plus confirmed KPIs); people
+  level on both share a rank (1, 2, 2, 4). Only people with a month overall are ranked.
+- **Pace status** (`paceStatus`): *N behind* (warning) with any target behind pace, *Ahead of
+  pace* (success) with none behind and the overall at or past today's pace, else *On pace*
+  (info). A month over has no pace.
+- **Podium** (`ScoreboardPodium.vue`, the dark hero): *Scoreboard · {month}*, *Top of the team*,
+  chips *Today's pace* and *Board average* (the ranked people's overalls averaged); the top three
+  on blocks, first in the middle and tallest (`hero-fill`, a crown and ring in `hero-pace`),
+  second left, third right, each with the percent and "2nd · 2 of 6". Screen readers get them in
+  rank order; an empty place is an outline.
+- **Leader** (`ScoreboardLeader.vue`, the gold card): *Leading this month* (*Champion of
+  {month}* once over), *Ahead of pace* when so, a ring of the overall, the name, "6 points ahead
+  of today's 80% pace", why (targets reached, ahead of pace, none behind, who they are level
+  with) and **See {name}'s targets**. Only once the leader has reached something.
+- **Full ranking**: counts *N ahead* / *N behind pace*; a row is the rank (gold square for
+  first), face, name, chips "6 of 9 reached" and the pace status, a bar (green, amber with any
+  target behind) with today's pace as a black tick, and the percent.
+- **Not on the board**: everyone with nothing counted (*Not begun*, *Couldn't count* with the
+  reason on hover, *Nothing counted*) or no targets. One person: the row and **Check {name}'s
+  targets**; more: each row opens them.
+- A click on anyone opens them in Person by person. A month not begun and a month with no
+  targets say so in place of the board; while progress is read it shows skeletons.
 
 States: loading (skeletons), load error with Try again, not a Sales Head (the route sends them
 Home; the server refuses), no one with a target role, no one matching the pills or search (Show
@@ -201,7 +229,7 @@ account on the ERP site gets the ERP site's reason on the card instead of a figu
 
 | Measure | Counts (ERP figure) | Formula shown |
 | --- | --- | --- |
-| `won_value` Won value | `totals.won_value`: leads that reached Closed – Won, each at its latest quotation total, else the deal's amount, else its Sales Orders' total | — |
+| `won_value` Won value | `totals.won_value`: leads that reached Closed – Won, each at the **won amount** entered when it moved there (required since 2026-11-23, [leads.md](leads.md) *Won amount*), else (leads won before) its latest quotation total, else the deal's amount, else its Sales Orders' total | — |
 | `collected` Money collected | `get_proposal_money` `totals.advances`: payments received against the leads' Sales Orders, by posting date | — |
 | `meetings` Meetings held | `totals.meetings`: a MOM submitted, or a lead reaching First / Second / Third Meeting Completed | — |
 | `proposals` Proposals sent | `totals.quotations_sent`: leads a proposal went to, each once | — |

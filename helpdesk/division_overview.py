@@ -723,3 +723,360 @@ def report(
             if data["erp"][d.name].get("error")
         ],
     }
+
+
+# ---------- lead status (the Lead status page) ----------
+
+# the order the status groups are shown in; a status with no group is "Other"
+LEAD_GROUPS = ("Open", "Won", "Converted", "Lost", "Other")
+
+
+def lead_group(category: str | None) -> str:
+    return category if category in LEAD_GROUPS else "Other"
+
+
+def lead_status_rows(meta: list[dict], start, end) -> list[dict]:
+    """The divisions' copied leads of the period, counted per division, status, salesperson,
+    lead source and month: few enough rows to filter here, so the filters' choices can be
+    every value of the period, not only those left after filtering."""
+    sources = {d.crm_source: d.name for d in meta if d.crm_source}
+    if not sources:
+        return []
+    lead = frappe.qb.DocType("HD CRM Report Lead")
+    rows = (
+        frappe.qb.from_(lead)
+        .select(
+            lead.source,
+            lead.category,
+            lead.status,
+            lead.employee,
+            lead.lead_source,
+            lead.created_month,
+            Count("*").as_("count"),
+            Sum(lead.expected_revenue).as_("expected"),
+            Sum(lead.won_value).as_("won_value"),
+        )
+        .where(
+            lead.source.isin(list(sources))
+            & (lead.created_on >= start)
+            & (lead.created_on <= end)
+        )
+        .groupby(
+            lead.source,
+            lead.category,
+            lead.status,
+            lead.employee,
+            lead.lead_source,
+            lead.created_month,
+        )
+        .run(as_dict=True)
+    )
+    for row in rows:
+        row.division = sources[row.source]
+        row.group = lead_group(row.category)
+        row.status = row.status or _("No status")
+    return rows
+
+
+def lead_counts() -> dict:
+    return {"total": 0, **{g.lower(): 0 for g in LEAD_GROUPS}}
+
+
+def add_lead(counts: dict, row: dict):
+    counts["total"] += row["count"]
+    counts[row["group"].lower()] += row["count"]
+
+
+def with_conversion(counts: dict) -> dict:
+    counts["conversion_rate"] = rate(counts["won"] + counts["converted"], counts["total"])
+    return counts
+
+
+def lead_status(
+    division: str | None,
+    from_date: str | None,
+    to_date: str | None,
+    group: str | None = None,
+    status: str | None = None,
+    employee: str | None = None,
+    lead_source: str | None = None,
+) -> dict:
+    """Every lead status of the divisions' leads created in the period, per division, with
+    the salespeople and lead sources behind them (docs/divisions.md, "Lead status")."""
+    divisions = scope(division)
+    start, end = period(from_date, to_date)
+    meta = divisions_meta(divisions)
+    all_rows = lead_status_rows(meta, start, end)
+    rows = [
+        r
+        for r in all_rows
+        if (not group or r.group == group)
+        and (not status or r.status == status)
+        and (not employee or (r.employee or "") == employee)
+        and (not lead_source or (r.lead_source or "") == lead_source)
+    ]
+
+    totals = lead_counts()
+    expected = won_value = 0.0
+    by_division = {d.name: lead_counts() for d in meta}
+    statuses: dict[str, dict] = {}
+    people: dict[tuple, dict] = {}
+    lead_sources: dict[str, dict] = {}
+    by_month = {m: lead_counts() for m in months(start, end)}
+    for r in rows:
+        add_lead(totals, r)
+        add_lead(by_division[r.division], r)
+        if r.group == "Open":
+            expected += flt(r.expected)
+        won_value += flt(r.won_value)
+        entry = statuses.setdefault(
+            r.status, {"status": r.status, "group": r.group, "total": 0, "divisions": {}}
+        )
+        entry["total"] += r["count"]
+        entry["divisions"][r.division] = entry["divisions"].get(r.division, 0) + r["count"]
+        add_lead(
+            people.setdefault(
+                (r.division, r.employee or ""),
+                {"division": r.division, "employee": r.employee or "", **lead_counts()},
+            ),
+            r,
+        )
+        add_lead(
+            lead_sources.setdefault(
+                r.lead_source or "", {"lead_source": r.lead_source or "", **lead_counts()}
+            ),
+            r,
+        )
+        if r.created_month in by_month:
+            add_lead(by_month[r.created_month], r)
+
+    names = {d.name: d.division_name for d in meta}
+    employees = {r.employee for r in all_rows if r.employee}
+    full_names = dict(
+        frappe.get_all(
+            "User",
+            filters={"name": ("in", list(employees))},
+            fields=["name", "full_name"],
+            as_list=True,
+        )
+    ) if employees else {}
+    order = {g: i for i, g in enumerate(LEAD_GROUPS)}
+    for person in people.values():
+        person["division_name"] = names[person["division"]]
+        person["name"] = full_names.get(person["employee"]) or person["employee"]
+        with_conversion(person)
+    for source in lead_sources.values():
+        with_conversion(source)
+
+    return {
+        "options": division_options(),
+        "currency": reporting_currency(),
+        "from_date": start,
+        "to_date": end,
+        "groups": list(LEAD_GROUPS),
+        "kpis": {
+            **with_conversion(totals),
+            "open_value": expected,
+            "won_value": won_value,
+        },
+        "divisions": [
+            {
+                "name": d.name,
+                "division_name": d.division_name,
+                "country": d.country,
+                "has_site": bool(d.crm_source),
+                "last_synced_on": frappe.db.get_value(
+                    "HD CRM Source", d.crm_source, "last_synced_on"
+                )
+                if d.crm_source
+                else None,
+                **with_conversion(by_division[d.name]),
+            }
+            for d in meta
+        ],
+        "statuses": sorted(
+            statuses.values(), key=lambda s: (order[s["group"]], -s["total"], s["status"])
+        ),
+        "people": sorted(people.values(), key=lambda p: (-p["total"], p["name"])),
+        "lead_sources": sorted(
+            lead_sources.values(), key=lambda s: (-s["total"], s["lead_source"])
+        ),
+        "monthly": [{"month": m, **c} for m, c in by_month.items()],
+        # every value of the period, so a filter never hides its own other choices
+        "filters": {
+            "statuses": sorted({r.status for r in all_rows}),
+            "employees": sorted(
+                (
+                    {"value": e, "label": full_names.get(e) or e}
+                    for e in employees
+                ),
+                key=lambda e: e["label"].lower(),
+            ),
+            "lead_sources": sorted({r.lead_source for r in all_rows if r.lead_source}),
+        },
+    }
+
+
+# ---------- the divisions home and a division's dashboard ----------
+
+RUN_ROLES = ("Group Admin", "Division Admin")
+LIVE_PROJECTS = ("Open", "On hold")
+
+
+def admins_of(divisions: list[str]) -> dict[str, list[str]]:
+    """{division: names of the people who run it (Group and Division Admins)}"""
+    member = frappe.qb.DocType(MEMBER)
+    out = defaultdict(list)
+    for division, user in (
+        frappe.qb.from_(member)
+        .select(member.parent, member.user)
+        .where(
+            (member.parenttype == DIVISION)
+            & member.parent.isin(divisions)
+            & member.role.isin(RUN_ROLES)
+        )
+        .orderby(member.idx)
+        .run()
+    ):
+        out[division].append(frappe.utils.get_fullname(user))
+    return out
+
+
+def site_health(meta: list[dict]) -> dict[str, dict]:
+    """{source: its name, last sync and how it went}"""
+    sources = [d.crm_source for d in meta if d.crm_source]
+    if not sources:
+        return {}
+    return {
+        s.name: s
+        for s in frappe.get_all(
+            "HD CRM Source",
+            filters={"name": ("in", sources)},
+            fields=["name", "enabled", "last_synced_on", "last_sync_status"],
+        )
+    }
+
+
+def division_cards(from_date: str | None, to_date: str | None) -> dict:
+    """One card per division the person may see: who runs it, its people, its ERP site's
+    sync, its leads, projects and open work (the Divisions home)."""
+    start, end = period(from_date, to_date)
+    return {
+        "from_date": start,
+        "to_date": end,
+        "currency": reporting_currency(),
+        "cards": cards_for(scope(None), start, end),
+    }
+
+
+def cards_for(divisions: list[str], start, end) -> list[dict]:
+    meta = divisions_meta(divisions)
+    figures = {
+        "leads": lead_figures(meta, start, end),
+        "projects": project_counts(divisions),
+        "tasks": task_counts(divisions, start, end),
+        "people": people_counts(divisions),
+        "admins": admins_of(divisions),
+        "sites": site_health(meta),
+    }
+    return [division_card(d, figures) for d in meta]
+
+
+def division_card(d: dict, figures: dict) -> dict:
+    leads = figures["leads"][d.name]
+    projects = figures["projects"].get(d.name, {})
+    tasks = figures["tasks"][d.name]
+    site = figures["sites"].get(d.crm_source) if d.crm_source else None
+    return {
+        "name": d.name,
+        "division_name": d.division_name,
+        "country": d.country,
+        "currency": d.currency,
+        "admins": figures["admins"].get(d.name, []),
+        "people": figures["people"].get(d.name, 0),
+        "site": {
+            "name": site.name,
+            "enabled": site.enabled,
+            "last_synced_on": site.last_synced_on,
+            "last_sync_status": site.last_sync_status,
+        }
+        if site
+        else None,
+        "leads": leads["total"],
+        "open_leads": leads["open"],
+        "won_leads": leads["won"],
+        "lost_leads": leads["lost"],
+        "conversion_rate": rate(leads["won"], leads["total"]),
+        "won_value": leads["won_value"],
+        "projects": sum(projects.values()),
+        "active_projects": projects.get("Open", 0),
+        "on_hold_projects": projects.get("On hold", 0),
+        "pending_tasks": tasks["pending"],
+        "overdue_tasks": tasks["overdue"],
+        "done_tasks": tasks["done"],
+    }
+
+
+def division_dashboard(
+    division: str, from_date: str | None, to_date: str | None
+) -> dict:
+    """One division's own dashboard: its card, profile, people with their work and leads,
+    teams, departments, live projects and lead statuses."""
+    if not division:
+        frappe.throw(_("Pick a division."))
+    scope(division)
+    start, end = period(from_date, to_date)
+    card = cards_for([division], start, end)[0]
+    leads = lead_status(division, from_date, to_date)
+    lead_people = {p["employee"]: p for p in leads["people"]}
+    people = []
+    for row in productivity([division], start, end):
+        mine = lead_people.get(row["user"], {})
+        people.append(
+            {
+                **row,
+                "leads": mine.get("total", 0),
+                "won_leads": mine.get("won", 0) + mine.get("converted", 0),
+            }
+        )
+    profile = frappe.db.get_value(
+        DIVISION,
+        division,
+        ["status", "workspace_url", "time_zone", "language", "crm_source"],
+        as_dict=True,
+    )
+    return {
+        "from_date": start,
+        "to_date": end,
+        "currency": reporting_currency(),
+        "options": division_options(),
+        "card": card,
+        "profile": profile,
+        "people": sorted(
+            people, key=lambda p: (-p["leads"], -p["done"], p["full_name"])
+        ),
+        "teams": frappe.get_all(
+            "HD Team", filters={"division": division}, pluck="name", order_by="name"
+        ),
+        "departments": frappe.get_all(
+            "HD Department",
+            filters={"division": division},
+            pluck="department_name",
+            order_by="department_name",
+        ),
+        "projects": frappe.get_all(
+            "Project",
+            filters={"division": division, "status": ("in", LIVE_PROJECTS)},
+            fields=[
+                "name",
+                "project_name",
+                "status",
+                "project_lead",
+                "expected_end_date",
+            ],
+            order_by="expected_end_date asc",
+            limit=50,
+        ),
+        "lead_groups": {g: leads["kpis"][g.lower()] for g in LEAD_GROUPS},
+        "statuses": leads["statuses"],
+    }

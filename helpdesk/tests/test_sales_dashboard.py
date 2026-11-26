@@ -100,6 +100,10 @@ class TestSalesDashboard(FrappeTestCase):
                     "given": 50,
                     "called": 68,
                     "contacted": 30,
+                    "calls": 0,
+                    "missed": 0,
+                    "talk_seconds": 0,
+                    "overdue": 0,
                 }
             ],
         )
@@ -213,3 +217,75 @@ class TestSalesDashboard(FrappeTestCase):
         frappe.set_user(MANAGER)
         with self.assertRaises(LeadsUnavailableError):
             api.get_team_dashboard(fresh=1, source="Website")
+
+    def test_the_period_before_is_the_same_days(self):
+        # a running period is compared like for like, never with a whole one
+        self.assertEqual(
+            api.previous_bounds("today", "2026-11-25"),
+            (getdate("2026-11-24"), getdate("2026-11-24")),
+        )
+        # a Wednesday: last week's Monday to Wednesday
+        self.assertEqual(
+            api.previous_bounds("week", "2026-11-25"),
+            (getdate("2026-11-16"), getdate("2026-11-18")),
+        )
+        self.assertEqual(
+            api.previous_bounds("month", "2026-11-25"),
+            (getdate("2026-10-01"), getdate("2026-10-25")),
+        )
+        # 31 March against February: all of February, never into March
+        self.assertEqual(
+            api.previous_bounds("month", "2026-03-31"),
+            (getdate("2026-02-01"), getdate("2026-02-28")),
+        )
+
+    def test_won_value_is_read_only_for_people_who_won(self):
+        self.crm.lead_answers["get_overview"] = {
+            **OVERVIEW,
+            "totals": {**OVERVIEW["totals"], "won_value": 90000},
+            "by_owner": [
+                {"user": SALES, "full_name": "Sia Sales", "won": 2},
+                {"user": MANAGER, "full_name": "Mira", "won": 4},
+            ],
+        }
+        frappe.set_user(MANAGER)
+        page = api.get_team_dashboard(period="month", fresh=1)
+        # only the sales team, and only those with a won lead are asked
+        self.assertEqual(
+            page["revenue"],
+            [{"user": SALES, "full_name": "Sia Sales", "won": 2, "won_value": 90000}],
+        )
+        owners = [
+            p["owner"] for m, _post, p in self.crm.lead_calls if m == "get_overview"
+        ]
+        self.assertIn(SALES, owners)
+        self.assertNotIn(MANAGER, owners)
+        # the same days of last month, for the comparison
+        previous = page["previous"]
+        self.assertEqual(previous["from_date"], str(api.previous_bounds("month")[0]))
+
+    def test_one_persons_view_has_no_podium(self):
+        frappe.set_user(MANAGER)
+        page = api.get_team_dashboard(owner=SALES, fresh=1)
+        self.assertIsNone(page["revenue"])
+        self.assertNotIn("revenue", page["errors"])
+
+    def test_money_is_left_out_when_narrowed(self):
+        self.crm.lead_answers["get_proposal_money"] = {
+            "currency": "INR",
+            "totals": {"advances": 5000, "to_collect": 12000, "overdue": 2000},
+        }
+        frappe.set_user(MANAGER)
+        page = api.get_team_dashboard(fresh=1)
+        self.assertEqual(page["money"]["advances"], 5000)
+        self.assertEqual(page["money"]["to_collect"], 12000)
+        said = {"narrowed": {"department": "Elsewhere"}}
+        self.crm.lead_answers["get_overview"] = {**OVERVIEW, **said}
+        self.crm.lead_answers["get_lead_analysis"] = {"calling": [], **said}
+        self.crm.lead_calls.clear()
+        page = api.get_team_dashboard(fresh=1, department="Elsewhere")
+        # the ERP site doesn't count money per department, so it isn't asked
+        self.assertIsNone(page["money"])
+        self.assertFalse(
+            [m for m, _post, _p in self.crm.lead_calls if m == "get_proposal_money"]
+        )
