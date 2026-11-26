@@ -912,8 +912,9 @@ class TestTaskHold(WorkControlCase):
         self.assertEqual(item["hold_reason"], "Laptop / system issue")
 
     def test_resume_moves_the_due_date_by_the_days_on_hold(self):
-        due = add_days(nowdate(), 1)
-        task = self.make_task("Import item master", due)
+        task = self.make_task("Import item master", add_days(nowdate(), 1))
+        # the due date as stored: already moved to a working day when tomorrow is a day off
+        due = frappe.db.get_value("Task", task, "exp_end_date")
         self.hold(task, days_ago=2)
 
         self.as_user(DEV, lambda: tasky.resume_task(task=task))
@@ -932,8 +933,9 @@ class TestTaskHold(WorkControlCase):
         self.assertTrue(any("Due date moved" in c for c in comments))
 
     def test_resume_can_keep_the_due_date(self):
-        due = add_days(nowdate(), 1)
-        task = self.make_task("Set up email alerts", due)
+        task = self.make_task("Set up email alerts", add_days(nowdate(), 1))
+        # the due date as stored: already moved to a working day when tomorrow is a day off
+        due = frappe.db.get_value("Task", task, "exp_end_date")
         self.hold(task, days_ago=2)
 
         self.as_user(DEV, lambda: tasky.resume_task(task=task, extend_due_date=False))

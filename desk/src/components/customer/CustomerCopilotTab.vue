@@ -37,6 +37,24 @@
 
     <template v-else-if="data">
       <p
+        v-if="setup.error"
+        role="alert"
+        class="flex flex-wrap items-center gap-2 rounded-lg bg-surface-red-1 px-3 py-2 text-p-sm text-ink-red-4"
+      >
+        {{
+          errorText(
+            setup.error,
+            __("Couldn't refresh. This is the setup as last loaded.")
+          )
+        }}
+        <Button
+          variant="ghost"
+          size="sm"
+          :label="__('Retry')"
+          @click="setup.reload()"
+        />
+      </p>
+      <p
         v-if="!data.copilot.enabled || data.copilot.shadow"
         role="note"
         class="flex items-start gap-2 rounded-lg bg-info-soft px-3 py-2.5 text-p-sm text-info"
@@ -76,7 +94,7 @@
             :description="
               __('Every new ticket from {0} starts a Copilot run.', customer)
             "
-            :disabled="!data.can.switches || saving.loading"
+            :disabled="!data.can.switches || saving.loading || setup.loading"
             @update:model-value="change('enabled', $event)"
           />
 
@@ -85,7 +103,7 @@
             type="select"
             :label="__('Copilot level')"
             :options="levelOptions"
-            :disabled="!data.can.switches || saving.loading"
+            :disabled="!data.can.switches || saving.loading || setup.loading"
             :description="levelHelp"
             @update:model-value="change('level', $event)"
           />
@@ -106,7 +124,7 @@
                 customer
               )
             "
-            :disabled="!data.can.switches || saving.loading"
+            :disabled="!data.can.switches || saving.loading || setup.loading"
             @update:model-value="change('watch', $event)"
           />
 
@@ -441,7 +459,7 @@ import {
   Switch,
   toast,
 } from "frappe-ui";
-import { computed, reactive, ref, type Component } from "vue";
+import { computed, reactive, ref, watch, type Component } from "vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideCircleDashed from "~icons/lucide/circle-dashed";
@@ -465,14 +483,13 @@ const ICON_CLASS: Record<CheckState, string> = {
 };
 
 // The customer's setup, where only the newest answer counts: a reload started earlier, or a
-// save's older snapshot, never replaces newer data (review of #351). After a dialog saves,
-// the tab reads the server again rather than taking the dialog's copy.
+// change's older copy, never replaces newer data (review of #351). After any change (a switch,
+// reading apps, a dialog's save) the tab reads the server again.
 const setup = reactive({
   data: undefined as CopilotSetup | undefined,
   loading: false,
   error: null as unknown,
   reload,
-  setData,
 });
 let latest = 0;
 
@@ -493,15 +510,6 @@ async function reload() {
   }
 }
 
-// an answer the tab asked for itself (switches, reading apps): newer than any reload in flight
-function setData(fresh: CopilotSetup) {
-  latest += 1;
-  setup.data = fresh;
-  setup.error = null;
-  setup.loading = false;
-}
-
-reload();
 const data = computed(() => setup.data);
 
 const settingsNote = computed(() => {
@@ -599,8 +607,9 @@ function connectionOf(card: SetupCard) {
 
 const saving = createResource({
   url: `${SETUP_API}.save_switches`,
-  onSuccess: (result: CopilotSetup) => {
-    setup.setData(result);
+  onSuccess: () => {
+    // read the server again: a reply's own copy could be older than a reload already shown
+    setup.reload();
     toast.success(__("Saved"));
   },
   onError: (err: unknown) => {
@@ -642,7 +651,7 @@ function readApps(name: string, source: "site" | "press") {
         result: { apps?: number; drift?: string[] };
         setup: CopilotSetup;
       }) => {
-        setup.setData(r.setup);
+        setup.reload();
         const apps = r.result?.apps || 0;
         const drift = r.result?.drift || [];
         notices[name] = {
@@ -667,4 +676,21 @@ function readApps(name: string, source: "site" | "press") {
     }
   );
 }
+
+// The tab may be reused for another customer (the route changes only its parameter): start
+// afresh for each one, so one customer's setup is never shown under another's name.
+watch(
+  () => props.customer,
+  (customer, before) => {
+    if (before !== undefined && customer !== before) {
+      setup.data = undefined;
+      setup.error = null;
+      for (const key of Object.keys(notices)) delete notices[key];
+      peopleDialog.value = false;
+      cardDialog.value = false;
+    }
+    reload();
+  },
+  { immediate: true }
+);
 </script>
