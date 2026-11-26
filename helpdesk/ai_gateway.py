@@ -265,7 +265,9 @@ def save_model(
             _admin("POST", "/model/new", _deployment(name, previous, key))
         except GatewayError:
             raise GatewayError(
-                _("{0}; the model it had could not be written back either").format(e)
+                _("{0}; the model it had could not be written back either").format(
+                    str(e)
+                )
             ) from None
         raise
 
