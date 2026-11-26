@@ -264,6 +264,9 @@ def pr_result(pull_request: str, lease_token: str, result: dict | str) -> dict:
     return pulls.result(pull_request, lease_token, _parse(result, "result") or {})
 
 
+OPEN_EVAL_REQUEST = ("Queued", "Running")
+
+
 @frappe.whitelist(methods=["POST"])
 def report_eval(
     model: str,
@@ -271,17 +274,80 @@ def report_eval(
     job: str = "investigate",
     request: str | None = None,
 ) -> dict:
-    """A run of the test set, from the worker (Phase 31): scores per case number only."""
-    from helpdesk import ai_models
+    """A run of the test set, from the worker (Phase 31): scores per case number only. It
+    answers the request it names, or else the model's open request for the same job."""
+    from helpdesk import ai_engine, ai_models
 
     worker_only()
-    name = ai_models.store_eval(model, frappe.parse_json(results), job=job)
-    if request and frappe.db.exists(ai_models.EVAL_REQUEST, request):
-        frappe.db.set_value(
-            ai_models.EVAL_REQUEST, request, {"status": "Done", "eval_run": name}
+    model = str(model or "").strip()
+    # the job as store_eval keeps it
+    job = job if job in ai_engine.JOBS else "investigate"
+    named = request and frappe.db.get_value(
+        ai_models.EVAL_REQUEST,
+        request,
+        ["name", "model", "job", "status", "eval_run"],
+        as_dict=True,
+    )
+    if named and (named.model, named.job) != (model, job):
+        frappe.throw(
+            _("Request {0} is for {1} ({2}), not this report's model and job.").format(
+                named.name, named.model, named.job
+            )
         )
-    ai_models.close_requests(str(model or "").strip(), name)
+    name = ai_models.store_eval(model, frappe.parse_json(results), job=job)
+    if request:
+        # only the request it names, while it waits or after it was given up for taking too
+        # long (a late report still answers it); a report sent again answers nothing
+        late = named and named.status == "Failed" and not named.eval_run
+        waiting = named and named.status in OPEN_EVAL_REQUEST
+        answered = [named.name] if waiting or late else []
+    else:
+        answered = frappe.get_all(
+            ai_models.EVAL_REQUEST,
+            filters={
+                "model": model,
+                "job": job,
+                "status": ["in", list(OPEN_EVAL_REQUEST)],
+            },
+            pluck="name",
+        )
+    for open_request in answered:
+        frappe.db.set_value(
+            ai_models.EVAL_REQUEST, open_request, {"status": "Done", "eval_run": name}
+        )
     return {"eval_run": name}
+
+
+# a test-set run a worker claimed and never reported (it stopped, or lost the file): after this
+# long the request is Failed with a note, and a manager can ask for a run again
+EVAL_RUN_HOURS = 24
+
+
+def give_up_stale_eval_requests() -> int:
+    """Running test-set requests with no report for EVAL_RUN_HOURS become Failed. A late report
+    for one still answers it (report_eval accepts a Failed request that names it)."""
+    from frappe.utils import add_to_date, now_datetime
+
+    from helpdesk import ai_models
+
+    cutoff = add_to_date(now_datetime(), hours=-EVAL_RUN_HOURS)
+    stale = frappe.get_all(
+        ai_models.EVAL_REQUEST,
+        filters={"status": "Running", "modified": ["<", cutoff]},
+        pluck="name",
+    )
+    for name in stale:
+        frappe.db.set_value(
+            ai_models.EVAL_REQUEST,
+            name,
+            {
+                "status": "Failed",
+                "error": _(
+                    "No report came back within {0} hours. Ask for a run again."
+                ).format(EVAL_RUN_HOURS),
+            },
+        )
+    return len(stale)
 
 
 @frappe.whitelist(methods=["POST"])
@@ -291,8 +357,16 @@ def claim_eval_request() -> dict | None:
     from helpdesk import ai_models
 
     worker_only()
+    give_up_stale_eval_requests()
+    # a locking read that passes over a request another worker is claiming: no two workers
+    # get the same one
     name = frappe.db.get_value(
-        ai_models.EVAL_REQUEST, {"status": "Queued"}, "name", order_by="creation asc"
+        ai_models.EVAL_REQUEST,
+        {"status": "Queued"},
+        "name",
+        order_by="creation asc",
+        for_update=True,
+        skip_locked=True,
     )
     if not name:
         return None

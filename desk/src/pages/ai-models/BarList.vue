@@ -5,9 +5,7 @@
       :key="row.label"
       class="grid grid-cols-[minmax(6rem,12rem)_minmax(0,1fr)_4.5rem] items-center gap-3 text-p-sm"
     >
-      <span class="truncate text-ink-gray-8" :title="row.label">{{
-        row.label
-      }}</span>
+      <span class="min-w-0 break-words text-ink-gray-8">{{ row.label }}</span>
       <span
         class="h-2 overflow-hidden rounded-full bg-surface-gray-2"
         aria-hidden="true"
@@ -30,6 +28,7 @@
 
 <script setup lang="ts">
 // A short list of labelled bars: each value beside its bar, so it never rests on colour alone.
+// A long label wraps rather than being cut, so the whole name shows without hovering.
 import { __ } from "@/translation";
 
 defineProps<{

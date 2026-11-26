@@ -8,6 +8,7 @@ import json
 import re
 from dataclasses import dataclass, field, replace
 from time import monotonic, perf_counter
+from types import SimpleNamespace
 
 import anthropic
 import frappe
@@ -490,7 +491,16 @@ def job_models(job: str | None, settings=None) -> dict[str, str]:
 def get_providers(job: str | None = None) -> list[AIProvider]:
     """The providers call_haiku tries, in order (`job_chain`), less the models past their
     monthly token limit (`within_limits`)."""
-    return within_limits(job_chain(job))
+    return within_limits(job_chain(job), own_model(job))
+
+
+def own_model(job: str | None, settings=None) -> str:
+    """The job's own model as set in Models per job, even when its provider is off; '' without
+    one."""
+    if job in COMING_JOBS:
+        return ""
+    row = job_row(job, settings)
+    return row.model if row and row.get("model") else ""
 
 
 def job_chain(job: str | None = None, settings=None) -> list[AIProvider]:
@@ -539,13 +549,24 @@ def chain_models(job: str | None, settings=None) -> list[str]:
     row = job_row(job, settings)
     if row and row.get("model"):
         return [
-            m
-            for m in (row.model, row.get("backup_model"))
-            if m and frappe.db.get_value(PRICING_DOCTYPE, m, "listed")
+            m for m in (row.model, row.get("backup_model")) if m and listed_and_on(m)
         ]
     if job in OWN_MODEL_JOBS:
         return []
     return list(dict.fromkeys(p.model for p in section_chain(job, settings)))
+
+
+def listed_and_on(model: str) -> bool:
+    """The model is allowed for jobs and its provider account isn't switched off: the gateway
+    path skips an account that is off, as `account_provider` does. A section is always on."""
+    row = frappe.db.get_value(
+        PRICING_DOCTYPE, model, ["listed", "ai_provider"], as_dict=True
+    )
+    if not row or not row.listed:
+        return False
+    if not row.ai_provider or row.ai_provider in SLOTS:
+        return True
+    return bool(frappe.db.get_value(PROVIDER_DOCTYPE, row.ai_provider, "enabled"))
 
 
 def gateway_provider(model: str, settings=None) -> AIProvider:
@@ -579,18 +600,21 @@ def gateway_unusable(error: "AIProviderError") -> bool:
     return False
 
 
-def within_limits(chain: list[AIProvider]) -> list[AIProvider]:
+def within_limits(chain: list[AIProvider], first: str = "") -> list[AIProvider]:
     """A model past its monthly token limit isn't called. When it is the first model, the job
-    stops: the backup is there for outages, not for spending past a limit."""
-    if chain and over_limit(chain[0].model):
+    stops: the backup is there for outages, not for spending past a limit. `first` is the job's
+    own model (`own_model`): its limit counts even when its provider is off and the chain left
+    it out."""
+    first = first or (chain[0].model if chain else "")
+    if first and over_limit(first):
         return []
     return [p for p in chain if not over_limit(p.model)]
 
 
 def limit_reached(job: str | None = None) -> str:
     """The job's first model when its monthly token limit is used up, else ''."""
-    chain = job_chain(job)
-    return chain[0].model if chain and over_limit(chain[0].model) else ""
+    first = own_model(job) or next((p.model for p in job_chain(job)), "")
+    return first if first and over_limit(first) else ""
 
 
 # --- the model list and the provider accounts (Phase 31, docs/ai-models.md) ---
@@ -684,8 +708,8 @@ def in_use_message(model: str, settings=None) -> str:
 
 
 def month_tokens(model: str) -> int:
-    """Input plus output tokens of `model` this calendar month, TBO Support's and the Copilot
-    worker's (the usage log), counted again at most every 5 minutes."""
+    """Input (cached input too) plus output tokens of `model` this calendar month, TBO Support's
+    and the Copilot worker's (the usage log), counted again at most every 5 minutes."""
     key = MONTH_TOKENS_KEY.format(model)
     cached = frappe.cache.get_value(key, expires=True)
     if cached is not None:
@@ -695,7 +719,15 @@ def month_tokens(model: str) -> int:
     log = frappe.qb.DocType("HDS AI Usage Log")
     total = (
         frappe.qb.from_(log)
-        .select(Sum(Coalesce(log.input_tokens, 0) + Coalesce(log.output_tokens, 0)))
+        .select(
+            # Anthropic and the worker log cached input apart from input_tokens
+            Sum(
+                Coalesce(log.input_tokens, 0)
+                + Coalesce(log.cache_read_tokens, 0)
+                + Coalesce(log.cache_write_tokens, 0)
+                + Coalesce(log.output_tokens, 0)
+            )
+        )
         .where(log.model == model)
         .where(log.creation >= get_first_day(nowdate()))
     ).run()[0][0]
@@ -1010,15 +1042,13 @@ def complete(
             )
         except AIProviderError as e:
             # a failed attempt is a row too: errors and speed are counted per model (Phase 31)
-            log_usage(
-                provider.model,
-                _Usage(0, 0),
+            keep_failed_attempt(
+                provider,
+                e,
                 ticket_name=ticket_name,
-                provider=provider.slot,
                 job=job,
                 fallback=fallback,
                 duration_ms=round((perf_counter() - started) * 1000),
-                error=e,
             )
             raise
         log_usage(
@@ -1282,6 +1312,46 @@ def log_usage(
         ).insert(ignore_permissions=True)
     except Exception:
         frappe.log_error("Failed to log AI usage")
+
+
+def keep_failed_attempt(provider: AIProvider, error: AIProviderError, **row):
+    """A failed attempt's usage row, written by a job of its own: a request that fails after it
+    (a draft that can't be made) rolls back, and must not take the row with it. The job commits
+    only this row. Never raises: the caller is failing over."""
+    try:
+        frappe.enqueue(
+            "helpdesk.ai_engine.log_failed_attempt",
+            queue="short",
+            now=frappe.flags.in_test,
+            attempt={
+                **row,
+                "model": provider.model,
+                "provider": provider.slot,
+                "kind": error.kind,
+                "status": error.status,
+                "detail": error.detail,
+            },
+        )
+    except Exception:
+        frappe.log_error("Failed to log AI usage")
+
+
+def log_failed_attempt(attempt: dict):
+    """The job behind `keep_failed_attempt`. `detail` was masked when the error was made."""
+    log_usage(
+        attempt["model"],
+        _Usage(0, 0),
+        ticket_name=attempt.get("ticket_name"),
+        provider=attempt.get("provider"),
+        job=attempt.get("job"),
+        fallback=attempt.get("fallback"),
+        duration_ms=attempt.get("duration_ms"),
+        error=SimpleNamespace(
+            kind=attempt.get("kind"),
+            status=attempt.get("status"),
+            detail=attempt.get("detail"),
+        ),
+    )
 
 
 def log_worker_usage(run: str, cost: dict | None, job: str, attempt: int = 1):

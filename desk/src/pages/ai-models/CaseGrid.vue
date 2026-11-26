@@ -3,8 +3,8 @@
     <h4 class="text-base-medium text-ink-gray-9">{{ title }}</h4>
     <ul class="flex flex-wrap gap-1" role="list">
       <li
-        v-for="c in cases"
-        :key="c.case"
+        v-for="(c, i) in cases"
+        :key="i"
         class="inline-flex h-7 min-w-[2.75rem] items-center justify-center gap-1 rounded px-1.5 text-xs font-medium"
         :class="
           c.right
@@ -27,7 +27,8 @@
 
 <script setup lang="ts">
 // One run of the test set, case by case: a tick or a cross beside each case number, so right
-// and wrong never rest on colour alone. Case numbers only; never a case's text.
+// and wrong never rest on colour alone. Case numbers only; never a case's text. A run can hold the
+// same case number twice, so each square is keyed by its place in the run, not by its number.
 import { __ } from "@/translation";
 import LucideCheck from "~icons/lucide/check";
 import LucideX from "~icons/lucide/x";

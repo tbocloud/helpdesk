@@ -613,12 +613,15 @@ def save_job(job: str, values: dict) -> dict:
         )
     clean = _clean_job(job, values)
     doc = frappe.get_doc(SETTINGS)
+    # the level's models before the change, written back if the gateway refuses the new ones
+    old = next((r for r in doc.get("ai_jobs") or [] if r.job == job), None)
+    previous = (old.get("model"), old.get("backup_model")) if old else ()
     changes = _apply_job(doc, job, clean)
     if not changes:
         return job_settings()
     doc.save(ignore_permissions=True)
     if job in ai_engine.DESKTOP_GATEWAY_NAMES and admin_ready():
-        write_level(job)
+        write_level(job, previous)
     for field, before, value in changes:
         frappe.get_doc(
             {
@@ -948,14 +951,17 @@ def _credential_values(key: str, url: str) -> dict:
     return {"api_key": key, **({"api_base": url} if url else {})}
 
 
-def _key_to_gateway(account: str, key: str, url: str) -> None:
-    """Writes an account's key to the gateway as a credential, and forgets it here."""
+def _key_to_gateway(account: str, key: str, url: str, forget: bool = True) -> None:
+    """Writes an account's key to the gateway as a credential, and forgets it here (`forget`).
+    A copy that isn't forgotten is for while TBO Support still calls the provider itself."""
     from frappe.utils.password import remove_encrypted_password
 
     try:
         ai_gateway.save_credential(account, _credential_values(key, url))
     except ai_gateway.GatewayError as e:
         frappe.throw(_("The gateway did not take the key: {0}").format(str(e)))
+    if not forget:
+        return
     remove_encrypted_password(PROVIDER, account, "api_key")
     frappe.db.set_value(PROVIDER, account, "key_on_gateway", 1, update_modified=False)
 
@@ -983,14 +989,28 @@ def _section_credential() -> None:
         )
 
 
-def _write_model(name: str) -> None:
-    """One model of the list into the gateway, or out of it when it is no longer allowed."""
+def _served(name: str) -> dict | None:
+    """How the gateway calls a model of the list now; None when it isn't on the gateway."""
+    row = frappe.db.get_value(
+        PRICING, name, ["listed", "ai_provider", "on_gateway"], as_dict=True
+    )
+    if not (row and row.on_gateway and row.listed and row.ai_provider):
+        return None
+    return gateway_params(name, row.ai_provider)
+
+
+def _write_model(name: str, previous: dict | None = None) -> None:
+    """One model of the list into the gateway, or out of it when it is no longer allowed.
+    `previous` (`_served` before the change) is written back if the gateway refuses the new
+    one, so the model keeps answering; saving it again tries once more."""
     row = frappe.db.get_value(PRICING, name, ["listed", "ai_provider"], as_dict=True)
     try:
         if row and row.listed and row.ai_provider:
             if row.ai_provider == ai_engine.ANTHROPIC_SLOT:
                 _section_credential()
-            ai_gateway.save_model(name, gateway_params(name, row.ai_provider))
+            ai_gateway.save_model(
+                name, gateway_params(name, row.ai_provider), previous=previous
+            )
             on = 1
         else:
             ai_gateway.delete_model(name)
@@ -1027,26 +1047,44 @@ def _ensure_credential(account: str) -> None:
         ai_gateway.save_credential(account, _credential_values(key, doc.base_url or ""))
 
 
-def write_level(job: str) -> None:
+def _level_to_gateway(name: str, models: list[str]) -> None:
+    """A desktop level's models under its name, in order, in place of what it had."""
+    for order in (1, 2):
+        ai_gateway.delete_model(f"{name}:{order}")
+    for order, model in enumerate(models, start=1):
+        account = model_section(model)
+        _ensure_credential(account)
+        ai_gateway.save_model(
+            name,
+            {**gateway_params(model, account), "order": order},
+            f"{name}:{order}",
+        )
+
+
+def write_level(job: str, previous: tuple = ()) -> None:
     """A desktop level on the gateway: one name (tbo-simple …) with the level's model first
     and its backup second, so a person's key needs only the level's name and the backup
-    answers when the model can't. Without a model the name leaves the gateway."""
+    answers when the model can't. Without a model the name leaves the gateway. When the
+    gateway refuses the change, the level's `previous` models are written back, so people's
+    calls keep an answer; the settings are not saved (the error rolls them back)."""
     name = ai_engine.DESKTOP_GATEWAY_NAMES[job]
     row = ai_engine.job_row(job)
     chosen = [m for m in ((row.model, row.backup_model) if row else ()) if m]
     try:
-        for order in (1, 2):
-            ai_gateway.delete_model(f"{name}:{order}")
-        for order, model in enumerate(chosen, start=1):
-            account = model_section(model)
-            _ensure_credential(account)
-            ai_gateway.save_model(
-                name,
-                {**gateway_params(model, account), "order": order},
-                f"{name}:{order}",
-            )
+        _level_to_gateway(name, chosen)
     except ai_gateway.GatewayError as e:
-        frappe.throw(_("The gateway did not take {0}: {1}").format(name, str(e)))
+        message = _("The gateway did not take {0}: {1}").format(name, str(e))
+        earlier = [m for m in previous if m]
+        if earlier:
+            try:
+                _level_to_gateway(name, earlier)
+                message += " " + _("It keeps the models it had.")
+            except ai_gateway.GatewayError:
+                # saving the same choice again changes nothing, so it can't repair the level
+                message += " " + _(
+                    "Its earlier models could not be written back either: use Write all to the gateway once it answers."
+                )
+        frappe.throw(message)
     _desktop_names(name, add=bool(chosen))
 
 
@@ -1074,18 +1112,21 @@ def _desktop_names(name: str, add: bool) -> None:
 
 
 def write_all() -> dict:
-    """Everything into the gateway: the accounts' keys (then forgotten here), and every allowed
-    model; a model no longer allowed leaves it."""
+    """Everything into the gateway: the accounts' keys, and every allowed model; a model no
+    longer allowed leaves it. A key is forgotten here only while every call goes through the
+    gateway (the owner's decision for Phase 37); before that switch is on, TBO Support still
+    calls the providers itself, so the gateway gets a copy and the key stays here too."""
     _only_system_managers(_("Only System Managers set up the AI gateway."))
     if not (ai_gateway.base_url() and ai_gateway.admin_key()):
         frappe.throw(_("Set the gateway's address and its admin key first."))
+    moving = ai_gateway.for_all()
     keys = 0
     for account in frappe.get_all(PROVIDER, fields=["name", "api_style", "base_url"]):
         key = get_decrypted_password(
             PROVIDER, account.name, "api_key", raise_exception=False
         )
         if key:
-            _key_to_gateway(account.name, key, account.base_url or "")
+            _key_to_gateway(account.name, key, account.base_url or "", forget=moving)
             keys += 1
     models = frappe.get_all(
         PRICING, filters={"ai_provider": ["is", "set"]}, pluck="name"
@@ -1152,16 +1193,31 @@ def test_provider(name: str, model: str | None = None) -> dict:
             "ok": False,
             "message": _("Add a model for {0} first, then test it.").format(name),
         }
-    provider = (
-        ai_engine.gateway_provider(model)
-        if ai_gateway.for_all()
-        else ai_engine.account_provider(name, model)
-    )
+    through_gateway = ai_gateway.for_all()
+    if through_gateway:
+        # the gateway answers a model with its own account's key, so only one of this account's
+        # models says whether this account works (a section's own model may be the gateway's)
+        owner = model_section(model)
+        if owner != name and (owner or name not in ai_engine.SLOTS):
+            return {
+                "ok": False,
+                "message": _(
+                    "{0} is not one of {1}'s models, so it can't test {1}."
+                ).format(model, name),
+            }
+        provider = ai_engine.gateway_provider(model)
+    else:
+        provider = ai_engine.account_provider(name, model)
     if not provider:
         return {
             "ok": False,
             "message": _("{0} has no API key yet, or it is off.").format(name),
         }
+    label = (
+        _("{0} ({1}) through the TBO AI gateway").format(name, model)
+        if through_gateway
+        else provider.label
+    )
     from time import perf_counter
 
     started = perf_counter()
@@ -1175,13 +1231,13 @@ def test_provider(name: str, model: str | None = None) -> dict:
     except ai_engine.AIProviderError as e:
         return {
             "ok": False,
-            "message": _("{0} answered: {1}").format(provider.label, e.summary),
+            "message": _("{0} answered: {1}").format(label, e.summary),
         }
     ai_engine.record_success(provider)
     return {
         "ok": True,
         "message": _("{0} answered in {1} s.").format(
-            provider.label, round(perf_counter() - started, 1)
+            label, round(perf_counter() - started, 1)
         ),
     }
 
@@ -1203,6 +1259,8 @@ def save_model(values: dict) -> dict:
     ):
         frappe.throw(_("{0} is already in the list.").format(model))
     doc = frappe.get_doc(PRICING, model) if exists else frappe.new_doc(PRICING)
+    # what the gateway serves now, to write back if it refuses the change
+    previous = _served(model) if exists else None
     if not exists:
         doc.update({"model_id": model, "display_name": model, "is_active": 1})
     if "name" in values:
@@ -1230,7 +1288,7 @@ def save_model(values: dict) -> dict:
         doc.listed = 1 if sbool(values.get("listed")) else 0
     doc.save(ignore_permissions=True)
     if ai_gateway.for_all():
-        _write_model(doc.name)
+        _write_model(doc.name, previous)
     return job_settings()
 
 
@@ -1509,9 +1567,16 @@ def _cases(run: str) -> list[dict]:
 
 
 def latest_scores() -> dict[str, dict]:
-    """Each model's newest run: {model: {accuracy, ran_on}}."""
+    """Each model's newest run: {model: {accuracy, ran_on}}. Every run is read (a few per
+    model), not the newest 50 the history shows: many runs of one model must not hide another
+    model's only one."""
     scores: dict[str, dict] = {}
-    for run in _eval_runs():
+    for run in frappe.get_all(
+        EVAL_RUN,
+        fields=["model", "accuracy", "ran_on"],
+        order_by="ran_on desc, creation desc",
+        limit=0,
+    ):
         scores.setdefault(
             run.model, {"accuracy": run.accuracy, "ran_on": str(run.ran_on)}
         )
@@ -1527,7 +1592,7 @@ def benchmarks(model: str, against: str | None = None) -> dict:
             round(run.total_cost_usd / run.cases_right, 2) if run.cases_right else None
         )
         run["ran_on"] = str(run.ran_on)
-    others = sorted({r.model for r in _eval_runs() if r.model != model})
+    others = sorted(m for m in latest_scores() if m != model)
     against = against if against in others else (others[0] if others else "")
     theirs = _eval_runs(against)[:1] if against else []
     return {
@@ -1592,13 +1657,13 @@ def remove_public_benchmark(name: str) -> dict:
     return benchmarks(model)
 
 
-def close_requests(model: str, eval_run: str) -> None:
-    """A run of the test set arrived: the model's waiting requests are answered."""
-    for name in frappe.get_all(
-        EVAL_REQUEST,
-        filters={"model": model, "status": ["in", ["Queued", "Running"]]},
-        pluck="name",
-    ):
+def close_requests(model: str, eval_run: str, job: str | None = None) -> None:
+    """A run of the test set arrived: the model's waiting requests (for `job`, when given)
+    are answered."""
+    filters = {"model": model, "status": ["in", ["Queued", "Running"]]}
+    if job:
+        filters["job"] = job
+    for name in frappe.get_all(EVAL_REQUEST, filters=filters, pluck="name"):
         frappe.db.set_value(
             EVAL_REQUEST, name, {"status": "Done", "eval_run": eval_run}
         )
@@ -1742,7 +1807,9 @@ def shingles(text: str | None) -> set[int]:
 
 def note_draft(ticket: str, model: str | None, reply: str) -> None:
     """An AI draft reply was made for the agent. Only its checksums are kept, for a day, to
-    compare with what the agent sends. A redraft of a waiting draft is the same draft."""
+    compare with what the agent sends. A redraft of a waiting draft by the same model is the
+    same draft; by another model it is a new one, so what the agent sends counts for the model
+    that made it, and the replaced draft stays unused."""
     try:
         marks = shingles(reply)
         if not marks:
@@ -1754,7 +1821,7 @@ def note_draft(ticket: str, model: str | None, reply: str) -> None:
             {"model": model or "", "marks": sorted(marks)},
             expires_in_sec=DRAFT_HOURS * 3600,
         )
-        if not waiting:
+        if not waiting or (waiting.get("model") or "") != (model or ""):
             record_event("Draft made", model, job="draft", ticket=ticket)
     except Exception:
         with contextlib.suppress(Exception):
@@ -1794,23 +1861,50 @@ def on_communication_insert(doc, method=None):
             frappe.log_error(title="AI draft not compared with the reply")
 
 
-def _customer_answers(runs: list) -> dict:
-    """What customers said after Copilot worked on their ticket: fixed, or still broken."""
+def _customer_answers(model: str, runs: list) -> dict:
+    """What customers said after Copilot worked on their ticket: fixed, or still broken. A
+    ticket keeps only its newest answer, and a new fix asks again, so the answer is about the
+    ticket's own run (`custom_copilot_run`, else its newest): it counts for that run's model
+    only, not for every model that once worked on the ticket."""
+    counts = {"Confirmed": 0, "Reopened": 0}
     tickets = sorted({r.ticket for r in runs if r.ticket})
     if not tickets or not frappe.db.has_column(
         "HD Ticket", "custom_customer_confirmation"
     ):
-        return {"Confirmed": 0, "Reopened": 0}
+        return counts
+    linked = frappe.db.has_column("HD Ticket", "custom_copilot_run")
     answers = frappe.get_all(
         "HD Ticket",
         filters={
             "name": ["in", tickets],
-            "custom_customer_confirmation": ["in", ["Confirmed", "Reopened"]],
+            "custom_customer_confirmation": ["in", list(counts)],
         },
-        pluck="custom_customer_confirmation",
+        fields=[
+            "name",
+            "custom_customer_confirmation",
+            *(["custom_copilot_run"] if linked else []),
+        ],
         limit=0,
     )
-    return {kind: answers.count(kind) for kind in ("Confirmed", "Reopened")}
+    if not answers:
+        return counts
+    model_of: dict[str, str] = {}
+    newest: dict[str, str] = {}
+    for run in frappe.get_all(
+        "HDS Copilot Run",
+        filters={"ticket": ["in", [a.name for a in answers]]},
+        fields=["name", "ticket", "model_used"],
+        order_by="creation asc",
+        limit=0,
+    ):
+        model_of[run.name] = run.model_used or ""
+        newest[run.ticket] = run.model_used or ""
+    for answer in answers:
+        run = answer.get("custom_copilot_run")
+        about = model_of[run] if run in model_of else newest.get(answer.name)
+        if about == model:
+            counts[answer.custom_customer_confirmation] += 1
+    return counts
 
 
 def quality(model: str, days: int = 30) -> dict:
@@ -1863,7 +1957,7 @@ def quality(model: str, days: int = 30) -> dict:
         + events.get("Unsupported answer", 0)
         + events.get("Hand-over", 0)
     )
-    answers = _customer_answers(runs)
+    answers = _customer_answers(model, runs)
     answered = answers["Confirmed"] + answers["Reopened"]
     drafts = max(
         events.get("Draft made", 0),
@@ -1950,19 +2044,31 @@ def _gateway_figures(days_rows: list) -> dict:
 
 
 def _add(figures: dict, more: dict) -> dict:
-    """Two sources' figures as one: counts and cost add up; the speed stays the first's."""
+    """TBO Support's figures with the gateway's (`more`) as one: counts and cost add up; the
+    speed stays the first's. Only TBO Support's own log says which calls a fallback answered,
+    so the fallback rate stays the share of its calls (`hub_calls`), never of the gateway's."""
     calls = figures["calls"] + more["calls"]
     failed = figures["failed"] + more["failed"]
+    hub_calls = figures.get("hub_calls", figures["calls"])
     return {
         **figures,
         "calls": calls,
         "failed": failed,
         "error_rate": rate(failed, calls),
-        "fallback_rate": rate(figures["as_fallback"], calls),
+        "hub_calls": hub_calls,
+        "fallback_rate": rate(figures["as_fallback"], hub_calls),
         "cost": round(figures["cost"] + more["cost"], 2),
         "p50": figures["p50"] if figures["p50"] is not None else more["p50"],
         "p95": figures["p95"] if figures["p95"] is not None else more["p95"],
     }
+
+
+def _merged_status(status: str, figures: dict) -> str:
+    """A model's status again once the gateway's calls are added: from all its calls, as for
+    TBO Support's alone. A pause stays."""
+    if status == "Paused" or not figures["calls"]:
+        return status
+    return _status("", figures, set())
 
 
 def overview(days: int = 30) -> dict:
@@ -1974,14 +2080,14 @@ def overview(days: int = 30) -> dict:
     if not by_model:
         return result
     known = {m["model"]: m for m in result["models"]}
+    scores = latest_scores()
     for name, rows in by_model.items():
         figures = _gateway_figures(rows)
         aliases = sorted({r.gateway_alias for r in rows if r.gateway_alias})
         if name in known:
             known[name].update(_add(known[name], figures))
             known[name]["gateway_aliases"] = aliases
-            if known[name]["status"] in ("Not used", "Candidate"):
-                known[name]["status"] = "Healthy"
+            known[name]["status"] = _merged_status(known[name]["status"], known[name])
         else:
             result["models"].append(
                 {
@@ -1990,11 +2096,8 @@ def overview(days: int = 30) -> dict:
                     "gateway_aliases": aliases,
                     "used_for": {"primary": [], "fallback": []},
                     **figures,
-                    "benchmark": latest_scores().get(name),
-                    "status": "Degraded"
-                    if figures["calls"] >= MIN_CALLS
-                    and (figures["error_rate"] or 0) >= DEGRADED_ERROR_RATE
-                    else "Healthy",
+                    "benchmark": scores.get(name),
+                    "status": _merged_status("Not used", figures),
                 }
             )
         result["totals"] = _add(result["totals"], figures)
@@ -2020,8 +2123,7 @@ def detail(model: str, days: int = 30) -> dict:
     )
     if not result["provider"]:
         result["provider"] = GATEWAY_SOURCE
-    if result["status"] in ("Not used", "Candidate"):
-        result["status"] = "Healthy"
+    result["status"] = _merged_status(result["status"], result)
     by_day: dict[str, list] = {}
     for row in rows:
         by_day.setdefault(str(row.day), []).append(row)
@@ -2051,13 +2153,43 @@ def detail(model: str, days: int = 30) -> dict:
     return result
 
 
+def _keys_only_on_gateway(settings) -> dict[str, list[str]]:
+    """Provider accounts whose key lives only in the gateway, with the jobs of TBO Support and
+    the Copilot worker that call their models. Straight to the providers, those models have no
+    key. A desktop level isn't one: the desktop app always calls the gateway."""
+    found: dict[str, list[str]] = {}
+    for row in settings.get("ai_jobs") or []:
+        if not row.get("model") or row.job in ai_engine.OWN_MODEL_JOBS:
+            continue
+        for model in (row.get("model"), row.get("backup_model")):
+            account = model_section(model) if model else ""
+            if (
+                account
+                and account not in ai_engine.SLOTS
+                and frappe.db.get_value(PROVIDER, account, "key_on_gateway")
+                and not get_decrypted_password(
+                    PROVIDER, account, "api_key", raise_exception=False
+                )
+            ):
+                jobs = found.setdefault(account, [])
+                if row.job not in jobs:
+                    jobs.append(row.job)
+    return found
+
+
 def save_gateway(values: dict) -> dict:
-    """The gateway's address, its read-only key and whether to read it."""
+    """The gateway's address, its keys, whether to read its usage and whether every call goes
+    through it. While every call goes through it, a new address or call key is checked like
+    the switch itself; the switch goes off only when no job needs a key that lives only in the
+    gateway."""
     if not can_change():
         frappe.throw(
             _("Only System Managers set up the AI gateway."), frappe.PermissionError
         )
     doc = frappe.get_doc(SETTINGS)
+    # whether every call went through the gateway until now (the switch, its address and key)
+    was_on = ai_gateway.for_all(doc)
+    old_url = (doc.gateway_url or "").strip()
     if "url" in values:
         doc.gateway_url = str(values.get("url") or "").strip()
     if "on" in values:
@@ -2068,11 +2200,28 @@ def save_gateway(values: dict) -> dict:
         doc.gateway_key = str(values.get("call_key")).strip()
     if values.get("admin_key") is not None:
         doc.gateway_admin_key = str(values.get("admin_key")).strip()
-    turning_on = "for_all" in values and frappe.utils.sbool(values.get("for_all"))
     if "for_all" in values:
-        doc.gateway_for_all = 1 if turning_on else 0
+        doc.gateway_for_all = 1 if frappe.utils.sbool(values.get("for_all")) else 0
+    if was_on and not doc.gateway_for_all:
+        # keys saved while every call went through the gateway live only there (the owner's
+        # decision for Phase 37), and the gateway never gives a key back
+        stranded = _keys_only_on_gateway(doc)
+        if stranded:
+            frappe.throw(
+                _(
+                    "The keys of {0} live only in the gateway, and {1} use their models. Choose other models for those jobs first; once the switch is off, enter those keys again. Every call keeps going through the gateway."
+                ).format(
+                    ", ".join(sorted(stranded)),
+                    ", ".join(sorted({j for jobs in stranded.values() for j in jobs})),
+                )
+            )
+    moved = (doc.gateway_url or "").strip() != old_url or values.get(
+        "call_key"
+    ) is not None
+    # turning it on, or a new address or key while it is on: checked before calls go there
+    probe = bool(doc.gateway_for_all) and (not was_on or moved)
     doc.save(ignore_permissions=True)
-    if turning_on and not ai_gateway.call_key() and ai_gateway.admin_key():
+    if probe and not ai_gateway.call_key() and ai_gateway.admin_key():
         # TBO Support makes its own gateway key: nobody copies one by hand
         try:
             doc.gateway_key = ai_gateway.make_call_key()
@@ -2081,7 +2230,7 @@ def save_gateway(values: dict) -> dict:
                 _("The gateway did not make TBO Support's key: {0}").format(str(e))
             )
         doc.save(ignore_permissions=True)
-    if turning_on:
+    if probe:
         # every call goes through it only once it answers and takes TBO Support's key
         frappe.cache.delete_value([ai_gateway.ALIVE_KEY, ai_gateway.KEY_WORKS_KEY])
         problem = ""
@@ -2096,8 +2245,17 @@ def save_gateway(values: dict) -> dict:
         elif not ai_gateway.key_works():
             problem = _("The gateway refused TBO Support's key.")
         if problem:
+            # the error rolls the save back, so the earlier settings stay
             frappe.throw(
-                problem + " " + _("Every call keeps going straight to the providers.")
+                problem
+                + " "
+                + (
+                    _(
+                        "Nothing was changed: every call keeps going through the gateway."
+                    )
+                    if was_on
+                    else _("Every call keeps going straight to the providers.")
+                )
             )
     ai_engine.reset_provider_state()
     return ai_gateway.status()

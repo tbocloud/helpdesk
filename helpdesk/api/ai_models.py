@@ -7,7 +7,7 @@ Managers change which model a job uses (helpdesk.ai_models)."""
 import frappe
 from frappe import _
 
-from helpdesk import ai_models
+from helpdesk import ai_engine, ai_models
 from helpdesk.tasky.permissions import is_tasky_admin
 
 
@@ -95,9 +95,15 @@ def request_eval(model: str, job: str = "investigate") -> dict:
 
 
 @frappe.whitelist(methods=["POST"])
-def import_eval(model: str, report: list | str, ran_on: str | None = None) -> dict:
+def import_eval(
+    model: str,
+    report: list | str,
+    ran_on: str | None = None,
+    job: str = "investigate",
+) -> dict:
     """A test-set report from the worker's `eval` command, brought in by a System Manager.
-    Only case numbers and scores are kept."""
+    Only case numbers and scores are kept. It is kept for `job` and answers the model's
+    requests for that job, as a report from the worker does."""
     check_manager()
     if not ai_models.can_change():
         frappe.throw(
@@ -105,8 +111,12 @@ def import_eval(model: str, report: list | str, ran_on: str | None = None) -> di
             frappe.PermissionError,
         )
     report = frappe.parse_json(report)
-    run = ai_models.store_eval(model, report, source="Imported", ran_on=ran_on)
-    ai_models.close_requests(model, run)
+    # one name for the run, its request and the answer (store_eval strips it too)
+    model = str(model or "").strip()
+    # the job as store_eval keeps it
+    job = job if job in ai_engine.JOBS else "investigate"
+    run = ai_models.store_eval(model, report, job=job, source="Imported", ran_on=ran_on)
+    ai_models.close_requests(model, run, job)
     return ai_models.benchmarks(model)
 
 

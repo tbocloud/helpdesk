@@ -834,6 +834,16 @@ def safe_text(text: str, articles: list[dict]) -> str:
     return " ".join(kept).strip()[:MAX_TEXT]
 
 
+def cut_for_safety(raw: str, text: str) -> bool:
+    """`safe_text` took something out of `raw` to make `text`: a link, a price or a promise.
+    The spaces and line breaks it tidies aren't a cut."""
+
+    def squeezed(value: str) -> str:
+        return re.sub(r"\s+", " ", re.sub(r"\*\*|__", "", value)).strip()
+
+    return len(squeezed(text)) < len(squeezed(raw))
+
+
 def _offer(doc) -> str:
     if doc.language == "ar":
         return "لم أجد إجابة في أدلتنا. هل يمكنك أن تخبرني بما حدث بالضبط حتى أرفع تذكرة إلى فريقنا؟"
@@ -1538,7 +1548,7 @@ def chatwoot_decision(row, chat_prompt: str, articles: list[dict]) -> dict | Non
     step = answer.get("next") if answer.get("next") in NEXT else "question"
     raw = str(answer.get("text") or "")
     text = safe_text(raw, articles)
-    if len(text) < len(re.sub(r"\*\*|__", "", raw).strip()) - 1:
+    if cut_for_safety(raw, text):
         # a link, a price or a promise was taken out before the customer saw it
         ai_models.record_event("Safety cut", model, job="chat")
     sources = cited(answer, articles)

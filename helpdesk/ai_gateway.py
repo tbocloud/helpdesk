@@ -14,6 +14,7 @@
 """
 
 import contextlib
+import hashlib
 import json
 
 import frappe
@@ -238,19 +239,35 @@ def model_id(name: str) -> str:
     return MODEL_ID_PREFIX + name
 
 
-def save_model(name: str, params: dict, key: str | None = None) -> None:
+def _deployment(name: str, params: dict, key: str | None) -> dict:
+    return {
+        "model_name": name,
+        "litellm_params": params,
+        "model_info": {"id": model_id(key or name), "written_by": "TBO Support"},
+    }
+
+
+def save_model(
+    name: str, params: dict, key: str | None = None, previous: dict | None = None
+) -> None:
     """A model the gateway serves under `name`; written again from scratch each time. `key`
-    tells apart several models under one name (a desktop level: its model and its backup)."""
+    tells apart several models under one name (a desktop level: its model and its backup).
+    `previous` is what the gateway served under this id until now: the gateway takes no second
+    model with the same id, so the old one goes first, and it is written back when the gateway
+    refuses the new one, so a failed save doesn't leave the name without its model."""
     delete_model(key or name)
-    _admin(
-        "POST",
-        "/model/new",
-        {
-            "model_name": name,
-            "litellm_params": params,
-            "model_info": {"id": model_id(key or name), "written_by": "TBO Support"},
-        },
-    )
+    try:
+        _admin("POST", "/model/new", _deployment(name, params, key))
+    except GatewayError as e:
+        if not previous:
+            raise
+        try:
+            _admin("POST", "/model/new", _deployment(name, previous, key))
+        except GatewayError:
+            raise GatewayError(
+                _("{0}; the model it had could not be written back either").format(e)
+            ) from None
+        raise
 
 
 def delete_model(key: str) -> None:
@@ -289,9 +306,10 @@ def _alert(subject: str) -> None:
 
 
 def fetch_day(url: str, key: str, day) -> list[dict]:
-    """Every call the gateway logged on `day`, page by page."""
-    rows, page = [], 1
-    while page <= MAX_PAGES:
+    """Every call the gateway logged on `day`, page by page. A day with more pages than
+    MAX_PAGES is refused, so its totals are never replaced with a part of its calls."""
+    rows = []
+    for page in range(1, MAX_PAGES + 1):
         try:
             response = requests.get(
                 url.rstrip("/") + LOGS_PATH,
@@ -321,9 +339,12 @@ def fetch_day(url: str, key: str, day) -> list[dict]:
         rows += [r for r in data if isinstance(r, dict)]
         pages = cint(body.get("total_pages")) if isinstance(body, dict) else 0
         if len(data) < PAGE_SIZE or (pages and page >= pages):
-            break
-        page += 1
-    return rows
+            return rows
+    raise GatewayError(
+        _("{0} has more than {1} calls, more than are read at once").format(
+            day, MAX_PAGES * PAGE_SIZE
+        )
+    )
 
 
 def _percentile(values: list[int], share: float) -> int | None:
@@ -422,6 +443,14 @@ def totals(rows: list[dict]) -> dict[tuple, dict]:
     return out
 
 
+def day_key(day: str, model: str, alias: str, provider: str, person: str) -> str:
+    """A row's unique key: the day and a digest of everything its totals are grouped by, so
+    rows that differ only in the provider, or after the 140 characters a field keeps, never
+    share one."""
+    identity = json.dumps([model, alias, provider, person])
+    return f"{day}|{hashlib.sha256(identity.encode()).hexdigest()}"
+
+
 def store_day(day, rows: list[dict]) -> int:
     """Replaces `day`'s totals with what the gateway says now, so reading again never doubles."""
     day = str(getdate(day))
@@ -436,7 +465,7 @@ def store_day(day, rows: list[dict]) -> int:
                 "gateway_alias": alias[:140],
                 "gateway_provider": provider[:140],
                 "gateway_user": person[:140],
-                "day_key": f"{day}|{model}|{alias}|{person}"[:140],
+                "day_key": day_key(day, model, alias, provider, person),
                 "requests": t["requests"],
                 "failures": t["failures"],
                 "error_classes": json.dumps(t["errors"]) if t["errors"] else None,
