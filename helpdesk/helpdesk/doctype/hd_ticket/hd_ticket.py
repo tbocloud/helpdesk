@@ -17,7 +17,6 @@ from frappe.utils import (
     add_to_date,
     cint,
     format_datetime,
-    formatdate,
     get_fullname,
     getdate,
     now_datetime,
@@ -122,6 +121,34 @@ class HDTicket(Document):
 
     def validate(self):
         self.validate_feedback()
+        self.check_customer_closes()
+
+    def customer_confirms_on_their_site(self) -> bool:
+        """A ticket the customer follows in their own ERP (raised there or in its chat): it is
+        closed when they confirm the fix there (Phase 13), never by the team."""
+        from helpdesk.copilot.conversation import for_ticket
+
+        return bool(
+            self.get("custom_qcs_connection")
+            and (self.get("custom_client_ticket") or for_ticket(self.name))
+        )
+
+    def check_customer_closes(self):
+        if (
+            self.status != "Closed"
+            or not self.has_value_changed("status")
+            or self.is_merged
+            or self.flags.closed_by_customer
+            or self.get("custom_customer_confirmation") == "Confirmed"
+            or not self.customer_confirms_on_their_site()
+        ):
+            return
+        frappe.throw(
+            _(
+                "The customer closes this ticket when they confirm the fix on their site. Mark it Resolved instead."
+            ),
+            title=_("Only the customer closes this ticket"),
+        )
 
     def before_save(self):
         self.apply_sla()
@@ -252,6 +279,7 @@ class HDTicket(Document):
         if (
             not self.via_customer_portal
             and not frappe.flags.initial_sync
+            and not self.flags.skip_acknowledgement  # raised from a Copilot chat: a person writes first
             and send_ack_email
             and not self.has_chat_only_contact()
             and not self.is_alert()
@@ -707,8 +735,9 @@ class HDTicket(Document):
             self.notify_agent(agent, "Assignment")
 
     def assign_customer_owner(self):
-        """Give a new ticket to its customer's ticket owner, or the backup while the
-        owner is away (docs/ticket-owners.md).
+        """Give a new ticket to its customer's ticket owner, the backup while the owner is
+        away, or else the least busy on the customer's project team who is working today
+        (helpdesk.ticket_assignment, docs/ticket-owners.md).
 
         Runs in after_insert, before Frappe's Assignment Rules (an on_update doc event),
         which skip a ticket that already has an open assignment, so the owner wins over
@@ -717,8 +746,10 @@ class HDTicket(Document):
         """
         if not self.customer:
             return
+        from helpdesk import ticket_assignment
+
         customer = frappe.get_doc("HD Customer", self.customer)
-        pick = customer.ticket_owner_today()
+        pick = ticket_assignment.pick(customer)
         if not pick:
             return
         open_todos = self.open_assignments()
@@ -744,6 +775,7 @@ class HDTicket(Document):
         self.log_owner_assignment(pick, customer.name)
         self.notify_ticket_owner(pick)
         self.notify_backup_owner(pick, customer.backup_ticket_owner)
+        ticket_assignment.tell_chat_about(self.name, pick, customer.name)
 
     def assign_owner_of_customer_set_later(self):
         """A ticket that came in without a customer and is still unassigned gets the
@@ -771,22 +803,26 @@ class HDTicket(Document):
     def log_owner_assignment(self, pick: dict, customer: str):
         """The activity line, credited to the automation user, not whoever's session
         created the ticket (a portal customer, an email, a job)."""
+        from helpdesk.ticket_assignment import why_text
+
         name = get_fullname(pick["user"])
-        if not pick["backup"]:
-            action = _("assigned {0}, ticket owner of {1}").format(name, customer)
-        elif pick["until"]:
-            action = _(
-                "assigned {0}, backup ticket owner of {1} ({2} is on leave until {3})"
-            ).format(
-                name,
-                customer,
-                get_fullname(pick["away"]),
-                formatdate(pick["until"], "EEE d MMM"),
+        why = why_text(pick)
+        if pick.get("step") == "project":
+            action = (
+                _("assigned {0}, the least busy on {1}'s project team ({2})").format(
+                    name, customer, why
+                )
+                if why
+                else _("assigned {0}, the least busy on {1}'s project team").format(
+                    name, customer
+                )
             )
+        elif not pick["backup"]:
+            action = _("assigned {0}, ticket owner of {1}").format(name, customer)
         else:
-            action = _(
-                "assigned {0}, backup ticket owner of {1} ({2} is inactive)"
-            ).format(name, customer, get_fullname(pick["away"]))
+            action = _("assigned {0}, backup ticket owner of {1} ({2})").format(
+                name, customer, why
+            )
         activity = log_ticket_activity(self.name, action)
         activity.db_set("owner", automation_user(), update_modified=False)
 
@@ -811,7 +847,13 @@ class HDTicket(Document):
             )
         if details:
             lines.append(" · ".join(details))
-        if pick["backup"]:
+        if pick.get("step") == "project":
+            lines.append(
+                _(
+                    "You're on {0}'s project team and the least busy there today."
+                ).format(self.customer)
+            )
+        elif pick["backup"]:
             lines.append(
                 _("You're the backup owner while {0} is away.").format(
                     get_fullname(pick["away"])
@@ -893,6 +935,37 @@ class HDTicket(Document):
         skip: str = frappe.get_value("HD Settings", None, "skip_email_workflow") or "0"
 
         return bool(int(skip))
+
+    def _emails_reply(self, skip_email_workflow, recipients, sender_email) -> bool:
+        """Whether an agent's reply also goes out by email. With no outgoing email account,
+        a ticket the customer follows in a chat or on their own site still gets the reply
+        there; any other ticket refuses the reply before anything is saved or sent."""
+        if skip_email_workflow or not frappe.db.get_single_value(
+            "HD Settings", "enable_reply_email_via_agent"
+        ):
+            return False
+        if recipients and not strip_chat_placeholders(recipients):
+            # a chat-only contact gets the reply in the chat (helpdesk.chatwoot_bridge)
+            return False
+        if sender_email:
+            return True
+        if not self.reaches_customer_without_email():
+            frappe.throw(
+                _("Unable to send email. Please setup default outgoing email account.")
+            )
+        return False
+
+    def reaches_customer_without_email(self) -> bool:
+        """A reply reaches the customer in the Copilot chat, in TBO Chat, or as a reply on
+        their own site's ticket (the ticket sync), so email is not the only way."""
+        from helpdesk.chatwoot_bridge import CONVERSATION as TBO_CHAT
+        from helpdesk.copilot.conversation import for_ticket
+
+        return bool(
+            (self.get("custom_qcs_connection") and self.get("custom_client_ticket"))
+            or for_ticket(self.name)
+            or frappe.db.exists(TBO_CHAT, {"hd_ticket": str(self.name)})
+        )
 
     def _resolve_sender_email(self, email_account_name, from_email_id):
         if not email_account_name:
@@ -1058,6 +1131,9 @@ class HDTicket(Document):
         if recipients == "Administrator":
             recipients = frappe.get_value("User", "Administrator", "email")
 
+        # decided before the reply is saved: its copy to the ticket's chat goes out on insert
+        emailing = self._emails_reply(skip_email_workflow, recipients, sender_email)
+
         communication = frappe.get_doc(
             {
                 "bcc": bcc,
@@ -1095,21 +1171,15 @@ class HDTicket(Document):
             self.attach_file_with_doc("HD Ticket", self.name, file_url)
             _attachments.append({"file_url": file_url})
 
-        if skip_email_workflow or not frappe.db.get_single_value(
-            "HD Settings", "enable_reply_email_via_agent"
-        ):
+        if not emailing:
             return
 
         if recipients:
             recipients = strip_chat_placeholders(recipients)
-            if not recipients:
-                # a chat-only contact gets the reply in the chat (helpdesk.chatwoot_bridge)
-                return
-
-        if not sender_email:
-            frappe.throw(
-                _("Unable to send email. Please setup default outgoing email account.")
-            )
+        if not (recipients or cc or bcc):
+            # nobody to email (e.g. an estimate sent without "to"): Frappe v15 sent nothing here,
+            # and v16's sendmail refuses a communication without recipients
+            return
 
         message = self.parse_content(message)
 
@@ -1881,6 +1951,8 @@ def close_tickets_after_n_days():
     # cant do set_value because SLA will not be applied as setting directly to db and doc is not running.
     for ticket in tickets_to_close:
         doc = frappe.get_doc("HD Ticket", ticket)
+        if doc.customer_confirms_on_their_site():
+            continue  # it waits for the customer's confirmation, however long
         doc.status = "Closed"
         doc.flags.ignore_validate = True
         try:

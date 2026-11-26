@@ -1,0 +1,174 @@
+{
+	"actions": [],
+	"autoname": "hash",
+	"creation": "2026-10-28 18:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"registry",
+		"customer",
+		"status",
+		"count",
+		"users",
+		"column_break_main",
+		"first_seen",
+		"last_seen",
+		"ticket",
+		"known_issue",
+		"signature_section",
+		"signature",
+		"signature_key",
+		"app",
+		"samples"
+	],
+	"fields": [
+		{
+			"fieldname": "registry",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"label": "Site",
+			"options": "HDS Site Registry",
+			"reqd": 1
+		},
+		{
+			"fieldname": "customer",
+			"fieldtype": "Link",
+			"in_standard_filter": 1,
+			"label": "Customer",
+			"options": "HD Customer"
+		},
+		{
+			"default": "Watching",
+			"description": "Watching: seen, not enough yet for a ticket. Baseline: there before the watch began.",
+			"fieldname": "status",
+			"fieldtype": "Select",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"label": "Status",
+			"options": "Watching\nTicket\nBaseline\nIgnored"
+		},
+		{
+			"description": "Since it first appeared (again).",
+			"fieldname": "count",
+			"fieldtype": "Int",
+			"in_list_view": 1,
+			"label": "Count",
+			"non_negative": 1
+		},
+		{
+			"description": "The users it happened to, one per line, when the site says.",
+			"fieldname": "users",
+			"fieldtype": "Small Text",
+			"label": "Users",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_main",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "first_seen",
+			"fieldtype": "Datetime",
+			"label": "First Seen",
+			"read_only": 1
+		},
+		{
+			"fieldname": "last_seen",
+			"fieldtype": "Datetime",
+			"in_list_view": 1,
+			"label": "Last Seen",
+			"read_only": 1
+		},
+		{
+			"fieldname": "ticket",
+			"fieldtype": "Link",
+			"label": "Ticket",
+			"options": "HD Ticket",
+			"read_only": 1
+		},
+		{
+			"fieldname": "known_issue",
+			"fieldtype": "Link",
+			"label": "Known Issue",
+			"options": "HDS Known Issue",
+			"read_only": 1
+		},
+		{
+			"fieldname": "signature_section",
+			"fieldtype": "Section Break",
+			"label": "Error"
+		},
+		{
+			"fieldname": "signature",
+			"fieldtype": "Small Text",
+			"label": "Signature",
+			"read_only": 1
+		},
+		{
+			"fieldname": "signature_key",
+			"fieldtype": "Data",
+			"hidden": 1,
+			"label": "Signature Key",
+			"read_only": 1,
+			"search_index": 1
+		},
+		{
+			"fieldname": "app",
+			"fieldtype": "Data",
+			"label": "App",
+			"read_only": 1
+		},
+		{
+			"description": "Up to 5 of the site's error logs: time, document, the code lines.",
+			"fieldname": "samples",
+			"fieldtype": "Code",
+			"label": "Samples",
+			"options": "JSON",
+			"read_only": 1
+		}
+	],
+	"links": [],
+	"modified": "2026-10-28 18:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HDS Site Error",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "System Manager",
+			"share": 1,
+			"write": 1
+		},
+		{
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent Manager",
+			"share": 1,
+			"write": 1
+		},
+		{
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent",
+			"share": 1
+		}
+	],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": [],
+	"title_field": "signature"
+}

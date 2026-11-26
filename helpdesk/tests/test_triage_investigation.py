@@ -8,6 +8,7 @@ from helpdesk import triage
 from helpdesk.session_manager import post_investigation_comment
 from helpdesk.test_utils import (
     create_customer,
+    hold_commits,
     make_ai_support_session,
     make_support_connection,
     make_ticket,
@@ -26,7 +27,8 @@ def mcp_result(payload):
 
 class TestTriageWithCustomerSite(FrappeTestCase):
     def setUp(self):
-        self.addCleanup(frappe.db.rollback)
+        # triage commits its progress by design; without this each run left its fixtures on the site
+        hold_commits(self)
         create_customer(CUSTOMER)
         self.connection = make_support_connection(CUSTOMER).name
         self.ticket = make_ticket(
@@ -128,7 +130,8 @@ class TestTriageWithCustomerSite(FrappeTestCase):
 
 class TestInvestigationComment(FrappeTestCase):
     def setUp(self):
-        self.addCleanup(frappe.db.rollback)
+        # triage commits its progress by design; without this each run left its fixtures on the site
+        hold_commits(self)
         create_customer(CUSTOMER)
         self.connection = make_support_connection(CUSTOMER).name
         self.ticket = make_ticket(

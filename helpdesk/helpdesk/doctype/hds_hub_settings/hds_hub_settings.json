@@ -22,6 +22,8 @@
 		"openai_api_key",
 		"column_break_openai",
 		"openai_model",
+		"jobs_section",
+		"ai_jobs",
 		"limits_section",
 		"max_tool_calls_per_session",
 		"max_session_time_seconds",
@@ -39,7 +41,21 @@
 		"column_break_triage",
 		"triage_job_timeout",
 		"draft_kb_articles",
-		"automation_user"
+		"automation_user",
+		"monitoring_section",
+		"internal_customer",
+		"internal_project",
+		"column_break_monitoring",
+		"monitor_quiet_minutes",
+		"watcher_status",
+		"auto_repair_section",
+		"auto_repair_paused",
+		"auto_repair_paused_by",
+		"auto_repair_paused_at",
+		"auto_repair_pause_reason",
+		"column_break_auto_repair",
+		"auto_repair_off",
+		"auto_repair_max_per_hour"
 	],
 	"fields": [
 		{
@@ -153,6 +169,19 @@
 			"label": "OpenAI Model"
 		},
 		{
+			"collapsible": 1,
+			"description": "Optional: a job's own model in each section. Without a row, a job uses the section's model; the order and the fallback stay as above. A change applies to the next call.",
+			"fieldname": "jobs_section",
+			"fieldtype": "Section Break",
+			"label": "Models per job"
+		},
+		{
+			"fieldname": "ai_jobs",
+			"fieldtype": "Table",
+			"label": "AI jobs",
+			"options": "HDS AI Job"
+		},
+		{
 			"fieldname": "limits_section",
 			"fieldtype": "Section Break",
 			"label": "Investigation Limits"
@@ -259,11 +288,95 @@
 			"options": "User",
 			"label": "Hub's Own Work Shown As",
 			"description": "AI triage and investigation notes, reminders, KB drafts and changes from Outlook or GitHub are credited to this user, e.g. a \"TBO AI\" user (ai@teambackoffice.com). Empty: Administrator. Agents' own replies stay theirs."
+		},
+		{
+			"fieldname": "monitoring_section",
+			"fieldtype": "Section Break",
+			"label": "Monitoring"
+		},
+		{
+			"fieldname": "internal_customer",
+			"fieldtype": "Link",
+			"label": "Internal customer",
+			"options": "HD Customer",
+			"description": "The customer the watcher's alert tickets belong to (TBO itself)."
+		},
+		{
+			"fieldname": "internal_project",
+			"fieldtype": "Link",
+			"label": "Internal project",
+			"options": "Project",
+			"description": "The project the watcher's follow-up tasks go to (certificates expiring, disks filling up)."
+		},
+		{
+			"fieldname": "column_break_monitoring",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "monitor_quiet_minutes",
+			"fieldtype": "Int",
+			"label": "Watcher quiet after (minutes)",
+			"default": "3",
+			"description": "Minutes without a heartbeat before the Infrastructure people (Copilot People; else Infrastructure Senior, else a Leader) hear that the watcher is quiet."
+		},
+		{
+			"fieldname": "watcher_status",
+			"fieldtype": "HTML",
+			"label": "Watcher last seen"
+		},
+		{
+			"fieldname": "auto_repair_section",
+			"fieldtype": "Section Break",
+			"label": "Auto-repair"
+		},
+		{
+			"fieldname": "auto_repair_paused",
+			"fieldtype": "Check",
+			"label": "Pause auto-repair",
+			"description": "While on, the watcher repairs nothing, approved repairs included. Teams: \"pause auto-repair\" / \"resume auto-repair\"."
+		},
+		{
+			"fieldname": "auto_repair_paused_by",
+			"fieldtype": "Link",
+			"label": "Paused by",
+			"options": "User",
+			"read_only": 1,
+			"depends_on": "auto_repair_paused"
+		},
+		{
+			"fieldname": "auto_repair_paused_at",
+			"fieldtype": "Datetime",
+			"label": "Paused at",
+			"read_only": 1,
+			"depends_on": "auto_repair_paused"
+		},
+		{
+			"fieldname": "auto_repair_pause_reason",
+			"fieldtype": "Small Text",
+			"label": "Why paused",
+			"depends_on": "auto_repair_paused"
+		},
+		{
+			"fieldname": "column_break_auto_repair",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "auto_repair_off",
+			"fieldtype": "Small Text",
+			"label": "Runbooks turned off",
+			"description": "One runbook name per line, for example disk-cleanup. The others still run."
+		},
+		{
+			"fieldname": "auto_repair_max_per_hour",
+			"fieldtype": "Int",
+			"label": "Automatic repairs per hour",
+			"default": "6",
+			"description": "Across every runbook; more waits for the next hour."
 		}
 	],
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-10-14 12:00:00.000000",
+	"modified": "2026-11-17 18:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Hub Settings",

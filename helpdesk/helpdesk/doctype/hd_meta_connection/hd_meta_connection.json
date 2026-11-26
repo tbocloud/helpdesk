@@ -170,6 +170,34 @@
 			"fieldtype": "Data",
 			"label": "Ad Account Status",
 			"read_only": 1
+		},
+		{
+			"fieldname": "insights_section",
+			"fieldtype": "Section Break",
+			"label": "Reach report"
+		},
+		{
+			"fieldname": "insights_allowed",
+			"fieldtype": "Check",
+			"label": "Insights Allowed",
+			"read_only": 1,
+			"description": "The client allowed read_insights and instagram_manage_insights"
+		},
+		{
+			"fieldname": "insights_synced_on",
+			"fieldtype": "Datetime",
+			"label": "Insights Synced On",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_insights",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "insights_error",
+			"fieldtype": "Small Text",
+			"label": "Insights Error",
+			"read_only": 1
 		}
 	],
 	"actions": [],
@@ -178,7 +206,7 @@
 	"engine": "InnoDB",
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-10-30 12:00:00.000000",
+	"modified": "2026-11-22 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Meta Connection",
@@ -211,6 +239,11 @@
 		"ad_account_id",
 		"ad_account_name",
 		"ad_account_currency",
-		"ad_account_status"
+		"ad_account_status",
+		"insights_section",
+		"insights_allowed",
+		"insights_synced_on",
+		"column_break_insights",
+		"insights_error"
 	]
 }

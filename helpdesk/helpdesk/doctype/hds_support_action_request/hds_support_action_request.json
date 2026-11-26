@@ -70,7 +70,7 @@
 			"in_list_view": 1,
 			"in_standard_filter": 1,
 			"label": "Status",
-			"options": "Pending Approval\nApproved\nPartially Approved\nExecuted\nFailed\nRejected"
+			"options": "Pending Approval\nApproved\nPartially Approved\nExecuting\nExecuted\nFailed\nRejected"
 		},
 		{
 			"fieldname": "diagnosis",

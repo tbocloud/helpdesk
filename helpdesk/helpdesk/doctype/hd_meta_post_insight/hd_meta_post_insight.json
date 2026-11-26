@@ -1,0 +1,201 @@
+{
+	"actions": [],
+	"creation": "2026-11-22 12:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"project",
+		"customer",
+		"platform",
+		"media_id",
+		"kind",
+		"posted_on",
+		"content_post",
+		"column_break_post",
+		"caption",
+		"permalink",
+		"thumbnail_url",
+		"numbers_section",
+		"reach",
+		"views",
+		"reactions",
+		"comments",
+		"column_break_numbers",
+		"shares",
+		"saves",
+		"clicks",
+		"interactions",
+		"sync_section",
+		"last_synced",
+		"insights_note"
+	],
+	"fields": [
+		{
+			"fieldname": "project",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"label": "Project",
+			"options": "Project",
+			"reqd": 1
+		},
+		{
+			"fieldname": "customer",
+			"fieldtype": "Link",
+			"in_standard_filter": 1,
+			"label": "Customer",
+			"options": "HD Customer"
+		},
+		{
+			"fieldname": "platform",
+			"fieldtype": "Select",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"label": "Platform",
+			"options": "Facebook\nInstagram",
+			"reqd": 1
+		},
+		{
+			"fieldname": "media_id",
+			"fieldtype": "Data",
+			"label": "Meta Post ID",
+			"read_only": 1,
+			"reqd": 1
+		},
+		{
+			"fieldname": "kind",
+			"fieldtype": "Select",
+			"in_list_view": 1,
+			"label": "Kind",
+			"options": "Image\nCarousel\nVideo\nReel\nStory\nText\nOther"
+		},
+		{
+			"fieldname": "posted_on",
+			"fieldtype": "Datetime",
+			"in_list_view": 1,
+			"label": "Posted On"
+		},
+		{
+			"description": "The content calendar post it was published from, when the hub published it",
+			"fieldname": "content_post",
+			"fieldtype": "Link",
+			"label": "Content Post",
+			"options": "HD Content Post"
+		},
+		{
+			"fieldname": "column_break_post",
+			"fieldtype": "Column Break",
+			"label": ""
+		},
+		{
+			"fieldname": "caption",
+			"fieldtype": "Small Text",
+			"label": "Caption"
+		},
+		{
+			"fieldname": "permalink",
+			"fieldtype": "Data",
+			"label": "Link",
+			"options": "URL"
+		},
+		{
+			"fieldname": "thumbnail_url",
+			"fieldtype": "Small Text",
+			"label": "Thumbnail URL"
+		},
+		{
+			"fieldname": "numbers_section",
+			"fieldtype": "Section Break",
+			"label": "Numbers"
+		},
+		{
+			"fieldname": "reach",
+			"fieldtype": "Int",
+			"in_list_view": 1,
+			"label": "Reach"
+		},
+		{
+			"fieldname": "views",
+			"fieldtype": "Int",
+			"label": "Views"
+		},
+		{
+			"fieldname": "reactions",
+			"fieldtype": "Int",
+			"label": "Likes / Reactions"
+		},
+		{
+			"fieldname": "comments",
+			"fieldtype": "Int",
+			"label": "Comments"
+		},
+		{
+			"fieldname": "column_break_numbers",
+			"fieldtype": "Column Break",
+			"label": ""
+		},
+		{
+			"fieldname": "shares",
+			"fieldtype": "Int",
+			"label": "Shares"
+		},
+		{
+			"description": "Instagram only",
+			"fieldname": "saves",
+			"fieldtype": "Int",
+			"label": "Saves"
+		},
+		{
+			"description": "Facebook only",
+			"fieldname": "clicks",
+			"fieldtype": "Int",
+			"label": "Clicks"
+		},
+		{
+			"description": "Likes, comments, shares and saves together",
+			"fieldname": "interactions",
+			"fieldtype": "Int",
+			"label": "Interactions"
+		},
+		{
+			"fieldname": "sync_section",
+			"fieldtype": "Section Break",
+			"label": "Sync"
+		},
+		{
+			"fieldname": "last_synced",
+			"fieldtype": "Datetime",
+			"label": "Last Synced"
+		},
+		{
+			"description": "Why Meta gave no numbers, e.g. too few viewers on a Story",
+			"fieldname": "insights_note",
+			"fieldtype": "Small Text",
+			"label": "Note"
+		}
+	],
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-11-22 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Meta Post Insight",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"export": 1,
+			"read": 1,
+			"report": 1,
+			"role": "System Manager",
+			"share": 1,
+			"write": 1
+		}
+	],
+	"read_only": 1,
+	"sort_field": "posted_on",
+	"sort_order": "DESC",
+	"states": [],
+	"title_field": "caption"
+}

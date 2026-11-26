@@ -169,20 +169,31 @@ def default_targets(post) -> list[str]:
 
 
 def connection_for(post):
-    """The connection of the post's project, else a connected one for the same customer."""
-    project = content_project_for(post.customer)
+    """The connection of the post's project (its branch's, when the branch has one), else
+    a connected one for the same customer. A branch's page only ever gets that branch's
+    posts, so another branch's connection is never the fallback."""
+    from helpdesk.helpdesk.doctype.hd_customer_branch.hd_customer_branch import (
+        branch_projects,
+    )
+
+    project = content_project_for(post.customer, post.get("branch"))
     name = project if project and frappe.db.exists(CONNECTION, project) else None
     if not name and post.customer:
-        name = frappe.db.get_value(
-            CONNECTION, {"customer": post.customer, "status": CONNECTED}
-        )
+        filters = {"customer": post.customer, "status": CONNECTED}
+        if taken := branch_projects(post.customer):
+            filters["project"] = ("not in", taken)
+        name = frappe.db.get_value(CONNECTION, filters)
     return frappe.get_doc(CONNECTION, name) if name else None
 
 
 def require_publisher(post, connection=None):
     """Who may publish: whoever may handle the project's client accounts (its managers
     and lead, the Digital Marketing Head, System Managers), never a Sales Employee."""
-    project = connection.project if connection else content_project_for(post.customer)
+    project = (
+        connection.project
+        if connection
+        else content_project_for(post.customer, post.get("branch"))
+    )
     post.check_permission("read")
     if not can_handle_credentials(project):
         frappe.throw(
@@ -494,7 +505,11 @@ def publish_state(post_name: str) -> dict:
     post = frappe.get_doc(POST, post_name)
     post.check_permission("read")
     connection = connection_for(post)
-    project = connection.project if connection else content_project_for(post.customer)
+    project = (
+        connection.project
+        if connection
+        else content_project_for(post.customer, post.get("branch"))
+    )
     media = post_media(post.name)
     try:
         kind = resolve_kind(media, None)

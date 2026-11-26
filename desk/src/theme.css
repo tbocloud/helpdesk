@@ -3,9 +3,15 @@
  *
  * Re-points frappe-ui's semantic tokens at the "Leads (all) — redesigned"
  * mockup: slate neutrals, a deep teal accent for primary actions and the
- * current menu item, white cards on a light gray canvas, the orange focus
- * ring, and Geist type. ink-gray-5 and -6 share the mockup's secondary text
- * colour, which passes WCAG AA (4.5:1) on white and on the canvas.
+ * current menu item, the orange focus ring, and Geist type. ink-gray-5 and -6
+ * share the mockup's secondary text colour, which passes WCAG AA (4.5:1) on
+ * white and on the canvas.
+ *
+ * The command center look, everywhere (2026-11-25, the owner's choice after the
+ * sales team dashboard): white cards on a cool gray canvas in the light theme,
+ * navy cards on a near-black canvas in the dark one, and every card carries one
+ * colour of the --cc-* palette as its top edge (a glow in the dark theme). See
+ * docs/ui-guidelines.md §8.
  *
  * Selectors are doubled up so they outrank frappe-ui's :root / [data-theme]
  * variables regardless of stylesheet order.
@@ -103,6 +109,22 @@
   --hero-track: #2c5161;
   --hero-fill: #5fd0b3;
   --hero-pace: #f2d24b;
+  /*
+   * cc: the command center palette (from the owner's photos of a neon dashboard,
+   * docs/ui-guidelines.md §8). One colour per card, as its top edge, icon and figures;
+   * deep enough for text on white here (4.5:1 or more), neon on the dark canvas.
+   */
+  --cc-page: var(--surface-canvas);
+  --cc-card: var(--surface-base);
+  --cc-card-border: var(--outline-gray-2);
+  --cc-blue: #1d4ed8;
+  --cc-violet: #6d28d9;
+  --cc-pink: #be185d;
+  --cc-red: #c81e1e;
+  --cc-orange: #c2410c;
+  --cc-amber: #a16207;
+  --cc-green: #047857;
+  --cc-cyan: #0e7490;
   /* performance channel colours; always with a text label */
   --channel-instagram: #b8306f;
   --channel-facebook: #2f5fc4;
@@ -114,7 +136,7 @@
   --channel-whatsapp: #1c7a43;
 
   /* the page canvas sits behind white cards; the menu panel is white */
-  --surface-canvas: #f4f6f8;
+  --surface-canvas: #eef2f7;
   --surface-sidebar: #ffffff;
 
   /* the navigation rail stays dark in both themes; icons are neutral on it */
@@ -147,7 +169,7 @@
   --ink-gray-9: #0f172a;
 
   --outline-gray-1: #eef1f4;
-  --outline-gray-2: #e3e7ec;
+  --outline-gray-2: #e1e7ef;
   --outline-gray-3: #d5dbe2;
   --outline-gray-4: #94a3b8;
   --outline-gray-5: #5b6474;
@@ -186,8 +208,8 @@
   --person-5-soft: #16233f;
   --person-6: #c9d0da;
   --person-6-soft: #2a2e36;
-  --surface-canvas: oklch(0.169 0.006 271);
-  --surface-sidebar: oklch(0.205 0.008 275);
+  --surface-canvas: #060a14;
+  --surface-sidebar: #0a1020;
   --rail-hover: oklch(1 0 0 / 0.14);
   --ink-rail: oklch(0.8 0.01 265);
   --highlight: #f59a4a;
@@ -218,6 +240,14 @@
   --champion-border: #4f3f1c;
   --hero: #12303b;
   --hero-track: #24495a;
+  --cc-blue: #4f8dff;
+  --cc-violet: #a78bfa;
+  --cc-pink: #f472b6;
+  --cc-red: #ff6b6b;
+  --cc-orange: #ff9f43;
+  --cc-amber: #fbbf24;
+  --cc-green: #34d399;
+  --cc-cyan: #22d3ee;
   --channel-instagram: #f08bbb;
   --channel-facebook: #8fb2f5;
   --channel-linkedin: #7fb0f5;
@@ -227,25 +257,28 @@
   --channel-email: #5fcfc1;
   --channel-whatsapp: #6fd39a;
 
-  --surface-base: oklch(0.205 0.008 275);
+  --surface-base: #0c1324;
+  --surface-modal: #0e1629;
+  --surface-menu-bar: #0a1020;
+  --surface-cards: #0c1324;
 
-  --surface-rail: oklch(0.12 0.006 271);
+  --surface-rail: #04070f;
 
-  --surface-gray-1: oklch(0.235 0.01 268);
-  --surface-gray-2: oklch(0.269 0.012 271);
-  --surface-gray-3: oklch(0.3 0.013 268);
-  --surface-gray-4: oklch(0.364 0.016 266);
-  --surface-gray-5: oklch(0.457 0.016 266);
+  --surface-gray-1: #111a2e;
+  --surface-gray-2: #152038;
+  --surface-gray-3: #1a2742;
+  --surface-gray-4: #22314f;
+  --surface-gray-5: #33456a;
   --surface-gray-6: oklch(0.58 0.017 265);
   --surface-gray-7: oklch(0.683 0.017 265);
   --surface-gray-8: oklch(0.754 0.015 265);
   --surface-gray-9: oklch(0.885 0.008 265);
   --surface-gray-10: oklch(0.979 0.004 265);
-  --surface-elevation-1: oklch(0.235 0.01 268);
-  --surface-elevation-2: oklch(0.26 0.011 270);
-  --surface-elevation-3: oklch(0.33 0.014 268);
+  --surface-elevation-1: #111a2e;
+  --surface-elevation-2: #131d33;
+  --surface-elevation-3: #1e2b48;
 
-  --ink-base: oklch(0.205 0.008 275);
+  --ink-base: #0c1324;
   --ink-gray-1: oklch(0.26 0.01 268);
   --ink-gray-2: oklch(0.34 0.012 268);
   --ink-gray-3: oklch(0.4 0.014 266);
@@ -256,17 +289,17 @@
   --ink-gray-8: oklch(0.885 0.008 265);
   --ink-gray-9: oklch(0.949 0.006 265);
 
-  --outline-gray-1: oklch(0.26 0.012 268);
-  --outline-gray-2: oklch(0.281 0.014 267);
-  --outline-gray-3: oklch(0.364 0.016 266);
-  --outline-gray-4: oklch(0.457 0.016 266);
+  --outline-gray-1: #141e33;
+  --outline-gray-2: #1a2540;
+  --outline-gray-3: #26355a;
+  --outline-gray-4: #3a4b70;
   --outline-gray-5: oklch(0.58 0.017 265);
   --outline-gray-6: oklch(0.683 0.017 265);
   --outline-gray-7: oklch(0.946 0.005 265);
   --outline-gray-8: oklch(0.964 0.004 265);
   --outline-gray-9: oklch(0.979 0.004 265);
-  --outline-elevation-1: oklch(0.281 0.014 267);
-  --outline-elevation-2: oklch(0.364 0.016 266);
+  --outline-elevation-1: #1a2540;
+  --outline-elevation-2: #26355a;
 }
 
 html {
@@ -466,21 +499,133 @@ a.text-ink-gray-8.bg-surface-gray-2:active {
 }
 
 /*
- * Cards (the redesign's white rounded-xl panels): a soft two-layer shadow
- * lifts them off the canvas, and a card that is a link or button rises a
- * little on hover. Matches the exact class trio every card uses.
+ * Cards (the rounded-xl panels, matched by the exact class trio every card uses):
+ * the command center look. Each card carries one colour of the --cc-* palette as a
+ * 3px top edge; side by side, cards take turns through the palette, and a card that
+ * means something sets its own `--accent` (StatTile does, from its tone). A soft
+ * shadow lifts them off the canvas in the light theme, a glow in their colour in the
+ * dark one; a card that is a link or button rises a little on hover.
  */
 .rounded-xl.border-outline-gray-2.bg-surface-base {
-  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04), 0 1px 3px rgb(15 23 42 / 0.03);
+  border-top: 3px solid var(--accent, var(--cc-blue));
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04),
+    0 4px 14px -6px rgb(15 23 42 / 0.08);
   transition: box-shadow 150ms ease, border-color 150ms ease,
     transform 150ms ease;
 }
+:is(.grid, .flex)
+  > .rounded-xl.border-outline-gray-2.bg-surface-base:nth-child(8n + 2) {
+  --accent: var(--cc-violet);
+}
+:is(.grid, .flex)
+  > .rounded-xl.border-outline-gray-2.bg-surface-base:nth-child(8n + 3) {
+  --accent: var(--cc-cyan);
+}
+:is(.grid, .flex)
+  > .rounded-xl.border-outline-gray-2.bg-surface-base:nth-child(8n + 4) {
+  --accent: var(--cc-green);
+}
+:is(.grid, .flex)
+  > .rounded-xl.border-outline-gray-2.bg-surface-base:nth-child(8n + 5) {
+  --accent: var(--cc-amber);
+}
+:is(.grid, .flex)
+  > .rounded-xl.border-outline-gray-2.bg-surface-base:nth-child(8n + 6) {
+  --accent: var(--cc-orange);
+}
+:is(.grid, .flex)
+  > .rounded-xl.border-outline-gray-2.bg-surface-base:nth-child(8n + 7) {
+  --accent: var(--cc-pink);
+}
+:is(.grid, .flex)
+  > .rounded-xl.border-outline-gray-2.bg-surface-base:nth-child(8n) {
+  --accent: var(--cc-red);
+}
 :is(a, button).rounded-xl.border-outline-gray-2.bg-surface-base:hover {
-  border-color: var(--outline-gray-3);
-  box-shadow: 0 4px 12px -2px rgb(15 23 42 / 0.08),
-    0 2px 4px -2px rgb(15 23 42 / 0.04);
+  box-shadow: 0 6px 18px -6px color-mix(in srgb, var(--accent, var(--cc-blue))
+        35%, transparent);
   transform: translateY(-1px);
 }
 :root[data-theme="dark"] .rounded-xl.border-outline-gray-2.bg-surface-base {
-  box-shadow: none;
+  box-shadow: 0 0 0 1px
+      color-mix(in srgb, var(--accent, var(--cc-blue)) 18%, transparent),
+    0 0 28px -12px color-mix(in srgb, var(--accent, var(--cc-blue)) 60%, transparent);
+}
+/* a card's own heading, as the command center writes it: small, bold, uppercase */
+.rounded-xl.border-outline-gray-2.bg-surface-base h2.text-base.font-semibold {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/*
+ * The sales team dashboard's cards (docs/ui-guidelines.md, the sales team dashboard). A card
+ * sets `--accent` (one of the --cc-* colours); it draws the top edge, and in the dark theme a
+ * soft glow in the same colour, as the owner's mockup does.
+ */
+.cc-page {
+  background: var(--cc-page);
+}
+.cc-card {
+  background: var(--cc-card);
+  border: 1px solid var(--cc-card-border);
+  border-top: 3px solid var(--accent, var(--cc-card-border));
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04),
+    0 4px 14px -6px rgb(15 23 42 / 0.08);
+}
+a.cc-card {
+  transition: box-shadow 150ms ease, transform 150ms ease;
+}
+a.cc-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px -6px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.cc-ink {
+  color: var(--accent, var(--ink-gray-6));
+}
+.cc-soft {
+  color: var(--accent, var(--ink-gray-6));
+  background: color-mix(
+    in srgb,
+    var(--accent, var(--ink-gray-6)) 12%,
+    transparent
+  );
+}
+.cc-fill {
+  background: var(--accent, var(--ink-gray-6));
+}
+.cc-pill {
+  color: var(--accent, var(--ink-gray-6));
+  background: color-mix(
+    in srgb,
+    var(--accent, var(--ink-gray-6)) 10%,
+    transparent
+  );
+  border: 1px solid
+    color-mix(in srgb, var(--accent, var(--ink-gray-6)) 45%, transparent);
+}
+/* the leaderboard's column lines */
+.cc-cols :is(th, td) + :is(th, td) {
+  border-left: 1px solid color-mix(in srgb, var(--cc-orange) 28%, transparent);
+}
+:root[data-theme="dark"] .cc-card {
+  box-shadow: 0 0 0 1px
+      color-mix(in srgb, var(--accent, transparent) 22%, transparent),
+    0 0 28px -10px color-mix(in srgb, var(--accent, transparent) 70%, transparent);
+}
+:root[data-theme="dark"] .cc-pill {
+  box-shadow: 0 0 10px -3px color-mix(in srgb, var(--accent, var(--ink-gray-6))
+        70%, transparent);
+}
+:root[data-theme="dark"] .cc-glow {
+  text-shadow: 0 0 14px
+    color-mix(in srgb, var(--accent, var(--ink-gray-6)) 60%, transparent);
+}
+:root[data-theme="dark"] .cc-arc {
+  filter: drop-shadow(
+    0 0 6px
+      color-mix(in srgb, var(--accent, var(--ink-gray-6)) 70%, transparent)
+  );
 }

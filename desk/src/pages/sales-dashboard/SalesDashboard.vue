@@ -598,9 +598,9 @@ import {
 import { useAuthStore } from "@/stores/auth";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
-import { useDocumentVisibility, useIntervalFn } from "@vueuse/core";
+import { useIntervalFn } from "@vueuse/core";
 import { Button, createResource, dayjs } from "frappe-ui";
-import { computed, ref, useId, watch } from "vue";
+import { computed, ref, useId } from "vue";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
 import LucideCheck from "~icons/lucide/check";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
@@ -620,6 +620,7 @@ import {
   openStages,
   percent,
   total,
+  useLiveRead,
   type MyDashboard,
 } from "./salesDashboard";
 import Sparkline from "./Sparkline.vue";
@@ -648,13 +649,7 @@ function refresh() {
   dash.submit({ fresh: 1 });
 }
 // the calls move all day: read them again every two minutes (the rest is cached a minute)
-useIntervalFn(() => !dash.loading && dash.reload(), 120_000);
-// and again when the person comes back to the tab
-const visibility = useDocumentVisibility();
-watch(
-  visibility,
-  (state) => state === "visible" && !dash.loading && dash.reload()
-);
+useLiveRead(dash);
 const now = ref(Date.now());
 useIntervalFn(() => (now.value = Date.now()), 30_000);
 

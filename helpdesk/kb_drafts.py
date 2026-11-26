@@ -86,7 +86,10 @@ def draft_article(ticket_id: str):
         if not has_team_answer(ticket_id):
             return None
         result = call_haiku(
-            DRAFT_SYSTEM_PROMPT, build_draft_prompt(doc), ticket_name=ticket_id
+            DRAFT_SYSTEM_PROMPT,
+            build_draft_prompt(doc),
+            ticket_name=ticket_id,
+            job="draft",
         )
         draft = parse_draft(result.get("response"))
         if draft:

@@ -24,6 +24,7 @@
             {{ __("Approved by {0}.", estimate.decided_by) }}
           </span>
         </p>
+        <EstimateScope :scope="estimate.scope" :checks="estimate.checks" />
         <Button
           variant="solid"
           :label="__('Create task')"
@@ -53,6 +54,7 @@
             )
           }}
         </p>
+        <EstimateScope :scope="estimate.scope" :checks="estimate.checks" />
         <div class="flex flex-wrap gap-2">
           <Button
             :label="__('Customer approved')"
@@ -116,6 +118,33 @@
             }}
           </p>
           <FormControl
+            v-model="form.scope"
+            type="textarea"
+            :rows="3"
+            :label="__('What we will build')"
+            :placeholder="
+              __('In plain words, what the customer gets and where it applies')
+            "
+          />
+          <FormControl
+            v-model="form.checks"
+            type="textarea"
+            :rows="3"
+            :label="__('Done when (one check per line)')"
+            :placeholder="
+              __(
+                'A normal invoice without a Sales Team row cannot be submitted'
+              )
+            "
+          />
+          <p class="text-p-xs text-ink-gray-5">
+            {{
+              __(
+                "The customer approves this text with the hours. Copilot can build only an approved scope."
+              )
+            }}
+          </p>
+          <FormControl
             v-model="form.note"
             type="textarea"
             :rows="2"
@@ -171,6 +200,7 @@ import TaskyBadge from "@/components/TaskyBadge.vue";
 import type { Tone } from "@/components/tone";
 import { showCreateTask } from "@/pages/ticket/modalStates";
 import type { Component } from "vue";
+import EstimateScope from "./EstimateScope.vue";
 import PanelSection from "./PanelSection.vue";
 
 interface Estimate {
@@ -178,6 +208,9 @@ interface Estimate {
   hours: number;
   status: "" | "Estimated" | "Sent" | "Approved" | "Declined";
   note: string;
+  scope: string;
+  checks: string[];
+  scope_approved: boolean;
   delivery_date: string | null;
   suggested_delivery: string | null;
   hours_per_day: number;
@@ -230,12 +263,16 @@ const form = reactive({
   hours: 0 as number | string,
   delivery_date: "",
   note: "",
+  scope: "",
+  checks: "",
 });
 
 function fill(data: Estimate) {
   form.hours = data.hours || "";
   form.delivery_date = data.delivery_date || data.suggested_delivery || "";
   form.note = data.status === "Estimated" ? "" : data.note || "";
+  form.scope = data.scope || "";
+  form.checks = (data.checks || []).join("\n");
 }
 
 // a new hour count suggests a new date, the same way the server counts it
@@ -281,6 +318,8 @@ async function send() {
         hours: form.hours,
         delivery_date: form.delivery_date,
         note: form.note,
+        scope: form.scope,
+        checks: form.checks,
       })
     );
     toast.success(__("Estimate sent to the customer"));

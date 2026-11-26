@@ -221,6 +221,28 @@
                   · {{ dateFormat(conn.connected_on, "D MMM YYYY") }}
                 </template>
               </dd>
+              <template v-if="data.insights_enabled">
+                <dt class="text-ink-gray-6">{{ __("Reach report") }}</dt>
+                <dd class="text-ink-gray-8">
+                  <router-link
+                    v-if="conn.insights_allowed"
+                    :to="{
+                      name: 'ContentReach',
+                      query: { project: projectId },
+                    }"
+                    class="rounded text-brand-ink underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+                  >
+                    {{ __("Open the Reach report") }}
+                  </router-link>
+                  <template v-else>
+                    {{
+                      __(
+                        "Not allowed yet. Connect again and allow the insights permissions."
+                      )
+                    }}
+                  </template>
+                </dd>
+              </template>
             </dl>
             <p
               v-if="conn.last_error"
@@ -321,6 +343,7 @@ interface Connection {
   ad_account_currency?: string | null;
   ad_account_status?: string | null;
   monthly_ad_cap?: number;
+  insights_allowed: boolean;
 }
 interface MetaPage {
   id: string;
@@ -347,6 +370,7 @@ const data = computed(
       | {
           enabled: boolean;
           ads_enabled: boolean;
+          insights_enabled: boolean;
           can_change_cap: boolean;
           connection: Connection | null;
         }

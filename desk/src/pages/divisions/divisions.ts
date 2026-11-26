@@ -22,6 +22,8 @@ export interface Division {
   workspace_url: string | null;
   /** their role in it; null for a Super Admin who isn't a member */
   role: string | null;
+  /** whether the person may switch to it (divisions.switchable_divisions) */
+  can_switch: boolean;
 }
 
 /** Switch the active division. The page reloads, so every list, cache and the Leads
@@ -129,7 +131,7 @@ export interface Overview {
   errors: { division: string; error: string }[];
 }
 
-function chart(
+export function chart(
   base: Pick<
     DashboardChart,
     "title" | "chart_type" | "dimension" | "dimension_label" | "metric"
@@ -359,4 +361,49 @@ export function reportCell(
   if (kind === "hours") return __("{0} h", Number(value).toFixed(1));
   if (kind === "int") return formatValue("count", value, currency);
   return formatValue(kind, value, currency);
+}
+
+/** A division's card on the Divisions home (helpdesk.division_overview.division_card). */
+export interface DivisionCard {
+  name: string;
+  division_name: string;
+  country: string;
+  currency: string;
+  admins: string[];
+  people: number;
+  site: {
+    name: string;
+    enabled: 0 | 1;
+    last_synced_on: string | null;
+    last_sync_status: string | null;
+  } | null;
+  leads: number;
+  open_leads: number;
+  won_leads: number;
+  lost_leads: number;
+  conversion_rate: number | null;
+  won_value: number;
+  projects: number;
+  active_projects: number;
+  on_hold_projects: number;
+  pending_tasks: number;
+  overdue_tasks: number;
+  done_tasks: number;
+}
+
+/** How a division's ERP site stands, in words; a tone only when something is wrong. */
+export function siteHealth(site: DivisionCard["site"]): {
+  label: string;
+  tone: "danger" | "warning" | null;
+} {
+  if (!site) return { label: __("No ERP site"), tone: "warning" };
+  if (site.last_sync_status === "Failed") {
+    return { label: __("{0}: last sync failed", site.name), tone: "danger" };
+  }
+  const when = site.last_synced_on
+    ? __("synced {0}", dayjs(site.last_synced_on).fromNow())
+    : __("never synced");
+  return site.enabled
+    ? { label: `${site.name} · ${when}`, tone: null }
+    : { label: __("{0} · sync off, {1}", site.name, when), tone: "warning" };
 }

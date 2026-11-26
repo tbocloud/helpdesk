@@ -2,7 +2,9 @@
 // figure live from the ERP site; these are its shapes and the small sums both pages share.
 import { token } from "@/pages/performance/chartTheme";
 import { __ } from "@/translation";
+import { useDocumentVisibility, useIntervalFn } from "@vueuse/core";
 import { dayjs } from "frappe-ui";
+import { onBeforeUnmount, watch } from "vue";
 import type { RouteLocationRaw } from "vue-router";
 import type { MyCalls } from "../leads/callBatches";
 import type { LeadRow } from "../leads/leads";
@@ -13,12 +15,18 @@ export interface LeadTotals {
   meetings: number;
   quotations_sent: number;
   won: number;
+  won_value: number;
+  /** won leads with no amount, quotation, deal or Sales Order: not in `won_value` */
+  won_unpriced?: number;
   lost: number;
   stale: number;
   overdue: number;
   hot: number;
   open: number;
+  open_value: number;
   win_rate: number;
+  /** % of the leads created in the period that are won now */
+  conversion_rate?: number;
 }
 
 export interface PipelineStage {
@@ -26,6 +34,8 @@ export interface PipelineStage {
   /** Open, Ongoing, On Hold, Won or Lost */
   type: string;
   count: number;
+  /** the stage's leads' expected value */
+  value?: number;
 }
 
 /** One lead in the AI's plan for today: why it's there and the next step. */
@@ -77,6 +87,23 @@ export interface TeamCalls {
   given: number;
   called: number;
   contacted: number;
+  /** from the call log: dialled, missed, seconds talked */
+  calls: number;
+  missed: number;
+  talk_seconds: number;
+  overdue: number;
+}
+
+/** One salesperson's leads in the period, as the Overview counts them. */
+export interface OwnerLeads {
+  user: string;
+  full_name: string;
+  new: number;
+  contacted: number;
+  open: number;
+  meetings_held: number;
+  quotations_sent: number;
+  won: number;
 }
 
 export interface TeamDashboard {
@@ -95,8 +122,24 @@ export interface TeamDashboard {
       stage_suggested?: number;
     };
     people: { user: string; full_name: string }[];
+    currency?: string;
+    by_owner: OwnerLeads[];
   };
   people: TeamCalls[] | null;
+  /** the same days of the period before */
+  previous: { from_date: string; to_date: string; totals: LeadTotals } | null;
+  /** each salesperson who won something, most won value first; null for one person */
+  revenue:
+    | { user: string; full_name: string; won: number; won_value: number }[]
+    | null;
+  /** null with a department or source picked: the ERP site doesn't count it that way */
+  money: {
+    currency?: string;
+    proposals_value: number;
+    advances: number;
+    to_collect: number;
+    overdue: number;
+  } | null;
   week: WeekCalls | null;
   handed_out:
     | { slot: string; department: string; size: number; called: number }[]
@@ -145,4 +188,94 @@ export function metricLink(
   query: Record<string, string | undefined> = {}
 ): RouteLocationRaw {
   return { name: "Leads", query: { view: "all", metric, ...query } };
+}
+
+/** The team dashboard's card colours (`--cc-*` in theme.css, docs/ui-guidelines.md). */
+export type Accent =
+  | "blue"
+  | "violet"
+  | "pink"
+  | "red"
+  | "orange"
+  | "amber"
+  | "green"
+  | "cyan";
+
+/** In the order a row of bars cycles through them. */
+export const ACCENTS: Accent[] = [
+  "blue",
+  "violet",
+  "cyan",
+  "green",
+  "amber",
+  "orange",
+  "pink",
+  "red",
+];
+
+/** The style that gives a `cc-card` (and its `cc-*` parts) its colour. */
+export function accentStyle(accent?: Accent) {
+  return accent ? { "--accent": `var(--cc-${accent})` } : {};
+}
+
+/**
+ * A running month's won value carried to its end at today's rate, and the rate per day the
+ * target still needs (0: reached or no target). `day` counts today as begun.
+ */
+export function forecastOf(
+  won: number,
+  target: number | null,
+  pace: { day: number; days: number }
+) {
+  const perDay = pace.day ? won / pace.day : 0;
+  const daysLeft = pace.days - pace.day + 1;
+  return {
+    perDay,
+    forecast: perDay * pace.days,
+    needed: target && won < target ? (target - won) / daysLeft : 0,
+  };
+}
+
+/** The parts of a frappe-ui resource the live reads below use. */
+interface LiveResource {
+  data: unknown;
+  loading: boolean;
+  reload: () => unknown;
+  abort: () => void;
+}
+
+/**
+ * Drops the reads still on their way when the page closes. The dashboards' reads take many
+ * seconds (each asks the ERP site several times), and a browser keeps only six requests open
+ * per site, across its tabs: left running, they queued the next page's requests behind them,
+ * so a card opened onto a list that stayed loading.
+ */
+export function dropOnLeave(...resources: LiveResource[]) {
+  onBeforeUnmount(() => resources.forEach((r) => r.loading && r.abort()));
+}
+
+const LIVE_EVERY = 120_000;
+
+/**
+ * A dashboard's figures kept live: read again every two minutes, and when the person comes
+ * back to the tab only if they are older than that (switching tabs doesn't start a read
+ * each time); `others` are dropped on leaving too.
+ */
+export function useLiveRead(main: LiveResource, ...others: LiveResource[]) {
+  let readAt = Date.now();
+  watch(
+    () => main.data,
+    () => (readAt = Date.now())
+  );
+  useIntervalFn(() => !main.loading && main.reload(), LIVE_EVERY);
+  const visibility = useDocumentVisibility();
+  watch(visibility, (state) => {
+    if (
+      state === "visible" &&
+      !main.loading &&
+      Date.now() - readAt > LIVE_EVERY
+    )
+      main.reload();
+  });
+  dropOnLeave(main, ...others);
 }

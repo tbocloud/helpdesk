@@ -28,6 +28,17 @@
           :placeholder="__('Select customer')"
           :disabled="!!plan"
         />
+        <BranchSelect
+          v-model="form.branch"
+          :customer="form.customer"
+          :label="__('Branch')"
+          :description="
+            __(
+              'Each branch can have its own plan. Whole customer: one plan for the customer.'
+            )
+          "
+          :disabled="!!plan"
+        />
 
         <fieldset class="flex flex-col gap-2">
           <legend class="mb-1 text-xs text-ink-gray-5">
@@ -211,6 +222,7 @@ import LucidePlus from "~icons/lucide/plus";
 import LucideX from "~icons/lucide/x";
 import { TEAM_ROLES } from "../constants";
 import { useContentOptions } from "../contentOptions";
+import BranchSelect from "./BranchSelect.vue";
 
 export interface PlanItem {
   channel: string;
@@ -221,6 +233,7 @@ export interface PlanItem {
 export interface ContentPlan {
   name: string;
   customer: string;
+  branch?: string | null;
   enabled: number;
   posting_days: string;
   publish_time: string;
@@ -274,6 +287,7 @@ const REGIONS = [
 function blank() {
   return {
     customer: "",
+    branch: "",
     items: [
       { channel: "Instagram", format: "Post", posts_per_month: 8 },
     ] as PlanItem[],
@@ -307,6 +321,7 @@ watch(open, (isOpen) => {
     p
       ? {
           customer: p.customer,
+          branch: p.branch || "",
           items: p.items.map((row) => ({ ...row })),
           writer: p.writer || "",
           designer: p.designer || "",

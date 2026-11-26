@@ -1,0 +1,49 @@
+{
+ "actions": [],
+ "creation": "2026-10-17 17:25:51.799475",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "job",
+  "openai_model",
+  "anthropic_model"
+ ],
+ "fields": [
+  {
+   "description": "triage, draft, summary and task run in TBO Support; investigate, fix and review in the Copilot worker; chat is for the Teams bot (later).",
+   "fieldname": "job",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Job",
+   "options": "triage\ndraft\nsummary\ntask\nchat\ninvestigate\nfix\nreview",
+   "reqd": 1
+  },
+  {
+   "description": "Blank: the OpenAI section's model.",
+   "fieldname": "openai_model",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "OpenAI model"
+  },
+  {
+   "description": "Blank: the Anthropic-compatible section's model.",
+   "fieldname": "anthropic_model",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Anthropic-compatible model"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-10-17 17:25:51.799475",
+ "modified_by": "Administrator",
+ "module": "Helpdesk",
+ "name": "HDS AI Job",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

@@ -25,6 +25,16 @@
           :label="__('Customer') + ' *'"
           :placeholder="__('Select customer')"
         />
+        <BranchSelect
+          v-model="branch"
+          :customer="customer"
+          :label="__('Branch')"
+          :description="
+            __(
+              'A branch\'s approvers see only that branch\'s posts. Whole customer: every post.'
+            )
+          "
+        />
 
         <div
           v-if="customer && access.loading && !access.data"
@@ -73,7 +83,15 @@
               :label="access.data.emails.length ? __('Email') : __('Send to')"
               :placeholder="__('client@company.com')"
               :description="
-                __('Saved as a contact of {0} so they can sign in.', customer)
+                branch
+                  ? __(
+                      'Saved as an approver of {0} so they can sign in.',
+                      branch
+                    )
+                  : __(
+                      'Saved as a contact of {0} so they can sign in.',
+                      customer
+                    )
               "
               required
             />
@@ -160,6 +178,7 @@ import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCopy from "~icons/lucide/copy";
 import LucideExternalLink from "~icons/lucide/external-link";
 import LucideMail from "~icons/lucide/mail";
+import BranchSelect from "./BranchSelect.vue";
 
 interface PortalAccess {
   enabled: boolean;
@@ -170,17 +189,21 @@ interface PortalAccess {
 
 const OTHER = "__other__";
 
-const props = defineProps<{ customer?: string }>();
+const props = defineProps<{ customer?: string; branch?: string }>();
 const open = defineModel<boolean>("open", { default: false });
 
 const customer = ref("");
+const branch = ref("");
 const choice = ref("");
 const typedEmail = ref("");
 const error = ref("");
 
 const access = createResource({
   url: "helpdesk.api.content_portal.get_portal_access",
-  makeParams: () => ({ customer: customer.value }),
+  makeParams: () => ({
+    customer: customer.value,
+    branch: branch.value || undefined,
+  }),
   onSuccess(data: PortalAccess) {
     choice.value = data.emails[0] || OTHER;
   },
@@ -196,12 +219,13 @@ const canSend = computed(
 );
 
 let loadedFor: string | null = null;
-function load(value: string) {
-  if (value === loadedFor) return;
-  loadedFor = value;
+function load() {
+  const key = `${customer.value}\u0000${branch.value}`;
+  if (key === loadedFor) return;
+  loadedFor = key;
   error.value = "";
   access.reset();
-  if (value) access.reload();
+  if (customer.value) access.reload();
 }
 
 watch(open, (isOpen) => {
@@ -209,10 +233,11 @@ watch(open, (isOpen) => {
   typedEmail.value = "";
   loadedFor = null;
   customer.value = props.customer || "";
-  load(customer.value);
+  branch.value = props.branch || "";
+  load();
 });
 
-watch(customer, (value) => open.value && load(value));
+watch([customer, branch], () => open.value && load());
 
 const send = createResource({
   url: "helpdesk.api.content_portal.send_portal_access",
@@ -232,7 +257,11 @@ const send = createResource({
 function submit() {
   error.value = "";
   if (!canSend.value) return;
-  send.submit({ customer: customer.value, email: email.value });
+  send.submit({
+    customer: customer.value,
+    email: email.value,
+    branch: branch.value || undefined,
+  });
 }
 
 async function copyLink() {

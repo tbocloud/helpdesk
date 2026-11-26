@@ -215,7 +215,7 @@
               __(
                 'Go to {0}: {1}, {2}, {3}',
                 dayjs(p.publish_on).format('ddd D MMM, h:mm A'),
-                p.customer,
+                clientOf(p),
                 copyOf(p),
                 __(p.status)
               )
@@ -240,7 +240,7 @@
             </span>
             <span class="truncate text-sm" aria-hidden="true">
               <span class="font-semibold text-ink-gray-9">{{
-                p.customer
+                clientOf(p)
               }}</span>
               <span class="text-ink-gray-7"> · {{ copyOf(p) }}</span>
             </span>
@@ -433,9 +433,9 @@
                     v-if="post.customer"
                     :id="`client-${post.name}`"
                     class="truncate text-lg font-semibold text-ink-gray-9"
-                    :title="post.customer"
+                    :title="clientOf(post)"
                   >
-                    {{ post.customer }}
+                    {{ clientOf(post) }}
                   </p>
                   <p
                     class="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"
@@ -591,7 +591,7 @@
                 :people="peopleOf(post, role.field)"
                 :can-edit="auth.canEditContent"
                 :readonly="post.status === 'Published'"
-                :context="`${post.customer} · ${copyOf(post)}`"
+                :context="`${clientOf(post)} · ${copyOf(post)}`"
                 :step="boxStep(roleTask(post, role.field))"
                 :busy="
                   !!stepBusy && stepBusy === roleTaskName(post, role.field)
@@ -845,6 +845,7 @@ import {
   type RolePerson,
   TEAM_ROLES,
   type TeamRole,
+  clientOf,
   copyOf,
 } from "../constants";
 import {

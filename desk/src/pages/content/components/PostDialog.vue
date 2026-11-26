@@ -55,8 +55,16 @@
                 :label="__('Customer') + ' *'"
                 :placeholder="__('Select customer')"
               />
-              <ContentProjectNote :customer="form.customer" />
+              <ContentProjectNote
+                :customer="form.customer"
+                :branch="form.branch"
+              />
             </div>
+            <BranchSelect
+              v-model="form.branch"
+              :customer="form.customer"
+              :label="__('Branch')"
+            />
             <FormControl
               v-model="form.campaign"
               :label="__('Campaign (optional)')"
@@ -491,6 +499,7 @@ import {
   textToHtml,
 } from "../constants";
 import { useContentOptions } from "../contentOptions";
+import BranchSelect from "./BranchSelect.vue";
 import ContentProjectNote from "./ContentProjectNote.vue";
 import AddOptionChip from "./AddOptionChip.vue";
 import ChannelIcon from "./ChannelIcon.vue";
@@ -511,6 +520,7 @@ const emit = defineEmits<{ (e: "saved"): void }>();
 const EMPTY = {
   title: "",
   customer: "",
+  branch: "",
   campaign: "",
   special_day: "",
   channel: "Instagram",
@@ -855,6 +865,7 @@ async function save() {
   saving.value = true;
   const values = {
     ...form,
+    branch: form.branch || null,
     title: copyPoints(form.title).trim(),
     campaign: form.campaign.trim(),
     special_day: form.special_day.trim(),

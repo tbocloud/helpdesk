@@ -11,6 +11,7 @@ from frappe.utils import (
     add_days,
     add_months,
     cint,
+    flt,
     get_first_day,
     get_last_day,
     getdate,
@@ -59,6 +60,8 @@ DAYS_AGO = {"today": 0, "yesterday": 1}
 BUSINESS_PERIODS = ("month", "last_month", "quarter", "fy", "custom")
 FY_START_MONTH = 4
 MESSAGE_CHANNELS = ("whatsapp", "email")
+# moving here needs what the lead was won for: its won value on Sales targets
+CLOSED_WON = "Closed – Won"
 # the call batch outcomes; an ERP site before them also takes the first two below, which
 # TBO Smart still reads as Not answered
 CALL_OUTCOMES = (
@@ -1086,20 +1089,31 @@ def category_write(method: str, permission_message: str, **params) -> dict:
 
 
 @frappe.whitelist(methods=["POST"])
-def set_stage(name: str, stage: str, note: str | None = None) -> dict:
+def set_stage(
+    name: str,
+    stage: str,
+    note: str | None = None,
+    won_amount: float | str | None = None,
+) -> dict:
+    """Move the lead on the ERP site. Closed – Won needs `won_amount`, what it was won for.
+    An ERP site without the won amount drops it silently, so the reply then says
+    `won_amount_not_kept` for the page to warn."""
     require_leads()
-    result = (
-        call(
-            "set_stage",
-            post=True,
-            name=name,
-            stage=stage,
-            note=(note or "").strip() or None,
-        )
-        or {}
-    )
+    params = {"name": name, "stage": stage, "note": (note or "").strip() or None}
+    if stage == CLOSED_WON:
+        params["won_amount"] = required_won_amount(won_amount)
+    result = call("set_stage", post=True, **params) or {}
     clear_cached_reads()
+    if stage == CLOSED_WON and "won_amount" not in (result.get("lead") or {}):
+        result["won_amount_not_kept"] = True
     return result
+
+
+def required_won_amount(won_amount: float | str | None) -> float:
+    amount = flt(won_amount)
+    if amount <= 0:
+        frappe.throw(_("Enter the amount the lead was won for."), title=_("Won amount"))
+    return amount
 
 
 @frappe.whitelist(methods=["POST"])

@@ -58,6 +58,7 @@ POST_FIELDS = [
     "name",
     "title",
     "customer",
+    "branch",
     "status",
     "publish_on",
     "channel",
@@ -81,6 +82,7 @@ def get_content_tasks(
     channel: str | None = None,
     status: str | None = None,
     person: str | None = None,
+    branch: str | None = None,
 ) -> dict:
     """The role tasks of the posts going live between `start` and `end` (dates), under
     the calendar's filters; `person` keeps the tasks assigned to them. Cancelled posts
@@ -99,7 +101,7 @@ def get_content_tasks(
     if date_diff(end, start) < 0 or date_diff(end, start) > MAX_RANGE_DAYS:
         frappe.throw(_("Pick a range of at most two months."))
 
-    posts, posts_truncated = _posts(start, end, customer, channel, status)
+    posts, posts_truncated = _posts(start, end, customer, channel, status, branch)
     names = list(posts)
     teams = role_teams_of(names)
     parts = role_tasks(names) if names else {}
@@ -127,7 +129,7 @@ def get_content_tasks(
 # --- posts ---
 
 
-def _posts(start, end, customer, channel, status) -> tuple[dict, bool]:
+def _posts(start, end, customer, channel, status, branch=None) -> tuple[dict, bool]:
     filters = {
         "publish_on": (
             "between",
@@ -137,6 +139,8 @@ def _posts(start, end, customer, channel, status) -> tuple[dict, bool]:
     }
     if customer:
         filters["customer"] = customer
+    if branch:
+        filters["branch"] = branch
     if channel:
         # a post can go out on several platforms; `channel` is only the first
         filters["platforms"] = ("like", f"%{channel}%")

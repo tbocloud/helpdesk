@@ -141,6 +141,10 @@
                 :projects="projects"
                 :total="projectCount.data ?? undefined"
               />
+              <CustomerBranchesTab
+                v-else-if="tab.hash === 'branches'"
+                :customer="props.id"
+              />
               <CustomerSupportHoursTab
                 v-else-if="tab.hash === 'support-hours'"
                 :customer="props.id"
@@ -188,6 +192,7 @@
 </template>
 
 <script setup lang="ts">
+import CustomerBranchesTab from "@/components/customer/CustomerBranchesTab.vue";
 import CustomerContactTab from "@/components/customer/CustomerContactTab.vue";
 import CustomerHealthTab from "@/components/customer/CustomerHealthTab.vue";
 import CustomerProjectsTab from "@/components/customer/CustomerProjectsTab.vue";
@@ -237,6 +242,7 @@ import LucideMapPin from "~icons/lucide/map-pin";
 import LucidePhone from "~icons/lucide/phone";
 import LucideSquarePen from "~icons/lucide/square-pen";
 import LucideSquareUser from "~icons/lucide/square-user";
+import LucideStore from "~icons/lucide/store";
 import LucideTrash2 from "~icons/lucide/trash-2";
 import { getTicketListResource } from "../../stores/docTickets";
 
@@ -327,6 +333,12 @@ const tabs = computed(() => [
         ? `${PROJECT_LIMIT}+`
         : projects.data?.length ?? 0),
     icon: markRaw(LucideFolderKanban),
+  },
+  {
+    label: __("Branches"),
+    hash: "branches",
+    count: undefined,
+    icon: markRaw(LucideStore),
   },
   {
     label: __("Support hours"),

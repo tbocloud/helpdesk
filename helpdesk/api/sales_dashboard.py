@@ -6,15 +6,11 @@ so parallel requests would wait on each other (docs/leads.md, "How the Overview 
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, cint, getdate, today
+from frappe.utils import add_days, add_months, cint, flt, get_last_day, getdate, today
 
 from helpdesk.api import call_batches, leads
 from helpdesk.content_team import manages_sales, only_sales_team
-from helpdesk.integrations.crm.leads import (
-    LeadsError,
-    call_if_deployed,
-    require_leads,
-)
+from helpdesk.integrations.crm.leads import LeadsError, call_if_deployed, require_leads
 
 TEAM_PERIODS = ("today", "week", "month")
 # a day that has ended no longer changes, so its calls are kept for an hour
@@ -59,33 +55,45 @@ def get_team_dashboard(
     source: str | None = None,
 ) -> dict:
     """The team's figures for `period` (today, week or month), everyone's or one person's:
-    `overview` (the Leads Overview's totals, pipeline, funnel and AI counts), `people` (each
-    salesperson's calls in the period), `week` (each one's calls per day since Monday) and
-    `handed_out` (today's call batches by slot). `department` and `source` keep every figure
-    to the leads of that lead department and lead source; the batches handed out follow the
-    department only (they aren't counted per lead). The overview is required; the rest are
-    optional, with their messages in `errors`. Not for BDs."""
+    `overview` (the Leads Overview's totals, pipeline, funnel, AI counts and each person's
+    leads), `people` (each salesperson's calls in the period), `week` (each one's calls per
+    day since Monday), `handed_out` (today's call batches by slot), `previous` (the same
+    days of the period before), `revenue` (each salesperson's won value, everyone's view
+    only) and `money` (collected and still to collect). `department` and `source` keep
+    every figure to the leads of that lead department and lead source; the batches handed
+    out follow the department only (they aren't counted per lead), and the money isn't read
+    at all (the ERP site doesn't count it per department or source). The overview is
+    required; the rest are optional, with their messages in `errors`. Not for BDs."""
     require_leads()
     leads.refuse_team()
     if period not in TEAM_PERIODS:
         frappe.throw(_("Pick today, this week or this month."))
     owner = owner or None
     narrow = {"department": department or None, "source": source or None}
+    overview = team_overview(period, owner, fresh, **narrow)
     page = {
         "period": period,
-        "overview": team_overview(period, owner, fresh, **narrow),
+        "overview": overview,
         "people": None,
         "week": None,
         "handed_out": None,
+        "previous": None,
+        "revenue": None,
+        "money": None,
     }
-    page["errors"] = read_parts(
-        page,
-        (
-            ("people", lambda: team_calls(period, owner, fresh, **narrow)),
-            ("week", lambda: week_calls(owner, fresh, **narrow)),
-            ("handed_out", lambda: handed_out_today(narrow["department"])),
-        ),
-    )
+    parts = [
+        ("people", lambda: team_calls(period, owner, fresh, **narrow)),
+        ("week", lambda: week_calls(owner, fresh, **narrow)),
+        ("handed_out", lambda: handed_out_today(narrow["department"])),
+        ("previous", lambda: previous_totals(period, owner, fresh, **narrow)),
+    ]
+    if not owner:
+        parts.append(
+            ("revenue", lambda: won_by_person(period, overview, fresh, **narrow))
+        )
+    if not any(narrow.values()):
+        parts.append(("money", lambda: team_money(period, owner, fresh)))
+    page["errors"] = read_parts(page, parts)
     return page
 
 
@@ -136,6 +144,7 @@ def team_overview(
     )
     ai = overview.get("ai") or {}
     people, _empty = only_sales_team(overview.get("people") or [], keep=(owner,))
+    by_owner, _empty = only_sales_team(overview.get("by_owner") or [], keep=(owner,))
     return {
         "from_date": overview.get("from_date"),
         "to_date": overview.get("to_date"),
@@ -148,6 +157,90 @@ def team_overview(
             for key in ("enabled", "high_intent", "unhappy", "stage_suggested")
         },
         "people": people,
+        "currency": overview.get("currency"),
+        "by_owner": by_owner,
+    }
+
+
+def previous_bounds(period: str, day=None) -> tuple:
+    """The same stretch of the period before, so a running period is compared like for
+    like: yesterday for today, last week's Monday to the same weekday, last month's 1st to
+    the same date (its last day when that month is shorter)."""
+    day = getdate(day or today())
+    if period == "today":
+        start = add_days(day, -1)
+        return start, start
+    if period == "week":
+        start = add_days(day, -day.weekday() - 7)
+        return start, add_days(day, -7)
+    start = add_months(day.replace(day=1), -1)
+    return start, min(add_months(day, -1), get_last_day(start))
+
+
+def previous_totals(
+    period: str, owner: str | None, fresh, department=None, source=None
+) -> dict:
+    """The Overview's totals for the same days of the period before (`previous_bounds`)."""
+    start, end = previous_bounds(period)
+    overview = leads.read_overview(
+        "custom",
+        str(start),
+        str(end),
+        owner,
+        fresh,
+        source=source,
+        department=department,
+    )
+    return {
+        "from_date": str(start),
+        "to_date": str(end),
+        "totals": overview.get("totals") or {},
+    }
+
+
+def won_by_person(
+    period: str, overview: dict, fresh, department=None, source=None
+) -> list[dict]:
+    """Each salesperson's won value in the period, most first. The Overview counts won
+    leads per person but their value only for everyone together, so each person who won
+    something is read on their own; nobody else is asked."""
+    rows = []
+    for person in overview["by_owner"]:
+        if not cint(person.get("won")):
+            continue
+        own = leads.read_overview(
+            period,
+            None,
+            None,
+            person["user"],
+            fresh,
+            source=source,
+            department=department,
+        )
+        rows.append(
+            {
+                "user": person["user"],
+                "full_name": person.get("full_name") or person["user"],
+                "won": cint(person.get("won")),
+                "won_value": flt((own.get("totals") or {}).get("won_value")),
+            }
+        )
+    return sorted(rows, key=lambda r: (-r["won_value"], -r["won"]))
+
+
+def team_money(period: str, owner: str | None, fresh) -> dict | None:
+    """What the period's won deals have paid and what is still to collect, as the Overview's
+    "Proposals & money" counts it. None while the ERP site is older than this."""
+    money = leads.read_proposal_money(period, None, None, owner, fresh)
+    if not money.get("available"):
+        return None
+    totals = money.get("totals") or {}
+    return {
+        "currency": money.get("currency"),
+        **{
+            key: flt(totals.get(key))
+            for key in ("proposals_value", "advances", "to_collect", "overdue")
+        },
     }
 
 
@@ -225,12 +318,18 @@ def day_analysis(
 
 
 def calling_row(row: dict) -> dict:
+    """One salesperson's calls: handed out, called and contacted as Today's calls counts
+    them, then the call log's dialled calls, missed calls, talk time and overdue follow-ups."""
     return {
         "user": row.get("user"),
         "full_name": row.get("full_name") or row.get("user"),
         "given": cint(row.get("given")),
         "called": cint(row.get("called")),
         "contacted": cint(row.get("reached")),
+        "calls": cint(row.get("calls")),
+        "missed": cint(row.get("missed")),
+        "talk_seconds": cint(row.get("talk_seconds")),
+        "overdue": cint(row.get("overdue")),
     }
 
 

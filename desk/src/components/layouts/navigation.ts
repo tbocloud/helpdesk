@@ -3,7 +3,9 @@ import type { Component } from "vue";
 import { OrganizationsIcon } from "../icons";
 import LucideBadgeIndianRupee from "~icons/lucide/badge-indian-rupee";
 import LucideBookOpen from "~icons/lucide/book-open";
+import LucideBot from "~icons/lucide/bot";
 import LucideBriefcase from "~icons/lucide/briefcase";
+import LucideCalendarCheck from "~icons/lucide/calendar-check";
 import LucideCalendarClock from "~icons/lucide/calendar-clock";
 import LucideCalendarDays from "~icons/lucide/calendar-days";
 import LucideCalendarRange from "~icons/lucide/calendar-range";
@@ -37,6 +39,8 @@ import LucideUserRoundCog from "~icons/lucide/user-round-cog";
 import LucideActivity from "~icons/lucide/activity";
 import LucideVideo from "~icons/lucide/video";
 import LucideFileChartColumn from "~icons/lucide/file-chart-column";
+import LucideBuilding2 from "~icons/lucide/building-2";
+import LucideChartPie from "~icons/lucide/chart-pie";
 import LucideGlobe from "~icons/lucide/globe";
 
 /** A page in the sidebar. The flags are the role rules; see `isNavItemVisible`. */
@@ -66,7 +70,7 @@ export interface NavItem {
   customerReportOnly?: boolean;
   /** Business overview and Division reports: Super Admins and division managers */
   divisionOverviewOnly?: boolean;
-  /** Sales targets: Sales Heads (and admins) */
+  /** Sales targets and Sales team: Sales Heads (and admins) */
   salesHeadOnly?: boolean;
   /** Sales targets (their own): Presales Executives and Sales Users */
   ownTargetsOnly?: boolean;
@@ -74,6 +78,8 @@ export interface NavItem {
   ownDashboardOnly?: boolean;
   /** the team's sales figures: anyone with Leads but a BD */
   salesManagersOnly?: boolean;
+  /** Lead report: the people of a division that keeps it (KSA) */
+  weeklyLeadReportOnly?: boolean;
 }
 
 /** A page in the tree under a parent item (a saved view). */
@@ -287,6 +293,14 @@ export const agentNavAreas: NavArea[] = [
             countKey: "tickets",
             ticketWorkersOnly: true,
           },
+          // agents: Copilot's runs, approvals, releases, sites and known issues (Phase 10)
+          {
+            id: "copilot-board",
+            label: __("Copilot board"),
+            icon: LucideBot,
+            to: "CopilotBoard",
+            ticketWorkersOnly: true,
+          },
           {
             id: "knowledge-base",
             label: __("Knowledge base"),
@@ -371,6 +385,14 @@ export const agentNavAreas: NavArea[] = [
             leadTab: "commission",
             leadsOnly: true,
           },
+          // the week's leads in the KSA template, with filters (docs/weekly-lead-report.md)
+          {
+            id: "weekly-lead-report",
+            label: __("Lead report"),
+            icon: LucideCalendarCheck,
+            to: "LeadReport",
+            weeklyLeadReportOnly: true,
+          },
           // expense claims on the division's ERP site: claim and approve (docs/expenses.md)
           {
             id: "expenses",
@@ -425,6 +447,14 @@ export const agentNavAreas: NavArea[] = [
             to: "TeamTargets",
             salesHeadOnly: true,
           },
+          // the sales and presales people: add, change roles, remove (docs/sales-team.md)
+          {
+            id: "sales-team",
+            label: __("Sales team"),
+            icon: LucideUsers,
+            to: "SalesTeam",
+            salesHeadOnly: true,
+          },
           // who is handed which product and how many calls per slot (docs/leads.md)
           {
             id: "assign-leads",
@@ -450,7 +480,7 @@ export const agentNavAreas: NavArea[] = [
             label: __("Content"),
             icon: LucideCalendarDays,
             to: "ContentCalendar",
-            also: ["ContentReport", "ContentPlans"],
+            also: ["ContentReport", "ContentReach", "ContentPlans"],
           },
           {
             id: "performance",
@@ -496,10 +526,25 @@ export const agentNavAreas: NavArea[] = [
         items: [
           // across divisions (docs/divisions.md)
           {
+            id: "divisions",
+            label: __("Divisions"),
+            icon: LucideBuilding2,
+            to: "DivisionsHome",
+            also: ["DivisionDashboard"],
+            divisionOverviewOnly: true,
+          },
+          {
             id: "business-overview",
             label: __("Business overview"),
             icon: LucideGlobe,
             to: "DivisionOverview",
+            divisionOverviewOnly: true,
+          },
+          {
+            id: "lead-status",
+            label: __("Lead status"),
+            icon: LucideChartPie,
+            to: "DivisionLeads",
             divisionOverviewOnly: true,
           },
           {

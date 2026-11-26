@@ -15,6 +15,7 @@
 		"credentials_section",
 		"api_key",
 		"api_secret",
+		"approval_key",
 		"column_break_cred",
 		"last_token_update",
 		"support_user",
@@ -25,6 +26,9 @@
 		"last_health_check",
 		"column_break_health",
 		"mcp_client_installed",
+		"client_version",
+		"client_capabilities",
+		"client_changes_cursor",
 		"last_error",
 		"consecutive_failures",
 		"unreachable_since",
@@ -94,6 +98,13 @@
 			"label": "API Secret"
 		},
 		{
+			"description": "Made by the customer site when it was connected; Copilot signs approved changes with it. The site connects again to replace it.",
+			"fieldname": "approval_key",
+			"fieldtype": "Password",
+			"label": "Approval key",
+			"read_only": 1
+		},
+		{
 			"fieldname": "column_break_cred",
 			"fieldtype": "Column Break"
 		},
@@ -133,6 +144,26 @@
 			"fieldtype": "Check",
 			"label": "MCP Client Installed",
 			"read_only": 1
+		},
+		{
+			"fieldname": "client_version",
+			"fieldtype": "Data",
+			"label": "Client Version",
+			"read_only": 1
+		},
+		{
+			"fieldname": "client_capabilities",
+			"fieldtype": "Small Text",
+			"label": "Client Capabilities",
+			"read_only": 1,
+			"description": "What the client on the customer site said it can do (JSON list), e.g. hub_api_v1 for stages and replies on its own ticket"
+		},
+		{
+			"fieldname": "client_changes_cursor",
+			"fieldtype": "Datetime",
+			"label": "Client Changes Read Up To",
+			"read_only": 1,
+			"description": "The customer site's time up to which its confirmations and reopens were read"
 		},
 		{
 			"fieldname": "last_error",
@@ -184,7 +215,7 @@
 		}
 	],
 	"links": [],
-	"modified": "2026-10-14 12:00:00.000000",
+	"modified": "2026-10-15 15:07:17.492922",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Support Connection",

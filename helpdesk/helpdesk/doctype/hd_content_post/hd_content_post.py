@@ -84,6 +84,7 @@ class HDContentPost(Document):
     def validate(self):
         self.guard_editing()
         self.guard_head_review()
+        self.validate_branch()
         self.mend_pasted_malayalam()
         self.clean_team()
         self.sync_platforms()
@@ -265,12 +266,32 @@ class HDContentPost(Document):
     def task_subject(self, role: str) -> str:
         what = _("Content") if role == SHARED_ROLE else _(role)
         text = f"{what}: {self.label} ({self.platforms_label})"
-        if self.customer:
-            text += f" · {self.customer}"
+        if self.client_label:
+            text += f" · {self.client_label}"
         return text[:140]
 
+    @property
+    def client_label(self) -> str | None:
+        """Who the post is for: its branch ("Roxy - Kochi", which names the customer
+        too), else its customer."""
+        return self.branch or self.customer
+
+    def validate_branch(self):
+        """A branch must be one of the post's customer's; a disabled one can't be newly picked."""
+        if not self.branch:
+            return
+        customer, enabled = frappe.db.get_value(
+            "HD Customer Branch", self.branch, ["customer", "enabled"]
+        ) or (None, 0)
+        if customer != self.customer:
+            frappe.throw(
+                _("{0} isn't a branch of {1}.").format(self.branch, self.customer)
+            )
+        if not enabled and (self.is_new() or self.has_value_changed("branch")):
+            frappe.throw(_("The branch {0} is disabled.").format(self.branch))
+
     def content_project(self) -> str | None:
-        return content_project_for(self.customer)
+        return content_project_for(self.customer, self.branch)
 
     def require_content_project(self):
         """Tasks go to one of the customer's projects, so adding people to a post, or moving a
@@ -305,14 +326,17 @@ class HDContentPost(Document):
         return bool(added - {t.content_role for t in self.content_tasks()})
 
     def moves_tasks(self) -> bool:
-        """Whether this save moves a post with open tasks to another customer (a post being
-        published or cancelled closes its tasks instead of moving them)."""
+        """Whether this save moves a post with open tasks to another customer or branch (a
+        post being published or cancelled closes its tasks instead of moving them)."""
         return (
             not CLOSE_TASKS_AS.get(self.status)
             and not self.is_new()
-            and self.has_value_changed("customer")
+            and self.client_changed()
             and any(t.status not in DONE_TASK_STATUSES for t in self.content_tasks())
         )
+
+    def client_changed(self) -> bool:
+        return self.has_value_changed("customer") or self.has_value_changed("branch")
 
     def create_task(self, role: str, plan: dict, project: str | None):
         task = frappe.get_doc(
@@ -398,7 +422,7 @@ class HDContentPost(Document):
         if (
             project
             and task.project != project
-            and (not task.project or self.has_value_changed("customer"))
+            and (not task.project or self.client_changed())
         ):
             task.project = project
             changed = True
@@ -609,7 +633,7 @@ class HDContentPost(Document):
             "HD Content Post",
             self.name,
             message.format(
-                self.label, self.customer or self.platforms_label, _(self.status)
+                self.label, self.client_label or self.platforms_label, _(self.status)
             ),
             link=self.board_path(),
         )
@@ -904,13 +928,22 @@ def project_customer_fields() -> list[str]:
     return fields
 
 
-def content_project_for(customer: str | None) -> str | None:
-    """The customer's open project for its post tasks: a Content Calendar one first, then
-    the latest changed, of any type."""
+def content_project_for(customer: str | None, branch: str | None = None) -> str | None:
+    """The open project for a post's tasks: its branch's own project when it has one,
+    else the customer's: a Content Calendar one first, then the latest changed, of any
+    type. Another branch's project is never the customer's."""
     if not customer:
         return None
+    from helpdesk.helpdesk.doctype.hd_customer_branch.hd_customer_branch import (
+        branch_projects,
+    )
+
+    if branch:
+        own = frappe.db.get_value("HD Customer Branch", branch, "project")
+        if own and frappe.db.get_value("Project", own, "status") == "Open":
+            return own
     project = frappe.qb.DocType("Project")
-    rows = (
+    query = (
         frappe.qb.from_(project)
         .select(project.name)
         .where(project.status == "Open")
@@ -919,7 +952,13 @@ def content_project_for(customer: str | None) -> str | None:
                 [project[field] == customer for field in project_customer_fields()]
             )
         )
-        .orderby(Case().when(project.project_type == CONTENT_PROJECT_TYPE, 0).else_(1))
+    )
+    if taken := branch_projects(customer):
+        query = query.where(project.name.notin(taken))
+    rows = (
+        query.orderby(
+            Case().when(project.project_type == CONTENT_PROJECT_TYPE, 0).else_(1)
+        )
         .orderby(project.modified, order=Order.desc)
         .limit(1)
         .run(pluck=True)
@@ -935,28 +974,31 @@ def missing_content_project_message(customer: str) -> str:
 
 
 def attach_content_tasks(doc, method=None):
-    """Project on_update: when this is the project a customer's post tasks go to, it takes
-    that customer's open content tasks that have no project yet (made before it had the
-    customer)."""
-    customers = [
-        customer
-        for customer in {doc.get(field) for field in project_customer_fields()}
-        - {None, ""}
-        if content_project_for(customer) == doc.name
-    ]
+    """Project on_update: when this is the project a customer's (or one of its branches')
+    post tasks go to, it takes their open content tasks that have no project yet (made
+    before it had the customer)."""
+    customers = {doc.get(field) for field in project_customer_fields()} - {None, ""}
     if not customers:
         return
     task, post = frappe.qb.DocType("Task"), frappe.qb.DocType("HD Content Post")
-    names = (
+    rows = (
         frappe.qb.from_(task)
         .join(post)
         .on(task.content_post == post.name)
-        .select(task.name)
-        .where(post.customer.isin(customers))
+        .select(task.name, post.customer, post.branch)
+        .where(post.customer.isin(list(customers)))
         .where(task.status.notin(DONE_TASK_STATUSES))
         .where(task.project.isnull() | (task.project == ""))
-        .run(pluck=True)
+        .run(as_dict=True)
     )
+    projects = {}
+    names = []
+    for row in rows:
+        key = (row.customer, row.branch or None)
+        if key not in projects:
+            projects[key] = content_project_for(*key)
+        if projects[key] == doc.name:
+            names.append(row.name)
     for name in names:
         # through the Task controller, so its project's rollups follow; a task that can't be
         # saved is logged and left for the next save instead of failing the project's save

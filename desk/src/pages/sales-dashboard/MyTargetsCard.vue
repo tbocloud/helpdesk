@@ -101,6 +101,7 @@ import {
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
 import { createResource, dayjs } from "frappe-ui";
+import { dropOnLeave } from "./salesDashboard";
 import { computed, useId, watch } from "vue";
 import LucideArrowRight from "~icons/lucide/arrow-right";
 
@@ -117,6 +118,7 @@ const progress = createResource<Progress>({
   url: "helpdesk.api.sales_targets.get_progress",
   params: { month },
 });
+dropOnLeave(mine, progress);
 const target = computed(() => mine.data?.target ?? null);
 watch(
   () => target.value?.modified,

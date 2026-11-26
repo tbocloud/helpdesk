@@ -42,6 +42,17 @@
     </ul>
 
     <div class="mt-auto flex flex-col items-center gap-1.5">
+      <!-- the staff assistant's panel (Phase 6): the same chat as the TBO Copilot bot in Teams -->
+      <RailButton
+        v-if="!mobile && !isCustomerPortal"
+        id="copilot-btn"
+        :label="__('TBO Copilot')"
+        :active="copilotChat.visible"
+        :aria-pressed="copilotChat.visible"
+        @click="copilotChat.toggle()"
+      >
+        <LucideBot class="size-5" aria-hidden="true" />
+      </RailButton>
       <RailButton
         v-if="!isCustomerPortal"
         id="notifications-btn"
@@ -83,6 +94,7 @@
 import BrandLogo from "@/components/BrandLogo.vue";
 import { showSettingsModal } from "@/components/Settings/settingsModal";
 import { useAuthStore } from "@/stores/auth";
+import { useCopilotChatStore } from "@/stores/copilotChat";
 import { useNotificationStore } from "@/stores/notification";
 import { useSidebarStore } from "@/stores/sidebar";
 import { __ } from "@/translation";
@@ -90,6 +102,7 @@ import { isCustomerPortal } from "@/utils";
 import { Avatar, Dropdown } from "frappe-ui";
 import { computed } from "vue";
 import LucideBell from "~icons/lucide/bell";
+import LucideBot from "~icons/lucide/bot";
 import LucidePanelLeftClose from "~icons/lucide/panel-left-close";
 import LucidePanelLeftOpen from "~icons/lucide/panel-left-open";
 import LucideSettings from "~icons/lucide/settings";
@@ -111,6 +124,7 @@ const emit = defineEmits<{
 }>();
 
 const authStore = useAuthStore();
+const copilotChat = useCopilotChatStore();
 const notificationStore = useNotificationStore();
 const sidebarStore = useSidebarStore();
 

@@ -159,6 +159,7 @@ def generate_suggestion(ticket_id: str, instructions: str = ""):
             SUGGESTION_SYSTEM_PROMPT,
             build_suggestion_prompt(doc, instructions, context),
             ticket_name=ticket_id,
+            job="draft",
         )
         suggestion = parse_suggestion(result.get("response"), context["articles"])
         if not suggestion:

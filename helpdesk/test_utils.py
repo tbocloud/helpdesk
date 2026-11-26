@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import frappe
 from frappe.core.doctype.communication.test_communication import create_email_account
-from frappe.utils import add_to_date, get_datetime, getdate, now_datetime
+from frappe.utils import add_to_date, get_datetime, getdate, now_datetime, nowdate
 
 from helpdesk.api.settings.field_dependency import create_update_field_dependency
 from helpdesk.integrations.erpnext.utils import create_customer_field
@@ -213,6 +213,25 @@ def get_ticket_owner_activity(ticket) -> list[str]:
         filters={"ticket": str(ticket), "action": ("like", "%ticket owner of%")},
         pluck="action",
     )
+
+
+def get_ticket_chat_notes(ticket) -> list[str]:
+    """The note lines in a ticket's Copilot chat (who it was assigned to and why, moves while
+    someone is on leave), oldest first."""
+    chat = frappe.db.get_value("HDS Copilot Chat", {"ticket": str(ticket)})
+    if not chat:
+        return []
+    lines = []
+    for card in frappe.get_all(
+        "HDS Copilot Chat Message",
+        filters={"chat": chat, "direction": "Out"},
+        pluck="card",
+        order_by="creation asc, name asc",
+    ):
+        card = frappe.parse_json(card or "{}") or {}
+        if card.get("tone") == "note":
+            lines += card.get("lines") or []
+    return lines
 
 
 def get_ticket_notices(ticket, notification_type: str) -> list[tuple[str, str]]:
@@ -988,6 +1007,27 @@ def make_content_project(customer: str) -> str:
     project = make_customer_project(customer, f"{customer} - Content calendar")
     frappe.db.set_value("Project", project, "project_type", CONTENT_PROJECT_TYPE)
     return project
+
+
+def make_customer_branch(
+    customer: str,
+    branch_name: str,
+    project: str | None = None,
+    approvers: list[str] | None = None,
+    **kwargs,
+):
+    """Creates an HD Customer Branch ("<customer> - <branch_name>"), optionally with its
+    own project and the emails that approve its posts."""
+    return frappe.get_doc(
+        {
+            "doctype": "HD Customer Branch",
+            "customer": customer,
+            "branch_name": branch_name,
+            "project": project,
+            "approvers": [{"email": email} for email in approvers or []],
+            **kwargs,
+        }
+    ).insert(ignore_permissions=True)
 
 
 def make_content_post(
@@ -3176,9 +3216,24 @@ def make_phone_contact(first_name: str, phone: str):
 
 
 def ai_chat_answer(reply: str, action: str = "answer", **fields) -> dict:
-    """What call_haiku returns for a chat reply: `reply`, `action` and any ticket_subject / ticket_summary."""
+    """What call_haiku returns to the customer chat's engine (Copilot Phase 5) for a TBO Chat reply:
+    `reply` as its next message; `action` "answer" (a reply that is no knowledge base answer: a
+    question), "ticket" (a summary whose fields are ticket_subject and ticket_summary) or "human"."""
+    step = {"answer": "question", "ticket": "summary", "human": "handover"}.get(
+        action, action
+    )
+    gathered = {
+        "title": fields.get("ticket_subject"),
+        "actual": fields.get("ticket_summary"),
+    }
     return {
-        "response": {"reply": reply, "action": action, **fields},
+        "response": {
+            "fields": {k: v for k, v in gathered.items() if v},
+            "next": step,
+            "text": reply,
+            "sources": fields.get("sources", []),
+            "language": "en",
+        },
         "usage": {},
         "cost": 0,
     }
@@ -4365,6 +4420,674 @@ def get_recurring_tasks_created(recurring_task: str) -> list[dict]:
     )
 
 
+# the Phase 22 tables a test may still pass to make_copilot_settings, and the People roles each
+# one stands for
+OLD_PEOPLE = {
+    "approvers": ("Senior", "Fix Approver"),
+    "project_coordinators": ("Project Coordinator",),
+    "risk_alert_people": ("Risk Alerts",),
+    "deploy_notice_people": ("Deploy Notices",),
+    "infrastructure_people": ("Infrastructure", "Infrastructure Senior"),
+}
+
+
+def set_customer_people(
+    customer: str,
+    developers=(),
+    fix_approvers=(),
+    coordinators=(),
+    rows=(),
+):
+    """A customer's Copilot People: `developers` in order (Main, then Fallback 1, 2, 3), the same
+    for `fix_approvers`, `coordinators` all Main, plus any `rows` as given."""
+    from helpdesk.copilot import people
+
+    doc = frappe.get_doc("HD Customer", customer)
+    doc.set(people.CUSTOMER_TABLE, [])
+    for role, users, ordered in (
+        (people.DEVELOPER, developers, True),
+        (people.FIX_APPROVER, fix_approvers, True),
+        (people.COORDINATOR, coordinators, False),
+    ):
+        for i, user in enumerate(users):
+            doc.append(
+                people.CUSTOMER_TABLE,
+                {
+                    "role": role,
+                    "person": user,
+                    "level": people.LEVELS[min(i, 3)] if ordered else people.LEVELS[0],
+                },
+            )
+    for row in rows:
+        doc.append(people.CUSTOMER_TABLE, {"level": people.LEVELS[0], **row})
+    doc.flags.ignore_links = True
+    doc.save(ignore_permissions=True)
+    return doc
+
+
+def make_copilot_settings(templates: dict[str, str] | None = None, **values):
+    """Saves HDS Copilot Settings with `values`; `templates` maps a stage to its message text.
+
+    Shadow mode is off and customers default to the Correct level unless asked for, so a
+    test sees what a live customer would.
+    """
+    from helpdesk.copilot import people
+
+    values.setdefault("shadow_mode", 0)
+    values.setdefault("default_copilot_level", "Correct")
+    # before Phase 11 a person asked for every fix and pressed every deploy; tests of that flow keep it
+    values.setdefault("ask_before_every_fix", 1)
+    values.setdefault("deploy_needs_a_press", 1)
+    # tests written before Phase 23 set the Phase 22 tables; they become rows of People, the one
+    # table the code reads (a test may also pass `copilot_people` rows itself)
+    old = {field: values.pop(field) for field in OLD_PEOPLE if field in values}
+    settings = frappe.get_single("HDS Copilot Settings")
+    if old:
+        replaced = {role for field in old for role in OLD_PEOPLE[field]}
+        settings.set(
+            people.TABLE,
+            [
+                row.as_dict()
+                for row in settings.get(people.TABLE) or []
+                if row.role not in replaced
+            ],
+        )
+        for row in people.rows_from_old_settings(
+            {field: [frappe._dict(r) for r in rows] for field, rows in old.items()}
+        ):
+            settings.append(people.TABLE, row)
+    settings.update(values)
+    for stage, message in (templates or {}).items():
+        row = next((r for r in settings.message_templates if r.stage == stage), None)
+        if row:
+            row.message = message
+        else:
+            settings.append("message_templates", {"stage": stage, "message": message})
+    settings.save(ignore_permissions=True)
+    # the cached settings outlive the test's rollback and would steer the site afterwards
+    frappe.db.after_rollback.add(
+        lambda: frappe.clear_document_cache(
+            "HDS Copilot Settings", "HDS Copilot Settings"
+        )
+    )
+    return settings
+
+
+def make_site_registry(
+    customer: str,
+    connection: str | None = None,
+    environment: str = "Production",
+    apps: list[dict] | None = None,
+    **kwargs,
+):
+    """Creates an HDS Site Registry row for `customer`; `apps` rows are `{app, repository, branch, deployed_commit}`."""
+    return frappe.get_doc(
+        {
+            "doctype": "HDS Site Registry",
+            "customer_name": customer,
+            "connection": connection,
+            "environment": environment,
+            "apps": apps or [],
+            **kwargs,
+        }
+    ).insert(ignore_permissions=True)
+
+
+def make_copilot_run(ticket: str, state: str = "Queued", **values):
+    """Creates an HDS Copilot Run for `ticket` directly in `state` (no events, no stage push)."""
+    return frappe.get_doc(
+        {
+            "doctype": "HDS Copilot Run",
+            "ticket": ticket,
+            "customer": frappe.db.get_value("HD Ticket", ticket, "customer"),
+            "kind": "investigate",
+            "state": state,
+            "queued_at": frappe.utils.now_datetime(),
+            **values,
+        }
+    ).insert(ignore_permissions=True)
+
+
+# what the fake worker reports for each root cause (demo text, not AI)
+FAKE_INVESTIGATIONS = {
+    "question": {
+        "summary": "A how-to question about printing a Delivery Note in two languages.",
+        "customer_message": 'You can print the Delivery Note in Arabic and English: open it, choose Print, and pick the format "Delivery Note (AR/EN)". If it is not in the list, tell us and we will enable it for you.',
+        "proposal": {"type": "answer"},
+    },
+    "not_allowed_request": {
+        "summary": "The customer asks to delete a submitted invoice; ERPNext keeps submitted accounting documents.",
+        "customer_message": "A submitted invoice cannot be deleted, because the books must keep every posted entry. The right way is Cancel, then Amend: the cancelled invoice stays in the history and the amended copy carries the corrections.",
+        "proposal": {"type": "answer"},
+    },
+    "customer_mistake": {
+        "summary": "The total is right: a 10% discount was typed on the item row (Version history shows the user's change).",
+        "customer_message": "The total is correct for what was entered: the item row has a 10% discount, added on the day the invoice was made. If the discount was not meant, cancel and amend the invoice and remove it. We can add a warning when a discount is entered, if you like.",
+        "proposal": {"type": "answer"},
+    },
+    "wrong_setting": {
+        "summary": "The notification's email account is disabled, so invoice emails are never queued.",
+        "customer_message": "",
+        "proposal": {
+            "type": "config",
+            "text": "Enable outgoing on the email account used by the Sales Invoice notification",
+        },
+    },
+    "bug": {
+        "summary": "The custom app's Sales Invoice validate hook reads tax_id[0] and fails when the customer has no tax ID.",
+        "customer_message": "",
+        "proposal": {
+            "type": "code",
+            "text": "Guard the tax_id read in sales_invoice.py and add a regression test",
+        },
+    },
+    "data_damaged_by_bug": {
+        "summary": "Stock for HT-PUMP-200 is wrong since the update: the repost after the custom valuation hook was skipped.",
+        "customer_message": "",
+        "proposal": {
+            "type": "code+data",
+            "text": "Fix the hook, then repost the item's ledger entries since the update",
+        },
+    },
+    "core_issue": {
+        "summary": "The Accounts Receivable report times out on a large party ledger: a known ERPNext limit, not the custom app.",
+        "customer_message": "",
+        "proposal": {
+            "type": "handover",
+            "text": "A person decides between a report workaround and an upstream fix",
+        },
+    },
+    "customization_request": {
+        "summary": "A new column for the salesperson's region on the Sales Register: nothing is broken, it is a change.",
+        "customer_message": "The Sales Register shows what it was built to show; adding the salesperson's region is a new column in the report.",
+        "proposal": {"type": "customization", "estimate_hours": 4},
+    },
+    "unclear": {
+        "summary": "Not enough to go on: no page, time or record is named.",
+        "customer_message": "To find the cause we need a little more: which page is slow, at what time of day, and does it happen for one user or everyone?",
+        "proposal": {"type": "question"},
+        "questions": [
+            "Which page is slow?",
+            "At what time of day?",
+            "One user or everyone?",
+        ],
+    },
+}
+
+
+def fake_investigation(
+    category: str = "question", confidence: float = 0.9, **extra
+) -> dict:
+    """A worker result for `category`, as `submit_result` expects it."""
+    canned = FAKE_INVESTIGATIONS[category]
+    result = {
+        "kind": "investigation",
+        "root_cause_category": category,
+        "confidence": confidence,
+        "summary": canned["summary"],
+        "evidence": [
+            {
+                "type": "error_log",
+                "ref": "Error Log/abc123",
+                "note": "IndexError in sales_invoice.py",
+            }
+        ],
+        "proposal": canned.get("proposal", {}),
+        "customer_message": canned.get("customer_message", ""),
+        "questions": canned.get("questions", []),
+        "cost": {"tokens": 1200, "usd": 0.01},
+    }
+    result.update(extra)
+    return result
+
+
+class FakeWorker:
+    """Plays the Copilot worker against the worker API, as the current user (who holds the role)."""
+
+    def __init__(self, worker_id: str = "fake-worker"):
+        self.worker_id = worker_id
+        self.run = None
+        self.token = None
+        self.context = None
+
+    def claim(self) -> dict:
+        from helpdesk.api.copilot_worker import claim_job
+
+        job = claim_job(self.worker_id)
+        if job:
+            self.run, self.token, self.context = (
+                job["run"],
+                job["lease_token"],
+                job["context"],
+            )
+        return job
+
+    def heartbeat(self, stage: str = "") -> dict:
+        from helpdesk.api.copilot_worker import heartbeat
+
+        return heartbeat(self.run, self.token, stage)
+
+    def events(self, events: list[dict]) -> dict:
+        from helpdesk.api.copilot_worker import post_events
+
+        return post_events(self.run, self.token, events)
+
+    def report(
+        self, category: str = "question", confidence: float = 0.9, **extra
+    ) -> dict:
+        from helpdesk.api.copilot_worker import submit_result
+
+        return submit_result(
+            self.run, self.token, fake_investigation(category, confidence, **extra)
+        )
+
+    def fail(self, reason: str = "the sandbox did not start") -> dict:
+        from helpdesk.api.copilot_worker import submit_result
+
+        return submit_result(
+            self.run, self.token, {"kind": "failure", "reason": reason}
+        )
+
+
+def run_fake_worker(
+    category: str = "question",
+    abandon: bool = False,
+    ticket: str | None = None,
+    change_set: dict | str | None = None,
+) -> dict:
+    """`bench execute` demo: claims the oldest queued run (or starts one for `ticket`) and reports `category`.
+
+    With `abandon` it claims and stops, so the lease expiry can be watched. With
+    `change_set` (an object, or its JSON) it reports that correction too, as the
+    worker would for a wrong setting or damaged data, e.g.
+    `{'summary': ..., 'customer_note': ..., 'changes': [{'doctype': 'Selling Settings',
+    'name': 'Selling Settings', 'values': {'selling_price_list': 'Standard Selling'}}]}`.
+    """
+    from helpdesk.copilot.runs import AGENT, start_run
+
+    if ticket:
+        start_run(str(ticket), actor=AGENT)
+    worker = FakeWorker()
+    if not worker.claim():
+        return {"claimed": None}
+    if abandon:
+        return {"claimed": worker.run, "abandoned": True}
+    worker.events(
+        [
+            {
+                "seq": 1,
+                "type": "tool_call",
+                "payload": {"tool": "get_error_log", "ms": 120},
+            }
+        ]
+    )
+    extra = {"change_set": frappe.parse_json(change_set)} if change_set else {}
+    return {"claimed": worker.run, **worker.report(category, **extra)}
+
+
+def mcp_message(
+    method: str, params: dict | None = None, req_id: int | None = 1
+) -> dict:
+    """A JSON-RPC 2.0 message for the hub's MCP server; `req_id=None` makes it a notification."""
+    message = {"jsonrpc": "2.0", "method": method}
+    if params is not None:
+        message["params"] = params
+    if req_id is not None:
+        message["id"] = req_id
+    return message
+
+
+def mcp_tool_result(result: dict):
+    """The JSON a tools/call result carries in its text block (or the text itself when it isn't JSON)."""
+    text = result["content"][0]["text"]
+    try:
+        return json.loads(text)
+    except ValueError:
+        return text
+
+
+def fake_http_request(
+    test_case,
+    method: str = "POST",
+    body: bytes | str = b"",
+    headers: dict | None = None,
+):
+    """Gives frappe.local a request with `method`, `body` and `headers`, put back after the test."""
+    from types import SimpleNamespace
+
+    data = body.encode() if isinstance(body, str) else body
+    previous = getattr(frappe.local, "request", None)
+    frappe.local.request = SimpleNamespace(
+        method=method, headers=headers or {}, cookies={}, get_data=lambda *a, **k: data
+    )
+    test_case.addCleanup(setattr, frappe.local, "request", previous)
+
+
+def restrict_tickets_to_teams(test_case):
+    """Turns on "agents see only their team's tickets" (tickets without a team hidden too) for one test.
+
+    Switched back off on cleanup: the setting is cached, so a rollback alone
+    would leave later tests restricted.
+    """
+    values = {
+        "restrict_tickets_by_agent_group": 1,
+        "do_not_restrict_tickets_without_an_agent_group": 0,
+    }
+    frappe.db.set_single_value("HD Settings", values)
+    test_case.addCleanup(
+        frappe.db.set_single_value,
+        "HD Settings",
+        {
+            "restrict_tickets_by_agent_group": 0,
+            "do_not_restrict_tickets_without_an_agent_group": 1,
+        },
+    )
+
+
+# --- Copilot fixes (Phase 1d) ---
+
+
+def github_pull(
+    repo: str,
+    number: int,
+    head_sha: str,
+    body: str = "",
+    title: str = "Fix the margin rate",
+    draft: bool = False,
+    state: str = "open",
+    merged: bool = False,
+    mergeable_state: str = "clean",
+    author: str = "dev-login",
+    base: str = "main",
+) -> dict:
+    """A GitHub pull request as the REST API and webhooks give it."""
+    return {
+        "number": number,
+        "title": title,
+        "body": body,
+        "draft": draft,
+        "state": state,
+        "merged": merged,
+        "merged_at": "2026-10-12T10:00:00Z" if merged else None,
+        "closed_at": "2026-10-12T10:00:00Z" if state == "closed" else None,
+        "html_url": f"https://github.com/{repo}/pull/{number}",
+        "user": {"login": author},
+        "head": {"sha": head_sha, "ref": f"fix-{number}"},
+        "base": {"ref": base, "repo": {"full_name": repo}},
+        "labels": [],
+        "mergeable_state": mergeable_state,
+        "merge_commit_sha": None,
+        "node_id": f"PR_{repo}_{number}",
+    }
+
+
+class FakeGitHub:
+    """GitHub's REST API for Copilot fixes, in memory: pull requests, their files and
+    checks, labels, comments, search and the merge (which refuses a moved head, 409).
+
+    `install(test_case)` routes helpdesk.copilot.github.request here for one test.
+    """
+
+    def __init__(self):
+        self.pulls: dict = {}
+        self.files: dict = {}
+        self.check_runs: dict = {}
+        self.statuses: dict = {}
+        self.repo_settings: dict = {}
+        self.comments: list = []
+        self.calls: list = []
+        self.search_items: list = []
+        self.merge_refusal: tuple | None = None
+        self.merged_with: dict | None = None
+        self.reverted: list = []
+        # a fine-grained personal token may not read check runs: GitHub says 403
+        self.check_runs_refused = False
+        # releases (Phase 7): each branch's tip, each repository's commits in order, a commit's pull requests
+        self.branches: dict = {}
+        self.history: dict = {}
+        self.commit_pulls_of: dict = {}
+
+    def commit(
+        self,
+        repo: str,
+        sha: str,
+        branch: str = "main",
+        message: str = "Change",
+        author: str = "dev-login",
+        pull: int | None = None,
+    ):
+        """A commit on `branch`, which becomes its tip; `pull`: the merged pull request it came with."""
+        self.history.setdefault(repo, []).append(
+            {
+                "sha": sha,
+                "commit": {
+                    "message": message,
+                    "author": {"email": f"{author}@example.com"},
+                },
+                "author": {"login": author},
+            }
+        )
+        self.branches[(repo, branch)] = sha
+        if pull:
+            self.commit_pulls_of.setdefault((repo, sha), []).append(pull)
+
+    def install(self, test_case):
+        patcher = patch("helpdesk.copilot.github.request", side_effect=self.request)
+        patcher.start()
+        test_case.addCleanup(patcher.stop)
+        return self
+
+    def add_pull(
+        self, repo: str, number: int, head_sha: str, files: list | None = None, **kwargs
+    ) -> dict:
+        pull = github_pull(repo, number, head_sha, **kwargs)
+        self.pulls[(repo, number)] = pull
+        self.files[(repo, number)] = (
+            files
+            if files is not None
+            else [
+                {
+                    "filename": "demo_app/margin.py",
+                    "status": "modified",
+                    "additions": 3,
+                    "deletions": 1,
+                    "patch": "+rate = 0",
+                },
+                {
+                    "filename": "tests/test_margin.py",
+                    "status": "modified",
+                    "additions": 5,
+                    "deletions": 0,
+                    "patch": "+check",
+                },
+            ]
+        )
+        self.set_checks(head_sha, {"tests": "success"})
+        return pull
+
+    def push(self, repo: str, number: int, head_sha: str):
+        self.pulls[(repo, number)]["head"]["sha"] = head_sha
+        self.set_checks(head_sha, {"tests": "success"})
+
+    def set_checks(self, sha: str, conclusions: dict, status: dict | None = None):
+        """`{name: conclusion}`; a conclusion of None means still running."""
+        self.check_runs[sha] = [
+            {
+                "name": name,
+                "status": "completed" if result else "in_progress",
+                "conclusion": result,
+            }
+            for name, result in conclusions.items()
+        ]
+        self.statuses[sha] = status or {"state": "pending", "total_count": 0}
+
+    def workflow_runs(self, sha: str) -> list[dict]:
+        """The check runs again, as the GitHub Actions workflow runs of `sha`."""
+        return [
+            dict(run, workflow_id=i, event="pull_request", created_at="2026-10-12")
+            for i, run in enumerate(self.check_runs.get(sha, []))
+        ]
+
+    def labels(self, repo: str, number: int) -> list[str]:
+        return [label["name"] for label in self.pulls[(repo, number)]["labels"]]
+
+    def request(self, method, path, body=None, params=None, owner=None):
+        import copy
+
+        from helpdesk.copilot.github import GitHubError
+
+        self.calls.append((method, path, body))
+        parts = path.strip("/").split("/")
+        if parts[0] == "search":
+            return {"items": self.search_items}
+        if parts[0] == "graphql":
+            # GitHub's revert of a merged pull request: a new pull request that undoes it
+            variables = body["variables"]
+            original = next(
+                (key, pull)
+                for key, pull in self.pulls.items()
+                if pull.get("node_id") == variables["id"]
+            )
+            repo, number = original[0][0], 100 + len(self.pulls)
+            self.add_pull(
+                repo, number, "r" * 40, body=variables["body"], title=variables["title"]
+            )
+            self.reverted.append(original[0])
+            return {
+                "data": {
+                    "revertPullRequest": {
+                        "revertPullRequest": {
+                            "number": number,
+                            "url": f"https://github.com/{repo}/pull/{number}",
+                        }
+                    }
+                }
+            }
+        repo, rest = f"{parts[1]}/{parts[2]}", parts[3:]
+        if not rest:
+            return self.repo_settings.get(
+                repo,
+                {
+                    "allow_merge_commit": True,
+                    "allow_squash_merge": True,
+                    "allow_rebase_merge": True,
+                },
+            )
+        if rest[0] == "actions":
+            return {"workflow_runs": self.workflow_runs((params or {})["head_sha"])}
+        if rest[0] == "branches":
+            sha = self.branches.get((repo, rest[1]))
+            if not sha:
+                raise GitHubError(404, "Branch not found")
+            return {"name": rest[1], "commit": {"sha": sha}}
+        if rest[0] == "compare":
+            base, head = rest[1].split("...")
+            shas = [c["sha"] for c in self.history.get(repo, [])]
+            if base not in shas or head not in shas:
+                raise GitHubError(404, "No common ancestor")
+            start, end = shas.index(base), shas.index(head)
+            commits = self.history[repo][start + 1 : end + 1]
+            status = (
+                "identical" if start == end else "ahead" if end > start else "behind"
+            )
+            # the files of the pull requests the commits came with; a push changes push.py
+            files = []
+            for commit in commits:
+                numbers = self.commit_pulls_of.get((repo, commit["sha"]))
+                for number in numbers or []:
+                    files += self.files.get((repo, number), [])
+                if not numbers:
+                    files.append(
+                        {"filename": "demo_app/push.py", "additions": 1, "deletions": 0}
+                    )
+            return {
+                "status": status,
+                "commits": copy.deepcopy(commits),
+                "files": copy.deepcopy(files),
+            }
+        if rest[0] == "commits" and rest[2] == "pulls":
+            return [
+                copy.deepcopy(self.pulls[(repo, number)])
+                for number in self.commit_pulls_of.get((repo, rest[1]), [])
+            ]
+        if rest[0] == "commits":
+            sha = rest[1]
+            if rest[2] == "check-runs":
+                if self.check_runs_refused:
+                    raise GitHubError(
+                        403, "Resource not accessible by personal access token"
+                    )
+                return {"check_runs": self.check_runs.get(sha, [])}
+            return self.statuses.get(sha, {"state": "pending", "total_count": 0})
+        number = int(rest[1])
+        pull = self.pulls.get((repo, number))
+        if not pull:
+            raise GitHubError(404, "Not Found")
+        if rest[0] == "pulls" and len(rest) == 2:
+            return copy.deepcopy(pull)
+        if rest[0] == "pulls" and rest[2] == "files":
+            return (
+                self.files[(repo, number)]
+                if int((params or {}).get("page", 1)) == 1
+                else []
+            )
+        if rest[0] == "pulls" and rest[2] == "merge":
+            if self.merge_refusal:
+                raise GitHubError(*self.merge_refusal)
+            if body.get("sha") != pull["head"]["sha"]:
+                raise GitHubError(
+                    409, "Head branch was modified. Review and try the merge again."
+                )
+            pull.update(
+                state="closed",
+                merged=True,
+                merged_at="2026-10-12T10:00:00Z",
+                merge_commit_sha="m" + body["sha"],
+            )
+            self.merged_with = body
+            return {"sha": pull["merge_commit_sha"], "merged": True}
+        if rest[0] == "issues" and rest[2] == "labels":
+            if method == "POST":
+                pull["labels"] += [{"name": name} for name in body["labels"]]
+                return []
+            name = rest[3]
+            if name not in self.labels(repo, number):
+                raise GitHubError(404, "Label does not exist")
+            pull["labels"] = [
+                label for label in pull["labels"] if label["name"] != name
+            ]
+            return {}
+        if rest[0] == "issues" and rest[2] == "comments":
+            self.comments.append((repo, number, body["body"]))
+            return {"id": len(self.comments)}
+        raise GitHubError(404, f"no fake route for {method} {path}")
+
+
+def make_hd_pull_request(
+    task: str,
+    repo: str,
+    number: int,
+    head_sha: str,
+    state: str = "Open",
+    link_kind: str = "Closes",
+):
+    """An HD Pull Request row as the GitHub sync makes it, linked to `task`."""
+    return frappe.get_doc(
+        {
+            "doctype": "HD Pull Request",
+            "repo": repo,
+            "number": number,
+            "task": task,
+            "link_kind": link_kind,
+            "state": state,
+            "title": "Fix the margin rate",
+            "url": f"https://github.com/{repo}/pull/{number}",
+            "head_sha": head_sha,
+            "base_branch": "main",
+        }
+    ).insert(ignore_permissions=True)
+
+
 def make_started_task(
     project: str,
     subject: str,
@@ -4399,6 +5122,440 @@ def record_status_change(task: str, old: str, new: str, at) -> None:
 def get_in_progress_as(user: str, **filters) -> dict:
     """The In progress page's answer (helpdesk.api.in_progress.get_in_progress) for `user`."""
     return call_as_user(user, "helpdesk.api.in_progress.get_in_progress", **filters)
+
+
+# --- Copilot deploys through Press (Phase 2) ---
+
+
+class FakePress:
+    """TBO's Press for Copilot deploys, in memory: one bench with its apps and sites,
+    the deploys asked for and the site updates they make. `finish(status)` ends them.
+
+    `install(test_case)` routes helpdesk.copilot.press.call here for one test.
+    """
+
+    def __init__(
+        self,
+        group: str = "bench-1",
+        sites: tuple = ("site1.example.com",),
+        app: str = "demo_app",
+        current: str = "o" * 40,
+        next_hash: str | None = None,
+    ):
+        self.group = group
+        self.apps = [
+            {
+                "app": app,
+                "source": "SRC-1",
+                "release": "REL-1",
+                "hash": current,
+                "next_release": "REL-2",
+                "next_hash": next_hash or current,
+                "branch": "main",
+            }
+        ]
+        self.sites = [
+            {"name": site, "server": "f1.example.com", "bench": f"{group}-old"}
+            for site in sites
+        ]
+        self.deploy_in_progress = False
+        self.deploys: list = []
+        self.fetched: list = []
+        self.site_updates: list = []
+        self.builds: list = []
+        self.on_fetch = None
+
+    @staticmethod
+    def _as_press(app: dict) -> dict:
+        """An app as TBO's Press shows it in deploy_information (release_group.get_app_updates):
+        the running commit as `current_hash`, a newer one only as a release."""
+        current, following = app.get("hash"), app.get("next_hash") or app.get("hash")
+        update = bool(following) and following != current
+        return {
+            "app": app["app"],
+            "name": app["app"],
+            "source": app.get("source"),
+            "repository_url": app.get("repository_url"),
+            "branch": app.get("branch"),
+            "current_branch": app.get("branch"),
+            "current_hash": current,
+            "current_release": app.get("release"),
+            "next_release": app.get("next_release") if update else app.get("release"),
+            "releases": [
+                {"name": app.get("next_release"), "hash": following, "is_yanked": False}
+            ]
+            if update
+            else [],
+            "update_available": update,
+        }
+
+    def install(self, test_case):
+        patcher = patch("helpdesk.copilot.press.call", side_effect=self.call)
+        patcher.start()
+        test_case.addCleanup(patcher.stop)
+        return self
+
+    def fail_build(self):
+        """The bench's newest build fails: Press then updates no site."""
+        self.builds[0]["status"] = "Failure"
+        self.site_updates.clear()
+
+    def finish(self, status: str = "Success"):
+        for build in self.builds:
+            build["status"] = "Success"
+        for update in self.site_updates:
+            update["status"] = status
+        if status == "Success":
+            self.apps[0]["hash"] = self.apps[0]["next_hash"]
+
+    def call(self, method, **args):
+        import copy
+
+        from helpdesk.copilot.press import PressError
+
+        name = method.rsplit(".", 1)[-1]
+        if name == "deploy_information":
+            return {
+                "apps": [self._as_press(app) for app in self.apps],
+                "sites": copy.deepcopy(self.sites),
+                "deploy_in_progress": self.deploy_in_progress,
+                "has_running_release_pipeline": False,
+            }
+        if name == "fetch_latest_app_update":
+            self.fetched.append(args["app"])
+            if self.on_fetch:
+                self.on_fetch()
+            return None
+        if name == "deploy_and_update":
+            self.deploys.append(copy.deepcopy(args))
+            self.builds.insert(
+                0,
+                {
+                    "name": f"DCB-{len(self.deploys)}",
+                    "group": self.group,
+                    "status": "Running",
+                    "creation": str(now_datetime()),
+                },
+            )
+            for site in args["sites"]:
+                self.site_updates.insert(
+                    0,
+                    {
+                        "name": f"SU-{len(self.site_updates) + 1}",
+                        "site": site["name"],
+                        "status": "Running",
+                        "creation": str(now_datetime()),
+                        "site_backup": f"BKP-{len(self.site_updates) + 1}",
+                    },
+                )
+            return f"DC-{len(self.deploys)}"
+        if name == "get_list" and args.get("doctype") == "Site Update":
+            if "name" in args["filters"]:
+                return [
+                    dict(update)
+                    for update in self.site_updates
+                    if update["name"] == args["filters"]["name"]
+                ]
+            wanted = set(args["filters"]["site"][1])
+            return [
+                dict(update) for update in self.site_updates if update["site"] in wanted
+            ]
+        if name == "get_list" and args.get("doctype") == "Deploy Candidate Build":
+            return [
+                dict(build)
+                for build in self.builds
+                if build["group"] == args["filters"]["group"]
+            ]
+        raise PressError(404, f"no fake route for {method}")
+
+
+def site_tool_replies(replies: dict):
+    """A patched MCPClient whose call_tool answers each customer-site tool with `replies[tool]` (JSON), or an error.
+
+    A reply may be a function of the call's arguments; raising LookupError refuses that call.
+    """
+    import json as _json
+
+    def refused(text):
+        return {"content": [{"type": "text", "text": text}], "isError": True}
+
+    def call_tool(tool, arguments=None, session_id=None):
+        if tool not in replies:
+            return refused(f"{tool} refused")
+        value = replies[tool]
+        if callable(value):
+            try:
+                value = value(arguments or {})
+            except LookupError as e:
+                return refused(str(e))
+        return {"content": [{"type": "text", "text": _json.dumps(value)}]}
+
+    return call_tool
+
+
+class FakeErrorSite:
+    """A customer site's Error Log as Copilot's error watch reads it through the connector:
+    `get_deploy_status` (the top signatures by count since a time) and `get_error_log` (samples,
+    newest first, filtered by method). Other tools are refused.
+
+    `install(test_case)` routes helpdesk.mcp_client.MCPClient here for one test.
+    """
+
+    def __init__(self):
+        self.errors: list[dict] = []
+        self.calls: list = []
+        self.down = False  # the site does not answer
+
+    def install(self, test_case):
+        patcher = patch("helpdesk.mcp_client.MCPClient")
+        mocked = patcher.start()
+        test_case.addCleanup(patcher.stop)
+        mocked.return_value.call_tool.side_effect = self.call_tool
+        return self
+
+    def error(
+        self,
+        method: str,
+        last_line: str,
+        app: str = "alpha_trading",
+        times: int = 1,
+        owner: str = "ali@alpha.example.com",
+        document: str = "",
+        at=None,
+    ):
+        """`times` error logs ending in `last_line`, raised in `app` by `method`."""
+        doctype, _sep, name = document.partition("/")
+        for _n in range(times):
+            self.errors.append(
+                {
+                    "name": frappe.generate_hash(length=10),
+                    "method": method,
+                    "error": "Traceback (most recent call last):\n"
+                    f'  File "apps/{app}/{app}/module.py", line 10, in run\n{last_line}',
+                    "app": app,
+                    "top_frames": [f'{app}/{app}/module.py", line 10, in run'],
+                    "creation": str(at or now_datetime()),
+                    "owner": owner,
+                    "reference_doctype": doctype or None,
+                    "reference_name": name or None,
+                }
+            )
+
+    def call_tool(self, tool, arguments=None, session_id=None):
+        from frappe.utils import get_datetime
+
+        from helpdesk.copilot.verify import signature
+
+        args = arguments or {}
+        self.calls.append((tool, args))
+        if self.down:
+            return {"content": [{"type": "text", "text": "site down"}], "isError": True}
+        since = get_datetime(args["since"]) if args.get("since") else None
+        rows = [
+            e for e in self.errors if not since or get_datetime(e["creation"]) >= since
+        ]
+        if tool == "get_deploy_status":
+            counts: dict = {}
+            for row in rows:
+                counts[signature(row)] = counts.get(signature(row), 0) + 1
+            value = {
+                "since": args.get("since"),
+                "errors": {
+                    "count": len(rows),
+                    "top": [
+                        {"signature": key, "count": count}
+                        for key, count in sorted(counts.items(), key=lambda kv: -kv[1])[
+                            :10
+                        ]
+                    ],
+                },
+            }
+        elif tool == "get_error_log":
+            if args.get("method"):
+                rows = [e for e in rows if args["method"] in e["method"]]
+            value = list(reversed(rows))[: int(args.get("limit") or 20)]
+        else:
+            return {
+                "content": [{"type": "text", "text": f"{tool} refused"}],
+                "isError": True,
+            }
+        return {"content": [{"type": "text", "text": json.dumps(value, default=str)}]}
+
+
+class FakeCustomerSite:
+    """The customer's site as Copilot's corrections reach it, in memory: its records,
+    `check_change` and `apply_change`, and its guard on the hub's signed approval
+    (the connection's approval key, the record, its exact values).
+
+    `install(test_case)` routes helpdesk.mcp_client.MCPClient here for one test.
+    """
+
+    def __init__(self, key: str = "site-approval-key", environment: str = "Production"):
+        self.key = key
+        self.environment = environment
+        self.records: dict = {}
+        self.problems: dict = {}  # (doctype, name) -> what the site's check says
+        self.refusals: dict = {}  # (doctype, name) -> why the site refuses to apply
+        self.created: list = []
+        self.approvals: list = []
+        self.calls: list = []
+        # other tools the site answers (the deploy's check): {tool: reply or function of the arguments}
+        self.replies: dict = {}
+
+    def install(self, test_case):
+        patcher = patch("helpdesk.mcp_client.MCPClient")
+        mocked = patcher.start()
+        test_case.addCleanup(patcher.stop)
+        mocked.return_value.call_tool.side_effect = self.call_tool
+        return self
+
+    def add(self, doctype: str, name: str, values: dict, docstatus: int = 0, rows=None):
+        self.records[(doctype, name)] = {
+            "values": dict(values),
+            "rows": {row: dict(v) for row, v in (rows or {}).items()},
+            "docstatus": docstatus,
+        }
+
+    def value(self, doctype: str, name: str, field: str):
+        return self.records[(doctype, name)]["values"].get(field)
+
+    def call_tool(self, tool, arguments=None, ticket_id=None, session_id=None):
+        import json as _json
+
+        self.calls.append((tool, arguments))
+        if tool in self.replies:
+            reply = self.replies[tool]
+            reply = reply(arguments or {}) if callable(reply) else reply
+            return {
+                "content": [{"type": "text", "text": _json.dumps(reply, default=str)}]
+            }
+        try:
+            result = getattr(self, tool)(**(arguments or {}))
+        except LookupError as e:
+            return {
+                "content": [{"type": "text", "text": f"Error executing {tool}: {e}"}],
+                "isError": True,
+            }
+        return {"content": [{"type": "text", "text": _json.dumps(result, default=str)}]}
+
+    def _current(self, change: dict) -> dict:
+        record = self.records[(change["doctype"], change.get("name") or "")]
+        return {
+            "values": {f: record["values"].get(f) for f in change.get("values") or {}},
+            "rows": {
+                row["name"]: {
+                    f: record["rows"].get(row["name"], {}).get(f)
+                    for f in row.get("values") or {}
+                }
+                for row in change.get("rows") or []
+            },
+        }
+
+    def check_change(self, change: dict):
+        key = (change["doctype"], change.get("name") or "")
+        if (change.get("action") or "update") == "create":
+            return {
+                "ok": True,
+                "problems": [],
+                "current": {},
+                "docstatus": 0,
+                "environment": self.environment,
+            }
+        if key not in self.records:
+            raise LookupError(f"{key[0]} {key[1]} not found")
+        problems = [self.problems[key]] if key in self.problems else []
+        return {
+            "ok": not problems,
+            "problems": problems,
+            "current": self._current(change),
+            "docstatus": self.records[key]["docstatus"],
+            "environment": self.environment,
+        }
+
+    def _guard(self, change: dict, expect, token):
+        import base64
+        import hashlib
+        import hmac
+        import json as _json
+        import time
+
+        from helpdesk.copilot.approval_key import change_digest
+
+        if not token:
+            if self.environment == "Production":
+                raise LookupError(
+                    "On a Production site every write from TBO Support needs its signed approval."
+                )
+            return {}
+        body, _sep, signature = token.partition(".")
+        expected = (
+            base64.urlsafe_b64encode(
+                hmac.new(self.key.encode(), body.encode(), hashlib.sha256).digest()
+            )
+            .decode()
+            .rstrip("=")
+        )
+        if signature != expected:
+            raise LookupError("The approval's signature is not valid.")
+        payload = _json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
+        if payload["exp"] < time.time():
+            raise LookupError("The approval has expired.")
+        wanted = (
+            change.get("item"),
+            change["doctype"],
+            change.get("name") or "",
+            change.get("action") or "update",
+            change_digest(change, expect),
+        )
+        if not any(
+            (
+                r.get("item"),
+                r["doctype"],
+                r.get("name") or "",
+                r["action"],
+                r.get("digest"),
+            )
+            == wanted
+            for r in payload["records"]
+        ):
+            raise LookupError("The approval does not cover this record and its values.")
+        self.approvals.append(payload)
+        return payload
+
+    def apply_change(self, change: dict, expect=None, approval=None):
+        self._guard(change, expect, approval)
+        key = (change["doctype"], change.get("name") or "")
+        if key in self.refusals:
+            raise LookupError(self.refusals[key])
+        if (change.get("action") or "update") == "create":
+            name = f"{change['doctype']}-NEW-{len(self.created) + 1}"
+            self.created.append((change["doctype"], name, change.get("values")))
+            return {
+                "status": "applied",
+                "doctype": change["doctype"],
+                "name": name,
+                "old": {},
+                "new": {"values": change.get("values")},
+            }
+        before = self._current(change)
+        if before != {
+            "values": (expect or {}).get("values") or {},
+            "rows": (expect or {}).get("rows") or {},
+        }:
+            raise LookupError(
+                f"{key[0]} {key[1]} changed since it was checked; it was left as it is."
+            )
+        record = self.records[key]
+        record["values"].update(change.get("values") or {})
+        for row in change.get("rows") or []:
+            record["rows"].setdefault(row["name"], {}).update(row.get("values") or {})
+        return {
+            "status": "applied",
+            "doctype": key[0],
+            "name": key[1],
+            "old": before,
+            "new": self._current(change),
+        }
 
 
 def make_credentials(
@@ -4502,6 +5659,150 @@ def make_ads_connection(project: str, **values):
         monthly_ad_cap=10000,
         **values,
     )
+
+
+def enable_meta_insights():
+    """Switches on Enable Reach Reports in HD Meta Settings (after enable_meta)."""
+    frappe.db.set_single_value("HD Meta Settings", "insights_enabled", 1)
+    frappe.clear_cache(doctype="HD Meta Settings")
+
+
+def make_insights_connection(project: str, **values):
+    """A Connected HD Meta Connection whose client allowed the insights permissions."""
+    return make_meta_connection(project, insights_allowed=1, **values)
+
+
+def make_daily_insight(project: str, platform: str, day, **values):
+    """One day of reach numbers (HD Meta Daily Insight) for `project` on `platform`."""
+    return frappe.get_doc(
+        {
+            "doctype": "HD Meta Daily Insight",
+            "project": project,
+            "platform": platform,
+            "day": day,
+            **values,
+        }
+    ).insert(ignore_permissions=True)
+
+
+def make_post_insight(project: str, platform: str, media_id: str, posted_on, **values):
+    """One post and its numbers (HD Meta Post Insight) for `project` on `platform`."""
+    return frappe.get_doc(
+        {
+            "doctype": "HD Meta Post Insight",
+            "project": project,
+            "platform": platform,
+            "media_id": media_id,
+            "posted_on": posted_on,
+            **values,
+        }
+    ).insert(ignore_permissions=True)
+
+
+def insights_graph_routes(day, **overrides) -> dict:
+    """FakeGraph routes for one insights sync of a Page ("page-1") and its Instagram
+    account ("ig-1") whose only day is `day`: daily numbers, one Facebook photo post
+    ("page-1_555"), one Instagram Reel ("ig-media-9") and follower totals."""
+    from frappe.utils import add_days
+
+    end = f"{add_days(day, 1)}T08:00:00+0000"
+
+    def series(name, value):
+        return {
+            "name": name,
+            "period": "day",
+            "values": [{"value": value, "end_time": end}],
+        }
+
+    def lifetime(name, value):
+        return {"name": name, "period": "lifetime", "values": [{"value": value}]}
+
+    def total(name, value):
+        return {"name": name, "period": "day", "total_value": {"value": value}}
+
+    return {
+        "GET page-1/insights": {
+            "data": [
+                series("page_total_media_view_unique", 1200),
+                series("page_media_view", 3000),
+                series("page_post_engagements", 150),
+                series("page_daily_follows_unique", 12),
+                series("page_daily_unfollows_unique", 2),
+            ]
+        },
+        "GET page-1/published_posts": {
+            "data": [
+                {
+                    "id": "page-1_555",
+                    "message": "Monday offer",
+                    "created_time": f"{day}T04:30:00+0000",
+                    "permalink_url": "https://facebook.com/post/555",
+                    "full_picture": "https://cdn.example/555.jpg",
+                    "attachments": {"data": [{"media_type": "photo"}]},
+                    "shares": {"count": 4},
+                    "comments": {"summary": {"total_count": 6}},
+                }
+            ]
+        },
+        "GET page-1_555/insights": {
+            "data": [
+                lifetime("post_total_media_view_unique", 800),
+                lifetime("post_media_view", 1100),
+                lifetime("post_clicks", 30),
+                lifetime("post_reactions_by_type_total", {"like": 40, "love": 10}),
+            ]
+        },
+        "GET ig-1/insights": {
+            "data": [
+                total("reach", 2500),
+                total("views", 6000),
+                total("accounts_engaged", 300),
+                total("total_interactions", 420),
+                {
+                    "name": "follows_and_unfollows",
+                    "total_value": {
+                        "breakdowns": [
+                            {
+                                "dimension_keys": ["follow_type"],
+                                "results": [
+                                    {"dimension_values": ["FOLLOWER"], "value": 25},
+                                    {"dimension_values": ["NON_FOLLOWER"], "value": 5},
+                                ],
+                            }
+                        ]
+                    },
+                },
+            ]
+        },
+        "GET ig-1/media": {
+            "data": [
+                {
+                    "id": "ig-media-9",
+                    "caption": "Reel of the week",
+                    "media_type": "VIDEO",
+                    "media_product_type": "REELS",
+                    "permalink": "https://instagram.com/reel/9",
+                    "timestamp": f"{day}T06:00:00+0000",
+                    "thumbnail_url": "https://cdn.example/9.jpg",
+                }
+            ]
+        },
+        "GET ig-media-9/insights": {
+            "data": [
+                lifetime("reach", 1900),
+                lifetime("views", 4200),
+                lifetime("likes", 210),
+                lifetime("comments", 14),
+                lifetime("shares", 9),
+                lifetime("saved", 21),
+                lifetime("total_interactions", 254),
+            ]
+        },
+        "GET ig-1/stories": {"data": []},
+        "GET page-1": {"id": "page-1", "followers_count": 5400},
+        "GET ig-1": {"id": "ig-1", "followers_count": 8100},
+        **overrides,
+    }
 
 
 def publish_post_on_meta(post: str, *targets: str, link: str | None = None):
@@ -5109,13 +6410,19 @@ def make_content_edits(post: str, user: str, count: int):
         frappe.db.set_value("Version", version.name, "owner", user)
 
 
-def age_ticket(ticket: str, hours: int, **values):
-    """Makes the ticket `ticket` look `hours` hours old, with any other `values` (for
-    example agreement_status) set straight in the database."""
+def age_ticket(ticket: str, hours: int = 0, minutes: int = 0, **values):
+    """Makes the ticket `ticket` look `hours` hours (or `minutes` minutes) old, with any other
+    `values` (for example agreement_status) set straight in the database.
+
+    One helper for both: two branches each added an age_ticket, one by minutes and one by hours,
+    and the later definition hid the earlier one."""
     frappe.db.set_value(
         "HD Ticket",
-        ticket,
-        {"creation": add_to_date(now_datetime(), hours=-hours), **values},
+        str(ticket),
+        {
+            "creation": add_to_date(now_datetime(), hours=-hours, minutes=-minutes),
+            **values,
+        },
         update_modified=False,
     )
 
@@ -5527,6 +6834,35 @@ def make_division(
     return doc
 
 
+def make_report_lead(
+    source: str,
+    lead: str,
+    status: str,
+    category: str = "Open",
+    created_on=None,
+    **values,
+):
+    """Writes one lead of the reporting copy (`HD CRM Report Lead`) of `source`'s ERP site
+    as its sync would, without a site: `values` set the other columns (employee,
+    lead_source, expected_revenue, won_value, ...)."""
+    created_on = getdate(created_on or nowdate())
+    doc = frappe.get_doc(
+        {
+            "doctype": "HD CRM Report Lead",
+            "name": f"{source}::{lead}",
+            "source": source,
+            "remote_name": lead,
+            "status": status,
+            "category": category,
+            "created_on": created_on,
+            "created_month": created_on.strftime("%Y-%m"),
+            **values,
+        }
+    )
+    doc.db_insert()
+    return doc
+
+
 class FakeERPSales:
     """In-memory stand-in for a division's ERP site as the division overview reads it:
     the count of its enabled Customers and its Quotations (CRMClient's call and get_page).
@@ -5573,3 +6909,82 @@ class FakeERPSales:
             <= bounds.get(("transaction_date", "<="), "9999")
         ]
         return rows[start : start + page_length]
+
+
+class FakeWeeklyLeadERP:
+    """The KSA ERP site for the weekly lead report (docs/weekly-lead-report.md): its Leads
+    (with `lead_owner` and `modified`) and Quotations. `visible` is {user: leads} the site
+    shows each salesperson: `get_lead` refuses any other with a 403, as TBO Smart does. Set
+    `error` (a CRMError) to fail every REST read and write."""
+
+    def __init__(
+        self,
+        leads: list[dict],
+        quotations: list[dict] | None = None,
+        visible: dict[str, set] | None = None,
+    ):
+        self.base = "https://ksa.example"
+        self.leads = {lead["name"]: lead for lead in leads}
+        self.quotations = list(quotations or [])
+        self.visible = visible or {}
+        self.error = None
+
+    def call(self, method, post=False, acting_user=None, **params):
+        from helpdesk.integrations.crm.client import CRMError
+
+        name = params.get("name")
+        if name not in self.visible.get(acting_user, set()):
+            raise CRMError(
+                "403",
+                status=403,
+                detail="No permission for Lead",
+                user_message=f"No permission for Lead {name}",
+            )
+        return {"lead": self.leads[name]}
+
+    def request(self, method, path, **kwargs):
+        from urllib.parse import unquote
+
+        if self.error:
+            raise self.error
+        assert method == "PUT"
+        self.leads[unquote(path.rsplit("/", 1)[-1])].update(kwargs["json"])
+        return {"data": {}}
+
+    def get_list(self, doctype, fields, filters=None):
+        if self.error:
+            raise self.error
+        if doctype == "Lead":
+            return [
+                {f: lead.get(f) for f in fields}
+                for lead in self.leads.values()
+                if all(self.matches(lead, f) for f in filters or [])
+            ]
+        names = next(f[2] for f in filters if f[0] == "party_name")
+        return [q for q in self.quotations if q["party_name"] in names]
+
+    @staticmethod
+    def matches(row: dict, condition: list) -> bool:
+        field, operator, value = condition
+        have = row.get(field)
+        if operator == "in":
+            return have in value
+        have = str(have or "")
+        return {">=": have >= value, "<": have < value, "=": have == value}[operator]
+
+
+def weekly_report_lead(name: str, company: str, **fields) -> dict:
+    """A Lead on FakeWeeklyLeadERP, with the template's fields empty unless given."""
+    return {
+        "name": name,
+        "company_name": company,
+        "lead_owner": None,
+        "modified": "2026-11-24 10:00:00",
+        "lead_name": "",
+        "job_title": "",
+        "mobile_no": "",
+        "phone": "",
+        "email_id": "",
+        "industry": "",
+        **fields,
+    }

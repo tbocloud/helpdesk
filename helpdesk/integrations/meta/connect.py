@@ -37,6 +37,9 @@ SCOPES = (
 )
 # added behind HD Meta Settings > Enable Ads, to boost posts (docs/meta-publishing.md)
 ADS_SCOPES = ("ads_management", "ads_read")
+# added behind HD Meta Settings > Enable Reach Reports, for the Reach report
+# (docs/meta-insights.md); a client may decline them and still publish
+INSIGHTS_SCOPES = ("read_insights", "instagram_manage_insights")
 # the ad account's account_status, in words
 ACCOUNT_STATUS = {
     1: "Active",
@@ -56,10 +59,18 @@ def ads_enabled() -> bool:
     return bool(frappe.db.get_single_value(SETTINGS, "ads_enabled"))
 
 
+def insights_enabled() -> bool:
+    return bool(frappe.db.get_single_value(SETTINGS, "insights_enabled"))
+
+
 def scopes() -> tuple[str, ...]:
-    """What the sign-in asks for: the posting permissions, plus the ads ones when ads
-    are switched on in the settings."""
-    return SCOPES + ADS_SCOPES if ads_enabled() else SCOPES
+    """What the sign-in asks for: the posting permissions, plus the ads and insights
+    ones when they are switched on in the settings."""
+    return (
+        SCOPES
+        + (ADS_SCOPES if ads_enabled() else ())
+        + (INSIGHTS_SCOPES if insights_enabled() else ())
+    )
 
 
 def app() -> tuple[str, str]:
@@ -119,6 +130,7 @@ def finish_login(code: str, state: str, session_user: str) -> str:
     missing = [s for s in SCOPES if s not in granted]
     # a client who declines only the ads permissions still gets Phase 1 publishing
     ads_allowed = ads_enabled() and all(s in granted for s in ADS_SCOPES)
+    insights_allowed = insights_enabled() and all(s in granted for s in INSIGHTS_SCOPES)
     if missing:
         frappe.throw(
             _(
@@ -132,6 +144,7 @@ def finish_login(code: str, state: str, session_user: str) -> str:
             "last_error": None,
             "user_access_token": token,
             "ads_allowed": int(ads_allowed),
+            "insights_allowed": int(insights_allowed),
             "granted_scopes": ", ".join(granted),
             "connected_by": user,
         }

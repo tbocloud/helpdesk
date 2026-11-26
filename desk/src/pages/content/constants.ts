@@ -71,6 +71,8 @@ export interface ContentPost {
   platforms?: string;
   format?: string;
   customer: string;
+  // one of the customer's branches ("Roxy - Kochi"), when it has any
+  branch?: string | null;
   // the festival or occasion the post is for; the calendar highlights it
   special_day?: string;
   publish_on?: string;
@@ -211,6 +213,14 @@ export function copyLine(title?: string) {
 }
 
 // What a post is called: its copy, else its post type, then its ID, until the copy is written
+/** Who a post is for: its branch, which names the customer too, else its customer. */
+export function clientOf(post: {
+  customer?: string | null;
+  branch?: string | null;
+}) {
+  return post.branch || post.customer || "";
+}
+
 export function copyOf(post: {
   title?: string;
   format?: string;

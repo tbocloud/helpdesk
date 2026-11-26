@@ -121,8 +121,9 @@ altogether, because a salesperson's work is leads, which live on the ERP site.
 | --- | --- |
 | **Leads**: the Overview, the list, the lead page, proposals and the documents chain up to the client documents | Home (it is their tasks and tickets, so `/helpdesk/home` opens Leads → Overview) |
 | **Scoreboard** (the sales rows, [team-dashboard.md](team-dashboard.md#sales)) | Tickets and the support pages: Customers, Contacts, Templates, Knowledge base, Support hours, Customer report |
-| **Notifications**, their own profile and preferences (the user menu), **Help & docs** | Projects, My Work, Board, Calendar, Timesheets, In progress, the work Overview, Team, Summaries, Performance, Stand-up |
-| | The content calendar (Content, plans, the report) |
+| **Notifications**, their own profile and preferences (the user menu), **Help & docs** | Projects, My Work, Board, Timesheets, In progress, the work Overview, Team, Summaries, Performance, Stand-up |
+| **Work → Calendar** (owner, 2026-11-23): their meetings, the holidays and their leave; it lists no tasks, since `task_query` gives them none | The content calendar (Content, plans, the report) |
+| **Meetings** (owner, 2026-11-26): the Meeting calendar (their meetings; scheduling one from a day) and Meeting types (read only, as for any agent). The Team toggle stays off for them, since `can_see_overview` is never true for a Sales Employee | |
 
 - **Sidebar and routes** (`SALES_EMPLOYEE_ROUTES` in `pages/content/contentTeam.ts`): an
   **allow list**, not a hide list like the other walls, so a page added later stays out of

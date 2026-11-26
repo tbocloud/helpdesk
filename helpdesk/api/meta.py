@@ -12,12 +12,18 @@ from frappe.utils import cstr, strip_html
 
 from helpdesk.content_team import DM_HEAD_ROLE
 from helpdesk.helpdesk.doctype.hd_meta_settings.hd_meta_settings import HDMetaSettings
-from helpdesk.integrations.meta import connect, publisher, signing
+from helpdesk.integrations.meta import connect, insights, publisher, signing
 from helpdesk.integrations.meta.graph import MetaError, graph_version
 from helpdesk.tasky.permissions import can_handle_credentials
 
 SETTINGS = connect.SETTINGS
-PLAIN_FIELDS = ("enabled", "ads_enabled", "app_id", "graph_api_version")
+PLAIN_FIELDS = (
+    "enabled",
+    "ads_enabled",
+    "insights_enabled",
+    "app_id",
+    "graph_api_version",
+)
 ADMIN_ROLE = "System Manager"
 PROJECT_PAGE = "/helpdesk/projects/{0}/meta"
 
@@ -98,6 +104,11 @@ def connection_summary(project: str) -> dict | None:
         "ad_account_currency": doc.ad_account_currency,
         "ad_account_status": doc.ad_account_status,
         "monthly_ad_cap": doc.monthly_ad_cap,
+        "insights_allowed": bool(doc.insights_allowed),
+        "insights_synced_on": (
+            cstr(doc.insights_synced_on) if doc.insights_synced_on else None
+        ),
+        "insights_error": doc.insights_error,
     }
 
 
@@ -113,6 +124,7 @@ def get_connection(project: str) -> dict:
     return {
         "enabled": bool(frappe.db.get_single_value(SETTINGS, "enabled")),
         "ads_enabled": connect.ads_enabled(),
+        "insights_enabled": connect.insights_enabled(),
         "can_change_cap": can_change_ad_cap(),
         "connection": connection_summary(project),
     }
@@ -166,9 +178,12 @@ def list_pages(project: str) -> list[dict]:
 def select_page(project: str, page_id: str) -> dict | None:
     require_project_access(project)
     try:
-        connect.select_page(project, page_id)
+        connection = connect.select_page(project, page_id)
     except MetaError as e:
         frappe.throw(e.user_message)
+    if connection.insights_allowed:
+        # the Reach report starts with the last 90 days, not an empty page
+        insights.queue_sync(project)
     return connection_summary(project)
 
 

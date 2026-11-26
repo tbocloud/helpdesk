@@ -56,14 +56,21 @@ type ContentProject = {
   missing?: string;
 };
 
-const props = defineProps<{ customer?: string | null }>();
+const props = defineProps<{
+  customer?: string | null;
+  branch?: string | null;
+}>();
 const router = useRouter();
 
 // the answer for the customer now picked; nothing while it loads or if it failed, so the
 // note never shows another customer's project
-const result = ref<{ customer: string; project: ContentProject } | null>(null);
+// a branch with its own project sends its tasks there, so the answer is per branch too
+const key = computed(
+  () => `${props.customer || ""}\u0000${props.branch || ""}`
+);
+const result = ref<{ key: string; project: ContentProject } | null>(null);
 const shown = computed(() =>
-  result.value?.customer === props.customer ? result.value.project : null
+  result.value?.key === key.value ? result.value.project : null
 );
 
 // only the latest request's answer counts: an older one (another customer, or the
@@ -73,21 +80,23 @@ let latest = 0;
 async function load() {
   const customer = props.customer;
   if (!customer) return;
+  const asked = key.value;
   const request = ++latest;
   try {
     const project = await call(
       "helpdesk.api.content_board.get_content_project",
       {
         customer,
+        branch: props.branch || undefined,
       }
     );
-    if (request === latest) result.value = { customer, project };
+    if (request === latest) result.value = { key: asked, project };
   } catch {
     if (request === latest) result.value = null;
   }
 }
 
-watch(() => props.customer, load, { immediate: true });
+watch(key, load, { immediate: true });
 // the project is often fixed in another tab (the link opens one): check again on return
 useEventListener(window, "focus", load);
 

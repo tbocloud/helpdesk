@@ -31,6 +31,7 @@ from helpdesk.sales_targets import (
 from helpdesk.tasky.permissions import is_project_manager as tasky_is_project_manager
 from helpdesk.utils import agent_only, get_agent_name, get_agents_team
 from helpdesk.utils import is_agent as _is_agent
+from helpdesk.weekly_lead_report import report_division
 
 
 @frappe.whitelist()
@@ -130,6 +131,8 @@ def get_user():
         "can_assign_sales_targets": can_assign_targets(current_user),
         # Sales targets (their own): Presales Executives and Sales Users read theirs
         "has_sales_targets": has_own_targets(current_user),
+        # Sales → Lead report, in a division that keeps it (docs/weekly-lead-report.md)
+        "has_weekly_lead_report": bool(report_division(current_user)),
         # Presales Executives don't get Today's calls: no sidebar item, no pill on Leads
         "hide_todays_calls": hides_todays_calls(current_user),
         # lets the frontend skip call-integration checks when telephony isn't installed

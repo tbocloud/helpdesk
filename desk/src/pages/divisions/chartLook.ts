@@ -34,6 +34,9 @@ export const METRIC_LOOK: Record<
   on_hold_projects: { icon: LucidePause, tone: "warning", slot: 3 },
   completed: { icon: LucideCircleCheck, tone: "success", slot: 2 },
   overdue_tasks: { icon: LucideCircleX, tone: "danger", slot: 1 },
+  // the Lead status page's open and lost leads
+  open: { icon: LucideUsers, tone: "warning", slot: 3 },
+  lost: { icon: LucideCircleX, tone: "danger", slot: 1 },
 };
 
 /** A chart card's heading in its tone: full class strings, so Tailwind finds them. */

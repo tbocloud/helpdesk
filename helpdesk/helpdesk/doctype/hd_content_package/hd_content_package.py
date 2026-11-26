@@ -2,6 +2,7 @@
 # For license information, please see license.txt
 
 """A customer's monthly content package: what goes out each month and who does it.
+A customer with branches (HD Customer Branch) can have one package per branch.
 
 On the planning day (HD Content Settings), next month's posts are created as Ideas,
 spread over the posting days, with the team and tasks already set. Occasions in the
@@ -44,9 +45,42 @@ DEFAULT_PLAN_DAY = 20
 
 
 class HDContentPackage(Document):
+    def autoname(self):
+        # a branch's name already holds its customer's ("Roxy - Kochi")
+        self.name = self.branch or self.customer
+
     def validate(self):
+        self.validate_branch()
+        self.validate_one_plan()
         self.validate_items()
         self.set_posts_per_month()
+
+    def validate_branch(self):
+        if (
+            self.branch
+            and frappe.db.get_value("HD Customer Branch", self.branch, "customer")
+            != self.customer
+        ):
+            frappe.throw(
+                _("{0} isn't a branch of {1}.").format(self.branch, self.customer)
+            )
+
+    def validate_one_plan(self):
+        """One plan per customer, or per branch."""
+        filters = {
+            "customer": self.customer,
+            "branch": self.branch or ("is", "not set"),
+        }
+        # a new plan is already named, after the very plan it would duplicate
+        if not self.is_new():
+            filters["name"] = ("!=", self.name)
+        other = frappe.db.get_value("HD Content Package", filters, "name")
+        if other:
+            frappe.throw(_("{0} already has a monthly plan.").format(self.label))
+
+    @property
+    def label(self) -> str:
+        return self.branch or self.customer
 
     def validate_items(self):
         if not self.items:
@@ -69,7 +103,7 @@ class HDContentPackage(Document):
         if self.is_planned(month):
             frappe.throw(
                 _("{0} is already planned for {1}.").format(
-                    self.customer, month.strftime("%B %Y")
+                    self.label, month.strftime("%B %Y")
                 )
             )
         count = self.plan_month(month)
@@ -194,6 +228,7 @@ class HDContentPackage(Document):
                 "doctype": "HD Content Post",
                 "title": title,
                 "customer": self.customer,
+                "branch": self.branch,
                 "channel": item.channel,
                 "format": item.format,
                 "status": "Idea",
@@ -222,7 +257,7 @@ class HDContentPackage(Document):
             "HD Content Package",
             self.name,
             _("{0}: {1} posts planned for {2}. Your parts are in My Work.").format(
-                self.customer, count, month.strftime("%B %Y")
+                self.label, count, month.strftime("%B %Y")
             ),
             link="/content",
         )

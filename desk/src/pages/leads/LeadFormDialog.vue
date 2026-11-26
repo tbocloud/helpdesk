@@ -121,6 +121,45 @@
           type="date"
           :label="__('Next follow-up')"
         />
+        <!-- the KSA lead report's fields, kept on the lead (docs/weekly-lead-report.md) -->
+        <template v-if="withSheet">
+          <FormControl
+            v-model="sheet.designation"
+            type="text"
+            maxlength="140"
+            :label="__('Designation')"
+            :disabled="sheetLoading"
+          />
+          <FormControl
+            v-model="sheet.requirement"
+            type="select"
+            :label="__('Requirement')"
+            :options="requirementOptions"
+            :disabled="sheetLoading"
+          />
+          <FormControl
+            v-model="sheet.conversion"
+            type="select"
+            :label="__('Conversion possibility')"
+            :options="conversionOptions"
+            :disabled="sheetLoading"
+          />
+          <FormControl
+            v-model="sheet.visits"
+            type="number"
+            min="0"
+            :max="MAX_VISITS"
+            :label="__('Visits this week')"
+            :disabled="sheetLoading"
+          />
+          <FormControl
+            v-model="sheet.follow_up"
+            type="select"
+            :label="__('Follow-up plan')"
+            :options="followUpOptions"
+            :disabled="sheetLoading"
+          />
+        </template>
       </div>
 
       <FormControl
@@ -201,6 +240,15 @@ import {
   type LeadOptions,
   type LeadRow,
 } from "./leads";
+import {
+  CONVERSIONS,
+  FOLLOW_UPS,
+  MAX_VISITS,
+  optionsOf,
+  REQUIREMENTS,
+  WEEKLY_API,
+  type WeekRow,
+} from "@/pages/weekly-lead-report/weeklyLeadReport";
 import DuplicateLeadsNotice from "./DuplicateLeadsNotice.vue";
 import LeadCategoryFields from "./LeadCategoryFields.vue";
 
@@ -227,6 +275,65 @@ function blank(): LeadForm {
 const form = reactive<LeadForm>(blank());
 // not a lead field: the ERP site's create takes only those, so remarks go in as a note
 const remarks = ref("");
+
+// the KSA lead report's fields: TBO Smart's create and update don't take them, so they
+// are written to the lead after it (helpdesk.api.weekly_lead_report.update_lead)
+const withSheet = computed(() => useAuthStore().hasWeeklyLeadReport);
+// the form's text values; visits go to the server as a number
+interface SheetForm {
+  designation: string;
+  requirement: string;
+  conversion: string;
+  visits: string;
+  follow_up: string;
+}
+const blankSheet = (): SheetForm => ({
+  designation: "",
+  requirement: "",
+  conversion: "",
+  visits: "",
+  follow_up: "",
+});
+const sheet = reactive<SheetForm>(blankSheet());
+const sheetBefore = ref<SheetForm>(blankSheet());
+const sheetLoading = ref(false);
+const requirementOptions = optionsOf(REQUIREMENTS);
+const conversionOptions = optionsOf(CONVERSIONS);
+const followUpOptions = optionsOf(FOLLOW_UPS);
+
+/** The lead's sheet fields, to edit them. */
+async function loadSheet(lead: string, opened: number) {
+  sheetLoading.value = true;
+  try {
+    const found: WeekRow = await call(`${WEEKLY_API}.get_lead_sheet`, { lead });
+    if (opened !== opening) return;
+    const values: SheetForm = {
+      designation: found.designation,
+      requirement: found.requirement,
+      conversion: found.conversion,
+      visits: found.visits ? String(found.visits) : "",
+      follow_up: found.follow_up,
+    };
+    Object.assign(sheet, values);
+    sheetBefore.value = values;
+  } catch {
+    // the fields stay empty and unchanged, so saving leaves the lead's as they are
+  } finally {
+    if (opened === opening) sheetLoading.value = false;
+  }
+}
+
+/** The sheet fields that changed (all filled ones on a new lead). */
+function sheetChanges(): Record<string, string | number> {
+  if (!withSheet.value || sheetLoading.value) return {};
+  const changes: Record<string, string | number> = {};
+  for (const key of Object.keys(sheet) as (keyof SheetForm)[]) {
+    const value = String(sheet[key] ?? "").trim();
+    if (value === sheetBefore.value[key]) continue;
+    changes[key] = key === "visits" ? Math.trunc(Number(value) || 0) : value;
+  }
+  return changes;
+}
 // bumped on each open, so a save that finishes after the form was closed and opened
 // again leaves that form alone
 let opening = 0;
@@ -321,6 +428,10 @@ watch(
       values[field] = String(props.lead?.[field] ?? "");
     }
     Object.assign(form, values);
+    Object.assign(sheet, blankSheet());
+    sheetBefore.value = blankSheet();
+    sheetLoading.value = false;
+    if (withSheet.value && props.lead) loadSheet(props.lead.name, opening);
     loadLeadOptions();
     if (options.value?.departments?.length && !leadDepartments.loading)
       leadDepartments.fetch();
@@ -457,7 +568,9 @@ async function submit() {
     return;
   }
   const data = payload();
-  if (props.lead && !Object.keys(data).length) {
+  const sheetData = sheetChanges();
+  const sheetChanged = !!Object.keys(sheetData).length;
+  if (props.lead && !Object.keys(data).length && !sheetChanged) {
     emit("update:open", false);
     return;
   }
@@ -465,13 +578,37 @@ async function submit() {
   const lead = props.lead;
   const note = lead ? "" : remarks.value.trim();
   saving.value = true;
-  call(
-    lead ? "helpdesk.api.leads.update_lead" : "helpdesk.api.leads.create_lead",
-    lead
-      ? { name: lead.name, data }
-      : { data, allow_duplicate: needsConfirm.value ? 1 : 0 }
-  )
+  const save =
+    lead && !Object.keys(data).length
+      ? // only the sheet fields changed: nothing for TBO Smart
+        Promise.resolve({ name: lead.name })
+      : call(
+          lead
+            ? "helpdesk.api.leads.update_lead"
+            : "helpdesk.api.leads.create_lead",
+          lead
+            ? { name: lead.name, data }
+            : { data, allow_duplicate: needsConfirm.value ? 1 : 0 }
+        );
+  save
     .then(async (result: { name?: string } | null) => {
+      const saved = result?.name || lead?.name;
+      if (sheetChanged && saved) {
+        // the lead is saved, so a failure here mustn't send the person back to save it again
+        await call(`${WEEKLY_API}.update_lead`, {
+          lead: saved,
+          values: sheetData,
+        }).catch((e: unknown) =>
+          toast.warning(
+            errorText(
+              e,
+              __(
+                "The lead report fields weren't saved. Edit the lead to add them again."
+              )
+            )
+          )
+        );
+      }
       if (note && result?.name) {
         const name = result.name;
         // the lead exists now, so a failed note mustn't send the person back to create it again

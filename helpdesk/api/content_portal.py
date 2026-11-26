@@ -5,6 +5,10 @@ their HD Customer contacts and a one-time code, review the posts sent to them,
 approve or ask for changes, and leave comments. One email can belong to several
 customers, so a session holds every customer that email reaches.
 
+A customer's branches (HD Customer Branch) have their own approvers. An approver's
+session also holds their branches, and they see only those branches' posts; the
+customer's own contacts see every post of the customer, branches included.
+
 The session lives in Redis behind a browser-session cookie, so closing the
 browser ends it and the client has to request a new code next time.
 """
@@ -22,6 +26,10 @@ from frappe.utils.html_utils import sanitize_html
 
 from helpdesk.content_sync import post_images
 from helpdesk.helpdesk.doctype.hd_customer.hd_customer import add_customer_contact
+from helpdesk.helpdesk.doctype.hd_customer_branch.hd_customer_branch import (
+    branch_approvers,
+    branches_for_email,
+)
 
 SESSION_COOKIE = "hd_content_portal"
 OTP_TTL_SECONDS = 10 * 60
@@ -99,8 +107,11 @@ def customers_for_email(email: str) -> list[str]:
     return sorted(customers)
 
 
-def portal_emails(customer: str) -> list[str]:
-    """The addresses a customer's people can sign in with."""
+def portal_emails(customer: str, branch: str | None = None) -> list[str]:
+    """The addresses that review a customer's posts: a branch's approvers when it has
+    any, else the customer's people."""
+    if branch and (approvers := branch_approvers(branch)):
+        return sorted({normalize_email(e) for e in approvers})
     Member = frappe.qb.DocType("HD Customer Member")
     Contact = frappe.qb.DocType("Contact")
     emails = set(
@@ -145,11 +156,11 @@ def get_session() -> dict | None:
     return frappe.cache.get_value(session_key(sid), expires=True)
 
 
-def start_session(email: str, customers: list[str]):
+def start_session(email: str, customers: list[str], branches: list[str]):
     sid = frappe.generate_hash(length=32)
     frappe.cache.set_value(
         session_key(sid),
-        {"email": email, "customers": customers},
+        {"email": email, "customers": customers, "branches": branches},
         expires_in_sec=SESSION_TTL_SECONDS,
     )
     # no max_age, so the cookie is gone once the browser closes
@@ -180,11 +191,22 @@ def require_post(post: str):
     doc = frappe.get_doc("HD Content Post", exists) if exists else None
     if (
         not doc
-        or doc.customer not in session["customers"]
+        or not session_reaches(session, doc)
         or doc.status not in CLIENT_STATUSES
     ):
         frappe.throw(_("Post not found"), frappe.DoesNotExistError)
     return session, doc
+
+
+def session_reaches(session: dict, doc) -> bool:
+    return doc.customer in session["customers"] or bool(
+        doc.branch and doc.branch in session.get("branches", [])
+    )
+
+
+def session_accounts(session: dict) -> list[str]:
+    """What the portal's account picker lists: whole customers, then branches."""
+    return [*session["customers"], *session.get("branches", [])]
 
 
 def session_key(sid: str) -> str:
@@ -252,11 +274,11 @@ def request_code(email: str):
     email = normalize_email(email)
     if not email:
         frappe.throw(_("Enter your email address."))
-    customers = customers_for_email(email)
-    if not customers:
+    accounts = customers_for_email(email) + branches_for_email(email)
+    if not accounts:
         # same answer as a real client, so the page can't be used to test addresses
         return {"success": True, "message": code_sent_message(email)}
-    label = customers[0] if len(customers) == 1 else email
+    label = accounts[0] if len(accounts) == 1 else email
     return issue_code(email, label)
 
 
@@ -294,12 +316,13 @@ def verify_code(email: str, code: str):
 
     frappe.cache.delete_value(key)
     customers = customers_for_email(email)
-    if not customers:
+    branches = branches_for_email(email)
+    if not (customers or branches):
         return {
             "success": False,
             "message": _("This email no longer has portal access."),
         }
-    start_session(email, customers)
+    start_session(email, customers, branches)
     return {"success": True}
 
 
@@ -318,11 +341,13 @@ def logout():
 # ------------------------------------------------------------------- data --
 
 
-def get_portal_posts(customer: str) -> list[dict]:
-    """What the client sees for one customer: client-stage posts with their images."""
+def get_portal_posts(account: str, session: dict) -> list[dict]:
+    """What the client sees for one of their accounts (a customer, or a branch they
+    approve for): client-stage posts with their images."""
+    key = "customer" if account in session["customers"] else "branch"
     posts = frappe.get_all(
         "HD Content Post",
-        filters={"customer": customer, "status": ("in", CLIENT_STATUSES)},
+        filters={key: account, "status": ("in", CLIENT_STATUSES)},
         fields=list(CLIENT_FIELDS),
         order_by="publish_on asc",
         limit=MAX_POSTS,
@@ -409,27 +434,42 @@ def get_image(post: str, file: str):
 
 
 @frappe.whitelist()
-def get_portal_access(customer: str) -> dict:
-    """What the Share portal dialog needs for a customer."""
+def get_portal_access(customer: str, branch: str | None = None) -> dict:
+    """What the Share portal dialog needs for a customer, or one of its branches."""
     frappe.has_permission("HD Customer", "read", customer, throw=True)
+    filters = {"customer": customer, "status": "Client Review"}
+    if branch:
+        filters["branch"] = branch
     return {
         "enabled": portal_enabled(),
-        "emails": portal_emails(customer),
-        "posts_in_review": frappe.db.count(
-            "HD Content Post", {"customer": customer, "status": "Client Review"}
-        ),
+        "emails": portal_emails(customer, branch),
+        "posts_in_review": frappe.db.count("HD Content Post", filters),
         "portal_url": get_url("/content-portal"),
     }
 
 
 @frappe.whitelist(methods=["POST"])
-def send_portal_access(customer: str, email: str) -> dict:
-    """Email the portal link with a sign-in code; a new address becomes a contact of the customer first."""
+def send_portal_access(customer: str, email: str, branch: str | None = None) -> dict:
+    """Email the portal link with a sign-in code. A new address becomes an approver of the
+    branch, or a contact of the customer, first."""
     frappe.has_permission("HD Customer", "read", customer, throw=True)
     ensure_portal_enabled()
     email = normalize_email(email)
     frappe.utils.validate_email_address(email, throw=True)
+    if branch:
+        return send_branch_access(customer, branch, email)
     if email not in portal_emails(customer):
         frappe.has_permission("HD Customer", "write", customer, throw=True)
         add_customer_contact(customer, email)
     return issue_code(email, customer)
+
+
+def send_branch_access(customer: str, branch: str, email: str) -> dict:
+    doc = frappe.get_doc("HD Customer Branch", branch)
+    if doc.customer != customer:
+        frappe.throw(_("{0} isn't a branch of {1}.").format(branch, customer))
+    if email not in branch_approvers(branch):
+        doc.check_permission("write")
+        doc.append("approvers", {"email": email})
+        doc.save()
+    return issue_code(email, branch)

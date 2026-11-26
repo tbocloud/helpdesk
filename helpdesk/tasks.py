@@ -6,6 +6,7 @@
 import frappe
 from frappe.utils import now_datetime
 
+from helpdesk import client_api
 from helpdesk.mcp_client import MCPClient
 
 HEALTH_CHECKED_STATUSES = ("Connected", "Disconnected", "Error", "Unreachable")
@@ -21,6 +22,8 @@ def health_check_connections():
         try:
             healthy = MCPClient(name).health_check()
             error = "" if healthy else "Health check failed: no tools returned"
+            if healthy:
+                client_api.refresh_capabilities(name)
         except Exception as e:
             error = str(e)
         conn.db_set("last_health_check", now_datetime(), update_modified=False)

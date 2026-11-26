@@ -1,0 +1,119 @@
+{
+	"actions": [],
+	"creation": "2026-11-25 10:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"customer",
+		"branch_name",
+		"enabled",
+		"column_break_1",
+		"project",
+		"approvers_section",
+		"approvers"
+	],
+	"fields": [
+		{
+			"fieldname": "customer",
+			"fieldtype": "Link",
+			"label": "Customer",
+			"options": "HD Customer",
+			"reqd": 1,
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"set_only_once": 1
+		},
+		{
+			"fieldname": "branch_name",
+			"fieldtype": "Data",
+			"label": "Branch Name",
+			"reqd": 1,
+			"in_list_view": 1,
+			"set_only_once": 1,
+			"description": "e.g. Kochi. The branch is named \"Customer - Branch Name\"."
+		},
+		{
+			"fieldname": "enabled",
+			"fieldtype": "Check",
+			"label": "Enabled",
+			"default": "1",
+			"in_list_view": 1,
+			"description": "A disabled branch keeps its posts but can't be picked for new ones."
+		},
+		{
+			"fieldname": "column_break_1",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "project",
+			"fieldtype": "Link",
+			"label": "Project",
+			"options": "Project",
+			"description": "The branch's own project. Its post tasks go here, and the Meta page connected to it is where its posts publish. Empty: the customer's project."
+		},
+		{
+			"fieldname": "approvers_section",
+			"fieldtype": "Section Break",
+			"label": "Approvers"
+		},
+		{
+			"fieldname": "approvers",
+			"fieldtype": "Table",
+			"label": "Approvers",
+			"options": "HD Customer Branch Approver",
+			"description": "Who approves this branch's posts in the content portal and gets its reminders. Empty: the customer's contacts."
+		}
+	],
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-11-25 10:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Customer Branch",
+	"naming_rule": "By script",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"read": 1,
+			"role": "System Manager",
+			"report": 1,
+			"print": 1,
+			"email": 1,
+			"create": 1,
+			"write": 1,
+			"delete": 1,
+			"export": 1,
+			"share": 1
+		},
+		{
+			"read": 1,
+			"role": "Agent Manager",
+			"report": 1,
+			"print": 1,
+			"email": 1,
+			"create": 1,
+			"write": 1,
+			"delete": 1,
+			"export": 1,
+			"share": 1
+		},
+		{
+			"read": 1,
+			"role": "Project Manager",
+			"report": 1,
+			"print": 1,
+			"email": 1,
+			"create": 1,
+			"write": 1,
+			"delete": 1,
+			"export": 1,
+			"share": 1
+		}
+	],
+	"search_fields": "customer,branch_name",
+	"sort_field": "creation",
+	"sort_order": "DESC",
+	"states": [],
+	"title_field": "branch_name",
+	"track_changes": 1
+}

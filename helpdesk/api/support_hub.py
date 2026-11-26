@@ -9,6 +9,7 @@ import frappe
 from frappe import _
 from frappe.rate_limiter import rate_limit
 
+from helpdesk import client_api
 from helpdesk.utils import agent_manager_only, agent_only
 
 
@@ -18,6 +19,7 @@ def get_triage(ticket: str | int):
     """Get triage results for a ticket."""
     ticket = str(ticket)
     ticket_doc = frappe.get_doc("HD Ticket", ticket)
+    ticket_doc.check_permission("read")
     triage_data = (
         json.loads(ticket_doc.custom_triage_data or "{}")
         if ticket_doc.custom_triage_data
@@ -50,9 +52,20 @@ def run_triage_now(ticket: str | int):
 @frappe.whitelist()
 @agent_only
 def start_investigation(ticket: str | int, connection: str, agent_notes: str = ""):
-    """Start an AI investigation session."""
+    """Start an AI investigation session on a ticket the agent can read, on its customer's site."""
     from helpdesk.session_manager import start_investigation as _start
 
+    doc = frappe.get_doc("HD Ticket", str(ticket))
+    doc.check_permission("read")
+    site_customer = frappe.db.get_value(
+        "HDS Support Connection", connection, "customer_name"
+    )
+    if site_customer != doc.customer and not _is_hub_manager():
+        # another customer's site would put their data on this ticket
+        frappe.throw(
+            _("This connection belongs to another customer than the ticket's."),
+            frappe.PermissionError,
+        )
     session_name = _start(str(ticket), str(connection), agent_notes)
     return {"session": session_name, "status": "started"}
 
@@ -84,8 +97,10 @@ def get_sessions(ticket: str | int):
 @frappe.whitelist()
 @agent_only
 def get_session_detail(session: str):
-    """Get full session details including MCP call logs."""
+    """Get full session details including MCP call logs, for agents who can read its ticket."""
     doc = frappe.get_doc("HDS AI Support Session", session)
+    if doc.ticket:
+        frappe.has_permission("HD Ticket", "read", doc.ticket, throw=True)
     return doc.as_dict()
 
 
@@ -128,12 +143,33 @@ def get_pending_actions(ticket: str | int):
 
 @frappe.whitelist()
 @agent_only
-def get_connections():
-    """Get all support connections."""
+def get_connections() -> list:
+    """Support connections: all of them for managers; for other agents, those of
+    the customers whose tickets they can read."""
+    filters = {}
+    if not _is_hub_manager():
+        customers = {
+            row.customer
+            for row in frappe.get_list(
+                "HD Ticket",
+                filters={"customer": ["is", "set"]},
+                fields=["customer"],
+                distinct=True,
+                limit_page_length=0,
+            )
+        }
+        filters["customer_name"] = ["in", sorted(customers) or [""]]
     return frappe.get_list(
         "HDS Support Connection",
+        filters=filters,
         fields=["name", "customer_name", "site_url", "connection_status"],
         order_by="customer_name asc",
+    )
+
+
+def _is_hub_manager() -> bool:
+    return bool(
+        {"Administrator", "System Manager", "Agent Manager"} & set(frappe.get_roles())
     )
 
 
@@ -404,49 +440,11 @@ def reject_action_request(action_request: str):
 
 
 def _call_client(conn, connection_name, path: str, payload: dict | None = None) -> dict:
-    """Helper: POST to a customer site endpoint with Token auth from the Connection."""
-    import requests
-    from frappe.utils.password import get_decrypted_password
-
-    if not conn.api_key:
-        frappe.throw(_("API Key is missing on this connection."))
-    api_secret = get_decrypted_password(
-        "HDS Support Connection", connection_name, "api_secret", raise_exception=False
-    )
-    if not api_secret:
-        frappe.throw(_("API Secret is missing on this connection."))
-
-    url = f"{conn.site_url}{path}"
-    try:
-        response = requests.post(
-            url,
-            headers={"Authorization": f"Token {conn.api_key}:{api_secret}"},
-            json=payload or {},
-            timeout=30,
-        )
-    except requests.Timeout:
-        frappe.throw(
-            _("Customer site unreachable (timeout): {0}").format(conn.site_url)
-        )
-    except requests.ConnectionError as e:
-        frappe.throw(
-            _("Cannot connect to {0}: {1}").format(conn.site_url, str(e)[:150])
-        )
-
-    if response.status_code == 401:
-        frappe.throw(
-            _(
-                "Authentication failed on {0}. Verify the API Key/Secret belong to {1} on the customer site."
-            ).format(conn.site_url, conn.support_user or LEGACY_SUPPORT_USER)
-        )
-    if response.status_code != 200:
-        frappe.throw(
-            _("Customer site refused request: {0}").format(response.text[:400])
-        )
-    return response.json().get("message", {})
+    """POST to a customer site endpoint with Token auth from the Connection (see helpdesk.client_api)."""
+    return client_api.call(conn, path, payload)
 
 
-LEGACY_SUPPORT_USER = "support@quarkcs.com"
+LEGACY_SUPPORT_USER = client_api.LEGACY_SUPPORT_USER
 PAIRING_CODE_HOURS = 24
 PAIRING_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O or 1/I to misread
 
@@ -494,6 +492,8 @@ def _register(conn) -> dict:
     conn.support_user = (
         result.get("support_user") or conn.support_user or LEGACY_SUPPORT_USER
     )
+    # a newer client says what it can do (hub_api); an older one says nothing
+    client_api.apply_capabilities(conn, result)
     conn.save(ignore_permissions=True)
 
     _log_login_attempt(conn.name, None, "Success", "", event_type="Register")
@@ -548,11 +548,13 @@ def pair_client(
     api_secret: str,
     client_app: str = "helpdesk_client",
     support_user: str = "",
+    approval_key: str = "",
 ) -> dict:
     """Called by the customer site with a connection code and the API key it just made for the hub.
 
     The code must be unused, unexpired and issued for this site URL; the hub then
-    runs the normal registration against that URL to prove the key works.
+    runs the normal registration against that URL to prove the key works. A site
+    that checks writes itself also sends the key Copilot signs approved corrections with.
     """
     from helpdesk.utils import normalize_site_url
 
@@ -583,6 +585,8 @@ def pair_client(
     conn.api_secret = api_secret
     conn.client_app = client_app or conn.client_app
     conn.support_user = support_user or conn.support_user
+    if approval_key:
+        conn.approval_key = approval_key
     conn.pairing_code_hash = None
     conn.pairing_code_expires = None
     conn.save(ignore_permissions=True)

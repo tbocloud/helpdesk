@@ -201,7 +201,9 @@ def _days_late(task: dict, today) -> int:
 def write_steps(facts: dict) -> tuple[list[str], str | None]:
     """The AI's steps, or none and why. Never raises: Home works without it."""
     try:
-        result = call_haiku(SYSTEM_PROMPT, json.dumps(facts, indent=1, default=str))
+        result = call_haiku(
+            SYSTEM_PROMPT, json.dumps(facts, indent=1, default=str), job="summary"
+        )
     except Exception:  # noqa: BLE001 - provider errors vary; the rules plan still works
         frappe.log_error(
             title="Home action plan failed", message=frappe.get_traceback()

@@ -86,7 +86,7 @@ class TestContentPortal(FrappeTestCase):
         with patch.object(content_portal, "start_session") as start:
             self.assertFalse(content_portal.verify_code(CLIENT_EMAIL, wrong)["success"])
             self.assertTrue(content_portal.verify_code(CLIENT_EMAIL, code)["success"])
-            start.assert_called_once_with(CLIENT_EMAIL, [CUSTOMER])
+            start.assert_called_once_with(CLIENT_EMAIL, [CUSTOMER], [])
             # used up
             self.assertFalse(content_portal.verify_code(CLIENT_EMAIL, code)["success"])
 
@@ -116,7 +116,7 @@ class TestContentPortal(FrappeTestCase):
         self.post("Internal draft", status="Drafting")
         self.post("Other client's post", customer=OTHER_CUSTOMER)
 
-        posts = content_portal.get_portal_posts(CUSTOMER)
+        posts = content_portal.get_portal_posts(CUSTOMER, {"customers": [CUSTOMER]})
 
         self.assertEqual([p.name for p in posts], [review.name])
         self.assertNotIn("writer", posts[0])

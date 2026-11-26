@@ -38,6 +38,7 @@ their own.
 | --- | --- |
 | `HD Division` | Name, code (2–10 capitals or digits; the record's name, can't change), status (Active / Inactive), country, workspace URL (unique host), currency, time zone (IANA), default language, division administrator (added to the members as Division Admin), ERP site (`crm_source` → `HD CRM Source`, unique), members. Tracks changes. Created on = `creation`. |
 | `HD Division Member` | Child: user and their role in the division. A user may be in several divisions, with a role in each. |
+| `HD Division.weekly_lead_report` | The division keeps Sales → Weekly lead report (KSA's weekly sheet of the leads each salesperson worked; [weekly-lead-report.md](weekly-lead-report.md)). Super Admins set it on the profile. |
 | `Project.division` | The project's division. New projects take the maker's active division. Empty = visible as before divisions. |
 | `HD Team.division`, `HD Department.division` | Which division a team or department belongs to (set in Settings → Divisions). |
 
@@ -49,6 +50,10 @@ their own.
 | Group Admin | membership | Runs that division like a Division Admin. Given and taken away only by Super Admins. With several divisions, sees their overview consolidated. |
 | Division Admin | membership | Their division's time zone, language, people (any role but Group Admin), teams and departments; its overview and reports. |
 | Division Manager, Sales Manager, Project Manager | membership | Their division's overview and reports. |
+
+Every membership role from Group Admin to Project Manager above is a **manager role**
+(`OVERVIEW_ROLES`): someone who holds one in several divisions switches between those divisions
+(see The active division).
 | Division Sales User | membership | A salesperson in that division: their own and allocated leads on the division's ERP site (it becomes a Sales User there), with proposals and the client documents; none of the team's figures. |
 | Sales Executive, Employee | membership | Their division's records only. |
 
@@ -145,25 +150,31 @@ rather than filtering leads itself, so every Leads screen keeps the site's one r
 ## The active division and the workspace URL
 
 `active_division(user)`, in order: the division whose workspace URL host the request came in on
-(when the hub itself is served there); then, for a Super Admin, the one they last picked (user
-default `hd_active_division`), else "All divisions" (none); for everyone else, their first
-division.
+(when the hub itself is served there); then the one they last picked (user default
+`hd_active_division`) when they may still switch to it; else, for a Super Admin, "All
+divisions" (none), and for everyone else their first division (by name).
 
-**Only Super Admins switch** (owner, 2026-11-17). `switch_division` refuses anyone else, even
-to another division they are a member of, and a pick saved earlier no longer moves them. A
-member of several divisions works in their first (by name); their projects and tasks still
-follow all their memberships, and a Group Admin's overview still consolidates their divisions.
-To move someone, a Super Admin changes their membership. `switch_division` saves a Super
-Admin's pick and writes the audit log; the page reloads so every list, cache and the Leads page
-follow.
+**Who switches** (owner, 2026-11-23, replacing "only Super Admins" of 2026-11-17):
 
-The **switcher** sits under the workspace name in the menu panel (`DivisionSwitcher.vue`). For a
-Super Admin it is a menu: the division, every division and "All divisions", and *Open …
-workspace* when the division has a URL. Only Super Admins see it: everyone else works in their
-own division without it, and it is hidden when there are no divisions.
+- **Super Admins**: any active division, or "All divisions".
+- **Managers of several divisions** (a manager role, see Roles, in more than one): between the
+  divisions they hold a manager role in (`switchable_divisions`), never "All divisions" and
+  never one where they only work (Employee, Sales Executive, Division Sales User).
+- **Everyone else** works in their first division; `switch_division` refuses them, and a pick
+  saved for them doesn't move them. Their projects and tasks still follow all their
+  memberships. To move them, a Super Admin changes their membership.
 
-`get_user` sends `divisions`, `active_division`, `is_super_admin`, `can_manage_divisions` and
-`can_view_division_overview` (`divisions.division_info`).
+`switch_division` saves the pick and writes the audit log; the page reloads so every list,
+cache, the Leads page's ERP site and the overview follow.
+
+The **switcher** sits under the workspace name in the menu panel (`DivisionSwitcher.vue`),
+shown when `can_switch_division`: a menu of the divisions they may switch to ("All divisions"
+first, for a Super Admin), and *Open … workspace* when the division has a URL. Hidden for
+everyone else and when there are no divisions.
+
+`get_user` sends `divisions` (each with the person's `role` and `can_switch`),
+`active_division`, `overview_division`, `is_super_admin`, `can_switch_division`,
+`can_manage_divisions` and `can_view_division_overview` (`divisions.division_info`).
 
 ## Settings
 
@@ -235,6 +246,10 @@ and Division Admins (see Who sees what).
   says which in words ("Consolidated: India, KSA" / "India division only").
 - **Period**: this month, last 3 months, this year (default), last 12 months or custom; kept in
   the URL with the division, so a view can be shared.
+- **Where it opens**: with no division in the URL, on `overview_division`, the active division
+  (the switcher's) when its figures are the person's to see, else every division they may see.
+  So a manager who switches to KSA opens on KSA, and a Super Admin on "All divisions" opens
+  consolidated. Picking "All divisions" on the page puts an empty division in the URL.
 - **Where each figure comes from:**
   - Employees: distinct members of the divisions.
   - Projects, active projects (Open), on hold, completed: `Project.status` by division.
@@ -263,6 +278,54 @@ and Division Admins (see Who sees what).
   business performance, lead conversion and pending activities. Each exports to **Excel**
   (`make_xlsx`) or **PDF** (wkhtmltopdf; where it isn't installed, a page that prints itself), and
   every export is written to the audit log.
+
+## Divisions home and a division's dashboard
+
+Owner, 2026-11-24: a page with every division side by side, each opening its own dashboard.
+Same access and scope as the overview (`scope`): Super Admins every division, managers
+theirs, nobody else.
+
+- **Divisions home** (`/helpdesk/divisions`, Reports → Divisions, `DivisionsHome.vue`,
+  `DivisionCard.vue`; `get_division_cards` → `division_overview.division_cards`): one card
+  per division with who runs it (its Group and Division Admins), its people, its ERP site's
+  sync in words (danger when the last sync failed, warning with no site or sync off), and for
+  the period its leads, conversion and open leads (the reporting copy), open projects,
+  pending and overdue tasks. Period filter only. *Compare* opens the Business overview of
+  every division.
+- **A division's dashboard** (`/helpdesk/divisions/<code>`, `DivisionDashboard.vue`;
+  `get_division_dashboard` → `division_dashboard`): the profile (who runs it, ERP site, time
+  zone, language, workspace URL), tiles (people, leads, conversion, won value, open projects,
+  pending and overdue tasks), leads by status group and its top statuses (*All lead status*
+  opens the Lead status page on the division), its people with their role, leads, won leads
+  and tasks open, overdue, done and hours in the period (`productivity` plus the lead status
+  people, matched by email), its open and on-hold projects (to 50, soonest due first) and its
+  teams and departments. The division picker switches dashboards; "All divisions" goes back to
+  the cards. Leads show "—" for a division with no ERP site, never 0.
+
+## Lead status
+
+`/helpdesk/lead-status` (Reports → Lead status, `DivisionLeads.vue`), served by
+`helpdesk.api.division_overview.get_lead_status` (`division_overview.lead_status`). Same
+access and division scope as the overview (`scope`): Super Admins every division, managers
+theirs, nobody else.
+
+- **What it counts**: the reporting copy (`HD CRM Report Lead`) of each division's ERP site,
+  leads created in the period, by their own status on the site (Lead, Replied, Interested,
+  Quotation, Do Not Contact, ...). Each status sits in its group from the source's status
+  mapping: Open, Won, Converted, Lost, or **Not grouped** when the mapping leaves it out (it is
+  counted and shown, never dropped, so a gap in the mapping is visible).
+- **Filters** (in the URL with the division and period, so a view can be shared): status
+  group, status, salesperson (the lead's mapped employee, else its owner; named from the hub
+  user when there is one) and lead source. Their choices are every value of the period, so
+  picking one never hides the others. Clicking a status, salesperson or source filters to it.
+- **The page**: tiles (leads, open, won or converted, lost, conversion, open pipeline = the
+  expected revenue of open leads in the reporting currency, and not grouped when there are
+  any); charts (by status group, by status, by month with won, and open/won/lost by division
+  for several); the status × division table with each status's share; by salesperson and by
+  lead source (top 10, then *Show all*).
+- **Freshness**: the copy is as fresh as the sources' last sync, said on the page ("Leads
+  synced from the ERP sites 3 hours ago", the oldest of the divisions). A division with no
+  ERP site is named: it has no leads.
 
 ## ERP sites
 
@@ -363,7 +426,9 @@ secret; with the statuses on its copied leads and its users), `save_source`, `de
   `hd_division_member/`, `helpdesk/templates/division_report_pdf.html`; hooks in
   `tasky/permissions.py`, `doctype/project/project.py`, `integrations/crm/leads.py`,
   `api/leads.py`, `api/auth.py`.
-- Frontend: `desk/src/pages/divisions/` (overview, reports, filters, `divisions.ts`),
+- Frontend: `desk/src/pages/divisions/` (overview, reports, lead status (`DivisionLeads.vue`,
+  `LeadBreakdown.vue`, `LeadGroupLabel.vue`, `leadStatus.ts`), divisions home and dashboard
+  (`DivisionsHome.vue`, `DivisionCard.vue`, `DivisionDashboard.vue`), filters, `divisions.ts`),
   `components/layouts/DivisionSwitcher.vue`, `components/Settings/Divisions/`.
 - ERP sites: `helpdesk/api/erp_sites.py`, `helpdesk/crm_dashboard/` (registry, sync,
   erp_roles), doctypes `hd_crm_source`, `hd_crm_status_map`, `hd_crm_source_role`,
@@ -376,7 +441,9 @@ secret; with the statuses on its copied leads and its users), `save_source`, `de
   `test_utils.py`); `TestDivisionSiteRoles` covers a division whose ERP site decides access,
   `TestDivisionSalesRoles` the ERP roles given on save (with `FakeCRM.remove_role`), the Leads
   page and sales screens for the two roles, `TestDivisionLeadsConnection` a division without a
-  site, `TestDivisionAgents` a division's agents and invites,
+  site, `TestDivisionAgents` a division's agents and invites, `TestDivisionDashboards` the
+  Divisions home, a division's dashboard and the Lead status page (helper
+  `make_report_lead`),
   `TestDivisionSalesRoles.test_a_division_admin_sets_up_lead_departments_on_their_divisions_site`
   the Lead setup saves;
   `test_sales_scoreboard.TestDivisionScoreboard` the division's Scoreboard.

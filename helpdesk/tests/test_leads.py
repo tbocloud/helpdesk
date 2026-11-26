@@ -460,6 +460,34 @@ class TestLeads(FrappeTestCase):
         )
         self.assertEqual(calls["set_stage"][1]["note"], "Met them")
 
+    def test_closed_won_needs_the_won_amount(self):
+        self.as_bde()
+        for amount in (None, "", 0, -100):
+            with self.subTest(amount=amount), self.assertRaises(frappe.ValidationError):
+                leads_api.set_stage("CRM-LEAD-0001", "Closed – Won", won_amount=amount)
+        self.assertEqual(self.crm.lead_calls, [])
+
+        self.crm.lead_answers["set_stage"] = {"lead": {"won_amount": 250000}}
+        moved = leads_api.set_stage(
+            "CRM-LEAD-0001", "Closed – Won", won_amount="250000"
+        )
+        [(_method, _post, params)] = self.crm.lead_calls
+        self.assertEqual(params["won_amount"], 250000)
+        self.assertNotIn("won_amount_not_kept", moved)
+
+    def test_an_erp_site_without_the_won_amount_is_flagged(self):
+        # an older TBO Smart moves the lead but drops the amount it doesn't know
+        self.crm.lead_answers["set_stage"] = {"lead": {"tbo_stage": "Closed – Won"}}
+        self.as_bde()
+        moved = leads_api.set_stage("CRM-LEAD-0001", "Closed – Won", won_amount=900)
+        self.assertTrue(moved["won_amount_not_kept"])
+
+    def test_other_stages_send_no_won_amount(self):
+        self.as_bde()
+        leads_api.set_stage("CRM-LEAD-0001", "Contacted", won_amount=500)
+        [(_method, _post, params)] = self.crm.lead_calls
+        self.assertNotIn("won_amount", params)
+
     def test_an_empty_note_isnt_sent(self):
         self.as_bde()
         with self.assertRaises(frappe.ValidationError):

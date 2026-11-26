@@ -114,6 +114,7 @@ export function useNavigation() {
       (!item.divisionOverviewOnly || authStore.canViewDivisionOverview) &&
       (!item.salesHeadOnly || authStore.canAssignSalesTargets) &&
       (!item.ownTargetsOnly || authStore.hasSalesTargets) &&
+      (!item.weeklyLeadReportOnly || authStore.hasWeeklyLeadReport) &&
       (!item.salesManagersOnly || seesTeam.value) &&
       (!item.ownDashboardOnly || authStore.hasOwnSalesDashboard) &&
       (!authStore.isContentTeam || CONTENT_TEAM_ROUTES.has(to))

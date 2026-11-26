@@ -125,7 +125,7 @@ def require_view(post) -> str | None:
     )
 
     post.check_permission("read")
-    project = content_project_for(post.customer)
+    project = content_project_for(post.customer, post.get("branch"))
     if not (project and can_request(post, project)):
         frappe.throw(
             _("You can't boost this post. Ask the Digital Marketing Head."),

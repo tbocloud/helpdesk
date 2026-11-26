@@ -54,9 +54,13 @@ const props = withDefaults(
     /** shade under the first line */
     area?: boolean;
     height?: string;
+    /** the dayjs format of the days under the chart; a month reads better as dates */
+    dayFormat?: string;
   }>(),
-  { height: "h-56" }
+  { height: "h-56", dayFormat: "ddd" }
 );
+// past two weeks the dots crowd the line, so only the tooltip marks a day
+const MAX_DOTS = 14;
 const colors = useChartColors();
 
 const summary = computed(
@@ -86,7 +90,7 @@ const options = computed(() => {
       },
     },
     xAxis: categoryAxis(c, {
-      data: props.days.map((day) => dayjs(day).format("ddd")),
+      data: props.days.map((day) => dayjs(day).format(props.dayFormat)),
       boundaryGap: false,
     }),
     yAxis: valueAxis(c, { minInterval: 1 }),
@@ -94,7 +98,7 @@ const options = computed(() => {
       type: "line",
       name: line.name,
       data: line.values,
-      symbol: "circle",
+      symbol: props.days.length > MAX_DOTS ? "none" : "circle",
       symbolSize: 8,
       lineStyle: { width: 2, color: drawColor(line.color) },
       itemStyle: {

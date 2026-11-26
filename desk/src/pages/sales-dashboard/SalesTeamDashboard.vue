@@ -39,11 +39,12 @@
       </template>
     </LayoutHeader>
 
-    <div class="relative flex-1 overflow-y-auto overflow-x-hidden">
+    <div class="cc-page relative flex-1 overflow-y-auto overflow-x-hidden">
       <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
         <!-- the period, whose leads, the department and the source, in one card -->
         <div
-          class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-outline-gray-2 bg-surface-base px-4 py-3"
+          class="cc-card flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+          :style="accentStyle('blue')"
         >
           <div class="flex flex-wrap items-center gap-3">
             <TabButtons
@@ -85,7 +86,7 @@
             />
           </div>
           <p class="text-[12px] text-ink-gray-6">
-            <strong class="font-semibold text-ink-gray-9">{{
+            <strong class="font-mono font-semibold text-ink-gray-9">{{
               dayjs().format("ddd, D MMM YYYY")
             }}</strong>
             · {{ __("tap any number to open those leads") }}
@@ -94,7 +95,7 @@
 
         <TaskyState
           v-if="dash.error && !data"
-          class="rounded-xl border border-outline-gray-2 bg-surface-base py-14"
+          class="cc-card py-14"
           :error="!isRefusal"
           :icon="isRefusal ? LucideLock : LucideCircleAlert"
           :title="
@@ -120,89 +121,142 @@
         </template>
 
         <template v-else>
-          <div
-            class="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-4"
-          >
-            <StatTile
-              :label="__('New leads')"
-              :value="totals.new"
-              :icon="LucidePlus"
-              icon-tone="info"
-              :sub="periodWord.came"
-              :to="metricLink('new', periodQuery)"
-            />
-            <StatTile
-              :label="__('Contacted')"
-              :value="totals.contacted"
-              :icon="LucideCheck"
-              icon-tone="success"
-              :sub="
-                __(
-                  '{0}% of new leads',
-                  String(percent(totals.contacted, totals.new))
-                )
-              "
-              :to="metricLink('contacted', periodQuery)"
-            />
-            <StatTile
-              :label="__('Hot leads')"
-              :value="totals.hot"
-              :icon="LucideFlame"
-              icon-tone="hot"
-              :sub="__('ready to close')"
-              :to="metricLink('hot', ownerQuery)"
-            />
-            <StatTile
-              :label="__('Overdue follow-ups')"
-              :value="totals.overdue"
-              :icon="LucideAlarmClock"
-              icon-tone="danger"
-              :value-tone="totals.overdue ? 'danger' : 'neutral'"
-              :sub="
-                __(
-                  '{0} more gone quiet {1}+ days',
-                  String(totals.stale),
-                  String(overview.stale_days)
-                )
-              "
-              :to="metricLink('overdue', ownerQuery)"
-            />
-            <StatTile
-              :label="__('Open pipeline')"
-              :value="totals.open"
-              :icon="LucideTrendingUp"
-              tint="brand"
-              :sub="
-                __('open leads · {0}% won', String(Math.round(totals.win_rate)))
-              "
-              :to="metricLink('open', ownerQuery)"
-            />
-          </div>
+          <RevenueHero
+            :currency="currency"
+            :period-label="periodLabel"
+            :won-value="totals.won_value ?? 0"
+            :won-count="totals.won"
+            :unpriced="totals.won_unpriced ?? 0"
+            :previous="previousWon"
+            :target="wonTarget"
+            :money="data.money"
+            :money-note="moneyNote"
+            :podium="podium"
+            :shows-podium="!owner"
+            @open="openWon"
+          />
 
-          <div class="grid grid-cols-1 gap-4 lg:grid-cols-5">
-            <!-- Team calls this week: each person's calls per day -->
-            <section
-              class="flex min-w-0 flex-col gap-3 rounded-xl border border-outline-gray-2 bg-surface-base p-4 lg:col-span-3"
-              :aria-labelledby="ids.week"
-            >
-              <div class="flex flex-col gap-0.5">
-                <h2
-                  :id="ids.week"
-                  class="text-base font-semibold text-ink-gray-9"
+          <div class="grid grid-cols-1 gap-4 lg:grid-cols-12">
+            <div class="flex min-w-0 flex-col gap-4 lg:col-span-3">
+              <!-- a running month carried to its end at today's rate -->
+              <CcCard
+                v-if="forecast"
+                accent="orange"
+                :icon="LucideHourglass"
+                :title="__('Forecasted revenue')"
+              >
+                <template v-if="wonTarget" #actions>
+                  <span
+                    class="cc-pill rounded-md px-1.5 py-0.5 text-[11px] font-bold tabular-nums"
+                    >{{ percent(forecast.forecast, wonTarget) }}%</span
+                  >
+                </template>
+                <p
+                  class="cc-ink cc-glow font-mono text-[26px] font-bold leading-tight tabular-nums"
+                  :title="fullAmount(forecast.forecast, currency)"
                 >
-                  {{ __("Team calls this week") }}
-                </h2>
-                <p class="text-xs text-ink-gray-6">
-                  {{
-                    weekLines.length < weekPeople.length
-                      ? __(
-                          "Calls per day, the {0} who called most",
-                          String(weekLines.length)
-                        )
-                      : __("Calls per day, person by person")
-                  }}
+                  {{ shortAmount(forecast.forecast, currency) }}
                 </p>
-              </div>
+                <p class="-mt-2 text-xs text-ink-gray-6">
+                  {{ __("month-end at today's rate") }}
+                </p>
+                <dl class="grid grid-cols-2 gap-3 text-xs">
+                  <div :style="accentStyle('green')">
+                    <dt class="text-[10px] font-bold uppercase text-ink-gray-6">
+                      {{ __("Daily rate") }}
+                    </dt>
+                    <dd class="cc-ink font-mono font-semibold tabular-nums">
+                      {{ shortAmount(forecast.perDay, currency) }}/{{
+                        __("day")
+                      }}
+                    </dd>
+                  </div>
+                  <div v-if="forecast.needed" :style="accentStyle('red')">
+                    <dt class="text-[10px] font-bold uppercase text-ink-gray-6">
+                      {{ __("Required rate") }}
+                    </dt>
+                    <dd class="cc-ink font-mono font-semibold tabular-nums">
+                      {{ shortAmount(forecast.needed, currency) }}/{{
+                        __("day")
+                      }}
+                    </dd>
+                  </div>
+                </dl>
+              </CcCard>
+
+              <!-- the open stages that hold leads, with what each is worth -->
+              <CcCard
+                accent="blue"
+                :icon="LucideFilter"
+                :title="__('Active pipeline stages')"
+                :sub="
+                  __(
+                    '{0} open leads worth {1}',
+                    String(pipelineTotal),
+                    shortAmount(pipelineValue, currency)
+                  )
+                "
+              >
+                <p
+                  v-if="!pipeline.length"
+                  class="py-6 text-center text-sm text-ink-gray-6"
+                >
+                  {{ __("No open leads.") }}
+                </p>
+                <ul v-else class="flex flex-col gap-1.5">
+                  <li v-for="row in pipeline" :key="row.stage">
+                    <RouterLink
+                      :to="stageLink(row.stage)"
+                      class="flex flex-col gap-1 rounded px-1 py-0.5 text-sm hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+                    >
+                      <span class="flex items-center gap-2">
+                        <span
+                          class="flex-1 truncate font-semibold text-ink-gray-8"
+                          >{{ row.stage }}
+                          <span class="font-normal text-ink-gray-5"
+                            >({{ row.count.toLocaleString() }})</span
+                          ></span
+                        >
+                        <span
+                          class="cc-ink font-mono text-xs font-semibold tabular-nums"
+                          :style="accentStyle('green')"
+                          :title="fullAmount(row.value ?? 0, currency)"
+                        >
+                          {{ shortAmount(row.value ?? 0, currency) }}
+                        </span>
+                      </span>
+                      <span
+                        class="block h-1.5 overflow-hidden rounded-full bg-surface-gray-2"
+                        aria-hidden="true"
+                      >
+                        <span
+                          class="cc-fill block h-full rounded-full"
+                          :style="{
+                            width: `${percent(row.count, pipelineMax)}%`,
+                          }"
+                        />
+                      </span>
+                    </RouterLink>
+                  </li>
+                </ul>
+              </CcCard>
+            </div>
+
+            <!-- Team calls this week: each person's calls per day -->
+            <CcCard
+              class="lg:col-span-6"
+              accent="cyan"
+              :icon="LucidePhoneCall"
+              :title="__('Team calls this week')"
+              :sub="
+                weekLines.length < weekPeople.length
+                  ? __(
+                      'Calls per day, the {0} who called most',
+                      String(weekLines.length)
+                    )
+                  : __('Calls per day, person by person')
+              "
+            >
               <PartError :message="errors.week" />
               <p
                 v-if="week && !weekLines.length"
@@ -215,279 +269,71 @@
                 :days="week.days"
                 :series="weekLines"
                 :label="__('Team calls this week')"
+                height="h-72"
+                area
               />
-            </section>
+            </CcCard>
 
-            <!-- Pipeline by stage: where the open leads are sitting now -->
-            <section
-              class="flex min-w-0 flex-col gap-3 rounded-xl border border-outline-gray-2 bg-surface-base p-4 lg:col-span-2"
-              :aria-labelledby="ids.pipeline"
-            >
-              <div class="flex flex-col gap-0.5">
-                <h2
-                  :id="ids.pipeline"
-                  class="text-base font-semibold text-ink-gray-9"
-                >
-                  {{ __("Pipeline by stage") }}
-                </h2>
-                <p class="text-xs tabular-nums text-ink-gray-6">
-                  {{
-                    __(
-                      "Where the {0} open leads are sitting",
-                      String(pipelineTotal)
-                    )
-                  }}
-                </p>
-              </div>
-              <div class="flex flex-wrap items-center gap-5">
-                <DonutChart
-                  :parts="pipelineParts"
-                  :value="pipelineTotal"
-                  :caption="__('open')"
-                  :label="__('Pipeline by stage')"
-                  small
-                />
-                <ul class="flex min-w-[10rem] flex-1 flex-col gap-1.5">
-                  <li v-for="part in pipelineParts" :key="part.label">
-                    <component
-                      :is="part.stage ? RouterLink : 'span'"
-                      v-bind="part.stage ? { to: stageLink(part.stage) } : {}"
-                      class="flex items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
-                    >
-                      <span
-                        class="size-2.5 shrink-0 rounded-full"
-                        :style="{ background: part.color }"
-                        aria-hidden="true"
-                      />
-                      <span class="flex-1 truncate text-ink-gray-7">{{
-                        part.label
-                      }}</span>
-                      <span class="font-semibold tabular-nums text-ink-gray-9">
-                        {{ part.value.toLocaleString() }}
-                      </span>
-                    </component>
-                  </li>
-                </ul>
-              </div>
-            </section>
+            <div class="min-w-0 lg:col-span-3">
+              <PeriodCompare
+                v-if="data.previous"
+                class="h-full"
+                :now="totals"
+                :before="data.previous.totals"
+                :period-label="periodLabel"
+                :range="rangeText(data.previous)"
+                :currency="currency"
+              />
+              <PartError
+                v-else-if="errors.previous"
+                :message="errors.previous"
+              />
+            </div>
           </div>
 
-          <!-- Your team: calls, contacts and target progress, person by person -->
-          <section
-            class="min-w-0 overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
-            :aria-labelledby="ids.team"
+          <!-- the number cards -->
+          <div
+            class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6"
           >
-            <header
-              class="flex flex-wrap items-center justify-between gap-3 border-b border-outline-gray-2 px-4 py-4"
-            >
-              <div class="flex flex-col gap-0.5">
-                <h2
-                  :id="ids.team"
-                  class="text-base font-semibold text-ink-gray-9"
-                >
-                  {{ periodWord.team }}
-                </h2>
-                <p class="text-xs text-ink-gray-6">
-                  {{
-                    hasTargets
-                      ? __(
-                          "Calls, contacts and {0} target progress, person by person",
-                          monthTitle(monthValue())
-                        )
-                      : __("Calls and contacts, person by person")
-                  }}
-                </p>
-              </div>
-              <div v-if="hasTargets" class="flex gap-1.5">
-                <span
-                  class="inline-flex items-center gap-1 rounded-full bg-success-soft px-2 py-0.5 text-xs font-medium text-success"
-                >
-                  <LucideCircleCheck class="size-3" aria-hidden="true" />
-                  {{ __("{0} on track", String(standingCount.onTrack)) }}
-                </span>
-                <span
-                  v-if="standingCount.behind"
-                  class="inline-flex items-center gap-1 rounded-full bg-warning-soft px-2 py-0.5 text-xs font-medium text-warning"
-                >
-                  <LucideTrendingDown class="size-3" aria-hidden="true" />
-                  {{ __("{0} behind", String(standingCount.behind)) }}
-                </span>
-              </div>
-            </header>
-            <PartError :message="errors.people" class="m-4" />
-            <p
-              v-if="people && !people.length"
-              class="px-4 py-10 text-center text-sm text-ink-gray-6"
-            >
-              {{
-                __(
-                  "No salespeople to show. Pick them in Settings → Agents → Department wall → Sales team."
-                )
-              }}
-            </p>
-            <div v-else-if="people" class="overflow-x-auto">
-              <table class="w-full min-w-[46rem] text-sm">
-                <thead>
-                  <tr
-                    class="h-11 bg-surface-gray-1 text-left text-xs font-semibold uppercase tracking-[0.04em] text-ink-gray-6"
-                  >
-                    <th scope="col" class="pl-4 pr-3">{{ __("Person") }}</th>
-                    <th scope="col" class="px-3">{{ periodWord.calls }}</th>
-                    <th scope="col" class="px-3">{{ __("Contacted") }}</th>
-                    <th scope="col" class="px-3">{{ __("Contact rate") }}</th>
-                    <template v-if="hasTargets">
-                      <th scope="col" class="px-3">
-                        {{ __("Target progress") }}
-                      </th>
-                      <th scope="col" class="px-3">{{ __("Status") }}</th>
-                    </template>
-                    <th scope="col" class="pl-3 pr-4">
-                      <span class="sr-only">{{ __("Leads") }}</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr
-                    v-for="row in people"
-                    :key="row.user"
-                    class="h-16 border-b border-outline-gray-1 last:border-0 hover:bg-surface-gray-1"
-                  >
-                    <th scope="row" class="pl-4 pr-3 text-left font-normal">
-                      <span class="flex items-center gap-2.5">
-                        <PersonAvatar :name="row.full_name" size="lg" />
-                        <span class="font-semibold text-ink-gray-9">{{
-                          row.full_name
-                        }}</span>
-                      </span>
-                    </th>
-                    <td class="px-3">
-                      <span class="tabular-nums text-ink-gray-9">
-                        <b>{{ row.called }}</b>
-                        <span v-if="row.given" class="text-ink-gray-6">
-                          / {{ row.given }}</span
-                        >
-                      </span>
-                      <span
-                        v-if="row.given"
-                        class="mt-1.5 block h-1.5 w-32 overflow-hidden rounded-full bg-surface-gray-2"
-                        role="meter"
-                        :aria-valuenow="percent(row.called, row.given)"
-                        aria-valuemin="0"
-                        aria-valuemax="100"
-                        :aria-label="__('Share of handed-out calls made')"
-                      >
-                        <span
-                          class="block h-full rounded-full bg-brand"
-                          :style="{
-                            width: `${Math.min(
-                              percent(row.called, row.given),
-                              100
-                            )}%`,
-                          }"
-                        />
-                      </span>
-                    </td>
-                    <td class="px-3 font-semibold tabular-nums text-ink-gray-9">
-                      {{ row.contacted }}
-                    </td>
-                    <td class="px-3 tabular-nums text-ink-gray-8">
-                      {{ percent(row.contacted, row.called) }}%
-                    </td>
-                    <template v-if="hasTargets">
-                      <td class="px-3">
-                        <span
-                          v-if="targetOf(row.user)?.percent != null"
-                          class="flex items-center gap-2"
-                        >
-                          <TargetRing
-                            class="!size-10 [&_svg]:!size-10"
-                            :actual="targetOf(row.user)!.percent!"
-                            :target="100"
-                            :tone="targetOf(row.user)!.behind ? 'warning' : 'success'"
-                            :status-text="targetOf(row.user)!.behind ? __('behind') : __('on track')"
-                            :text="`${targetOf(row.user)!.percent}%`"
-                          />
-                          <span class="text-xs text-ink-gray-6">
-                            {{ __("of {0} targets", monthTitle(monthValue())) }}
-                          </span>
-                        </span>
-                        <span v-else class="text-xs text-ink-gray-5">
-                          {{ __("No targets") }}
-                        </span>
-                      </td>
-                      <td class="px-3">
-                        <span
-                          v-if="targetOf(row.user)?.percent != null"
-                          class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
-                          :class="
-                            targetOf(row.user)!.behind
-                              ? 'bg-warning-soft text-warning'
-                              : 'bg-success-soft text-success'
-                          "
-                        >
-                          {{
-                            targetOf(row.user)!.behind
-                              ? __("Behind")
-                              : __("On track")
-                          }}
-                        </span>
-                      </td>
-                    </template>
-                    <td class="pl-3 pr-4 text-right">
-                      <CardLink
-                        :to="{
-                          name: 'Leads',
-                          query: {
-                            view: 'all',
-                            ...narrowQuery,
-                            owner: row.user,
-                          },
-                        }"
-                      >
-                        {{ __("Leads") }}
-                      </CardLink>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </section>
+            <CcStat v-for="stat in stats" :key="stat.label" v-bind="stat" />
+          </div>
 
-          <div class="grid grid-cols-1 gap-4 lg:grid-cols-5">
+          <div class="grid grid-cols-1 gap-4 lg:grid-cols-12">
             <!-- Lead funnel: how the period's new leads moved on -->
-            <section
-              class="flex min-w-0 flex-col gap-3 rounded-xl border border-outline-gray-2 bg-surface-base p-4 lg:col-span-3"
-              :aria-labelledby="ids.funnel"
+            <CcCard
+              class="lg:col-span-7"
+              accent="violet"
+              :icon="LucideFilter"
+              :title="__('Lead funnel')"
             >
-              <header class="flex items-center justify-between gap-3">
-                <h2
-                  :id="ids.funnel"
-                  class="text-base font-semibold text-ink-gray-9"
-                >
-                  {{ __("Lead funnel") }}
-                </h2>
+              <template #actions>
                 <CardLink :to="{ name: 'Leads', query: { view: 'overview' } }">
                   {{ __("Full overview") }}
                 </CardLink>
-              </header>
+              </template>
               <ol class="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
-                <li v-for="(step, index) in funnel" :key="step.step">
+                <li
+                  v-for="(step, index) in funnel"
+                  :key="step.step"
+                  :style="accentStyle(FUNNEL_ACCENTS[index])"
+                >
                   <RouterLink
                     :to="metricLink(step.metric, periodQuery)"
-                    class="flex h-full flex-col gap-1.5 rounded-lg border border-outline-gray-2 p-3 hover:border-outline-gray-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+                    class="cc-soft flex h-full flex-col gap-1.5 rounded-lg p-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
                   >
-                    <span class="text-xs text-ink-gray-6">{{
-                      step.label
-                    }}</span>
                     <span
-                      class="text-xl font-bold tabular-nums text-ink-gray-9"
+                      class="text-[10px] font-bold uppercase tracking-[0.06em]"
+                      >{{ step.label }}</span
+                    >
+                    <span
+                      class="cc-glow font-mono text-xl font-bold tabular-nums text-ink-gray-9"
                       >{{ step.count }}</span
                     >
                     <span
                       class="block h-1.5 overflow-hidden rounded-full bg-surface-gray-2"
                     >
                       <span
-                        class="block h-full rounded-full bg-brand"
+                        class="cc-fill block h-full rounded-full"
                         :style="{
                           width: `${
                             index ? step.share : step.count ? 100 : 0
@@ -509,7 +355,8 @@
               </ol>
               <p
                 v-if="biggestDrop"
-                class="flex items-start gap-2 rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning"
+                class="cc-pill flex items-start gap-2 rounded-lg px-3 py-2 text-sm"
+                :style="accentStyle('red')"
               >
                 <LucideTriangleAlert
                   class="mt-0.5 size-4 shrink-0"
@@ -517,24 +364,56 @@
                 />
                 {{ biggestDrop }}
               </p>
-            </section>
+            </CcCard>
 
-            <!-- Calls this week, ranked -->
-            <section
-              class="flex min-w-0 flex-col gap-3 rounded-xl border border-outline-gray-2 bg-surface-base p-4 lg:col-span-2"
-              :aria-labelledby="ids.board"
+            <!-- the open stages as upright bars -->
+            <CcCard
+              class="lg:col-span-5"
+              accent="amber"
+              :icon="LucideChartColumn"
+              :title="__('Stage pipeline')"
+              :sub="__('Open leads in each stage; tap a bar for its leads')"
             >
-              <header class="flex items-center justify-between gap-3">
-                <h2
-                  :id="ids.board"
-                  class="text-base font-semibold text-ink-gray-9"
+              <template #actions>
+                <span
+                  class="cc-pill rounded-md px-2 py-0.5 text-xs font-semibold"
+                  >{{ __("Stages") }}</span
                 >
-                  {{ __("Calls this week") }}
-                </h2>
-                <span class="text-xs text-ink-gray-6">{{
-                  __("Leaderboard")
-                }}</span>
-              </header>
+              </template>
+              <p
+                v-if="!pipeline.length"
+                class="py-10 text-center text-sm text-ink-gray-6"
+              >
+                {{ __("No open leads.") }}
+              </p>
+              <StageBars
+                v-else
+                :rows="pipeline"
+                :currency="currency"
+                :label="__('Open leads in each stage')"
+                :link="stageLink"
+              />
+            </CcCard>
+          </div>
+
+          <TeamLeaderboard
+            :title="__('Sales executive performance & target leaderboard')"
+            :calls-label="periodWord.calls"
+            :rows="leaderRows"
+            :error="errors.people"
+            :currency="currency"
+            :month-name="hasTargets ? monthTitle(monthValue()) : ''"
+            :leads-query="narrowQuery"
+          />
+
+          <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <!-- Calls this week, ranked -->
+            <CcCard
+              accent="green"
+              :icon="LucidePhone"
+              :title="__('Calls this week')"
+              :sub="__('Leaderboard')"
+            >
               <p
                 v-if="!leaderboard.length"
                 class="py-8 text-center text-sm text-ink-gray-6"
@@ -548,7 +427,7 @@
                   class="flex items-center gap-3"
                 >
                   <span
-                    class="grid size-6 shrink-0 place-items-center rounded-full bg-surface-gray-2 text-xs font-semibold tabular-nums text-ink-gray-8"
+                    class="cc-pill grid size-6 shrink-0 place-items-center rounded-full text-xs font-bold tabular-nums"
                     >{{ index + 1 }}</span
                   >
                   <PersonAvatar :name="row.full_name" />
@@ -559,7 +438,7 @@
                       <span class="truncate font-semibold text-ink-gray-9">{{
                         row.full_name
                       }}</span>
-                      <b class="tabular-nums text-ink-gray-9">{{
+                      <b class="cc-ink font-mono tabular-nums">{{
                         row.calls
                       }}</b>
                     </span>
@@ -567,7 +446,7 @@
                       class="block h-1.5 overflow-hidden rounded-full bg-surface-gray-2"
                     >
                       <span
-                        class="block h-full rounded-full bg-brand"
+                        class="cc-fill block h-full rounded-full"
                         :style="{
                           width: `${percent(row.calls, leaderboard[0].calls)}%`,
                         }"
@@ -576,26 +455,19 @@
                   </span>
                 </li>
               </ol>
-            </section>
-          </div>
+            </CcCard>
 
-          <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <!-- Leads handed out today, by slot -->
-            <section
-              class="flex min-w-0 flex-col gap-3 rounded-xl border border-outline-gray-2 bg-surface-base p-4"
-              :aria-labelledby="ids.handed"
+            <CcCard
+              accent="violet"
+              :icon="LucideSend"
+              :title="__('Leads handed out today')"
             >
-              <header class="flex items-center justify-between gap-3">
-                <h2
-                  :id="ids.handed"
-                  class="text-base font-semibold text-ink-gray-9"
-                >
-                  {{ __("Leads handed out today") }}
-                </h2>
-                <CardLink v-if="canAssign" :to="{ name: 'AssignLeads' }">
+              <template v-if="canAssign" #actions>
+                <CardLink :to="{ name: 'AssignLeads' }">
                   {{ __("Assign") }}
                 </CardLink>
-              </header>
+              </template>
               <PartError :message="errors.handed_out" />
               <p v-if="source && handedOut" class="text-xs text-ink-gray-6">
                 {{ __("All sources: batches aren't counted by source.") }}
@@ -606,11 +478,17 @@
               >
                 {{ __("No call batches handed out yet today.") }}
               </p>
-              <ul v-else-if="handedOut" class="divide-y divide-outline-gray-1">
+              <ul
+                v-else-if="handedOut"
+                class="divide-y divide-[color:var(--cc-card-border)]"
+              >
                 <li
                   v-for="slot in handedOut"
                   :key="`${slot.slot}-${slot.department}`"
-                  class="grid grid-cols-[minmax(8rem,10rem)_1fr_4.5rem] items-center gap-3 py-2.5 text-sm"
+                  class="grid grid-cols-[minmax(7rem,9rem)_1fr_4.5rem] items-center gap-3 py-2.5 text-sm"
+                  :style="
+                    accentStyle(slot.called >= slot.size ? 'green' : 'violet')
+                  "
                 >
                   <span class="truncate">
                     <b class="text-ink-gray-9">{{ slot.slot }}</b>
@@ -622,52 +500,45 @@
                     class="block h-2 overflow-hidden rounded-full bg-surface-gray-2"
                   >
                     <span
-                      class="block h-full rounded-full"
-                      :class="
-                        slot.called >= slot.size ? 'bg-success' : 'bg-brand'
-                      "
+                      class="cc-fill block h-full rounded-full"
                       :style="{ width: `${percent(slot.called, slot.size)}%` }"
                     />
                   </span>
                   <span class="text-right text-xs tabular-nums text-ink-gray-7">
-                    <b class="text-ink-gray-9"
+                    <b class="cc-ink font-mono"
                       >{{ slot.called }} / {{ slot.size }}</b
                     >
                     {{ __("called") }}
                   </span>
                 </li>
               </ul>
-            </section>
+            </CcCard>
 
             <!-- Needs a nudge: what is waiting on a person -->
-            <section
-              class="flex min-w-0 flex-col gap-3 rounded-xl border border-outline-gray-2 bg-surface-base p-4"
-              :aria-labelledby="ids.nudge"
+            <CcCard
+              accent="red"
+              :icon="LucideBellRing"
+              :title="__('Needs a nudge')"
             >
-              <h2
-                :id="ids.nudge"
-                class="text-base font-semibold text-ink-gray-9"
-              >
-                {{ __("Needs a nudge") }}
-              </h2>
               <RouterLink
                 :to="metricLink('overdue', ownerQuery)"
-                class="flex items-center gap-3 rounded-lg bg-danger-soft px-3 py-3 text-sm text-danger hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+                class="cc-pill flex items-center gap-3 rounded-lg px-3 py-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
               >
                 <LucideAlarmClock class="size-4 shrink-0" aria-hidden="true" />
                 <span class="flex-1">
-                  <b class="tabular-nums">{{ totals.overdue }}</b>
+                  <b class="font-mono tabular-nums">{{ totals.overdue }}</b>
                   {{ __("follow-ups overdue") }}
                 </span>
                 <span class="font-medium">{{ __("Open") }} →</span>
               </RouterLink>
               <RouterLink
                 :to="metricLink('stale', ownerQuery)"
-                class="flex items-center gap-3 rounded-lg bg-warning-soft px-3 py-3 text-sm text-warning hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+                class="cc-pill flex items-center gap-3 rounded-lg px-3 py-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+                :style="accentStyle('amber')"
               >
                 <LucideMoon class="size-4 shrink-0" aria-hidden="true" />
                 <span class="flex-1">
-                  <b class="tabular-nums">{{ totals.stale }}</b>
+                  <b class="font-mono tabular-nums">{{ totals.stale }}</b>
                   {{
                     __(
                       "leads gone quiet ({0}+ days)",
@@ -682,13 +553,13 @@
                   v-for="chip in aiChips"
                   :key="chip.metric"
                   :to="metricLink(chip.metric, ownerQuery)"
-                  class="rounded-full px-2.5 py-1 text-xs font-medium tabular-nums focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
-                  :class="chip.class"
+                  class="cc-pill rounded-full px-2.5 py-1 text-xs font-medium tabular-nums focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+                  :style="accentStyle(chip.accent)"
                 >
                   {{ chip.label }}
                 </RouterLink>
               </div>
-            </section>
+            </CcCard>
           </div>
         </template>
       </div>
@@ -699,9 +570,12 @@
 <script setup lang="ts">
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import PersonAvatar from "@/components/PersonAvatar.vue";
-import StatTile from "@/components/StatTile.vue";
 import TaskyState from "@/components/TaskyState.vue";
-import TargetRing from "@/pages/leads/TargetRing.vue";
+import {
+  fullAmount,
+  rangeText,
+  shortAmount,
+} from "@/pages/leads/business/businessFormat";
 import {
   choices,
   leadOptions,
@@ -711,6 +585,7 @@ import {
 } from "@/pages/leads/leads";
 import { useChartColors } from "@/pages/performance/chartTheme";
 import {
+  monthPace,
   monthTitle,
   monthValue,
   overallOf,
@@ -727,33 +602,50 @@ import {
   FormControl,
   TabButtons,
 } from "frappe-ui";
-import { useDocumentVisibility, useIntervalFn } from "@vueuse/core";
-import { computed, useId, watch } from "vue";
+import { computed, type Component, useId, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
-import LucideCheck from "~icons/lucide/check";
+import LucideBellRing from "~icons/lucide/bell-ring";
+import LucideChartColumn from "~icons/lucide/chart-column";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
-import LucideCircleCheck from "~icons/lucide/circle-check";
+import LucideFileText from "~icons/lucide/file-text";
+import LucideFilter from "~icons/lucide/filter";
 import LucideFlame from "~icons/lucide/flame";
+import LucideHourglass from "~icons/lucide/hourglass";
+import LucideIndianRupee from "~icons/lucide/indian-rupee";
 import LucideLock from "~icons/lucide/lock";
 import LucideMoon from "~icons/lucide/moon";
-import LucidePlus from "~icons/lucide/plus";
+import LucidePercent from "~icons/lucide/percent";
+import LucidePhone from "~icons/lucide/phone";
+import LucidePhoneCall from "~icons/lucide/phone-call";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideSend from "~icons/lucide/send";
-import LucideTrendingDown from "~icons/lucide/trending-down";
+import LucideTarget from "~icons/lucide/target";
 import LucideTrendingUp from "~icons/lucide/trending-up";
 import LucideTriangleAlert from "~icons/lucide/triangle-alert";
+import LucideTrophy from "~icons/lucide/trophy";
+import LucideUsers from "~icons/lucide/users";
+import LucideWallet from "~icons/lucide/wallet";
 import CardLink from "./CardLink.vue";
-import DonutChart, { type DonutPart } from "./DonutChart.vue";
+import CcCard from "./CcCard.vue";
+import CcStat from "./CcStat.vue";
 import PartError from "./PartError.vue";
+import PeriodCompare from "./PeriodCompare.vue";
+import RevenueHero, { type PodiumPerson } from "./RevenueHero.vue";
+import StageBars from "./StageBars.vue";
 import {
+  accentStyle,
+  forecastOf,
   metricLink,
   openStages,
   percent,
   total,
+  useLiveRead,
+  type Accent,
   type TeamDashboard,
   type TeamPeriod,
 } from "./salesDashboard";
+import TeamLeaderboard, { type LeaderRow } from "./TeamLeaderboard.vue";
 import WeekLineChart, { type WeekLine } from "./WeekLineChart.vue";
 
 const auth = useAuthStore();
@@ -761,15 +653,6 @@ const route = useRoute();
 const router = useRouter();
 const colors = useChartColors();
 const ownerId = useId();
-const ids = {
-  week: useId(),
-  pipeline: useId(),
-  team: useId(),
-  funnel: useId(),
-  board: useId(),
-  handed: useId(),
-  nudge: useId(),
-};
 loadLeadOptions();
 
 const PERIODS = [
@@ -805,14 +688,11 @@ const dash = createResource<TeamDashboard>({
   makeParams: params,
   auto: true,
 });
-watch([period, owner, department, source], () => dash.reload());
-// the day moves on: read again every two minutes and when the person comes back to the tab
-useIntervalFn(() => !dash.loading && dash.reload(), 120_000);
-const visibility = useDocumentVisibility();
-watch(
-  visibility,
-  (state) => state === "visible" && !dash.loading && dash.reload()
-);
+// a new filter drops the read on its way: only the latest answer is wanted
+watch([period, owner, department, source], () => {
+  dash.abort();
+  dash.reload();
+});
 function refresh() {
   dash.submit({ ...params(), fresh: 1 });
 }
@@ -840,16 +720,22 @@ const periodWord = computed(
         came: __("came in today"),
         team: __("Your team today"),
         calls: __("Calls today"),
+        sent: __("sent today"),
+        word: __("today"),
       },
       week: {
         came: __("came in this week"),
         team: __("Your team this week"),
         calls: __("Calls this week"),
+        sent: __("sent this week"),
+        word: __("this week"),
       },
       month: {
         came: __("came in this month"),
         team: __("Your team this month"),
         calls: __("Calls this month"),
+        sent: __("sent this month"),
+        word: __("this month"),
       },
     }[period.value])
 );
@@ -903,32 +789,14 @@ const ownerOptions = computed(() => [
   })),
 ]);
 
-// the four biggest open stages in the categorical colours, in fixed order; the rest as one
-const PIPELINE_PARTS = 4;
-const pipelineParts = computed<(DonutPart & { stage?: string })[]>(() => {
-  const stages = [...openStages(overview.value.pipeline)].sort(
-    (a, b) => b.count - a.count
-  );
-  const top = stages.slice(0, PIPELINE_PARTS).map((row, i) => ({
-    stage: row.stage,
-    label: row.stage,
-    value: row.count,
-    color: colors.value.series[i],
-  }));
-  const rest = total(stages.slice(PIPELINE_PARTS).map((row) => row.count));
-  return rest
-    ? [
-        ...top,
-        {
-          label: __("Other open stages"),
-          value: rest,
-          color: colors.value.other,
-        },
-      ]
-    : top;
-});
-const pipelineTotal = computed(() =>
-  total(pipelineParts.value.map((p) => p.value))
+// every open stage that holds leads, in the ERP site's order, with what it is worth
+const pipeline = computed(() => openStages(overview.value.pipeline));
+const pipelineTotal = computed(() => total(pipeline.value.map((p) => p.count)));
+const pipelineValue = computed(() =>
+  total(pipeline.value.map((p) => p.value ?? 0))
+);
+const pipelineMax = computed(() =>
+  Math.max(0, ...pipeline.value.map((p) => p.count))
 );
 
 // each person's line, coloured by their place in the team list so a filter never repaints them
@@ -961,6 +829,7 @@ const leaderboard = computed(() =>
     .sort((a, b) => b.calls - a.calls)
 );
 
+const FUNNEL_ACCENTS: Accent[] = ["blue", "cyan", "violet", "amber", "green"];
 const FUNNEL_STEPS: Record<string, { label: string; metric: string }> = {
   created: { label: __("New leads"), metric: "new" },
   contacted: { label: __("Contacted"), metric: "contacted" },
@@ -1015,17 +884,17 @@ const aiChips = computed(() => {
     {
       metric: "high_intent",
       label: __("{0} high intent", String(ai.high_intent ?? 0)),
-      class: "bg-warning-soft text-hot",
+      accent: "orange" as Accent,
     },
     {
       metric: "unhappy",
       label: __("{0} unhappy", String(ai.unhappy ?? 0)),
-      class: "bg-danger-soft text-danger",
+      accent: "red" as Accent,
     },
     {
       metric: "stage_suggested",
       label: __("{0} stage moves to check", String(ai.stage_suggested ?? 0)),
-      class: "bg-info-soft text-info",
+      accent: "blue" as Accent,
     },
   ];
 });
@@ -1044,6 +913,8 @@ const teamProgress = createResource<Record<string, Progress>>({
   params: { month: monthValue() },
   auto: auth.canAssignSalesTargets,
 });
+// the day moves on: read again every two minutes, and leave nothing running on the way out
+useLiveRead(dash, teamTargets, teamProgress);
 const targets = computed(() => {
   const team = teamTargets.data;
   const progress = teamProgress.data;
@@ -1057,11 +928,257 @@ const targets = computed(() => {
   return byUser;
 });
 const targetOf = (user: string) => targets.value[user];
-const standingCount = computed(() => {
-  const rows = (people.value ?? [])
-    .map((p) => targetOf(p.user))
-    .filter((t) => t && t.percent != null);
-  const behind = rows.filter((t) => t!.behind).length;
-  return { behind, onTrack: rows.length - behind };
+
+// the money: the ERP site's currency, whichever part says it
+const currency = computed(
+  () =>
+    overview.value.currency ||
+    data.value?.money?.currency ||
+    teamTargets.data?.currency ||
+    ""
+);
+const periodLabel = computed(
+  () => PERIODS.find((p) => p.value === period.value)!.label
+);
+const previousWon = computed(() => {
+  const before = data.value?.previous;
+  return before
+    ? { value: before.totals.won_value ?? 0, won: before.totals.won ?? 0 }
+    : null;
+});
+const moneyNote = computed(() => {
+  if (department.value || source.value)
+    return __(
+      "Collections aren't counted by department or source, so they're left out while one is picked."
+    );
+  return errors.value.money || "";
+});
+// the month's won value target: the person's, or the sales team's summed (the people on
+// this page: targets set for anyone else, a test account, would inflate it)
+const wonTarget = computed(() => {
+  const team = teamTargets.data;
+  if (period.value !== "month" || !team) return null;
+  const shown = new Set(overview.value.people.map((p) => p.user));
+  const sum = total(
+    team.people
+      .filter((p) => (owner.value ? p.user === owner.value : shown.has(p.user)))
+      .flatMap((p) => p.target?.criteria ?? [])
+      .filter((c) => c.measure === "won_value" && typeof c.target === "number")
+      .map((c) => c.target as number)
+  );
+  return sum || null;
+});
+
+// people level on won value and deals share a place (1, 2, 2, 4)
+function rankBy<T>(rows: T[], key: (row: T) => string) {
+  return rows.map((row, index) => {
+    let rank = index + 1;
+    while (rank > 1 && key(rows[rank - 2]) === key(row)) rank--;
+    return { row, rank };
+  });
+}
+const podium = computed<PodiumPerson[]>(() =>
+  rankBy(
+    (data.value?.revenue ?? []).filter((r) => r.won > 0),
+    (r) => `${r.won_value}:${r.won}`
+  ).map(({ row, rank }) => ({ ...row, rank }))
+);
+function openWon(user: string) {
+  router.push(metricLink("won", { ...periodQuery.value, owner: user }));
+}
+
+// a running month carried to its end at today's rate
+const forecast = computed(() => {
+  if (period.value !== "month") return null;
+  const pace = monthPace(monthValue());
+  if (pace.state !== "running") return null;
+  return forecastOf(totals.value.won_value ?? 0, wonTarget.value, pace);
+});
+
+// the number cards, in the mockup's colours: each figure keeps its colour and its icon
+const stats = computed(() => {
+  const t = totals.value;
+  const c = currency.value;
+  const money = data.value?.money;
+  const list: {
+    label: string;
+    value: string | number;
+    title?: string;
+    icon: Component;
+    accent: Accent;
+    sub?: string;
+    to?: ReturnType<typeof metricLink>;
+  }[] = [
+    {
+      label: __("Total leads"),
+      value: t.new,
+      icon: LucideUsers,
+      accent: "blue",
+      sub: periodWord.value.came,
+      to: metricLink("new", periodQuery.value),
+    },
+    {
+      label: __("Active pipeline"),
+      value: t.open,
+      icon: LucideTrendingUp,
+      accent: "violet",
+      sub: __("worth {0}", shortAmount(t.open_value ?? 0, c)),
+      to: metricLink("open", ownerQuery.value),
+    },
+    {
+      label: __("Hot leads"),
+      value: t.hot,
+      icon: LucideFlame,
+      accent: "red",
+      sub: __("ready to close"),
+      to: metricLink("hot", ownerQuery.value),
+    },
+    {
+      label: __("Contacted"),
+      value: t.contacted,
+      icon: LucidePhone,
+      accent: "cyan",
+      sub: __("{0}% of new leads", String(percent(t.contacted, t.new))),
+      to: metricLink("contacted", periodQuery.value),
+    },
+    {
+      label: __("Proposals sent"),
+      value: t.quotations_sent,
+      icon: LucideFileText,
+      accent: "amber",
+      sub: money
+        ? __("worth {0}", shortAmount(money.proposals_value, c))
+        : periodWord.value.sent,
+      to: metricLink("quotations", periodQuery.value),
+    },
+    {
+      label: __("Converted (won)"),
+      value: t.won,
+      icon: LucideTrophy,
+      accent: "green",
+      sub: t.won_unpriced
+        ? __("{0} of them without an amount", String(t.won_unpriced))
+        : __("worth {0}", shortAmount(t.won_value ?? 0, c)),
+      to: metricLink("won", periodQuery.value),
+    },
+    {
+      label: __("Conversion ratio"),
+      value: `${t.conversion_rate ?? 0}%`,
+      icon: LucidePercent,
+      accent: "green",
+      sub: __(
+        "of new leads won · win rate {0}%",
+        String(Math.round(t.win_rate))
+      ),
+    },
+  ];
+  if (wonTarget.value)
+    list.push({
+      label: __("Sales target"),
+      value: shortAmount(wonTarget.value, c),
+      title: fullAmount(wonTarget.value, c),
+      icon: LucideTarget,
+      accent: "blue",
+      sub:
+        (t.won_value ?? 0) >= wonTarget.value
+          ? __("reached")
+          : __(
+              "{0} to go",
+              shortAmount(wonTarget.value - (t.won_value ?? 0), c)
+            ),
+    });
+  if (money)
+    list.push(
+      {
+        label: __("Revenue received"),
+        value: shortAmount(money.advances, c),
+        title: fullAmount(money.advances, c),
+        icon: LucideIndianRupee,
+        accent: "green",
+        sub: __("received {0}", periodWord.value.word),
+      },
+      {
+        label: __("Total receivables"),
+        value: shortAmount(money.to_collect, c),
+        title: fullAmount(money.to_collect, c),
+        icon: LucideWallet,
+        accent: "violet",
+        sub: __("outstanding now"),
+      },
+      {
+        label: __("Payments overdue"),
+        value: shortAmount(money.overdue, c),
+        title: fullAmount(money.overdue, c),
+        icon: LucideCircleAlert,
+        accent: "red",
+        sub: __("past their due date, now"),
+      }
+    );
+  list.push({
+    label: __("Overdue follow-ups"),
+    value: t.overdue,
+    icon: LucideAlarmClock,
+    accent: "orange",
+    sub: __("{0} more gone quiet", String(t.stale)),
+    to: metricLink("overdue", ownerQuery.value),
+  });
+  return list;
+});
+
+// the leaderboard: each salesperson's calls, their leads' progress and what they won
+const leaderRows = computed<LeaderRow[] | null>(() => {
+  if (!people.value) return null;
+  const leads = new Map(overview.value.by_owner.map((r) => [r.user, r]));
+  const won = new Map((data.value?.revenue ?? []).map((r) => [r.user, r]));
+  // everyone with calls or with leads: someone who only held meetings has no call row
+  const calls = new Map(people.value.map((p) => [p.user, p]));
+  const noCalls = { given: 0, called: 0, contacted: 0, calls: 0, missed: 0 };
+  const everyone = [
+    ...people.value,
+    ...overview.value.by_owner
+      .filter((o) => !calls.has(o.user))
+      .map((o) => ({
+        ...noCalls,
+        user: o.user,
+        full_name: o.full_name,
+        talk_seconds: 0,
+      })),
+  ];
+  const rows = everyone.map((p) => {
+    const own = leads.get(p.user);
+    const deals = own?.won ?? null;
+    // one person picked: the overview is theirs alone; else only winners were read
+    const wonValue = owner.value
+      ? totals.value.won_value ?? null
+      : won.get(p.user)?.won_value ?? (deals === 0 ? 0 : null);
+    return {
+      user: p.user,
+      full_name: p.full_name,
+      given: p.given,
+      called: p.called,
+      contacted: p.contacted,
+      // per answered call; the call log may record calls without talk time, which isn't 0s
+      talkPerCall:
+        p.talk_seconds && p.calls > p.missed
+          ? Math.round(p.talk_seconds / (p.calls - p.missed))
+          : null,
+      meetings: own?.meetings_held ?? null,
+      proposals: own?.quotations_sent ?? null,
+      won: deals,
+      wonValue,
+      target: targetOf(p.user),
+    };
+  });
+  rows.sort(
+    (a, b) =>
+      (b.wonValue ?? -1) - (a.wonValue ?? -1) ||
+      (b.won ?? -1) - (a.won ?? -1) ||
+      b.contacted - a.contacted ||
+      b.called - a.called
+  );
+  return rankBy(
+    rows,
+    (r) => `${r.wonValue}:${r.won}:${r.contacted}:${r.called}`
+  ).map(({ row, rank }) => ({ ...row, rank }));
 });
 </script>

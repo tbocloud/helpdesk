@@ -48,7 +48,7 @@
     <div class="flex min-w-0 flex-col gap-1 text-sm text-ink-gray-6">
       <p class="flex min-w-0 items-center gap-1.5">
         <span class="truncate font-medium text-ink-gray-8">{{
-          post?.customer
+          post ? clientOf(post) : ""
         }}</span>
         <span
           v-if="platforms.length"
@@ -216,7 +216,7 @@ import LucidePanelRight from "~icons/lucide/panel-right";
 import LucidePause from "~icons/lucide/pause";
 import LucideClock from "~icons/lucide/clock";
 import LucideTimer from "~icons/lucide/timer";
-import { copyLine, platformsOf, ROLE_TONES } from "../constants";
+import { clientOf, copyLine, platformsOf, ROLE_TONES } from "../constants";
 import {
   type ContentTask,
   dueText,

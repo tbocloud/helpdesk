@@ -1649,6 +1649,13 @@ const ownerOptions = computed(() => [
   })),
 ]);
 
+// Follow-up has its own cards (when they are due), so the stage cards stay out there. Declared
+// before the list: its makeParams runs as the page sets up, and a const declared later throws
+// there ("Cannot access before initialization"), so the list never loads
+const hasStageCards = computed(
+  () => isList.value && view.value !== "follow_up"
+);
+
 const leads = createResource({
   url: "helpdesk.api.leads.list_leads",
   makeParams: () => ({
@@ -1775,10 +1782,6 @@ const quiet = computed(
 );
 const statuses = computed(
   () => new Map((data.value?.rows ?? []).map((r) => [r.name, clientStatus(r)]))
-);
-// Follow-up has its own cards (when they are due), so the stage cards stay out there
-const hasStageCards = computed(
-  () => isList.value && view.value !== "follow_up"
 );
 // "All stages" first, then the stages with leads in their pipeline order; the one picked stays
 // even at 0, so it can be seen and let go

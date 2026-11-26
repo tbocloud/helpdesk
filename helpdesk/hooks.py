@@ -60,6 +60,10 @@ scheduler_events = {
             # the async stand-up: drafts, the reminder and the summaries (docs/standup.md)
             "helpdesk.standup.run",
             "helpdesk.helpdesk.doctype.hd_meeting.hd_meeting.sync_with_outlook",
+            # Copilot fix approvals: remind the approver, then hand to a senior
+            "helpdesk.copilot.approvals.remind_and_escalate",
+            # action approvals (Press, AWS, repairs): remind, escalate, expire (Phase 18)
+            "helpdesk.copilot.actions.remind_and_escalate",
             # each ERP site whose sync interval has passed (docs/divisions.md, "ERP sites")
             "helpdesk.crm_dashboard.sync.sync_due_sources",
         ],
@@ -69,6 +73,18 @@ scheduler_events = {
             "helpdesk.helpdesk.doctype.hd_project_signoff.hd_project_signoff.send_signoff_reminders",
         ],
         "*/5 * * * *": [
+            # the watcher's heartbeat: the Infrastructure people hear when it goes quiet (Phase 18)
+            "helpdesk.monitor.watch_heartbeats",
+            # Copilot's infrastructure actions: fixed once the alert is healthy, else a Leader (Phase 25)
+            "helpdesk.copilot.infra.check_verifying",
+            # Copilot deploys through Press: start, follow, check (helpdesk.copilot.deploy)
+            "helpdesk.copilot.deploy.run_due",
+            # what did not reach the customer's site (a chat reply, a stage) goes again (Phase 23)
+            "helpdesk.copilot.delivery.resend_undelivered",
+            # releases of every merge: the CI gate and approval reminders (off by default)
+            "helpdesk.copilot.releases.run_due",
+            # customer sites' new errors become tickets (off by default; docs/tbo-copilot.md, Error watch)
+            "helpdesk.copilot.watch.run_due",
             # pauses every running timer once the work day (or the morning, with a lunch
             # break set) has closed
             "helpdesk.tasky.time_sessions.stop_timers_outside_work_hours",
@@ -78,10 +94,21 @@ scheduler_events = {
             # posts the content calendar scheduled for Facebook / Instagram (docs/meta-publishing.md)
             "helpdesk.integrations.meta.publisher.publish_due",
             "helpdesk.helpdesk.doctype.hd_meeting.hd_meeting.send_reminders",
+            "helpdesk.copilot.runs.expire_stale_leases",
         ],
         # every 10 minutes: new hub errors to the team's chat channel
         "*/10 * * * *": [
             "helpdesk.error_alerts.post_error_digest",
+            # Copilot fixes read their pull requests, so a missed webhook never strands an approval
+            "helpdesk.copilot.fixes.refresh_open",
+            # developers' pull requests Copilot takes live: reviews, CI, merges (Phase 26)
+            "helpdesk.copilot.pulls.refresh",
+            # Copilot runs waiting with no worker claiming them: the Agent Managers hear hourly
+            "helpdesk.copilot.pilot.watch_workers",
+            # every merge into a branch a customer site runs becomes a release (off by default)
+            "helpdesk.copilot.releases.watch",
+            # a customer's new ticket nobody could take goes to its coordinators
+            "helpdesk.ticket_assignment.ask_for_unassigned",
         ],
         # every 10 minutes, off the error digest's minutes: ask GitHub to run the org
         # merge bot, whose own schedule doesn't fire (off by default; docs/github-sync.md)
@@ -105,6 +132,16 @@ scheduler_events = {
         "15 6 * * *": [
             "helpdesk.integrations.crm.holidays.sync_holidays_job",
         ],
+        # 06:30, after the leave sync: tickets of people on leave today move along the
+        # assignment chain, and come back to whoever returned (docs/ticket-owners.md)
+        "30 6 * * *": [
+            "helpdesk.ticket_assignment.daily",
+        ],
+        # 06:45, after that: tickets whose coordinators have not chosen who takes them yet are
+        # asked again (Phase 22, copilot/people.py)
+        "45 6 * * *": [
+            "helpdesk.copilot.people.ask_again",
+        ],
         # hourly at :40: disable people TBO removed from Microsoft (off by default;
         # docs/tbo-smart-api.md, "Offboarding")
         "40 * * * *": [
@@ -121,6 +158,8 @@ scheduler_events = {
         # Monday 09:00: the week's adoption findings to management (docs/adoption.md)
         "0 9 * * 1": [
             "helpdesk.adoption.send_weekly_digest",
+            # the week's repairs by the watcher, and root-cause tasks for repeats (Phase 19)
+            "helpdesk.repairs.weekly",
         ],
         # Monday 08:00: last week's summary per customer
         "0 8 * * 1": [
@@ -131,6 +170,8 @@ scheduler_events = {
         "helpdesk.helpdesk.doctype.hd_ticket.hd_ticket.close_tickets_after_n_days",
         "helpdesk.tasks.health_check_connections",
         "helpdesk.tasks.retry_pending_triages",
+        # Copilot chats (Teams and the panel) are kept 90 days
+        "helpdesk.copilot.assistant.prune",
         "helpdesk.helpdesk.doctype.hd_content_post.hd_content_post.send_due_reminders",
         "helpdesk.work_calendar.sync_saturdays_off",
         "helpdesk.helpdesk.doctype.hd_github_delivery.hd_github_delivery.clear_old_deliveries",
@@ -141,13 +182,21 @@ scheduler_events = {
         "helpdesk.lead_mirror.check_drift",
         # nightly: every lead of every ERP site, which drops deleted ones
         "helpdesk.crm_dashboard.sync.full_sync_all",
+        # nightly: each client's Facebook and Instagram reach (docs/meta-insights.md)
+        "helpdesk.integrations.meta.insights.sync_all",
     ],
     "hourly": [
         "helpdesk.triage.fail_stuck_triages",
         "helpdesk.integrations.crm.users.sync_users_job",
         "helpdesk.helpdesk.doctype.hd_content_post.hd_content_post.send_missed_post_alerts",
+        # Monday from 08:00 Riyadh time, once: the Copilot pilot's weekly email
+        "helpdesk.copilot.pilot.send_weekly_email",
+        # 09:00 Riyadh time, once a day: what waits for each person, in Teams or the Copilot panel
+        "helpdesk.copilot.assistant.send_digest",
         # spend, reach and status of running boosts (docs/meta-publishing.md)
         "helpdesk.integrations.meta.ads.sync_active_boosts",
+        # Instagram Stories, whose numbers are gone a day after posting
+        "helpdesk.integrations.meta.insights.sync_stories",
     ],
     "hourly_long": [
         "helpdesk.helpdesk.doctype.hd_ticket.hd_ticket.update_sla_status_in_ticket"
@@ -185,6 +234,9 @@ user_invitation = {
     "extra_invite_params": ["customer", "contact"],
 }
 
+# the Frappe task form: "Open in TBO Copilot" (testing fixes 7)
+doctype_js = {"Task": "public/js/task_desktop.js"}
+
 doc_events = {
     # a disabled user keeps no OAuth tokens (helpdesk/offboarding.py) and leaves TBO Chat
     "User": {
@@ -200,8 +252,12 @@ doc_events = {
     "ToDo": {
         # nobody is given a task in a department their team keeps out of
         "validate": "helpdesk.tasky.permissions.check_assignment_department",
-        # the person given a task hears about it (docs/workspace-pages.md, "New tasks")
-        "after_insert": "helpdesk.tasky.new_assignments.notify_assignee",
+        "after_insert": [
+            # the person given a task hears about it (docs/workspace-pages.md, "New tasks")
+            "helpdesk.tasky.new_assignments.notify_assignee",
+            # a ticket given to someone else by hand ends a coordinator's choice (Phase 23, A15)
+            "helpdesk.copilot.people.on_ticket_assigned",
+        ],
         # In progress and Overview reload when a task changes hands
         "on_update": "helpdesk.tasky.api.notify_task_assignment",
     },
@@ -245,9 +301,16 @@ doc_events = {
         "before_insert": "helpdesk.extends.notification_log.before_insert",
     },
     "HD Ticket": {
-        "after_insert": "helpdesk.triage.auto_triage_ticket",
+        "after_insert": [
+            "helpdesk.triage.auto_triage_ticket",
+            "helpdesk.copilot.runs.on_ticket_insert",
+            # the project coordinators hear of every new ticket (Phase 22, copilot/people.py)
+            "helpdesk.copilot.people.on_ticket_insert",
+        ],
         "on_update": [
             "helpdesk.chatwoot_bridge.on_ticket_update",
+            # a ticket the customer gave to a person: its chat asks "Is it fixed?" (testing fixes 2)
+            "helpdesk.copilot.conversation.on_ticket_update",
             "helpdesk.kb_drafts.on_ticket_update",
             # the customer came back: counts against the tasks made from the ticket
             "helpdesk.helpdesk.doctype.task.task.count_ticket_comeback",
@@ -256,6 +319,8 @@ doc_events = {
     "Communication": {
         "after_insert": [
             "helpdesk.chatwoot_bridge.on_communication_insert",
+            "helpdesk.copilot.customer.on_communication_insert",
+            "helpdesk.copilot.conversation.on_communication_insert",
             # a customer's reply to a sign-off's mail (docs/project-signoff.md)
             "helpdesk.helpdesk.doctype.hd_project_signoff.hd_project_signoff.on_communication_insert",
         ],
@@ -263,6 +328,7 @@ doc_events = {
     # customer health (helpdesk/customer_health.py) is cached for 10 minutes; a
     # manager's change to these shows at once, tickets and tasks within the 10
     "HD Customer": {
+        "validate": "helpdesk.copilot.people.validate_customer",
         "after_insert": "helpdesk.customer_health.clear_health_cache",
         "after_rename": [
             "helpdesk.customer_health.clear_health_cache",
@@ -352,11 +418,17 @@ setup_wizard_complete = "helpdesk.setup.setup_wizard.setup_complete"
 # ---------------
 
 before_tests = "helpdesk.test_utils.before_tests"
-auth_hooks = ["helpdesk.auth.authenticate"]
+auth_hooks = [
+    "helpdesk.auth.authenticate",
+    # Bot Framework's token for the Teams bot's endpoint, which Frappe would take for its own
+    "helpdesk.copilot.teams.authenticate",
+]
 
 default_log_clearing_doctypes = {
     "HDS AI Usage Log": 90,
     "HDS Site Login Log": 180,
     "HDS Remote Audit Log": 365,
+    "HDS Copilot Event": 90,
+    "HDS Copilot Call Log": 90,
     "HD Intake Log": 30,
 }

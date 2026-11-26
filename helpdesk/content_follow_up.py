@@ -2,7 +2,8 @@
 
 Runs daily. A post waits for the client from when it entered Client Review (older
 posts: from when it was sent to the client's ERP). After `client_reminder_days`
-(HD Content Settings) the client's contacts get one email listing what's waiting;
+(HD Content Settings) the client's contacts (a branch's approvers, for a branch's
+posts) get one email listing what's waiting;
 after `client_escalate_days` the post's marketer, its creator and the project lead
 are told. Each happens once per round of review.
 """
@@ -43,12 +44,12 @@ def send_client_follow_ups():
             and not post.client_reminded_on
             and post.customer
         ):
-            to_remind[post.customer].append(post)
+            to_remind[(post.customer, post.branch or None)].append(post)
         if alert_after and days >= alert_after and not post.client_escalated_on:
             alert_team(post, int(days))
 
-    for customer, posts in to_remind.items():
-        remind_client(customer, posts)
+    for (customer, branch), posts in to_remind.items():
+        remind_client(customer, posts, branch)
 
 
 def waiting_posts() -> list:
@@ -60,6 +61,7 @@ def waiting_posts() -> list:
             "title",
             "format",
             "customer",
+            "branch",
             "publish_on",
             "marketer",
             "owner",
@@ -73,11 +75,12 @@ def waiting_posts() -> list:
     )
 
 
-def remind_client(customer: str, posts: list):
-    """One email to the customer's contacts listing every post waiting for them."""
+def remind_client(customer: str, posts: list, branch: str | None = None):
+    """One email to the customer's contacts (or the branch's approvers) listing every
+    post waiting for them."""
     from helpdesk.api.content_portal import portal_emails, portal_enabled
 
-    emails = portal_emails(customer)
+    emails = portal_emails(customer, branch)
     in_erp = any(p.client_connection for p in posts)
     # without the portal or a connected ERP the client has nowhere to approve
     if not emails or not (portal_enabled() or in_erp):
@@ -130,7 +133,7 @@ def alert_team(post, days: int):
             "{0} ({1}) has waited {2} days for the client's approval and publishes {3}."
         ).format(
             post.title or post.format or post.name,
-            post.customer,
+            post.branch or post.customer,
             days,
             format_datetime(post.publish_on, "d MMM, h:mm a"),
         ),
