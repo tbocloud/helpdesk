@@ -611,8 +611,20 @@ def save_job(job: str, values: dict) -> dict:
             _("Only System Managers change which model a job uses."),
             frappe.PermissionError,
         )
+    values = dict(values or {})
+    # the guard compared against the job's model as it was then: someone may have changed it
+    # since, and the manager saw a comparison that no longer holds
+    expected = values.pop("expected_model", None)
     clean = _clean_job(job, values)
     doc = frappe.get_doc(SETTINGS)
+    if job in GUARDED_JOBS and expected is not None:
+        now = _first_model(doc, job) or ""
+        if now != (expected or ""):
+            frappe.throw(
+                _(
+                    "{0} now uses {1}, not the model you compared against. Look at the comparison again before saving."
+                ).format(job, now or _("its section's default"))
+            )
     # the level's models before the change, written back if the gateway refuses the new ones
     old = next((r for r in doc.get("ai_jobs") or [] if r.job == job), None)
     previous = (old.get("model"), old.get("backup_model")) if old else ()
@@ -1757,19 +1769,25 @@ def record_references(run: str, references) -> None:
     doctypes and fields it checked, and which do not exist."""
     if not isinstance(references, dict):
         return
+    # the worker sends a list; anything else counts as nothing missing, never as a refusal
+    listed = references.get("missing")
     missing = [
         {
             "kind": str(m.get("kind") or "")[:40],
             "value": str(m.get("value") or "")[:200],
         }
-        for m in references.get("missing") or []
+        for m in (listed if isinstance(listed, list) else [])
         if isinstance(m, dict) and m.get("value")
     ][:50]
+    try:
+        checked = cint(references.get("checked"))
+    except (TypeError, ValueError):
+        checked = 0
     frappe.db.set_value(
         "HDS Copilot Run",
         run,
         {
-            "references_checked": cint(references.get("checked")),
+            "references_checked": checked,
             "references_missing": len(missing),
             "missing_references": frappe.as_json(missing) if missing else None,
         },

@@ -13,7 +13,9 @@ private design notes, Phase 31.) Providers, failover and models per job are desc
 
 ## What is recorded
 
-**HDS AI Usage Log** now writes one row for every attempt, failed attempts included:
+**HDS AI Usage Log** now writes one row for every attempt, failed attempts included. A failed attempt's row is
+written by a background job of its own (the `short` queue), so it stays even when the request that made the call
+fails and rolls back:
 
 | Field | Meaning |
 |---|---|
@@ -81,8 +83,9 @@ Each purpose gets a model and a backup. A new application or purpose is one entr
   - `listed`: allowed for jobs;
   - `monthly_token_limit`: in millions, 0 means none;
   - its prices.
-- **This month's use** (`ai_engine.month_tokens`) is the input plus output tokens in the usage
-  log since the 1st, TBO Support's calls and the worker's. It is cached for 5 minutes.
+- **This month's use** (`ai_engine.month_tokens`) is the input, cached input and output tokens in
+  the usage log since the 1st, TBO Support's calls and the worker's. It is cached for 5 minutes.
+  A used-up first model stops its job even when its provider is switched off.
 - **Allowed models:** a model a job uses can't be unticked or removed.
 - **Removing:** a model that was never called and has no test-set run is deleted. Otherwise it
   only leaves the list, and its prices stay for the cost reports.
@@ -139,7 +142,11 @@ The TBO AI gateway is LiteLLM, running on the Copilot worker's server. It alread
 - **The managers are told** once in 6 hours (`ai_gateway.mark_down`). The alert says whether an emergency key
   answers.
 - **Every 5 minutes** `ai_gateway.watch` checks the gateway and says when it answers again.
-- **The switch** turns on only once the gateway answers and accepts TBO Support's key.
+- **The switch** turns on only once the gateway answers and accepts TBO Support's key. While it is on, a new
+  address or key is checked the same way before it is kept.
+- **Switching off** is refused while a TBO Support or worker job uses a model whose account's key lives only in the
+  gateway: TBO Support no longer has that key. To switch off, point those jobs at other models, switch off, enter
+  the keys again, then point the jobs back. Desktop levels don't stop it: the desktop app always calls the gateway.
 
 **The AI models page writes into the gateway** (admin API, with TBO Support's admin key or TBO Desktop Settings'
 one)
@@ -151,9 +158,11 @@ one)
 | An unticked or removed model | `/model/delete` |
 | A model of today's OpenAI section | the gateway's own `OPENAI_API_KEY` |
 
-- **Write all to the gateway** writes everything again: the keys still held here (then forgotten here), and every
-  model.
-- **While the switch is on,** a change the gateway can't take isn't saved.
+- **Write all to the gateway** writes everything again: the keys still held here, and every model. A key is
+  forgotten here only while the switch is on; with it off, the key is copied and kept.
+- **While the switch is on,** a change the gateway can't take isn't saved. A model or desktop level the gateway
+  refuses keeps what it had (the old one is written back); if even that fails, the message says to use "Write all".
+- **A provider test** through the gateway tests only that account's own models.
 
 **Usage:** TBO Support keeps its own log of its calls and the worker's. From the gateway's usage it reads only the
 desktop app's keys (aliases starting with `desktop:`), so nothing is counted twice.
@@ -214,7 +223,10 @@ summary.
 
 **Requests** (HDS Model Eval Request)
 - **Ask for a run** records a request. A model can have only one open request.
-- A report that arrives for the model answers its open requests (`close_requests`).
+- **A worker claims** the oldest waiting request with a locking read, so two workers never take the same one.
+- **A report** answers the request it names, or else the model's open request for the same job. A report for
+  another model or job is refused.
+- **A run never reported** within 24 hours is given up (Failed, with a note); a late report still answers it.
 - **Take back** deletes a request that hasn't been answered.
 - The live worker doesn't run the test set by itself, because the cases' tickets exist only on
   the test hub.

@@ -642,3 +642,39 @@ class TestALongBenchmarkSource(ReviewCase):
         )
 
         self.assertEqual(result["public"][0]["source_url"], url)
+
+
+class TestReferencesOfAnyShape(ReviewCase):
+    def test_odd_shapes_count_as_nothing_missing(self):
+        for references in (
+            {"checked": 3, "missing": 1},
+            {"checked": 3, "missing": "acme/x.py"},
+            {"checked": "many", "missing": {"kind": "file"}},
+            {"checked": None, "missing": None},
+            "not a dict",
+        ):
+            # never raises: a report is never refused for the shape of its check
+            ai_models.record_references("CPR-no-such-run", references)
+
+
+class TestAGuardThatNoLongerHolds(ReviewCase):
+    def test_a_save_after_someone_else_changed_the_job_is_refused(self):
+        change = {"primary_section": "Anthropic-compatible"}
+        compared = ai_models.guard("fix", change)["current_model"]
+        self.assertEqual(compared, "gpt-test-model")
+        # meanwhile someone else gives the job another first model
+        ai_models.save_job("fix", change)
+
+        with self.assertRaises(frappe.ValidationError):
+            ai_models.save_job(
+                "fix", {"allow_fallback": "Off", "expected_model": compared}
+            )
+        self.assertNotEqual(
+            getattr(ai_engine.job_row("fix"), "allow_fallback", ""), "Off"
+        )
+
+        # compared against the job as it is now, the save goes through
+        ai_models.save_job(
+            "fix", {"allow_fallback": "Off", "expected_model": "kimi-k2.6"}
+        )
+        self.assertEqual(ai_engine.job_row("fix").allow_fallback, "Off")
