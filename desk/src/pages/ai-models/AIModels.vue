@@ -256,6 +256,11 @@
           <p v-if="!model" class="text-p-sm text-ink-gray-6">
             {{ __("Choose a model.") }}
           </p>
+          <div
+            v-else-if="loading && !detail"
+            class="h-64 animate-pulse rounded-xl border border-outline-gray-2 bg-surface-gray-1"
+            :aria-label="__('Loading')"
+          />
           <p
             v-if="detail && detail.status === 'Candidate'"
             class="rounded-lg bg-info-soft px-3 py-2 text-p-sm text-info"
@@ -266,7 +271,7 @@
               )
             }}
           </p>
-          <template v-else-if="detail">
+          <template v-if="detail">
             <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
               <StatTile
                 :label="__('Calls')"
@@ -1089,9 +1094,13 @@
                             v-if="!p.section"
                             variant="ghost"
                             size="sm"
-                            :theme="confirming === p.name ? 'red' : 'gray'"
+                            :theme="
+                              confirming === `provider:${p.name}`
+                                ? 'red'
+                                : 'gray'
+                            "
                             :label="
-                              confirming === p.name
+                              confirming === `provider:${p.name}`
                                 ? __('Click again to remove')
                                 : __('Remove')
                             "
@@ -1321,9 +1330,11 @@
                             v-if="!m.in_use"
                             variant="ghost"
                             size="sm"
-                            :theme="confirming === m.model ? 'red' : 'gray'"
+                            :theme="
+                              confirming === `model:${m.model}` ? 'red' : 'gray'
+                            "
                             :label="
-                              confirming === m.model
+                              confirming === `model:${m.model}`
                                 ? __('Click again to remove')
                                 : __('Remove')
                             "
@@ -1529,7 +1540,7 @@
                 <p class="text-p-sm text-ink-gray-6">
                   {{
                     __(
-                      "The managers are told when, in one hour, a model fails or the backup gives the answer at least this share of the time (from 10 calls; 0 turns it off), and when a model reaches 80% and 100% of its monthly token limit."
+                      "The managers are told when, in one hour, a model's calls fail at least this share of the time (from 10 calls), or the backup gives at least this share of the answered calls (from 10 answered calls); 0 turns an alert off. They are also told when a model reaches 80% and 100% of its monthly token limit."
                     )
                   }}
                 </p>
@@ -1558,7 +1569,7 @@
                   <FormControl
                     v-model="alertForm.fallback_rate"
                     type="number"
-                    :label="__('Fallback answers, %')"
+                    :label="__('Fallback answers, % of answered calls')"
                   />
                   <div>
                     <Button
@@ -1699,6 +1710,18 @@
                   />
                 </div>
               </form>
+              <p
+                v-if="gwNotice"
+                role="status"
+                class="rounded-lg px-3 py-2 text-p-sm"
+                :class="
+                  gwNotice.ok
+                    ? 'bg-success-soft text-success'
+                    : 'bg-warning-soft text-warning'
+                "
+              >
+                {{ gwNotice.text }}
+              </p>
               <p v-if="usageLine" class="text-p-xs text-ink-gray-5">
                 {{ usageLine }}
               </p>
@@ -2253,7 +2276,7 @@ const loading = ref(false);
 const error = ref<unknown>(null);
 let latest = 0;
 
-// only the newest request fills the page
+// only the newest request fills the page: an older one's answer is dropped after every wait
 async function load() {
   const mine = ++latest;
   loading.value = true;
@@ -2266,27 +2289,35 @@ async function load() {
     if (view.value === "model") {
       const name = model.value || o.models[0]?.model || "";
       if (name && !model.value) return go({ model: name });
-      detail.value = name
+      const d = name
         ? ((await call(`${API}.detail`, {
             model: name,
             days: days.value,
           })) as Detail)
         : null;
+      if (mine !== latest) return;
+      detail.value = d;
       if (name && tab.value === "quality") {
-        quality.value = (await call(`${API}.quality`, {
+        const q = (await call(`${API}.quality`, {
           model: name,
           days: days.value,
         })) as Quality;
+        if (mine !== latest) return;
+        quality.value = q;
       } else if (name && tab.value === "benchmarks") {
-        bench.value = (await call(`${API}.benchmarks`, {
+        const b = (await call(`${API}.benchmarks`, {
           model: name,
           against: against.value || undefined,
         })) as Bench;
+        if (mine !== latest) return;
+        bench.value = b;
       }
     } else if (view.value === "settings") {
-      settings.value = (await call(`${API}.job_settings`, {
+      const s = (await call(`${API}.job_settings`, {
         days: days.value,
       })) as Settings;
+      if (mine !== latest) return;
+      settings.value = s;
     }
   } catch (err) {
     if (mine === latest) error.value = err;
@@ -2295,13 +2326,17 @@ async function load() {
   }
 }
 watch([view, days, model, tab, against], load, { immediate: true });
+// another model's figures and controls never stay on the page while this one loads, or fails
+watch(model, () => {
+  detail.value = null;
+  quality.value = null;
+  bench.value = null;
+  benchNotice.value = null;
+});
 
+// one model's view keeps its picker on screen while another model loads
 const shown = computed(() =>
-  view.value === "models"
-    ? overview.value
-    : view.value === "model"
-    ? detail.value || !model.value
-    : settings.value
+  view.value === "settings" ? settings.value : overview.value
 );
 const usedModels = computed(
   () => (overview.value?.models || []).filter((m) => m.calls).length
@@ -2514,21 +2549,32 @@ const pub = reactive({
   source_url: "",
 });
 
+// A write's answer is not put on the page as it is: the page is read again, with the comparison
+// in the address, and that newer read drops any older one still on its way.
 async function benchCall(
   method: string,
   args: Record<string, unknown>,
   done: string
 ) {
+  const target = model.value;
+  const say = (ok: boolean, text: string) => {
+    benchNotice.value = {
+      ok,
+      text: model.value === target ? text : __("{0}: {1}", target, text),
+    };
+  };
   benchBusy.value = true;
   benchNotice.value = null;
   try {
-    bench.value = (await call(`${API}.${method}`, args)) as Bench;
-    benchNotice.value = { ok: true, text: done };
+    await call(`${API}.${method}`, args);
+    say(true, done);
     return true;
   } catch (err) {
-    benchNotice.value = { ok: false, text: errorText(err, __("Not saved")) };
+    say(false, errorText(err, __("Not saved")));
     return false;
   } finally {
+    // the buttons wait for the panel read after the write
+    await load();
     benchBusy.value = false;
   }
 }
@@ -2611,6 +2657,8 @@ async function bringReport(event: Event) {
   const file = input.files?.[0];
   input.value = "";
   if (!file) return;
+  // the scores go to the model shown when the file was picked, never one chosen while it is read
+  const target = model.value;
   benchNotice.value = null;
   let data: unknown;
   try {
@@ -2622,8 +2670,17 @@ async function bringReport(event: Event) {
     };
     return;
   }
+  if (model.value !== target) {
+    benchNotice.value = {
+      ok: false,
+      text: __(
+        "Another model was chosen while the file was read, so nothing was brought in. Bring the report in again."
+      ),
+    };
+    return;
+  }
   const fileDate = new Date(file.lastModified).toISOString().slice(0, 10);
-  const report = readReport(data, model.value, fileDate);
+  const report = readReport(data, target, fileDate);
   if (typeof report === "string" || !report.cases.length) {
     benchNotice.value = {
       ok: false,
@@ -2637,7 +2694,7 @@ async function bringReport(event: Event) {
   benchCall(
     "import_eval",
     {
-      model: model.value,
+      model: target,
       report: JSON.stringify(report.cases),
       ran_on: report.ranOn,
     },
@@ -2669,17 +2726,18 @@ function removePublic(name: string) {
 
 // --- providers and the model list ----------------------------------------------------------
 
-// a remove asks for a second click within 5 seconds
+// a remove asks for a second click on the same row within 5 seconds; the key names the kind of
+// record too ("provider:x", "model:x"), as a model and a provider can share a name
 const confirming = ref("");
-function askTwice(name: string) {
-  if (confirming.value === name) {
+let confirmTimer: ReturnType<typeof setTimeout> | undefined;
+function askTwice(key: string) {
+  clearTimeout(confirmTimer);
+  if (confirming.value === key) {
     confirming.value = "";
     return true;
   }
-  confirming.value = name;
-  setTimeout(() => {
-    if (confirming.value === name) confirming.value = "";
-  }, 5000);
+  confirming.value = key;
+  confirmTimer = setTimeout(() => (confirming.value = ""), 5000);
   return false;
 }
 function keyLabel(p: Provider) {
@@ -2833,7 +2891,7 @@ async function testProvider(name: string) {
   }
 }
 async function removeProvider(name: string) {
-  if (!askTwice(name)) return;
+  if (!askTwice(`provider:${name}`)) return;
   provNotice.value = null;
   try {
     await call(`${API}.remove_provider`, { name });
@@ -2943,7 +3001,7 @@ async function saveModel(values: Record<string, unknown>) {
   }
 }
 async function removeModel(name: string) {
-  if (!askTwice(name)) return;
+  if (!askTwice(`model:${name}`)) return;
   listNotice.value = null;
   try {
     await call(`${API}.remove_model`, { model: name });
@@ -2978,13 +3036,25 @@ function usedByLine(u: UsedBy) {
     .join("; ");
 }
 
+// a refresh fills only the fields nobody changed since the last one: a draft being typed stays
+function refill<T extends object>(
+  form: T,
+  before: Partial<T> | null,
+  now: Partial<T>
+) {
+  for (const field of Object.keys(now) as (keyof T)[]) {
+    if (!before || String(form[field]) === String(before[field]))
+      form[field] = now[field] as T[keyof T];
+  }
+}
+
 const alertForm = reactive({ error_rate: 0, fallback_rate: 0 });
 const alertBusy = ref(false);
 const alertNotice = ref<{ ok: boolean; text: string } | null>(null);
 watch(
   () => settings.value?.alerts,
-  (limits) => {
-    if (limits) Object.assign(alertForm, limits);
+  (limits, old) => {
+    if (limits) refill(alertForm, old || null, limits);
   }
 );
 function limitText(limit: number) {
@@ -3020,18 +3090,18 @@ const gw = reactive({
   forAll: false,
 });
 const gwBusy = ref(false);
+// the gateway's own results, shown in its card
+const gwNotice = ref<{ ok: boolean; text: string } | null>(null);
+// the typed keys are never read back: they stay until saved, so a refused save can be corrected
 watch(
   () => settings.value?.gateway,
-  (g) => {
+  (g, old) => {
     if (g)
-      Object.assign(gw, {
-        url: g.url,
-        key: "",
-        on: g.on,
-        callKey: "",
-        adminKey: "",
-        forAll: g.for_all,
-      });
+      refill(
+        gw,
+        old ? { url: old.url, on: old.on, forAll: old.for_all } : null,
+        { url: g.url, on: g.on, forAll: g.for_all }
+      );
   }
 );
 async function gatewayCall(
@@ -3040,24 +3110,26 @@ async function gatewayCall(
   done: string
 ) {
   gwBusy.value = true;
-  notice.value = null;
+  gwNotice.value = null;
   try {
     const r = (await call(`${API}.${method}`, args)) as {
       ok?: boolean;
       note?: string;
     };
-    notice.value = {
+    gwNotice.value = {
       ok: r.ok !== false,
       text: r.note ? __("AI gateway: {0}", r.note) : done,
     };
+    return true;
   } catch (err) {
-    notice.value = { ok: false, text: errorText(err, __("Not saved")) };
+    gwNotice.value = { ok: false, text: errorText(err, __("Not saved")) };
+    return false;
   } finally {
     gwBusy.value = false;
     load();
   }
 }
-function saveGateway() {
+async function saveGateway() {
   const values: Record<string, unknown> = {
     url: gw.url,
     on: gw.on ? 1 : 0,
@@ -3066,11 +3138,12 @@ function saveGateway() {
   if (gw.key) values.key = gw.key;
   if (gw.callKey) values.call_key = gw.callKey;
   if (gw.adminKey) values.admin_key = gw.adminKey;
-  gatewayCall(
+  const ok = await gatewayCall(
     "save_gateway",
     { values: JSON.stringify(values) },
     __("AI gateway saved.")
   );
+  if (ok) Object.assign(gw, { key: "", callKey: "", adminKey: "" });
 }
 function readGateway() {
   gatewayCall("sync_gateway", {}, __("Read."));
@@ -3085,12 +3158,12 @@ const usageLine = computed(() => {
 });
 async function writeAll() {
   gwBusy.value = true;
-  notice.value = null;
+  gwNotice.value = null;
   try {
     const r = (await call(`${API}.write_all_to_gateway`)) as Settings & {
       written: { keys: number; models: number };
     };
-    notice.value = {
+    gwNotice.value = {
       ok: true,
       text: __(
         "Written to the gateway: {0} keys and {1} models.",
@@ -3099,7 +3172,7 @@ async function writeAll() {
       ),
     };
   } catch (err) {
-    notice.value = { ok: false, text: errorText(err, __("Not written")) };
+    gwNotice.value = { ok: false, text: errorText(err, __("Not written")) };
   } finally {
     gwBusy.value = false;
     load();

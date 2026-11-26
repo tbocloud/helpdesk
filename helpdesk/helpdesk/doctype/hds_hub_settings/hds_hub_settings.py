@@ -1,12 +1,25 @@
 # Copyright (c) 2026, Quark Cyber Systems FZC and contributors
 # For license information, please see license.txt
 
+from urllib.parse import urlsplit
+
 import frappe
 from frappe import _
 from frappe.model.document import Document
 
 # the base URLs an AI key is sent to
 KEYED_URL_FIELDS = ("ai_base_url", "openai_base_url", "gateway_url")
+LOCAL_HOSTS = ("localhost", "127.0.0.1")
+
+
+def on_this_machine(url: str) -> bool:
+    """An http:// address whose host is this machine: the host itself, not one that starts
+    with its name (http://localhost.example.com is another machine)."""
+    try:
+        parts = urlsplit(url)
+        return parts.scheme == "http" and parts.hostname in LOCAL_HOSTS
+    except ValueError:  # a malformed address, such as an unclosed [
+        return False
 
 
 class HDSHubSettings(Document):
@@ -32,9 +45,7 @@ class HDSHubSettings(Document):
         for fieldname in KEYED_URL_FIELDS:
             value = (self.get(fieldname) or "").strip().rstrip("/")
             # plain http only to this machine, for a local test gateway
-            local = fieldname == "gateway_url" and value.startswith(
-                ("http://localhost", "http://127.0.0.1")
-            )
+            local = fieldname == "gateway_url" and on_this_machine(value)
             if value and not value.startswith("https://") and not local:
                 frappe.throw(
                     _(
