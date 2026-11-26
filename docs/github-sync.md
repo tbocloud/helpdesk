@@ -15,6 +15,8 @@ independent things happen:
    rules. Other events, and other repositories, are logged as Ignored.
 2. **Merge bot trigger** (`helpdesk/merge_bot.py`), described below.
 
+Each HD Pull Request also keeps the pull request's head commit, base branch and, once merged, its merge commit. After a pull-request delivery or a finished workflow run, the sync tells Copilot (`helpdesk.copilot.fixes`), which follows the pull requests of its fix tasks: it holds them with the `no-auto-merge` label until one person approves them on the ticket, then merges them itself (`docs/tbo-copilot.md`, The fix). A Copilot failure there is logged and never fails the delivery.
+
 ## Merge bot trigger
 
 The org-wide merge bot, `tbocloud/ai-review` → `.github/workflows/merge-bot.yml`, merges

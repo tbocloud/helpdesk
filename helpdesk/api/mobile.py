@@ -587,6 +587,8 @@ def _task_shape(t: dict, today: str) -> dict:
         "project": t.get("project"),
         "project_name": t.get("project_name"),
         "customer": t.get("customer"),
+        # the ticket the task came from, for the desktop's task chat (Phase 23, C12)
+        "hd_ticket": t.get("hd_ticket"),
         "status": status,
         "group": _task_group(status, t.get("is_overdue"), t.get("deadline"), today),
         "exp_end_date": t.get("deadline"),

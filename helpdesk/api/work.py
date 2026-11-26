@@ -925,6 +925,16 @@ def get_ticket_linked_work(ticket: str | int) -> list[dict]:
     return items
 
 
+def _made_by_the_hub() -> bool:
+    """The automation user's own work, or Administrator in a job or test (no person's web request)."""
+    from helpdesk.automation import automation_user
+
+    user = frappe.session.user
+    if user == "Administrator" and getattr(frappe.local, "request", None) is not None:
+        return False  # a person signed in as Administrator
+    return user == automation_user()
+
+
 @frappe.whitelist()
 @agent_only
 def create_task_from_ticket(
@@ -936,10 +946,13 @@ def create_task_from_ticket(
     due_date: str | None = None,
     is_key: bool = False,
     estimated_hours: float | str | None = None,
+    pause_ticket: bool = True,
 ) -> dict:
     """Turn a ticket that needs project work into a task; the ticket waits until it's done.
 
     An approved customization estimate fills in the due date and hours when they aren't given.
+    With pause_ticket off the ticket stays as it is, so its SLA keeps running while
+    the task is worked on (Copilot runs track their own progress on the ticket).
     """
     from helpdesk.tasky.api import (
         _assign_user,
@@ -974,7 +987,10 @@ def create_task_from_ticket(
     if ticket_doc.get("custom_estimate_status") == "Approved":
         due_date = due_date or ticket_doc.get("custom_agreed_delivery")
         estimated_hours = estimated_hours or ticket_doc.get("custom_estimate_hours")
-    require_due_or_estimate(due_date, estimated_hours)
+    # the rule is for tasks a person creates; the hub's own (a Copilot hand-over or fix task, made as
+    # the automation user) are dated by the AI below, like the other tasks the hub makes itself
+    if not _made_by_the_hub():
+        require_due_or_estimate(due_date, estimated_hours)
     task = frappe.get_doc(
         {
             "doctype": "Task",
@@ -1001,7 +1017,7 @@ def create_task_from_ticket(
     _estimate_if_undated(task)
     task.reload()
 
-    if frappe.db.exists("HD Ticket Status", WAITING_ON_TASK):
+    if pause_ticket and frappe.db.exists("HD Ticket Status", WAITING_ON_TASK):
         ticket_doc.status = WAITING_ON_TASK
         ticket_doc.save()
     frappe.get_doc(

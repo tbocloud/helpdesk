@@ -1,0 +1,160 @@
+# Copyright (c) 2026, Quark Cyber Systems FZC and contributors
+# For license information, please see license.txt
+
+"""Press for agents and the desktop app (Phase 18): the reads, a backup now, and the actions
+that wait for an approval card (helpdesk.copilot.press_tools). Every caller is a signed-in
+agent; what Press is asked is logged, and the key never leaves the hub."""
+
+import json
+
+import frappe
+from frappe import _
+
+from helpdesk.copilot import actions, press_tools
+from helpdesk.utils import agent_only
+
+VIA = "Desktop"
+
+
+def _extra(value) -> dict:
+    if isinstance(value, str):
+        try:
+            value = json.loads(value) if value.strip() else {}
+        except ValueError:
+            frappe.throw(_("extra must be JSON."))
+    return value or {}
+
+
+@frappe.whitelist()
+@agent_only
+def sites(query: str = "", status: str = "") -> list[dict]:
+    return press_tools.list_sites(status=status or None, query=query)
+
+
+@frappe.whitelist()
+@agent_only
+def site_status(site: str) -> dict:
+    return press_tools.site_status(site)
+
+
+@frappe.whitelist()
+@agent_only
+def jobs(site: str = "", bench: str = "", limit: int = 10) -> list[dict]:
+    return press_tools.jobs(site=site or None, bench=bench or None, limit=limit)
+
+
+@frappe.whitelist()
+@agent_only
+def job(name: str) -> dict:
+    return press_tools.job(name)
+
+
+@frappe.whitelist()
+@agent_only
+def failed_jobs(hours: int = 24) -> list[dict]:
+    return press_tools.failed_jobs(hours)
+
+
+@frappe.whitelist()
+@agent_only
+def benches() -> list[dict]:
+    return press_tools.list_benches()
+
+
+@frappe.whitelist()
+@agent_only
+def deploy_history(group: str, limit: int = 10) -> list[dict]:
+    return press_tools.deploy_history(group, limit)
+
+
+@frappe.whitelist()
+@agent_only
+def servers() -> list[dict]:
+    return press_tools.list_servers()
+
+
+@frappe.whitelist()
+@agent_only
+def logs(site: str, log: str = "") -> dict:
+    if log:
+        return {"site": site, "log": log, "text": press_tools.site_log(site, log)}
+    return {"site": site, "logs": press_tools.site_logs(site)}
+
+
+BACKUP_LOCK_SECONDS = 120  # two asks this close together are one backup
+
+
+@frappe.whitelist(methods=["POST"])
+@agent_only
+def backup(site: str, ticket: str | None = None) -> dict:
+    """A backup now: runs, logged, no approval. One per site at a time: a backup Press is still
+    running, or one asked for a moment ago, is answered with its job, never started twice."""
+    rule = press_tools.spec("backup")
+    cache = frappe.cache()
+    lock = cache.make_key(f"copilot:press-backup:{site}")
+    if not cache.set(
+        lock, 1, ex=BACKUP_LOCK_SECONDS, nx=True
+    ):  # the site's own key - nosemgrep
+        job = press_tools.latest_job(rule, site)
+        return {
+            "text": _("A backup of {0} was asked for a moment ago.").format(site),
+            "job": job,
+        }
+    try:
+        job = press_tools.latest_job(rule, site)
+        if job and job.get("status") in ("Pending", "Running"):
+            return {
+                "text": _("A backup of {0} is already running.").format(site),
+                "job": job,
+            }
+        # answered once Press took it: a hub worker is not held for minutes per backup (C5)
+        done = press_tools.run(
+            "backup", site, frappe.session.user, VIA, ticket=ticket or None, wait=False
+        )
+        return {"text": done["text"], "job": done.get("job")}
+    except Exception:
+        cache.delete(lock)  # nothing started: the next ask may try
+        raise
+
+
+@frappe.whitelist(methods=["POST"])
+@agent_only
+def request_action(
+    action: str,
+    target: str,
+    extra: dict | list | str | None = None,
+    ticket: str | None = None,
+) -> dict:
+    """An approval-level action: the card goes to an approver; the hub runs it after Approve and
+    tells the caller. The same ask twice returns the live request."""
+    rule = press_tools.spec(action)
+    if rule["level"] != press_tools.APPROVAL:
+        frappe.throw(
+            _("{0} needs no approval; call backup or the reads instead.").format(action)
+        )
+    asked = press_tools.run(
+        action,
+        target,
+        frappe.session.user,
+        VIA,
+        extra=_extra(extra),
+        ticket=ticket or None,
+    )
+    return actions.as_dict(frappe.get_doc(actions.ACTION, asked["approval"]))
+
+
+@frappe.whitelist()
+@agent_only
+def actions_table() -> dict:
+    """What Copilot may do on Press, by level, so the desktop app can show and refuse the same."""
+    return {
+        "actions": {
+            name: {
+                "level": rule["level"],
+                "target": rule["target"],
+                "risk": rule.get("risk"),
+            }
+            for name, rule in press_tools.ACTIONS.items()
+        },
+        "never": list(press_tools.NEVER),
+    }

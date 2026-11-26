@@ -1,0 +1,801 @@
+# Copyright (c) 2026, Quark Cyber Systems FZC and contributors
+# For license information, please see license.txt
+
+"""HDS Copilot Run: one run per ticket at a time, moved through a fixed set of states.
+
+A run is queued when a Copilot-enabled customer's ticket arrives (or an agent
+presses Start Copilot), claimed by a worker under a lease, and moved on by the
+router once the worker reports. Every change of state writes an HDS Copilot
+Event, updates the ticket's Copilot fields and tells open ticket pages.
+"""
+
+import hashlib
+import json
+import re
+
+import frappe
+from frappe import _
+from frappe.utils import add_to_date, get_datetime, now_datetime
+
+from helpdesk.copilot import settings as copilot_settings
+from helpdesk.copilot.registry import apps_for, registry_for_ticket
+from helpdesk.utils import get_doc_room, publish_event
+
+REALTIME_EVENT = "helpdesk:copilot-run"
+MAX_PAYLOAD_BYTES = 16 * 1024
+
+# who moves a run: the worker holding the lease, the hub itself, an agent, the customer
+WORKER, SYSTEM, AGENT, CUSTOMER = "worker", "system", "agent", "customer"
+# events only the hub writes, and reads back with a meaning: a stage is sent to the customer's site,
+# a state change and a review are the run's record (see worker_event_type)
+HUB_EVENTS = frozenset(
+    {
+        "stage",
+        "state_change",
+        "review",
+        "pull_request_ignored",
+        "hand_over_skipped",
+    }
+)
+
+# nobody waits on Copilot in these states, so a new run may start for the ticket
+SETTLED_STATES = (
+    "Answered",
+    "Closed",
+    "Failed",
+    "Cancelled",
+    "Escalated",
+    "Handed Over",
+)
+FINISHED_STATES = ("Closed", "Failed", "Cancelled")
+
+TRANSITIONS = {
+    ("Queued", "Investigating"): {WORKER},
+    ("Investigating", "Queued"): {SYSTEM},
+    ("Investigating", "Failed"): {WORKER, SYSTEM},
+    ("Investigating", "Explaining"): {SYSTEM},
+    ("Investigating", "Preparing Fix"): {SYSTEM},
+    ("Investigating", "Handed Over"): {SYSTEM},
+    ("Explaining", "Answered"): {SYSTEM, AGENT},
+    # an approved customization: a person starts Copilot's build (helpdesk.copilot.fixes.request_build)
+    ("Explaining", "Preparing Fix"): {AGENT},
+    ("Answered", "Preparing Fix"): {AGENT},
+    ("Answered", "Closed"): {CUSTOMER, AGENT, SYSTEM},
+    ("Answered", "Escalated"): {CUSTOMER, AGENT},
+    ("Preparing Fix", "Escalated"): {CUSTOMER, AGENT},
+    ("Preparing Fix", "Closed"): {CUSTOMER, AGENT, SYSTEM},
+    ("Handed Over", "Escalated"): {CUSTOMER, AGENT},
+    ("Handed Over", "Closed"): {CUSTOMER, AGENT, SYSTEM},
+    ("Escalated", "Closed"): {CUSTOMER, AGENT, SYSTEM},
+    # the fix (helpdesk.copilot.fixes and approvals): one approval per head commit, then the merge
+    ("Preparing Fix", "Awaiting Approval"): {SYSTEM},
+    ("Awaiting Approval", "Approved"): {AGENT},
+    ("Awaiting Approval", "Preparing Fix"): {SYSTEM, AGENT},
+    ("Approved", "Awaiting Approval"): {SYSTEM},
+    ("Approved", "Preparing Fix"): {SYSTEM, AGENT},
+    ("Approved", "Merged"): {SYSTEM},
+    # merged on GitHub before (or without) the approval: recorded, and the managers told
+    ("Awaiting Approval", "Merged"): {SYSTEM},
+    ("Preparing Fix", "Merged"): {SYSTEM},
+    # an engineer deployed it (by hand, until Phase 2); the customer then confirms or reopens
+    ("Merged", "Resolved"): {AGENT},
+    ("Resolved", "Closed"): {CUSTOMER, AGENT, SYSTEM},
+    ("Resolved", "Escalated"): {CUSTOMER, AGENT},
+    # deployed through Press (helpdesk.copilot.deploy and verify): updated, checked, or escalated
+    ("Merged", "Deploying"): {SYSTEM},
+    ("Deploying", "Verifying"): {SYSTEM},
+    ("Verifying", "Resolved"): {SYSTEM},
+    ("Merged", "Escalated"): {SYSTEM},
+    ("Deploying", "Escalated"): {SYSTEM},
+    ("Verifying", "Escalated"): {SYSTEM},
+    # a correction (helpdesk.copilot.changes): applied after a senior's approval, or stopped
+    ("Approved", "Applying"): {SYSTEM},
+    ("Applying", "Resolved"): {SYSTEM},
+    ("Applying", "Escalated"): {SYSTEM},
+    # code and data together: the data is corrected once the code is live
+    ("Verifying", "Applying"): {SYSTEM},
+    ("Merged", "Applying"): {AGENT},
+}
+# Copilot on an infrastructure alert (Phase 25, helpdesk.copilot.infra): its proposal waits for a
+# person's approval in HDS Action Approval, runs, and is checked by the watcher's next look
+INFRA = "infra"
+INFRA_TRANSITIONS = {
+    # the same start as every run: claimed, re-queued when its lease lapses, or failed
+    ("Queued", "Investigating"): {WORKER},
+    ("Investigating", "Queued"): {SYSTEM},
+    ("Investigating", "Failed"): {WORKER, SYSTEM},
+    ("Investigating", "Awaiting Approval"): {SYSTEM},
+    ("Investigating", "Handed Over"): {SYSTEM},
+    ("Investigating", "Closed"): {SYSTEM},
+    # a second alert joins a request for the same action that is approved, or has just run
+    # (testing fixes 5): it waits for that action's result, or straight for the watcher
+    ("Investigating", "Approved"): {SYSTEM},
+    ("Investigating", "Verifying"): {SYSTEM},
+    ("Awaiting Approval", "Approved"): {AGENT},
+    ("Awaiting Approval", "Handed Over"): {SYSTEM},
+    ("Awaiting Approval", "Closed"): {SYSTEM},
+    ("Approved", "Verifying"): {SYSTEM},
+    ("Approved", "Escalated"): {SYSTEM},
+    ("Approved", "Closed"): {SYSTEM},
+    ("Verifying", "Resolved"): {SYSTEM},
+    ("Verifying", "Escalated"): {SYSTEM},
+    ("Resolved", "Closed"): {SYSTEM},
+    ("Handed Over", "Closed"): {SYSTEM},
+    ("Escalated", "Closed"): {SYSTEM},
+}
+# a run reaching one of these is news for the people on its fix (the staff assistant)
+NEWS_STATES = ("Merged", "Resolved", "Closed", "Escalated", "Failed")
+
+CANCELLABLE = (
+    "Queued",
+    "Investigating",
+    "Explaining",
+    "Answered",
+    "Preparing Fix",
+    "Handed Over",
+    "Awaiting Approval",
+    "Approved",
+)
+
+# the stage the customer sees when a run enters a state; the router sets the others
+STAGE_FOR_STATE = {
+    "Investigating": "Working on it",
+    "Explaining": "Working on it",
+    "Preparing Fix": "Working on it",
+    "Handed Over": "With our team",
+    "Escalated": "With our team",
+    "Failed": "With our team",
+}
+
+
+def active_run(ticket: str):
+    """The run of a ticket that Copilot is still working on, if any."""
+    name = frappe.db.get_value(
+        "HDS Copilot Run",
+        {"ticket": ticket, "state": ["not in", SETTLED_STATES]},
+        "name",
+    )
+    return frappe.get_doc("HDS Copilot Run", name) if name else None
+
+
+COMMIT_RE = re.compile(r"^[0-9a-f]{7,40}$")
+APP_RE = re.compile(r"^[A-Za-z0-9_.-]{1,140}$")
+
+
+def clean_base(
+    base_app: str | None, base_commit: str | None
+) -> tuple[str | None, str | None]:
+    """The app and commit a run should read instead of the deployed code, checked; (None, None) if not given."""
+    base_app, base_commit = (base_app or "").strip() or None, (
+        base_commit or ""
+    ).strip().lower() or None
+    if base_commit and not COMMIT_RE.match(base_commit):
+        frappe.throw(_("The base commit must be 7 to 40 hexadecimal characters."))
+    if base_app and not APP_RE.match(base_app):
+        frappe.throw(_("The base app must be an app name such as service_pro."))
+    if base_app and not base_commit:
+        frappe.throw(_("A base app needs a base commit."))
+    return base_app, base_commit
+
+
+def start_run(
+    ticket: str,
+    kind: str = "investigate",
+    actor: str = SYSTEM,
+    base_commit: str | None = None,
+    base_app: str | None = None,
+):
+    """Queues a run for a ticket; when one is already active, that one is returned instead.
+
+    `base_app` and `base_commit` make the worker read that app at that commit
+    instead of the deployed code (evaluation runs). A run for a customer below the
+    Explain level (or in shadow mode) is a shadow run, and stays one whatever the
+    settings say later.
+    """
+    from helpdesk.content_sync import get_client_connection
+
+    base_app, base_commit = clean_base(base_app, base_commit)
+    existing = active_run(ticket)
+    if existing:
+        return existing
+    info = frappe.db.get_value(
+        "HD Ticket", ticket, ["customer", "custom_qcs_connection"], as_dict=True
+    )
+    registry = registry_for_ticket(ticket)
+    run = frappe.get_doc(
+        {
+            "doctype": "HDS Copilot Run",
+            "ticket": ticket,
+            "customer": info.customer,
+            "connection": info.custom_qcs_connection
+            or get_client_connection(info.customer),
+            "registry": registry.name if registry else None,
+            "kind": kind,
+            "state": "Queued",
+            "shadow": int(
+                not copilot_settings.allows(info.customer, copilot_settings.EXPLAIN)
+            ),
+            "base_app": base_app,
+            "base_commit": base_commit,
+            "queued_at": now_datetime(),
+        }
+    ).insert(ignore_permissions=True)
+    add_event(run, "state_change", {"from": None, "to": "Queued"}, actor)
+    update_ticket(run)
+    if kind == "investigate":
+        send_stage(
+            run, "Received"
+        )  # a follow-up keeps "Waiting for you" until a worker picks it up
+    publish_run(run)
+    return run
+
+
+def on_ticket_insert(doc, method=None):
+    """after_insert hook: a new ticket of a Copilot-enabled customer gets a run (not one
+    the error watch raised for a fix that only has to reach the site)."""
+    if (
+        not doc.customer
+        or not copilot_settings.is_enabled()
+        or doc.flags.get("no_copilot_run")
+    ):
+        return
+    if not frappe.db.get_value("HD Customer", doc.customer, "custom_copilot_enabled"):
+        return
+    try:
+        start_run(doc.name)
+    except Exception:
+        frappe.log_error(
+            title=f"Copilot run not started for {doc.name}",
+            message=frappe.get_traceback(),
+        )
+
+
+def transition(run, to: str, actor: str, note: str = "", **fields):
+    """Moves a run to `to` under a row lock; refused unless TRANSITIONS allows it for `actor`."""
+    name = run if isinstance(run, str) else run.name
+    frappe.db.get_value("HDS Copilot Run", name, "state", for_update=True)
+    return _move(frappe.get_doc("HDS Copilot Run", name), to, actor, note, **fields)
+
+
+def _move(doc, to: str, actor: str, note: str = "", **fields):
+    infra = doc.get("kind") == INFRA
+    table = INFRA_TRANSITIONS if infra else TRANSITIONS
+    allowed = table.get((doc.state, to), set())
+    cancel = to == "Cancelled" and actor in (AGENT, SYSTEM) and doc.state in CANCELLABLE
+    if actor not in allowed and not cancel:
+        frappe.throw(
+            _("A Copilot run cannot go from {0} to {1} ({2})").format(
+                doc.state, to, actor
+            )
+        )
+    previous = doc.state
+    doc.state = to
+    doc.update(fields)
+    if previous == "Investigating" and to not in ("Investigating", "Cancelled"):
+        # the lease ends with the work; a cancelled run keeps it so the worker hears "cancel"
+        doc.lease_token_hash = None
+        doc.lease_expires = None
+    if to in FINISHED_STATES:
+        doc.finished_at = now_datetime()
+    doc.save(ignore_permissions=True)
+    add_event(doc, "state_change", {"from": previous, "to": to, "note": note}, actor)
+    update_ticket(doc)
+    if not infra:
+        # an infrastructure run tells its own steps (helpdesk.copilot.infra), never a customer
+        from helpdesk.copilot import thread
+
+        # the step as one plain message in the ticket's chat; the news ones reach the people on
+        # the ticket in Teams or their Copilot panel (Phase 11, helpdesk.copilot.thread)
+        thread.on_state(doc, previous, to, note)
+        if STAGE_FOR_STATE.get(to):
+            send_stage(doc, STAGE_FOR_STATE[to])
+    publish_run(doc)
+    return doc
+
+
+def worker_event_type(event_type: str) -> str:
+    """The name an event the worker sends is kept under: one the hub reads with a meaning (a stage
+    goes on to the customer's site) becomes `worker_<name>`, so the worker never speaks for the hub.
+    For the worker's own endpoints only; the hub's own events (a move the worker made, its state
+    change) are written by the hub."""
+    event_type = str(event_type or "note")
+    return f"worker_{event_type}" if event_type in HUB_EVENTS else event_type
+
+
+def add_event(
+    run,
+    event_type: str,
+    payload: dict | None = None,
+    actor: str = SYSTEM,
+    seq: int | None = None,
+) -> bool:
+    """Writes an event; a worker's `seq` makes it idempotent (a repeat is ignored and returns False)."""
+    name = run if isinstance(run, str) else run.name
+    key = (
+        f"{name}:w:{seq}"
+        if seq is not None
+        else f"{name}:h:{frappe.generate_hash(length=10)}"
+    )
+    if seq is not None and frappe.db.exists("HDS Copilot Event", {"event_key": key}):
+        return False
+    text = json.dumps(payload or {}, default=str)
+    truncated = len(text.encode()) > MAX_PAYLOAD_BYTES
+    if truncated:
+        text = json.dumps({"_truncated": True, "text": text[: MAX_PAYLOAD_BYTES - 64]})
+    frappe.db.savepoint("copilot_event")
+    try:
+        frappe.get_doc(
+            {
+                "doctype": "HDS Copilot Event",
+                "run": name,
+                "seq": seq or 0,
+                "event_key": key,
+                "event_type": event_type[:140],
+                "actor": actor,
+                "payload": text,
+                "truncated": int(truncated),
+            }
+        ).insert(ignore_permissions=True)
+    except (frappe.UniqueValidationError, frappe.DuplicateEntryError):
+        frappe.db.rollback(save_point="copilot_event")
+        return False
+    return True
+
+
+def _hash(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def lease_minutes() -> int:
+    return copilot_settings.get_settings().lease_minutes or 5
+
+
+# a fix job's lease outlives Preparing Fix when the pull request is followed before the worker reports
+FIX_LEASE_STATES = ("Preparing Fix", "Awaiting Approval", "Approved")
+
+
+def fixing(run) -> bool:
+    """Whether the run's lease is a fix job's (Copilot writes the fix) rather than the investigation's."""
+    return run.get("fix_status") == "Working" and run.state in FIX_LEASE_STATES
+
+
+def claim(worker_id: str, capabilities: str = "", run: str | None = None):
+    """Hands the oldest queued run (or `run`, when it is queued) to a worker for the lease time.
+
+    (None, None) when there is nothing to hand out. Naming the run lets an
+    evaluation work on exactly the runs it started. A worker that can fix
+    (`fix` among its capabilities) gets a fix job when no investigation waits.
+    """
+    filters = {"state": "Queued"}
+    if run:
+        filters["name"] = run
+    if INFRA not in re.split(r"[\s,]+", (capabilities or "").lower()):
+        # only a worker that says it can investigate infrastructure gets an alert (Phase 25)
+        filters["kind"] = ["!=", INFRA]
+    candidates = frappe.get_all(
+        "HDS Copilot Run",
+        filters=filters,
+        order_by="queued_at asc, creation asc",
+        limit=5,
+        pluck="name",
+    )
+    for name in candidates:
+        if (
+            frappe.db.get_value("HDS Copilot Run", name, "state", for_update=True)
+            != "Queued"
+        ):
+            continue  # another worker got it first
+        token = frappe.generate_hash(length=32)
+        doc = _move(
+            frappe.get_doc("HDS Copilot Run", name),
+            "Investigating",
+            WORKER,
+            note=f"claimed by {worker_id}",
+            worker_id=worker_id,
+            worker_user=frappe.session.user,
+            lease_token_hash=_hash(token),
+            lease_expires=add_to_date(now_datetime(), minutes=lease_minutes()),
+            claimed_at=now_datetime(),
+        )
+        add_event(
+            doc,
+            "lease",
+            {
+                "worker_id": worker_id,
+                "capabilities": capabilities,
+                "expires": str(doc.lease_expires),
+            },
+            WORKER,
+        )
+        return doc, token
+    if "fix" in re.split(r"[\s,]+", (capabilities or "").lower()):
+        return claim_fix(worker_id, run)
+    return None, None
+
+
+def claim_fix(worker_id: str, run: str | None = None):
+    """Hands the oldest queued fix job (or `run`'s) to a worker; the run stays where it is, with a lease."""
+    filters = {"state": "Preparing Fix", "fix_requested": 1, "fix_status": "Queued"}
+    if run:
+        filters["name"] = run
+    for name in frappe.get_all(
+        "HDS Copilot Run",
+        filters=filters,
+        order_by="modified asc",
+        limit=5,
+        pluck="name",
+    ):
+        if (
+            frappe.db.get_value("HDS Copilot Run", name, "fix_status", for_update=True)
+            != "Queued"
+        ):
+            continue  # another worker got it first
+        doc = frappe.get_doc("HDS Copilot Run", name)
+        token = frappe.generate_hash(length=32)
+        doc.db_set(
+            {
+                "fix_status": "Working",
+                "fix_attempts": (doc.fix_attempts or 0) + 1,
+                "worker_id": worker_id,
+                "worker_user": frappe.session.user,
+                "lease_token_hash": _hash(token),
+                "lease_expires": add_to_date(now_datetime(), minutes=lease_minutes()),
+            },
+            update_modified=False,
+        )
+        add_event(
+            doc,
+            "fix_lease",
+            {
+                "worker_id": worker_id,
+                "attempt": doc.fix_attempts,
+                "expires": str(doc.lease_expires),
+            },
+            WORKER,
+        )
+        publish_run(doc)
+        return doc, token
+    return None, None
+
+
+def check_lease(run, token: str):
+    """The run as a document when `token` is its live lease; PermissionError otherwise."""
+    doc = frappe.get_doc("HDS Copilot Run", run) if isinstance(run, str) else run
+    if not token or not doc.lease_token_hash or _hash(token) != doc.lease_token_hash:
+        frappe.throw(
+            _("This lease is not valid for run {0}").format(doc.name),
+            frappe.PermissionError,
+        )
+    if doc.state != "Investigating" and not fixing(doc):
+        frappe.throw(
+            _("Run {0} is {1}; the lease has ended").format(doc.name, doc.state),
+            frappe.PermissionError,
+        )
+    if get_datetime(doc.lease_expires) < now_datetime():
+        frappe.throw(
+            _("The lease on run {0} expired").format(doc.name), frappe.PermissionError
+        )
+    return doc
+
+
+def heartbeat(run: str, token: str) -> dict:
+    """Extends the lease; tells a worker whose run was cancelled to stop."""
+    doc = frappe.get_doc("HDS Copilot Run", run)
+    if (
+        doc.state == "Cancelled"
+        and doc.lease_token_hash
+        and _hash(token) == doc.lease_token_hash
+    ):
+        return {"ok": True, "action": "cancel"}
+    doc = check_lease(doc, token)
+    if not copilot_settings.is_enabled():
+        return switched_off(doc)
+    expires = add_to_date(now_datetime(), minutes=lease_minutes())
+    doc.db_set("lease_expires", expires, update_modified=False)
+    return {"ok": True, "action": "continue", "lease_expires": str(expires)}
+
+
+def switched_off(doc) -> dict:
+    """Copilot was switched off mid-run: the worker stops at once and a person takes the ticket."""
+    note = "Copilot was switched off in HDS Copilot Settings"
+    if fixing(doc):
+        doc.db_set(
+            {"fix_status": "Failed", "lease_token_hash": None, "lease_expires": None},
+            update_modified=False,
+        )
+        add_event(doc, "fix_stopped", {"reason": note}, SYSTEM)
+    elif doc.state in CANCELLABLE:
+        _move(doc, "Cancelled", SYSTEM, note=note)
+    return {"ok": True, "action": "cancel"}
+
+
+def expire_stale_leases():
+    """Cron: a run whose worker stopped reporting goes back to the queue, or fails after too many losses."""
+    limit = copilot_settings.get_settings().max_lease_losses or 3
+    stale = frappe.get_all(
+        "HDS Copilot Run",
+        filters={"state": "Investigating", "lease_expires": ["<", now_datetime()]},
+        pluck="name",
+    )
+    for name in stale:
+        frappe.db.get_value("HDS Copilot Run", name, "state", for_update=True)
+        doc = frappe.get_doc("HDS Copilot Run", name)
+        if (
+            doc.state != "Investigating"
+            or get_datetime(doc.lease_expires) >= now_datetime()
+        ):
+            continue  # a heartbeat or a result arrived meanwhile
+        losses = (doc.lease_losses or 0) + 1
+        if losses >= limit:
+            _move(
+                doc,
+                "Failed",
+                SYSTEM,
+                note="lease lost too often",
+                lease_losses=losses,
+                failure_reason=f"The worker stopped reporting {losses} times",
+            )
+            tell_people(
+                doc,
+                _("Copilot gave up on ticket {0}: the worker kept stopping").format(
+                    doc.ticket
+                ),
+            )
+        else:
+            _move(
+                doc,
+                "Queued",
+                SYSTEM,
+                note="lease expired",
+                lease_losses=losses,
+                worker_id=None,
+            )
+        frappe.db.commit()  # one run at a time; a failure on the next must not undo this - nosemgrep
+    _expire_fix_leases()
+
+
+def _expire_fix_leases():
+    """A fix job whose worker stopped reporting is tried again, or handed to the developer."""
+    from helpdesk.copilot import fixes
+
+    for name in frappe.get_all(
+        "HDS Copilot Run",
+        filters={"fix_status": "Working", "lease_expires": ["<", now_datetime()]},
+        pluck="name",
+    ):
+        frappe.db.get_value("HDS Copilot Run", name, "fix_status", for_update=True)
+        doc = frappe.get_doc("HDS Copilot Run", name)
+        if (
+            doc.fix_status != "Working"
+            or get_datetime(doc.lease_expires) >= now_datetime()
+        ):
+            continue  # a heartbeat or a report arrived meanwhile
+        fixes.fix_lease_lost(doc)
+        frappe.db.commit()  # one run at a time - nosemgrep
+
+
+def tell_people(run, subject: str):
+    """A reminder (and the chat channel): Copilot needs a person here: the customer's project
+    coordinators working today, else a Leader (Copilot People; with no Leader set, the Agent
+    Managers), so it never goes nowhere."""
+    from helpdesk.copilot import approvals, people
+    from helpdesk.work_reminders import notify_users
+
+    notify_users(
+        people.need_a_person(run.customer) or approvals.leaders(),
+        "HD Ticket",
+        run.ticket,
+        subject,
+        escalate=True,
+    )
+
+
+def send_stage(run, stage: str, context: dict | None = None) -> bool:
+    """The customer's stage, delivered by helpdesk.copilot.customer (imported late: it imports this module)."""
+    from helpdesk.copilot.customer import send_stage as deliver
+
+    return deliver(run, stage, context)
+
+
+def update_ticket(run, stage: str | None = None, root_cause: str | None = None):
+    """Mirrors the run on its ticket (latest run, stage, root cause) without touching `modified`."""
+    values = {"custom_copilot_run": run.name}
+    if stage:
+        values["custom_copilot_stage"] = stage
+    if root_cause:
+        values["custom_root_cause"] = root_cause
+    frappe.db.set_value("HD Ticket", run.ticket, values, update_modified=False)
+
+
+def publish_run(run):
+    # IDs only: the ticket room can be joined by anyone who knows the ticket number
+    publish_event(
+        REALTIME_EVENT,
+        room=get_doc_room("HD Ticket", run.ticket),
+        data={"ticket": run.ticket, "run": run.name},
+    )
+    from helpdesk.copilot import board
+
+    board.changed()  # open Copilot boards ask again, each with its own permissions
+
+
+def run_context(run) -> dict:
+    """What a worker gets with a claim: the ticket, its triage, the customer, the site, the conversation.
+
+    Never credentials: the worker reaches the customer site only through the hub.
+    """
+    if run.get("kind") == INFRA:
+        from helpdesk.copilot import infra
+
+        return infra.context(run)
+    ticket = frappe.get_doc("HD Ticket", run.ticket)
+    registry = (
+        frappe.get_doc("HDS Site Registry", run.registry) if run.registry else None
+    )
+    customer = (
+        frappe.db.get_value(
+            "HD Customer",
+            run.customer,
+            ["customer_name", "custom_copilot_enabled", "custom_assigned_developer"],
+            as_dict=True,
+        )
+        if run.customer
+        else None
+    )
+    from helpdesk.ai_engine import worker_models
+    from helpdesk.copilot import changes, fixes, known_issues, thread
+
+    return {
+        "run": run.name,
+        # each worker job's model per provider section, in order, with its price: no keys
+        "models": worker_models(),
+        "kind": "fix" if fixing(run) else run.kind,
+        "shadow": bool(run.shadow),
+        # an agent asked Copilot to prepare the correction of the customer's own mistake
+        "prepare_correction": bool(run.get("prepare_correction")),
+        # corrections on this ticket so far: a new look prepares only what they missed
+        "corrections": changes.earlier_corrections(run.ticket),
+        # what the investigation found, for the fix job (and for a follow-up run)
+        "diagnosis": {
+            "root_cause_category": run.root_cause_category,
+            "confidence": run.confidence,
+            "summary": run.summary,
+            "evidence": frappe.parse_json(run.evidence or "[]"),
+            "proposal": frappe.parse_json(run.proposal or "{}"),
+        }
+        if run.root_cause_category
+        else None,
+        "fix": fixes.fix_context(run) if fixing(run) else None,
+        # the pilot's per-run dollar cap for an investigation (a fix has its own in `fix`)
+        "limits": {
+            "max_usd": copilot_settings.get_settings().get("max_diagnosis_usd") or 0
+        },
+        # read this app at this commit instead of the deployed code (evaluation runs)
+        "base_app": run.base_app,
+        "base_commit": run.base_commit,
+        "ticket": {
+            "name": ticket.name,
+            "subject": ticket.subject,
+            "description": ticket.description,
+            "status": ticket.status,
+            "priority": ticket.priority,
+            "ticket_type": ticket.ticket_type,
+            "customer": ticket.customer,
+            "raised_by": ticket.raised_by,
+            "created": str(ticket.creation),
+            "root_cause": ticket.get("custom_root_cause"),
+        },
+        "triage": {
+            key: ticket.get(f"custom_triage_{key}")
+            for key in (
+                "status",
+                "category",
+                "priority",
+                "complexity",
+                "summary",
+                "recommended_track",
+            )
+        },
+        "customer": customer,
+        "site": {
+            "registry": registry.name,
+            "environment": registry.environment,
+            "site_url": registry.site_url,
+            "apps": apps_for(registry),
+            # when the commits were last read from the site (the claim reads them again when it can)
+            "apps_read_at": str(registry.last_synced or ""),
+            # an error logged before the latest deploy may be fixed already
+            "deploys": last_deploys(registry.name),
+        }
+        if registry
+        else None,
+        "connection": run.connection,
+        "conversation": _conversation(ticket.name),
+        "files": frappe.get_all(
+            "File",
+            filters={
+                "attached_to_doctype": "HD Ticket",
+                "attached_to_name": ticket.name,
+            },
+            fields=["file_name", "file_url", "is_private", "file_size"],
+        ),
+        "previous_runs": frappe.get_all(
+            "HDS Copilot Run",
+            filters={"ticket": ticket.name, "name": ["!=", run.name]},
+            fields=["name", "state", "root_cause_category", "summary"],
+            order_by="creation asc",
+        ),
+        # what Copilot remembers about this ticket's and this site's errors (Phase 9)
+        "known_issues": known_issues.for_run(run),
+        # the ticket's chat: its summary and what people told Copilot to do (Phase 11)
+        "ticket_chat": thread.for_worker(ticket.name),
+        "raised_by_copilot": ticket.get("custom_copilot_source") or "",
+    }
+
+
+def last_deploys(registry: str, limit: int = 5) -> list[dict]:
+    """The site's latest deploys through TBO Support, newest first: when, and each app's commit."""
+    requests = frappe.get_all(
+        "HDS Deploy Site",
+        filters={"registry": registry, "parenttype": "HDS Deploy Request"},
+        pluck="parent",
+    )
+    done = frappe.get_all(
+        "HDS Deploy Request",
+        filters={"name": ["in", requests or [""]], "status": "Succeeded"},
+        fields=["name", "finished_at"],
+        order_by="finished_at desc",
+        limit=limit,
+    )
+    return [
+        {
+            "finished_at": str(request.finished_at or ""),
+            "apps": [
+                {"app": app.app, "commit": (app.to_commit or "")[:12]}
+                for app in frappe.get_all(
+                    "HDS Deploy App",
+                    filters={
+                        "parent": request.name,
+                        "parenttype": "HDS Deploy Request",
+                    },
+                    fields=["app", "to_commit"],
+                )
+            ],
+        }
+        for request in done
+    ]
+
+
+def _conversation(ticket: str, limit: int = 20) -> list[dict]:
+    messages = [
+        {
+            "kind": "email",
+            "direction": c.sent_or_received,
+            "sender": c.sender,
+            "content": c.content,
+            "at": str(c.creation),
+        }
+        for c in frappe.get_all(
+            "Communication",
+            filters={"reference_doctype": "HD Ticket", "reference_name": ticket},
+            fields=["sent_or_received", "sender", "content", "creation"],
+            order_by="creation desc",
+            limit=limit,
+        )
+    ]
+    messages += [
+        {
+            "kind": "comment",
+            "sender": c.commented_by,
+            "content": c.content,
+            "at": str(c.creation),
+        }
+        for c in frappe.get_all(
+            "HD Ticket Comment",
+            filters={"reference_ticket": ticket},
+            fields=["commented_by", "content", "creation"],
+            order_by="creation desc",
+            limit=limit,
+        )
+    ]
+    return sorted(messages, key=lambda m: m["at"])[-limit:]

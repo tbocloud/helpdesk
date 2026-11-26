@@ -81,7 +81,7 @@ def approve_actions(action_request_name, approved_indices=None):
             action_request_name: HDS Support Action Request name
             approved_indices: list of row indices to approve (0-based). If None, approve all.
     """
-    ar = frappe.get_doc("HDS Support Action Request", action_request_name)
+    ar = _lock_action_request(action_request_name)
 
     if ar.status not in ("Pending Approval",):
         frappe.throw(_("Action request is not pending approval"))
@@ -107,9 +107,17 @@ def approve_actions(action_request_name, approved_indices=None):
     return ar.status
 
 
+def _lock_action_request(action_request_name):
+    """Load the request under a row lock, so two decisions cannot both pass the status check."""
+    frappe.db.get_value(
+        "HDS Support Action Request", action_request_name, "status", for_update=True
+    )
+    return frappe.get_doc("HDS Support Action Request", action_request_name)
+
+
 def reject_actions(action_request_name):
     """Reject all actions in an action request."""
-    ar = frappe.get_doc("HDS Support Action Request", action_request_name)
+    ar = _lock_action_request(action_request_name)
 
     if ar.status not in ("Pending Approval",):
         frappe.throw(_("Action request is not pending approval"))
@@ -131,7 +139,7 @@ def execute_approved_actions(action_request_name):
     Returns:
             dict with results per action
     """
-    ar = frappe.get_doc("HDS Support Action Request", action_request_name)
+    ar = _lock_action_request(action_request_name)
 
     if ar.status not in ("Approved", "Partially Approved"):
         frappe.throw(_("Action request is not approved"))
@@ -141,7 +149,20 @@ def execute_approved_actions(action_request_name):
     if not session.connection:
         frappe.throw(_("No connection found for this session"))
 
-    mcp = MCPClient(session.connection)
+    # Claim the request before the first remote write. MCPClient commits
+    # after every call it audits, which would release the row lock above
+    # mid-way; the persisted status keeps a second run out.
+    decided = ar.status
+    ar.db_set("status", "Executing", commit=True)
+
+    try:
+        mcp = MCPClient(session.connection)
+        approval = _signed(ar, session.connection)
+    except Exception:
+        # the site could not be reached (or nothing could be signed) before any write: the
+        # request goes back to its decision, so it can be executed again once the site is up
+        ar.db_set("status", decided, commit=True)
+        raise
 
     execution_log = []
     all_success = True
@@ -153,6 +174,8 @@ def execute_approved_actions(action_request_name):
 
         try:
             arguments = json.loads(action.arguments) if action.arguments else {}
+            if approval:
+                arguments["approval"] = approval
             result = mcp.call_tool(action.tool_name, arguments)
 
             content = ""
@@ -186,3 +209,48 @@ def execute_approved_actions(action_request_name):
         "status": ar.status,
         "results": execution_log,
     }
+
+
+def _action_of(tool: str, arguments: dict) -> str:
+    if tool in ("set_value", "set_values"):
+        return "update"
+    if tool == "create_doc":
+        return "create"
+    if tool == "run_doc_method":
+        return str(arguments.get("method") or "")
+    if tool == "delete_doc":
+        return "delete"
+    return ""
+
+
+def _signed(ar, connection: str) -> str | None:
+    """The approval the customer's site checks before it writes, for exactly the approved actions.
+
+    Sites that check writes themselves (helpdesk_client's write guard) need it on
+    Production; without the site's approval key nothing is signed and such a site refuses.
+    """
+    from helpdesk.copilot import approval_key
+
+    records = []
+    for action in ar.proposed_actions:
+        if not action.approved:
+            continue
+        arguments = json.loads(action.arguments) if action.arguments else {}
+        if arguments.get("doctype"):
+            records.append(
+                {
+                    "doctype": arguments.get("doctype"),
+                    "name": arguments.get("name") or "",
+                    "action": _action_of(action.tool_name, arguments),
+                }
+            )
+    if not records:
+        return None
+    return approval_key.approval_for(
+        connection,
+        change_set=ar.name,
+        ticket=ar.ticket,
+        approved_by=ar.approved_by,
+        approved_at=ar.approved_at,
+        records=records,
+    )

@@ -1,0 +1,887 @@
+{
+ "actions": [],
+ "creation": "2026-10-08 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "enabled",
+  "handover_project",
+  "shadow_mode",
+  "column_break_limits",
+  "lease_minutes",
+  "max_lease_losses",
+  "min_confidence",
+  "mcp_section",
+  "mcp_enabled",
+  "column_break_mcp",
+  "mcp_calls_per_minute",
+  "approval_section",
+  "approvers",
+  "column_break_approval",
+  "approval_reminder_hours",
+  "approval_escalate_hours",
+  "hold_label",
+  "people_section",
+  "copilot_people",
+  "people_options_section",
+  "project_coordinators",
+  "new_ticket_notice",
+  "column_break_people",
+  "risk_alert_people",
+  "risk_alert_coordinators",
+  "deploy_notice_people",
+  "infrastructure_section",
+  "infrastructure_people",
+  "people_overview_section",
+  "people_overview",
+  "fixes_section",
+  "copilot_writes_fixes",
+  "max_fix_attempts",
+  "column_break_fixes",
+  "max_fix_usd",
+  "build_enabled",
+  "max_build_hours",
+  "max_build_usd",
+  "copilot_commit_email",
+  "github_app_section",
+  "github_app_id",
+  "column_break_github_app",
+  "github_app_private_key",
+  "press_section",
+  "press_url",
+  "press_api_key",
+  "column_break_press",
+  "press_api_secret",
+  "press_team",
+  "deploy_section",
+  "deploy_window_start",
+  "deploy_window_end",
+  "deploy_timezone",
+  "column_break_deploy",
+  "deploy_start_wait_minutes",
+  "deploy_check_minutes",
+  "press_skip_backups",
+  "auto_deploy_categories",
+  "pilot_section",
+  "default_copilot_level",
+  "monthly_ai_budget_usd",
+  "max_diagnosis_usd",
+  "column_break_pilot",
+  "pilot_report_to",
+  "pilot_report_enabled",
+  "pilot_report_sent_for",
+  "feedback_project",
+  "teams_section",
+  "teams_bot_enabled",
+  "teams_bot_app_id",
+  "column_break_teams",
+  "teams_bot_secret",
+  "teams_tenant_id",
+  "teams_app_version",
+  "teams_privacy_url",
+  "teams_terms_url",
+  "templates_section",
+  "message_templates",
+  "releases_section",
+  "releases_enabled",
+  "release_repositories",
+  "release_staging",
+  "release_check_hours",
+  "copilot_takes_prs",
+  "chat_section",
+  "chat_enabled",
+  "chat_messages_per_minute",
+  "chat_messages_per_day",
+  "chat_max_usd",
+  "chat_max_turns",
+  "column_break_chat",
+  "chat_opening_text",
+  "chat_recording_consent",
+  "chat_recording_consent_ar",
+  "watch_section",
+  "watch_enabled",
+  "watch_minutes",
+  "watch_new_after_days",
+  "watch_min_count",
+  "watch_min_users",
+  "column_break_watch",
+  "watch_site_daily_cap",
+  "watch_daily_cap",
+  "watch_ignored",
+  "ticket_chat_section",
+  "ask_before_every_fix",
+  "column_break_ticket_chat",
+  "deploy_needs_a_press",
+  "infra_copilot_section",
+  "infra_investigate",
+  "infra_propose",
+  "infra_dollar_cap",
+  "column_break_infra_copilot",
+  "infra_may_change"
+ ],
+ "fields": [
+  {
+   "default": "0",
+   "description": "A Copilot run starts for every new ticket of a customer with \"Copilot enabled\"",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled"
+  },
+  {
+   "description": "Tasks for hand-overs go here when the customer has no project of their own",
+   "fieldname": "handover_project",
+   "fieldtype": "Link",
+   "label": "Hand-over Project",
+   "options": "Project"
+  },
+  {
+   "default": "1",
+   "description": "Copilot investigates and notes its diagnosis for the team only: the customer sees no stages, no hand-over tasks are created, and agents rate each diagnosis. Switch off only after the ratings show Copilot is right often enough.",
+   "fieldname": "shadow_mode",
+   "fieldtype": "Check",
+   "label": "Shadow mode"
+  },
+  {
+   "fieldname": "column_break_limits",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "5",
+   "description": "A worker keeps a run alive by heartbeat; after this long without one the run is given back to the queue",
+   "fieldname": "lease_minutes",
+   "fieldtype": "Int",
+   "label": "Lease Minutes"
+  },
+  {
+   "default": "3",
+   "description": "After this many lost leases the run fails and a person is told",
+   "fieldname": "max_lease_losses",
+   "fieldtype": "Int",
+   "label": "Max Lease Losses"
+  },
+  {
+   "default": "0.6",
+   "description": "An investigation below this confidence (0 to 1) is treated as unclear",
+   "fieldname": "min_confidence",
+   "fieldtype": "Float",
+   "label": "Min Confidence"
+  },
+  {
+   "fieldname": "mcp_section",
+   "fieldtype": "Section Break",
+   "label": "MCP Server"
+  },
+  {
+   "default": "1",
+   "description": "TBO staff and the Copilot worker use the hub's MCP server (helpdesk.api.copilot_mcp.handle)",
+   "fieldname": "mcp_enabled",
+   "fieldtype": "Check",
+   "label": "MCP Server On"
+  },
+  {
+   "fieldname": "column_break_mcp",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "120",
+   "description": "Per person; calls over this are refused for the rest of the minute",
+   "fieldname": "mcp_calls_per_minute",
+   "fieldtype": "Int",
+   "label": "MCP Calls per Minute"
+  },
+  {
+   "fieldname": "approval_section",
+   "fieldtype": "Section Break",
+   "label": "Fix Approval Timing"
+  },
+  {
+   "description": "Kept for one version after Phase 23 moved these people into the People table; not read any more",
+   "fieldname": "approvers",
+   "fieldtype": "Table",
+   "label": "Approvers (before Phase 23)",
+   "options": "HDS Copilot Approver",
+   "hidden": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_approval",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "4",
+   "fieldname": "approval_reminder_hours",
+   "fieldtype": "Int",
+   "label": "Remind After (Hours)"
+  },
+  {
+   "default": "24",
+   "fieldname": "approval_escalate_hours",
+   "fieldtype": "Int",
+   "label": "Escalate After (Hours)"
+  },
+  {
+   "default": "no-auto-merge",
+   "description": "Put on every Copilot pull request until the hub merges it; the org merge bot and the auto-merge workflow skip pull requests with this label",
+   "fieldname": "hold_label",
+   "fieldtype": "Data",
+   "label": "Hold Label"
+  },
+  {
+   "description": "Everyone Copilot goes to, for every customer. A customer's own rows (HD Customer → Copilot People) come first for Developer, Fix Approver and Project Coordinator; these rows follow. Each role: Main first, then Fallback 1, 2 and 3; only people working today count. Nobody is named in the code.",
+   "fieldname": "people_section",
+   "fieldtype": "Section Break",
+   "label": "People"
+  },
+  {
+   "description": "Developer and Fix Approver are usually set on each customer. Here: Project Coordinator (customers without their own), Fix Approver (stand-ins for every customer, after the customer's own people), Senior (sensitive fixes, corrections, releases that need a senior, Deploy Now), Leader (the last resort for everything; with none, the Agent Managers), Infrastructure and Infrastructure Senior (Press, AWS and repair actions, the watcher), Risk Alerts and Deploy Notices (for information)",
+   "fieldname": "copilot_people",
+   "fieldtype": "Table",
+   "label": "People",
+   "options": "HDS Copilot Role Person"
+  },
+  {
+   "fieldname": "people_options_section",
+   "fieldtype": "Section Break"
+  },
+  {
+   "description": "Kept for one version after Phase 23 moved these people into the People table; not read any more",
+   "fieldname": "project_coordinators",
+   "fieldtype": "Table",
+   "label": "Project Coordinators (before Phase 23)",
+   "options": "HDS Copilot Person",
+   "hidden": 1,
+   "read_only": 1
+  },
+  {
+   "default": "Teams and TBO Support",
+   "description": "Every new ticket is told to the customer's project coordinators (else the common ones), with Assign to. Never to stand-ins, and never for the error watch's own tickets",
+   "fieldname": "new_ticket_notice",
+   "fieldtype": "Select",
+   "label": "New Tickets to the Coordinators",
+   "options": "Teams and TBO Support\nTBO Support only\nOff"
+  },
+  {
+   "fieldname": "column_break_people",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Kept for one version after Phase 23 moved these people into the People table; not read any more",
+   "fieldname": "risk_alert_people",
+   "fieldtype": "Table",
+   "label": "Risk Alerts Go To (before Phase 23)",
+   "options": "HDS Copilot Person",
+   "hidden": 1,
+   "read_only": 1
+  },
+  {
+   "default": "1",
+   "description": "Risk alerts also go to the customer's project coordinators (else the common ones)",
+   "fieldname": "risk_alert_coordinators",
+   "fieldtype": "Check",
+   "label": "Also Tell the Project Coordinators"
+  },
+  {
+   "description": "Kept for one version after Phase 23 moved these people into the People table; not read any more",
+   "fieldname": "deploy_notice_people",
+   "fieldtype": "Table",
+   "label": "Deploy Notices Go To (before Phase 23)",
+   "options": "HDS Copilot Person",
+   "hidden": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "infrastructure_section",
+   "fieldtype": "Section Break",
+   "label": "Infrastructure People",
+   "hidden": 1
+  },
+  {
+   "description": "Kept for one version after Phase 23 moved these people into the People table; not read any more",
+   "fieldname": "infrastructure_people",
+   "fieldtype": "Table",
+   "label": "Infrastructure People (before Phase 23)",
+   "options": "HDS Copilot Approver",
+   "hidden": 1,
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "people_overview_section",
+   "fieldtype": "Section Break",
+   "label": "Who Copilot Goes To Today"
+  },
+  {
+   "fieldname": "people_overview",
+   "fieldtype": "HTML",
+   "label": "Who Copilot Goes To Today"
+  },
+  {
+   "fieldname": "fixes_section",
+   "fieldtype": "Section Break",
+   "label": "Copilot fixes"
+  },
+  {
+   "default": "0",
+   "description": "Copilot fixes a diagnosed bug itself: it reproduces it on a sandbox copy of the site, changes the code until its check passes, and opens the pull request for the one approval. Off: only when an agent presses Let Copilot fix it.",
+   "fieldname": "copilot_writes_fixes",
+   "fieldtype": "Check",
+   "label": "Copilot writes fixes"
+  },
+  {
+   "default": "2",
+   "description": "How often Copilot may try to fix the same run (a lost worker counts as a try).",
+   "fieldname": "max_fix_attempts",
+   "fieldtype": "Int",
+   "label": "Fix attempts per run",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "column_break_fixes",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "3",
+   "description": "The worker stops a fix that would cost more than this, in US dollars (0: no cap).",
+   "fieldname": "max_fix_usd",
+   "fieldtype": "Float",
+   "label": "Dollar cap per fix",
+   "non_negative": 1
+  },
+  {
+   "default": "0",
+   "description": "Build with Copilot on a customization whose written scope the customer approved (Phase 8). Off: customizations go to a developer.",
+   "fieldname": "build_enabled",
+   "fieldtype": "Check",
+   "label": "Copilot Builds Approved Customizations"
+  },
+  {
+   "default": "8",
+   "description": "Copilot builds estimates up to this many hours; bigger ones go to a developer.",
+   "fieldname": "max_build_hours",
+   "fieldtype": "Float",
+   "label": "Max Build Hours",
+   "non_negative": 1
+  },
+  {
+   "description": "The AI budget of one build. Blank: twice the dollar cap per fix.",
+   "fieldname": "max_build_usd",
+   "fieldtype": "Float",
+   "label": "Dollar cap per build",
+   "non_negative": 1
+  },
+  {
+   "default": "copilot@teambackoffice.com",
+   "description": "Copilot's commits carry this email. When every commit of a pull request does, the customer's developer may approve it.",
+   "fieldname": "copilot_commit_email",
+   "fieldtype": "Data",
+   "label": "Copilot commit email",
+   "options": "Email"
+  },
+  {
+   "fieldname": "github_app_section",
+   "fieldtype": "Section Break",
+   "label": "GitHub App"
+  },
+  {
+   "description": "The TBO Copilot GitHub App. With its id and private key, TBO Support uses a short-lived key per repository (and gives the worker one to push a fix) instead of the personal token in Settings, GitHub.",
+   "fieldname": "github_app_id",
+   "fieldtype": "Data",
+   "label": "GitHub App ID"
+  },
+  {
+   "fieldname": "column_break_github_app",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "The App's private key: paste the whole .pem file's text. The box keeps one line, so its line breaks are lost; that is fine.",
+   "fieldname": "github_app_private_key",
+   "fieldtype": "Password",
+   "label": "GitHub App private key"
+  },
+  {
+   "fieldname": "press_section",
+   "fieldtype": "Section Break",
+   "label": "Press"
+  },
+  {
+   "description": "TBO's Press, for example https://tbocloud.in. Copilot deploys merged fixes through it.",
+   "fieldname": "press_url",
+   "fieldtype": "Data",
+   "label": "Press URL"
+  },
+  {
+   "description": "The API key of Copilot's own Press user in TBO's Press team.",
+   "fieldname": "press_api_key",
+   "fieldtype": "Data",
+   "label": "Press API key"
+  },
+  {
+   "fieldname": "column_break_press",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "press_api_secret",
+   "fieldtype": "Password",
+   "label": "Press API secret"
+  },
+  {
+   "description": "Copilot's team on Press, when its user belongs to more than one (sent as X-Press-Team).",
+   "fieldname": "press_team",
+   "fieldtype": "Data",
+   "label": "Press team"
+  },
+  {
+   "fieldname": "deploy_section",
+   "fieldtype": "Section Break",
+   "label": "Deploys"
+  },
+  {
+   "default": "21:00",
+   "description": "Deploy Tonight goes out from this time (HH:MM, in the timezone below).",
+   "fieldname": "deploy_window_start",
+   "fieldtype": "Data",
+   "label": "Deploy window starts"
+  },
+  {
+   "default": "06:00",
+   "fieldname": "deploy_window_end",
+   "fieldtype": "Data",
+   "label": "Deploy window ends"
+  },
+  {
+   "default": "Asia/Riyadh",
+   "fieldname": "deploy_timezone",
+   "fieldtype": "Data",
+   "label": "Deploy window timezone"
+  },
+  {
+   "fieldname": "column_break_deploy",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "60",
+   "description": "How long a deploy waits for Press (another deploy running, the merged commit not yet on the bench) before it moves to the next window.",
+   "fieldname": "deploy_start_wait_minutes",
+   "fieldtype": "Int",
+   "label": "Wait for Press (minutes)",
+   "non_negative": 1
+  },
+  {
+   "default": "30",
+   "description": "How long the check after a deploy may take before it counts as failed.",
+   "fieldname": "deploy_check_minutes",
+   "fieldtype": "Int",
+   "label": "Check after deploy (minutes)",
+   "non_negative": 1
+  },
+  {
+   "default": "0",
+   "description": "Test benches only. Press then updates the sites without taking a backup first, so a failed update cannot be restored from one. Leave it off for customers' live sites.",
+   "fieldname": "press_skip_backups",
+   "fieldtype": "Check",
+   "label": "Skip Press's backup"
+  },
+  {
+   "description": "Root-cause categories or risk levels whose approved fixes deploy in the window without anyone pressing Deploy, one per line. Empty in the pilot.",
+   "fieldname": "auto_deploy_categories",
+   "fieldtype": "Small Text",
+   "label": "Auto-deploy categories"
+  },
+  {
+   "fieldname": "templates_section",
+   "fieldtype": "Section Break",
+   "label": "Messages to the Customer"
+  },
+  {
+   "description": "One row per stage; a missing or empty row uses the built-in text",
+   "fieldname": "message_templates",
+   "fieldtype": "Table",
+   "label": "Stage Messages",
+   "options": "HDS Copilot Message Template"
+  },
+  {
+   "fieldname": "pilot_section",
+   "fieldtype": "Section Break",
+   "label": "Pilot",
+   "collapsible": 1,
+   "description": "Phase 4: how far Copilot may go per customer, the monthly AI budget, and the weekly pilot email (docs/tbo-copilot.md, Pilot)."
+  },
+  {
+   "fieldname": "default_copilot_level",
+   "fieldtype": "Select",
+   "label": "Default Copilot level",
+   "options": "Diagnose only\nExplain\nFix\nCorrect",
+   "default": "Diagnose only",
+   "description": "For customers whose Copilot level is blank. Diagnose only: the team sees the diagnosis, the customer nothing. Explain: the customer sees the stages and the explanations agents send. Fix: Copilot also writes fixes. Correct: a senior may also approve setting and data corrections. Shadow mode holds everyone at Diagnose only."
+  },
+  {
+   "fieldname": "monthly_ai_budget_usd",
+   "fieldtype": "Float",
+   "label": "Monthly AI budget (USD)",
+   "default": "100",
+   "non_negative": 1,
+   "description": "What Copilot's runs may cost in a calendar month. At 80% the Agent Managers are told; at 100% no new work goes to a worker until the next month or a larger budget. 0: no budget."
+  },
+  {
+   "fieldname": "max_diagnosis_usd",
+   "fieldtype": "Float",
+   "label": "Dollar cap per diagnosis",
+   "default": "1",
+   "non_negative": 1,
+   "description": "The worker stops an investigation that would cost more than this, in US dollars (0: the worker's own limit)."
+  },
+  {
+   "fieldname": "column_break_pilot",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "pilot_report_to",
+   "fieldtype": "Small Text",
+   "label": "Weekly pilot email to",
+   "description": "Email addresses, one per line or comma separated, besides the Agent Managers. Sent on Monday at 08:00 Riyadh time with last week's numbers."
+  },
+  {
+   "fieldname": "pilot_report_enabled",
+   "fieldtype": "Check",
+   "label": "Send the weekly pilot email",
+   "default": "1"
+  },
+  {
+   "fieldname": "pilot_report_sent_for",
+   "fieldtype": "Data",
+   "label": "Pilot email sent for week",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "description": "Where \"report a problem\" and \"feedback\" from Teams, the panel and the desktop app become tasks. Blank: the internal project in HDS Hub Settings.",
+   "fieldname": "feedback_project",
+   "fieldtype": "Link",
+   "label": "Feedback tasks go to",
+   "options": "Project"
+  },
+  {
+   "fieldname": "teams_section",
+   "fieldtype": "Section Break",
+   "label": "Teams bot",
+   "collapsible": 1,
+   "description": "Phase 6: the TBO Copilot bot in Teams (an Azure Bot registered by TBO's Microsoft 365 admin). Its messaging endpoint is /api/method/helpdesk.api.copilot_teams.messages on this site."
+  },
+  {
+   "fieldname": "teams_bot_enabled",
+   "fieldtype": "Check",
+   "label": "Teams bot enabled",
+   "description": "Off: Teams messages go through the Workflows webhooks of HD Chat Settings, as before."
+  },
+  {
+   "fieldname": "teams_bot_app_id",
+   "fieldtype": "Data",
+   "label": "Bot app ID",
+   "description": "The Microsoft App ID of the Azure Bot (single tenant)."
+  },
+  {
+   "fieldname": "column_break_teams",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "teams_bot_secret",
+   "fieldtype": "Password",
+   "label": "Bot client secret"
+  },
+  {
+   "fieldname": "teams_tenant_id",
+   "fieldtype": "Data",
+   "label": "Tenant ID",
+   "description": "Blank: the Microsoft tenant ID in HD Settings."
+  },
+  {
+   "description": "The Teams app package's version. Raise it (for example 1.0.1) before uploading a changed package to the Teams admin centre; Teams refuses a package with a version it already has. Blank: the TBO Support app's version.",
+   "fieldname": "teams_app_version",
+   "fieldtype": "Data",
+   "label": "Teams app version"
+  },
+  {
+   "description": "TBO's privacy page, shown in the Teams app's details. Blank: this site.",
+   "fieldname": "teams_privacy_url",
+   "fieldtype": "Data",
+   "label": "Privacy page",
+   "options": "URL"
+  },
+  {
+   "description": "TBO's terms of use page, shown in the Teams app's details. Blank: this site.",
+   "fieldname": "teams_terms_url",
+   "fieldtype": "Data",
+   "label": "Terms of use page",
+   "options": "URL"
+  },
+  {
+   "collapsible": 1,
+   "description": "Phase 7: every merge into a branch a customer site runs goes out through TBO Support: CI, one approval, the Press deploy in the window, the check after (docs/tbo-copilot.md, Releases).",
+   "fieldname": "releases_section",
+   "fieldtype": "Section Break",
+   "label": "Releases"
+  },
+  {
+   "default": "0",
+   "fieldname": "releases_enabled",
+   "fieldtype": "Check",
+   "label": "Release every merge"
+  },
+  {
+   "depends_on": "releases_enabled",
+   "description": "One owner/repo per line. Only these repositories' branches become releases; add a repository once its CI is green.",
+   "fieldname": "release_repositories",
+   "fieldtype": "Small Text",
+   "label": "Repositories in the pipeline"
+  },
+  {
+   "default": "1",
+   "depends_on": "releases_enabled",
+   "description": "The customer's UAT site when a card runs the branch there, else the sandbox check by a worker. Off: releases go straight to their approval.",
+   "fieldname": "release_staging",
+   "fieldtype": "Check",
+   "label": "Stage before the approval"
+  },
+  {
+   "default": "6",
+   "depends_on": "releases_enabled",
+   "description": "After this, the check is marked not run and a senior decides whether the release goes on.",
+   "fieldname": "release_check_hours",
+   "fieldtype": "Int",
+   "label": "Hours a sandbox check may wait for a worker"
+  },
+  {
+   "fieldname": "chat_section",
+   "fieldtype": "Section Break",
+   "label": "Customer Chat (Phase 5)",
+   "collapsible": 1,
+   "description": "The Support button in a customer's ERP opens a chat with TBO Copilot (helpdesk_client with chat_v1). Off: the customer gets today's form."
+  },
+  {
+   "fieldname": "chat_enabled",
+   "fieldtype": "Check",
+   "label": "Customer Chat",
+   "default": "0"
+  },
+  {
+   "fieldname": "chat_messages_per_minute",
+   "fieldtype": "Int",
+   "label": "Messages per Minute (per Customer)",
+   "default": "10",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "chat_messages_per_day",
+   "fieldtype": "Int",
+   "label": "Messages per Day (per Customer)",
+   "default": "200",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "chat_max_usd",
+   "fieldtype": "Float",
+   "label": "Dollar cap per conversation",
+   "default": "0.25",
+   "non_negative": 1,
+   "description": "Past it, or past the turns below, the chat hands over to a person."
+  },
+  {
+   "fieldname": "chat_max_turns",
+   "fieldtype": "Int",
+   "label": "Max Turns per Conversation",
+   "default": "40",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "column_break_chat",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "chat_opening_text",
+   "fieldtype": "Small Text",
+   "label": "Opening (English)",
+   "description": "Blank: the built-in greeting. {name} is the customer's first name, {where} the record they are on."
+  },
+  {
+   "fieldname": "chat_recording_consent",
+   "fieldtype": "Small Text",
+   "label": "Recording Request (English)",
+   "description": "Blank: the built-in text saying what is recorded and who sees it."
+  },
+  {
+   "fieldname": "chat_recording_consent_ar",
+   "fieldtype": "Small Text",
+   "label": "Recording Request (Arabic)"
+  },
+  {
+   "fieldname": "watch_section",
+   "fieldtype": "Section Break",
+   "label": "Error Watch (Phase 9)",
+   "collapsible": 1,
+   "description": "Copilot asks each watched customer site for its new errors and opens a ticket for one before the customer reports it (docs/tbo-copilot.md, Error watch). A customer is watched when Watch Errors is ticked on HD Customer."
+  },
+  {
+   "fieldname": "watch_enabled",
+   "fieldtype": "Check",
+   "label": "Watch Customer Errors",
+   "default": "0"
+  },
+  {
+   "fieldname": "watch_minutes",
+   "fieldtype": "Int",
+   "label": "Minutes Between Checks",
+   "default": "15",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "watch_new_after_days",
+   "fieldtype": "Int",
+   "label": "New After (Days)",
+   "default": "14",
+   "non_negative": 1,
+   "description": "An error the site has not had for this many days counts as new."
+  },
+  {
+   "fieldname": "watch_min_count",
+   "fieldtype": "Int",
+   "label": "Times Before a Ticket",
+   "default": "3",
+   "non_negative": 1,
+   "description": "Or the users below; once is enough in accounting, stock or payroll code."
+  },
+  {
+   "fieldname": "watch_min_users",
+   "fieldtype": "Int",
+   "label": "Users Before a Ticket",
+   "default": "2",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "column_break_watch",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "watch_site_daily_cap",
+   "fieldtype": "Int",
+   "label": "Tickets per Site per Day",
+   "default": "3",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "watch_daily_cap",
+   "fieldtype": "Int",
+   "label": "Tickets per Day",
+   "default": "10",
+   "non_negative": 1,
+   "description": "Past either cap the error keeps being counted, and the Agent Managers get one note a day."
+  },
+  {
+   "fieldname": "watch_ignored",
+   "fieldtype": "Small Text",
+   "label": "Ignored Errors",
+   "default": "helpdesk_client\nSession Stopped",
+   "description": "One per line; an error whose signature (app | method | last line) contains one is never a ticket. The connector's own errors (helpdesk_client) never are. Blank: Session Stopped."
+  },
+  {
+   "fieldname": "ticket_chat_section",
+   "fieldtype": "Section Break",
+   "label": "Ticket Chat (Phase 11)",
+   "collapsible": 1,
+   "description": "Every ticket is a chat with Copilot, on the ticket page and in Teams (docs/tbo-copilot.md, Ticket chat)."
+  },
+  {
+   "fieldname": "ask_before_every_fix",
+   "fieldtype": "Check",
+   "label": "Ask Before Every Fix",
+   "default": "0",
+   "description": "Off: Copilot starts fixing an ordinary bug by itself (customers at the Fix level) and asks once, when the fix is ready. It always asks first for data or settings changes, sensitive areas and high-risk fixes. On: it asks first every time."
+  },
+  {
+   "fieldname": "column_break_ticket_chat",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "deploy_needs_a_press",
+   "fieldtype": "Check",
+   "label": "Deploy Needs a Press",
+   "default": "0",
+   "description": "Off: an approved fix deploys by itself, a low-risk one at once, the rest in the night window. On: a person presses Deploy, as before."
+  },
+  {
+   "fieldname": "infra_copilot_section",
+   "fieldtype": "Section Break",
+   "label": "Copilot on Infrastructure (Phase 25)",
+   "description": "Copilot investigates every alert the watcher opens, tells the alert's owner and the Infrastructure people through the TBO Copilot bot, and proposes one action from a fixed list. Nothing runs before a DevOps person (normal) or a Leader (risky) approves it."
+  },
+  {
+   "fieldname": "infra_investigate",
+   "fieldtype": "Check",
+   "label": "Investigate Infrastructure Alerts",
+   "default": "1",
+   "description": "Off: alerts are tickets for people only, as before."
+  },
+  {
+   "fieldname": "infra_propose",
+   "fieldtype": "Check",
+   "label": "Propose Infrastructure Actions",
+   "default": "1",
+   "description": "Off: Copilot only explains what it found; a person decides what to do. \"pause auto-repair\" in Teams stops proposals too."
+  },
+  {
+   "fieldname": "infra_dollar_cap",
+   "fieldtype": "Float",
+   "label": "Dollar Cap per Infrastructure Diagnosis",
+   "default": "1"
+  },
+  {
+   "fieldname": "column_break_infra_copilot",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "infra_may_change",
+   "fieldtype": "Small Text",
+   "label": "Copilot May Change",
+   "description": "One bench, bench group or site per line. Copilot's actions are offered for approval only on these; for anything else its card says what a person should run. During testing: the demo bench and its sites only."
+  },
+  {
+   "fieldname": "copilot_takes_prs",
+   "fieldtype": "Check",
+   "default": "1",
+   "label": "Copilot Takes Developers' Pull Requests Live",
+   "description": "When a developer asks to go live (desktop app) while the task's pull request is open: Copilot fixes what CodeRabbit and CI find (3 rounds at most), asks one approver, then merges and deploys through the release. Only pull requests the developer hands to Copilot; repositories in the pipeline only."
+  }
+ ],
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-11-18 14:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Helpdesk",
+ "name": "HDS Copilot Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Agent Manager",
+   "share": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

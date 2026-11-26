@@ -1,0 +1,547 @@
+{
+ "actions": [],
+ "autoname": "TBO-RUN-.YYYY.-.#####",
+ "creation": "2026-10-08 13:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "ticket",
+  "customer",
+  "connection",
+  "registry",
+  "kind",
+  "state",
+  "shadow",
+  "base_app",
+  "base_commit",
+  "column_break_lease",
+  "worker_id",
+  "worker_user",
+  "lease_token_hash",
+  "lease_expires",
+  "lease_losses",
+  "investigation_section",
+  "root_cause_category",
+  "known_issue",
+  "confidence",
+  "summary",
+  "customer_message",
+  "explanation_edited",
+  "column_break_result",
+  "handed_over_to",
+  "task",
+  "failure_reason",
+  "cost_usd",
+  "tokens_in",
+  "tokens_out",
+  "model_used",
+  "details_section",
+  "investigation",
+  "evidence",
+  "proposal",
+  "build_scope",
+  "fix_section",
+  "pull_request",
+  "approval",
+  "merge_commit",
+  "column_break_fix",
+  "deployed_at",
+  "deployed_by",
+  "copilot_fix_section",
+  "fix_requested",
+  "fix_status",
+  "fix_attempts",
+  "fix_requested_by",
+  "column_break_copilot_fix",
+  "change",
+  "deploy_request",
+  "change_set",
+  "prepare_correction",
+  "reverts",
+  "review_section",
+  "review_verdict",
+  "reviewed_root_cause",
+  "review_note",
+  "column_break_review",
+  "reviewed_by",
+  "reviewed_at",
+  "timeline_section",
+  "queued_at",
+  "claimed_at",
+  "column_break_timeline",
+  "investigated_at",
+  "finished_at"
+ ],
+ "fields": [
+  {
+   "fieldname": "ticket",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Ticket",
+   "options": "HD Ticket",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "ticket.customer",
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Customer",
+   "options": "HD Customer",
+   "read_only": 1
+  },
+  {
+   "fieldname": "connection",
+   "fieldtype": "Link",
+   "label": "Connection",
+   "options": "HDS Support Connection"
+  },
+  {
+   "fieldname": "registry",
+   "fieldtype": "Link",
+   "label": "Site",
+   "options": "HDS Site Registry"
+  },
+  {
+   "default": "investigate",
+   "fieldname": "kind",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Kind",
+   "options": "investigate\nfollowup\ncode\nconfig\ndata\nrevert\ninfra"
+  },
+  {
+   "default": "Queued",
+   "fieldname": "state",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "State",
+   "options": "Queued\nInvestigating\nExplaining\nAnswered\nPreparing Fix\nAwaiting Approval\nApproved\nMerging\nMerged\nDeploying\nVerifying\nApplying\nResolved\nClosed\nRejected\nEscalated\nHanded Over\nFailed\nCancelled"
+  },
+  {
+   "default": "0",
+   "description": "Started in shadow mode: nothing reached the customer.",
+   "fieldname": "shadow",
+   "fieldtype": "Check",
+   "label": "Shadow",
+   "read_only": 1
+  },
+  {
+   "description": "Investigate this app at this commit instead of the deployed one (evaluation runs).",
+   "fieldname": "base_app",
+   "fieldtype": "Data",
+   "label": "Base App",
+   "read_only": 1
+  },
+  {
+   "fieldname": "base_commit",
+   "fieldtype": "Data",
+   "label": "Base Commit",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_lease",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "worker_id",
+   "fieldtype": "Data",
+   "label": "Worker",
+   "read_only": 1
+  },
+  {
+   "description": "The Copilot Worker user that holds the lease; the run token acts as this user",
+   "fieldname": "worker_user",
+   "fieldtype": "Link",
+   "label": "Worker User",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "lease_token_hash",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Lease Token Hash",
+   "read_only": 1
+  },
+  {
+   "fieldname": "lease_expires",
+   "fieldtype": "Datetime",
+   "label": "Lease Expires",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "lease_losses",
+   "fieldtype": "Int",
+   "label": "Lease Losses",
+   "read_only": 1
+  },
+  {
+   "fieldname": "investigation_section",
+   "fieldtype": "Section Break",
+   "label": "Investigation"
+  },
+  {
+   "fieldname": "root_cause_category",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Root Cause",
+   "options": "\nquestion\nnot_allowed_request\ncustomer_mistake\nwrong_setting\nbug\ndata_damaged_by_bug\ncore_issue\ncustomization_request\nunclear",
+   "read_only": 1
+  },
+  {
+   "fieldname": "known_issue",
+   "fieldtype": "Link",
+   "label": "Known Issue",
+   "options": "HDS Known Issue",
+   "read_only": 1
+  },
+  {
+   "fieldname": "confidence",
+   "fieldtype": "Float",
+   "label": "Confidence",
+   "read_only": 1
+  },
+  {
+   "fieldname": "summary",
+   "fieldtype": "Small Text",
+   "label": "Summary",
+   "read_only": 1
+  },
+  {
+   "fieldname": "customer_message",
+   "fieldtype": "Small Text",
+   "label": "Message for the Customer",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_result",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "handed_over_to",
+   "fieldtype": "Link",
+   "label": "Handed Over To",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "task",
+   "fieldtype": "Link",
+   "label": "Task",
+   "options": "Task",
+   "read_only": 1
+  },
+  {
+   "fieldname": "failure_reason",
+   "fieldtype": "Small Text",
+   "label": "Failure Reason",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cost_usd",
+   "fieldtype": "Currency",
+   "label": "Cost (USD)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "tokens_in",
+   "fieldtype": "Int",
+   "label": "Tokens In",
+   "read_only": 1
+  },
+  {
+   "fieldname": "tokens_out",
+   "fieldtype": "Int",
+   "label": "Tokens Out",
+   "read_only": 1
+  },
+  {
+   "fieldname": "model_used",
+   "fieldtype": "Data",
+   "label": "Model Used",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "details_section",
+   "fieldtype": "Section Break",
+   "label": "Details"
+  },
+  {
+   "fieldname": "investigation",
+   "fieldtype": "Code",
+   "label": "Investigation",
+   "options": "JSON",
+   "read_only": 1
+  },
+  {
+   "fieldname": "evidence",
+   "fieldtype": "Code",
+   "label": "Evidence",
+   "options": "JSON",
+   "read_only": 1
+  },
+  {
+   "fieldname": "proposal",
+   "fieldtype": "Code",
+   "label": "Proposal",
+   "options": "JSON",
+   "read_only": 1
+  },
+  {
+   "description": "A build of an approved customization (Phase 8): the scope, the Done-when checks, the hours, who approved it and when, and the hash of what was approved.",
+   "fieldname": "build_scope",
+   "fieldtype": "Code",
+   "label": "Build Scope",
+   "options": "JSON",
+   "read_only": 1
+  },
+  {
+   "fieldname": "fix_section",
+   "fieldtype": "Section Break",
+   "label": "Fix"
+  },
+  {
+   "fieldname": "pull_request",
+   "fieldtype": "Link",
+   "label": "Pull Request",
+   "options": "HD Pull Request",
+   "read_only": 1
+  },
+  {
+   "fieldname": "approval",
+   "fieldtype": "Link",
+   "label": "Approval",
+   "options": "HDS Copilot Approval",
+   "read_only": 1
+  },
+  {
+   "fieldname": "merge_commit",
+   "fieldtype": "Data",
+   "label": "Merge Commit",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_fix",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "deployed_at",
+   "fieldtype": "Datetime",
+   "label": "Deployed At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "deployed_by",
+   "fieldtype": "Link",
+   "label": "Deployed By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "copilot_fix_section",
+   "fieldtype": "Section Break",
+   "label": "Copilot's fix"
+  },
+  {
+   "default": "0",
+   "fieldname": "fix_requested",
+   "fieldtype": "Check",
+   "label": "Copilot asked to fix",
+   "read_only": 1
+  },
+  {
+   "fieldname": "fix_status",
+   "fieldtype": "Select",
+   "label": "Copilot fix",
+   "options": "\nQueued\nWorking\nOpened\nFailed",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "fix_attempts",
+   "fieldtype": "Int",
+   "label": "Fix attempts",
+   "read_only": 1
+  },
+  {
+   "fieldname": "fix_requested_by",
+   "fieldtype": "Link",
+   "label": "Fix asked by",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_copilot_fix",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "The pull request Copilot opened and what it tested, as the worker reported it.",
+   "fieldname": "change",
+   "fieldtype": "Code",
+   "label": "Copilot's change",
+   "options": "JSON",
+   "read_only": 1
+  },
+  {
+   "fieldname": "deploy_request",
+   "fieldtype": "Link",
+   "label": "Deploy request",
+   "options": "HDS Deploy Request",
+   "read_only": 1
+  },
+  {
+   "fieldname": "change_set",
+   "fieldtype": "Link",
+   "label": "Change set",
+   "options": "HDS Copilot Change Set",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "An agent asked Copilot to prepare the correction of the customer's own mistake.",
+   "fieldname": "prepare_correction",
+   "fieldtype": "Check",
+   "label": "Prepare a correction",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reverts",
+   "fieldtype": "Link",
+   "label": "Reverts the fix of",
+   "options": "HDS Copilot Run",
+   "read_only": 1
+  },
+  {
+   "fieldname": "review_section",
+   "fieldtype": "Section Break",
+   "label": "Team Review"
+  },
+  {
+   "fieldname": "review_verdict",
+   "fieldtype": "Select",
+   "label": "Review Verdict",
+   "options": "\nRight\nPartly\nWrong",
+   "read_only": 1
+  },
+  {
+   "description": "The root cause the reviewer found, when the diagnosis was wrong or partly right.",
+   "fieldname": "reviewed_root_cause",
+   "fieldtype": "Select",
+   "label": "Reviewed Root Cause",
+   "options": "\nquestion\nnot_allowed_request\ncustomer_mistake\nwrong_setting\nbug\ndata_damaged_by_bug\ncore_issue\ncustomization_request\nunclear",
+   "read_only": 1
+  },
+  {
+   "fieldname": "review_note",
+   "fieldtype": "Small Text",
+   "label": "Review Note",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_review",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "reviewed_by",
+   "fieldtype": "Link",
+   "label": "Reviewed By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reviewed_at",
+   "fieldtype": "Datetime",
+   "label": "Reviewed At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "timeline_section",
+   "fieldtype": "Section Break",
+   "label": "Timeline"
+  },
+  {
+   "fieldname": "queued_at",
+   "fieldtype": "Datetime",
+   "label": "Queued At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "claimed_at",
+   "fieldtype": "Datetime",
+   "label": "Claimed At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_timeline",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "investigated_at",
+   "fieldtype": "Datetime",
+   "label": "Investigated At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "finished_at",
+   "fieldtype": "Datetime",
+   "label": "Finished At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "explanation_edited",
+   "fieldtype": "Percent",
+   "label": "Explanation edited",
+   "read_only": 1,
+   "description": "How much the agent changed Copilot's explanation before sending it: 0 sent as drafted, 100 rewritten."
+  }
+ ],
+ "links": [],
+ "modified": "2026-11-18 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Helpdesk",
+ "name": "HDS Copilot Run",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Agent Manager",
+   "share": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Agent",
+   "share": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "ticket",
+ "track_changes": 1
+}

@@ -36,6 +36,7 @@
           </template>
         </Button>
       </div>
+      <!-- the ticket's chat is the main view now (Phase 12): the panel holds its details -->
       <TicketDetailsTab />
     </aside>
   </Resizer>
@@ -55,6 +56,7 @@ const props = defineProps<{
 }>();
 
 const open = defineModel<boolean>("open", { default: false });
+
 const modal = computed(() => props.sheet && open.value);
 
 const panelRef = ref<HTMLElement | null>(null);

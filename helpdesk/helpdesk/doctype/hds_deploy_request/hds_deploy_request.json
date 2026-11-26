@@ -1,0 +1,515 @@
+{
+	"actions": [],
+	"autoname": "TBO-DEP-.YYYY.-.#####",
+	"creation": "2026-10-13 02:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"run",
+		"ticket",
+		"release_section",
+		"source",
+		"repository",
+		"branch",
+		"task",
+		"column_break_release",
+		"authors",
+		"changes",
+		"ci_section",
+		"ci_status",
+		"ci_detail",
+		"column_break_ci",
+		"ci_override_by",
+		"ci_override_reason",
+		"staging_section",
+		"staging",
+		"staging_status",
+		"staging_request",
+		"staging_for",
+		"column_break_staging",
+		"staging_detail",
+		"check_worker",
+		"check_started_at",
+		"check_lease_expires",
+		"check_lease_hash",
+		"decision_section",
+		"needs_senior",
+		"risk_level",
+		"risk_reasons",
+		"assigned_to",
+		"assigned_at",
+		"reminded_at",
+		"approval_hash",
+		"column_break_decision",
+		"decided_by",
+		"decided_at",
+		"decided_via",
+		"decision_note",
+		"train",
+		"approval",
+		"column_break_request",
+		"status",
+		"when",
+		"scheduled_for",
+		"requested_by",
+		"requested_at",
+		"press_section",
+		"release_group",
+		"press_reference",
+		"other_sites",
+		"column_break_press",
+		"waiting_since",
+		"started_at",
+		"finished_at",
+		"sites_section",
+		"sites",
+		"apps",
+		"check_section",
+		"check_results",
+		"error"
+	],
+	"fields": [
+		{
+			"fieldname": "run",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"label": "Copilot run",
+			"options": "HDS Copilot Run",
+			"read_only": 1,
+			"reqd": 0,
+			"search_index": 1,
+			"description": "Empty for a release of other people's merges (Phase 7)"
+		},
+		{
+			"fieldname": "ticket",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"label": "Ticket",
+			"options": "HD Ticket",
+			"read_only": 1,
+			"search_index": 1
+		},
+		{
+			"fieldname": "release_section",
+			"fieldtype": "Section Break",
+			"label": "Release"
+		},
+		{
+			"default": "Copilot run",
+			"fieldname": "source",
+			"fieldtype": "Select",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"label": "Source",
+			"options": "Copilot run\nPull request\nPush",
+			"read_only": 1
+		},
+		{
+			"fieldname": "repository",
+			"fieldtype": "Data",
+			"label": "Repository",
+			"read_only": 1,
+			"search_index": 1
+		},
+		{
+			"fieldname": "branch",
+			"fieldtype": "Data",
+			"label": "Branch",
+			"read_only": 1
+		},
+		{
+			"fieldname": "task",
+			"fieldtype": "Link",
+			"label": "Task",
+			"options": "Task",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_release",
+			"fieldtype": "Column Break"
+		},
+		{
+			"description": "Who wrote the commits (GitHub logins, or the commit email for a push); they never approve their own release",
+			"fieldname": "authors",
+			"fieldtype": "Small Text",
+			"label": "Authors",
+			"read_only": 1
+		},
+		{
+			"fieldname": "changes",
+			"fieldtype": "Code",
+			"label": "Commits",
+			"options": "JSON",
+			"read_only": 1
+		},
+		{
+			"fieldname": "ci_section",
+			"fieldtype": "Section Break",
+			"label": "CI"
+		},
+		{
+			"fieldname": "ci_status",
+			"fieldtype": "Select",
+			"label": "CI",
+			"options": "\nPending\nPassed\nFailed\nOverridden",
+			"read_only": 1
+		},
+		{
+			"fieldname": "ci_detail",
+			"fieldtype": "Small Text",
+			"label": "CI detail",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_ci",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "ci_override_by",
+			"fieldtype": "Link",
+			"label": "CI overridden by",
+			"options": "User",
+			"read_only": 1
+		},
+		{
+			"fieldname": "ci_override_reason",
+			"fieldtype": "Small Text",
+			"label": "Override reason",
+			"read_only": 1
+		},
+		{
+			"fieldname": "staging_section",
+			"fieldtype": "Section Break",
+			"label": "Staging"
+		},
+		{
+			"description": "Before the approval: the customer's UAT site when a card runs the branch there, else a fresh site with the customer's apps on the sandbox server",
+			"fieldname": "staging",
+			"fieldtype": "Select",
+			"label": "Staging",
+			"options": "\nUAT site\nSandbox",
+			"read_only": 1
+		},
+		{
+			"fieldname": "staging_status",
+			"fieldtype": "Select",
+			"label": "Staging result",
+			"options": "\nQueued\nRunning\nPassed\nFailed\nNot run",
+			"read_only": 1
+		},
+		{
+			"fieldname": "staging_request",
+			"fieldtype": "Link",
+			"label": "UAT deploy",
+			"options": "HDS Deploy Request",
+			"read_only": 1
+		},
+		{
+			"description": "On a UAT deploy: the release it stages",
+			"fieldname": "staging_for",
+			"fieldtype": "Link",
+			"label": "Staging for",
+			"options": "HDS Deploy Request",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_staging",
+			"fieldtype": "Column Break",
+			"label": ""
+		},
+		{
+			"fieldname": "staging_detail",
+			"fieldtype": "Code",
+			"label": "Staging checks",
+			"options": "JSON",
+			"read_only": 1
+		},
+		{
+			"fieldname": "check_worker",
+			"fieldtype": "Data",
+			"label": "Checked by worker",
+			"read_only": 1
+		},
+		{
+			"fieldname": "check_started_at",
+			"fieldtype": "Datetime",
+			"label": "Check started",
+			"read_only": 1
+		},
+		{
+			"fieldname": "check_lease_expires",
+			"fieldtype": "Datetime",
+			"label": "Check lease expires",
+			"read_only": 1
+		},
+		{
+			"fieldname": "check_lease_hash",
+			"fieldtype": "Data",
+			"hidden": 1,
+			"label": "Check lease",
+			"read_only": 1
+		},
+		{
+			"fieldname": "decision_section",
+			"fieldtype": "Section Break",
+			"label": "Approval"
+		},
+		{
+			"description": "A push without a pull request, a sensitive change, or a bench other customers share",
+			"fieldname": "needs_senior",
+			"fieldtype": "Check",
+			"label": "Needs a senior",
+			"read_only": 1
+		},
+		{
+			"fieldname": "risk_level",
+			"fieldtype": "Select",
+			"label": "Risk",
+			"options": "\nlow\nmedium\nhigh\nunknown",
+			"read_only": 1
+		},
+		{
+			"fieldname": "risk_reasons",
+			"fieldtype": "Small Text",
+			"label": "Risk reasons",
+			"read_only": 1
+		},
+		{
+			"fieldname": "assigned_to",
+			"fieldtype": "Link",
+			"label": "Assigned to",
+			"options": "User",
+			"read_only": 1
+		},
+		{
+			"fieldname": "assigned_at",
+			"fieldtype": "Datetime",
+			"label": "Assigned at",
+			"read_only": 1
+		},
+		{
+			"fieldname": "reminded_at",
+			"fieldtype": "Datetime",
+			"label": "Reminded at",
+			"read_only": 1
+		},
+		{
+			"fieldname": "approval_hash",
+			"fieldtype": "Data",
+			"label": "Approval hash",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_decision",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "decided_by",
+			"fieldtype": "Link",
+			"label": "Decided by",
+			"options": "User",
+			"read_only": 1
+		},
+		{
+			"fieldname": "decided_at",
+			"fieldtype": "Datetime",
+			"label": "Decided at",
+			"read_only": 1
+		},
+		{
+			"fieldname": "decided_via",
+			"fieldtype": "Data",
+			"label": "Decided via",
+			"read_only": 1
+		},
+		{
+			"fieldname": "decision_note",
+			"fieldtype": "Small Text",
+			"label": "Decision note",
+			"read_only": 1
+		},
+		{
+			"description": "The release that leads one Press deploy for several approved releases of the same bench",
+			"fieldname": "train",
+			"fieldtype": "Data",
+			"label": "Train",
+			"read_only": 1
+		},
+		{
+			"fieldname": "approval",
+			"fieldtype": "Link",
+			"label": "Approval",
+			"options": "HDS Copilot Approval",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_request",
+			"fieldtype": "Column Break"
+		},
+		{
+			"default": "Scheduled",
+			"fieldname": "status",
+			"fieldtype": "Select",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"label": "Status",
+			"options": "Waiting for CI\nStaging\nWaiting for approval\nScheduled\nWaiting for Press\nDeploying\nChecking\nSucceeded\nFailed\nRejected\nCancelled",
+			"read_only": 1,
+			"search_index": 1
+		},
+		{
+			"default": "Tonight",
+			"fieldname": "when",
+			"fieldtype": "Select",
+			"label": "When",
+			"options": "Tonight\nNow",
+			"read_only": 1
+		},
+		{
+			"fieldname": "scheduled_for",
+			"fieldtype": "Datetime",
+			"in_list_view": 1,
+			"label": "Scheduled for",
+			"read_only": 1
+		},
+		{
+			"fieldname": "requested_by",
+			"fieldtype": "Link",
+			"label": "Requested by",
+			"options": "User",
+			"read_only": 1
+		},
+		{
+			"fieldname": "requested_at",
+			"fieldtype": "Datetime",
+			"label": "Requested at",
+			"read_only": 1
+		},
+		{
+			"fieldname": "press_section",
+			"fieldtype": "Section Break",
+			"label": "Press"
+		},
+		{
+			"fieldname": "release_group",
+			"fieldtype": "Data",
+			"label": "Release group (bench)",
+			"read_only": 1
+		},
+		{
+			"fieldname": "press_reference",
+			"fieldtype": "Data",
+			"label": "Press deploy",
+			"read_only": 1
+		},
+		{
+			"fieldname": "other_sites",
+			"fieldtype": "Small Text",
+			"label": "Other sites on the bench",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_press",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "waiting_since",
+			"fieldtype": "Datetime",
+			"label": "Waiting for Press since",
+			"read_only": 1
+		},
+		{
+			"fieldname": "started_at",
+			"fieldtype": "Datetime",
+			"label": "Started at",
+			"read_only": 1
+		},
+		{
+			"fieldname": "finished_at",
+			"fieldtype": "Datetime",
+			"label": "Finished at",
+			"read_only": 1
+		},
+		{
+			"fieldname": "sites_section",
+			"fieldtype": "Section Break",
+			"label": "Sites and apps"
+		},
+		{
+			"fieldname": "sites",
+			"fieldtype": "Table",
+			"label": "Sites",
+			"options": "HDS Deploy Site",
+			"read_only": 1
+		},
+		{
+			"fieldname": "apps",
+			"fieldtype": "Table",
+			"label": "Apps",
+			"options": "HDS Deploy App",
+			"read_only": 1
+		},
+		{
+			"fieldname": "check_section",
+			"fieldtype": "Section Break",
+			"label": "The check after"
+		},
+		{
+			"fieldname": "check_results",
+			"fieldtype": "Code",
+			"label": "Check results",
+			"options": "JSON",
+			"read_only": 1
+		},
+		{
+			"fieldname": "error",
+			"fieldtype": "Small Text",
+			"label": "Error",
+			"read_only": 1
+		}
+	],
+	"links": [],
+	"modified": "2026-10-24 16:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HDS Deploy Request",
+	"naming_rule": "Expression (old style)",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "System Manager",
+			"share": 1,
+			"write": 1
+		},
+		{
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent Manager",
+			"share": 1
+		},
+		{
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent",
+			"share": 1
+		}
+	],
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": [],
+	"title_field": "ticket",
+	"track_changes": 1
+}

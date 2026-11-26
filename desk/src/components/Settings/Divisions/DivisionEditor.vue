@@ -435,7 +435,7 @@ const FIELDS = [
   // a Check, kept as "1" or "" like the text fields
   "weekly_lead_report",
 ] as const;
-type Profile = Record<(typeof FIELDS)[number], string>;
+type Profile = Record<typeof FIELDS[number], string>;
 
 const blank = (): Profile =>
   Object.fromEntries(

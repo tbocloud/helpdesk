@@ -38,6 +38,7 @@ def draft_reply(ticket: str, instructions: str = "", current_draft: str = "") ->
             SYSTEM_PROMPT,
             build_prompt(doc, instructions, current_draft),
             ticket_name=ticket,
+            job="triage",
         )
     except Exception:  # noqa: BLE001 - provider errors vary; show one clear message
         frappe.log_error(

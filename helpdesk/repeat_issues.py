@@ -683,7 +683,9 @@ def label_clusters(clusters: list[dict]) -> int:
         batch = todo[i : i + AI_BATCH]
         facts = [{"id": c["id"], "subjects": c["subjects"]} for c in batch]
         try:
-            result = call_haiku(LABEL_PROMPT, json.dumps({"clusters": facts}, indent=1))
+            result = call_haiku(
+                LABEL_PROMPT, json.dumps({"clusters": facts}, indent=1), job="summary"
+            )
         except Exception:  # noqa: BLE001 - provider errors vary; subjects still work
             frappe.log_error(
                 title="Repeat issues: AI titles failed", message=frappe.get_traceback()

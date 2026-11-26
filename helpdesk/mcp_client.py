@@ -62,6 +62,9 @@ class MCPClient:
         """
         conn = frappe.get_doc("HDS Support Connection", connection_name)
         self.connection_name = connection_name
+        # how long one call waits, and how many times it is tried again; a caller in a hurry lowers them
+        self.timeout = MCP_TIMEOUT
+        self.retries = MCP_RETRY_COUNT
         self.endpoint = conn.mcp_endpoint
         self.customer_name = conn.customer_name
         self.site_url = conn.site_url
@@ -161,8 +164,6 @@ class MCPClient:
         self, tool_name, arguments, result, elapsed_ms, session_id, error_message
     ):
         """Write an entry to HDS Remote Audit Log."""
-        import json as _json
-
         WRITE_TOOLS = {
             "set_value",
             "set_values",
@@ -178,6 +179,10 @@ class MCPClient:
                 content = result["content"][0].get("text", "")[:500]
             is_error = bool(result and result.get("isError"))
 
+            from helpdesk.copilot import audit
+
+            # what was called on which record, and how it went; the customer site's data stays out
+            # (TBO Copilot Phase 21): arguments as identifiers and fingerprints, the answer as its size
             frappe.get_doc(
                 {
                     "doctype": "HDS Remote Audit Log",
@@ -188,9 +193,13 @@ class MCPClient:
                     "status": "Error" if (is_error or error_message) else "Success",
                     "execution_time_ms": elapsed_ms,
                     "session_id": str(session_id) if session_id else "",
-                    "arguments": _json.dumps(arguments, default=str)[:2000],
-                    "result_summary": content if not is_error else "",
-                    "error_message": error_message or (content if is_error else ""),
+                    "arguments": audit.safe_arguments(arguments),
+                    "result_summary": audit.result_size(content)
+                    if not is_error
+                    else "",
+                    "error_message": audit.error_line(
+                        error_message or (content if is_error else "")
+                    ),
                 }
             ).insert(ignore_permissions=True)
             frappe.db.commit()
@@ -227,13 +236,13 @@ class MCPClient:
             headers["Mcp-Session-Id"] = self.session_id
 
         last_error = None
-        for attempt in range(MCP_RETRY_COUNT + 1):
+        for attempt in range(self.retries + 1):
             try:
                 response = requests.post(
                     self.endpoint,
                     json=payload,
                     headers=headers,
-                    timeout=MCP_TIMEOUT,
+                    timeout=self.timeout,
                 )
 
                 if not expect_response:
@@ -247,7 +256,7 @@ class MCPClient:
 
             except requests.Timeout:
                 last_error = f"MCP request timed out after {MCP_TIMEOUT}s"
-                if attempt < MCP_RETRY_COUNT:
+                if attempt < self.retries:
                     continue
             except requests.ConnectionError as e:
                 last_error = f"Cannot connect to {self.site_url}: {e}"

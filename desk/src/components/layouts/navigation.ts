@@ -3,6 +3,7 @@ import type { Component } from "vue";
 import { OrganizationsIcon } from "../icons";
 import LucideBadgeIndianRupee from "~icons/lucide/badge-indian-rupee";
 import LucideBookOpen from "~icons/lucide/book-open";
+import LucideBot from "~icons/lucide/bot";
 import LucideBriefcase from "~icons/lucide/briefcase";
 import LucideCalendarCheck from "~icons/lucide/calendar-check";
 import LucideCalendarClock from "~icons/lucide/calendar-clock";
@@ -290,6 +291,14 @@ export const agentNavAreas: NavArea[] = [
             to: "TicketsAgent",
             also: ["TicketAgent", "TicketAgentNew"],
             countKey: "tickets",
+            ticketWorkersOnly: true,
+          },
+          // agents: Copilot's runs, approvals, releases, sites and known issues (Phase 10)
+          {
+            id: "copilot-board",
+            label: __("Copilot board"),
+            icon: LucideBot,
+            to: "CopilotBoard",
             ticketWorkersOnly: true,
           },
           {

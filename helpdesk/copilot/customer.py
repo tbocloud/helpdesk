@@ -1,0 +1,608 @@
+# Copyright (c) 2026, Quark Cyber Systems FZC and contributors
+# For license information, please see license.txt
+
+"""What the customer hears from Copilot.
+
+Stages ("Received", "Working on it", "Resolved", ...) go to the customer's own
+ticket on their site through hub_api and are noted on the hub ticket.
+Explanations and questions never go out by themselves: they land in the
+agent's suggested-reply card, and the agent sends them. The customer's
+"it's fixed" or "still broken" comes back here, from the portal or from
+their site.
+"""
+
+import json
+import re
+from contextlib import contextmanager
+
+import frappe
+from frappe import _
+from frappe.utils import escape_html
+
+from helpdesk import client_api
+from helpdesk.automation import automation_user
+from helpdesk.copilot import runs
+from helpdesk.copilot import settings as copilot_settings
+from helpdesk.ticket_puller import _close_ticket, _log_once
+from helpdesk.work_reminders import notify_users
+
+COPILOT_NAME = "TBO Copilot"
+# what "Resolved" says after an explanation, by root cause
+RESOLUTION_TEXT = {
+    "question": "We have replied with the answer.",
+    "not_allowed_request": "We have explained why this cannot be done and what to do instead.",
+    "customer_mistake": "We have explained what happened and how to correct it.",
+}
+
+
+class _Blank(dict):
+    def __missing__(self, key):
+        return ""
+
+
+def render(
+    stage: str, context: dict | None = None, build: bool = False, language: str = "en"
+) -> str:
+    template = copilot_settings.template_for(stage, build, language)
+    try:
+        # an empty value leaves no double space behind
+        return re.sub(r" {2,}", " ", template.format_map(_Blank(context or {}))).strip()
+    except (ValueError, IndexError):
+        return (
+            template.strip()
+        )  # an edited template with a stray brace still reaches the customer
+
+
+def latest_run(ticket: str):
+    name = frappe.db.get_value("HD Ticket", ticket, "custom_copilot_run")
+    return frappe.get_doc("HDS Copilot Run", name) if name else None
+
+
+# --- stages -----------------------------------------------------------------
+
+
+def send_stage(run, stage: str, context: dict | None = None) -> bool:
+    """Shows `stage` on the customer's ticket, once per run, stage and text.
+
+    Connected sites with hub_api get an update row (the raiser is notified
+    there); every delivery is noted on the hub ticket and mirrored in
+    `custom_copilot_stage`, whether or not the site could be reached.
+
+    A shadow run tells the customer nothing: the event alone records what
+    they would have seen. Nor does a revert run (an undo): the ticket is
+    with a person by then. Nor does a ticket the error watch opened, until
+    a person replied on it or the fix is live.
+    """
+    from helpdesk.copilot import conversation
+
+    language = conversation.language_of(run.ticket)
+    text = render(stage, context, build=bool(run.get("build_scope")), language=language)
+    if _last_stage(run) == (stage, text):
+        return False
+    number = (
+        frappe.db.count("HDS Copilot Event", {"run": run.name, "event_type": "stage"})
+        + 1
+    )
+    hub_ref = f"{run.name}:{stage}:{number}"
+    if (
+        run.get("shadow")
+        or run.get("kind") == "revert"
+        or (stage != "Resolved" and quiet_for_customer(run.ticket))
+    ):
+        runs.add_event(
+            run,
+            "stage",
+            {
+                "stage": stage,
+                "message": text,
+                "hub_ref": hub_ref,
+                "pushed": False,
+                "shadow": True,
+                **(
+                    {"held": "until a person replies"}
+                    if not run.get("shadow") and run.get("kind") != "revert"
+                    else {}
+                ),
+            },
+            runs.SYSTEM,
+        )
+        return False
+    if stage == "Resolved":
+        # a new fix: "Is it fixed?" is asked again, on the portal and the customer's form, even
+        # after an earlier answer (Phase 23, B7)
+        frappe.db.set_value(
+            "HD Ticket",
+            run.ticket,
+            "custom_customer_confirmation",
+            None,
+            update_modified=False,
+        )
+    pushed = _push_stage(run, hub_ref, stage, text)
+    note = _("Copilot → customer: <b>{0}</b> — {1}").format(
+        escape_html(_(stage)), escape_html(text)
+    )
+    if not pushed:
+        note += " <i>({0})</i>".format(_("not delivered to the customer's site"))
+    comment(run.ticket, note)
+    runs.add_event(
+        run,
+        "stage",
+        {"stage": stage, "message": text, "hub_ref": hub_ref, "pushed": pushed},
+        runs.SYSTEM,
+    )
+    runs.update_ticket(run, stage=stage)
+    conversation.tell_stage(run, stage, text)  # a chat hears it at once (Phase 5)
+    return True
+
+
+def _last_stage(run) -> tuple | None:
+    rows = frappe.get_all(
+        "HDS Copilot Event",
+        filters={"run": run.name, "event_type": "stage", "actor": runs.SYSTEM},
+        fields=["payload"],
+        order_by="creation desc",
+        limit=1,
+    )
+    if not rows:
+        return None
+    payload = json.loads(rows[0].payload or "{}")
+    return (payload.get("stage"), payload.get("message"))
+
+
+def quiet_for_customer(ticket: str) -> bool:
+    """Copilot says nothing to the customer until a person replied when the error watch raised
+    the ticket (Phase 9), or when the chat is with a person after Still broken. When the customer
+    pressed Talk to a person, never (testing fixes 2): only the resolve question reaches them."""
+    from helpdesk.copilot import conversation, watch
+
+    if watch.held(ticket):
+        return True
+    if conversation.asked_for_person(ticket):
+        return True
+    name = conversation.for_ticket(ticket)
+    if (
+        not name
+        or frappe.db.get_value(conversation.CONVERSATION, name, "state")
+        != "With a person"
+    ):
+        return False
+    return not frappe.db.exists(
+        "Communication",
+        {
+            "reference_doctype": "HD Ticket",
+            "reference_name": ticket,
+            "sent_or_received": "Sent",
+        },
+    )
+
+
+def _push_stage(run, hub_ref: str, stage: str, text: str) -> bool:
+    info = frappe.db.get_value(
+        "HD Ticket",
+        run.ticket,
+        ["custom_qcs_connection", "custom_client_ticket"],
+        as_dict=True,
+    )
+    if not (info and info.custom_qcs_connection and info.custom_client_ticket):
+        return False
+    conn = frappe.get_doc("HDS Support Connection", info.custom_qcs_connection)
+    if not client_api.supports(conn, client_api.HUB_API):
+        return False  # an older client: the status push still reaches it
+    try:
+        client_api.hub_api(
+            conn,
+            "add_update",
+            {
+                "name": info.custom_client_ticket,
+                "hub_ref": hub_ref,
+                "stage": stage,
+                "message": text,
+                "author_name": COPILOT_NAME,
+                "kind": "Stage",
+            },
+        )
+        return True
+    except Exception:
+        _log_once(
+            f"Copilot stage not delivered to the customer site for {run.ticket}",
+            f"hds_copilot_stage_push:{run.ticket}",
+        )
+        return False
+
+
+def comment(ticket: str, html: str):
+    """An internal note on the hub ticket, credited to the automation user, without notifications."""
+    doc = frappe.get_doc(
+        {
+            "doctype": "HD Ticket Comment",
+            "reference_ticket": ticket,
+            "commented_by": automation_user(),
+            "content": html,
+        }
+    )
+    doc.flags.skip_notifications = True
+    doc.insert(ignore_permissions=True)
+    return doc
+
+
+# --- the worker's result ----------------------------------------------------
+
+
+def note_diagnosis(run, investigation: dict):
+    """The diagnosis as an internal note: category, confidence, summary, evidence, proposal."""
+    shadow = bool(run.get("shadow"))
+    parts = [
+        "<b>{0}</b> ({1}, {2}%)".format(
+            _("Copilot diagnosis (shadow)") if shadow else _("Copilot diagnosis"),
+            escape_html(run.root_cause_category or ""),
+            int(round((investigation.get("confidence") or 0) * 100)),
+        ),
+        "<div>{0}</div>".format(escape_html(investigation.get("summary") or "")),
+    ]
+    evidence = investigation.get("evidence") or []
+    if evidence:
+        items = "".join(
+            "<li>{0}</li>".format(
+                escape_html(" ".join(str(v) for v in item.values() if v))
+            )
+            for item in evidence
+        )
+        parts.append(f"<ul>{items}</ul>")
+    proposal = investigation.get("proposal") or {}
+    if proposal:
+        parts.append(
+            "<div><b>{0}:</b> {1}</div>".format(
+                _("Proposal"),
+                escape_html(
+                    " ".join(
+                        ", ".join(v) if isinstance(v, list) else str(v)
+                        for v in proposal.values()
+                        if v
+                    )
+                ),
+            )
+        )
+    if shadow:
+        parts.append(
+            "<div><i>{0}</i></div>".format(
+                _(
+                    "Shadow mode: the customer was told nothing. Rate this diagnosis in the "
+                    "Copilot dialog: Right, Partly or Wrong."
+                )
+            )
+        )
+    comment(run.ticket, "".join(parts))
+
+
+def draft_explanation(run, text: str):
+    """The explanation or question goes to the agent's suggested-reply card; the agent reads and sends it."""
+    from helpdesk.ai_suggestion import store_suggestion
+
+    store_suggestion(
+        run.ticket,
+        {
+            "reply": as_html(text),
+            "note": _(
+                "From Copilot run {0} ({1}): read it, edit if needed, send."
+            ).format(run.name, run.root_cause_category),
+        },
+        [
+            {
+                "kind": "investigation",
+                "name": run.name,
+                "title": _("Copilot run {0}").format(run.name),
+            }
+        ],
+    )
+    from helpdesk.copilot import thread
+
+    thread.on_explanation(
+        run, text
+    )  # the ticket's chat: the draft with Send to customer
+
+
+def as_html(text: str) -> str:
+    paragraphs = [p.strip() for p in (text or "").split("\n\n") if p.strip()]
+    return "".join(
+        "<p>{0}</p>".format(escape_html(p).replace("\n", "<br>")) for p in paragraphs
+    )
+
+
+# --- hand-over to a person --------------------------------------------------
+
+
+def hand_over(run, reason: str) -> str | None:
+    """A Task for the customer's developer in the customer's project (else the hand-over project).
+
+    Without a project, or a developer, the Agent Managers are told instead.
+    Returns the task name. A shadow run hands nothing over: the diagnosis note
+    is all the team gets.
+    """
+    if run.get("shadow"):
+        runs.add_event(
+            run,
+            "hand_over_skipped",
+            {"note": "shadow mode", "reason": reason[:500]},
+            runs.SYSTEM,
+        )
+        return None
+    ticket = frappe.get_doc("HD Ticket", run.ticket)
+    from helpdesk.copilot import people
+
+    developer = people.developer(ticket.customer, ticket.name)
+    project = project_for(ticket.customer)
+    task = _create_task(ticket, project, developer, run, reason) if project else None
+    run.db_set({"task": task, "handed_over_to": developer}, update_modified=False)
+    subject = _("Copilot handed ticket {0} over: {1}").format(ticket.name, reason[:120])
+    if developer:
+        notify_users([developer], "HD Ticket", ticket.name, subject, escalate=not task)
+    else:
+        runs.tell_people(run, subject)
+    return task
+
+
+def project_for(customer: str | None) -> str | None:
+    project = (
+        frappe.db.get_value(
+            "Project",
+            {"customer": customer, "status": "Open"},
+            "name",
+            order_by="modified desc",
+        )
+        if customer
+        else None
+    )
+    return project or copilot_settings.get_settings().handover_project
+
+
+def _create_task(
+    ticket, project: str, developer: str | None, run, reason: str
+) -> str | None:
+    from helpdesk.api.work import create_task_from_ticket
+    from helpdesk.tasky.api import _is_project_member
+
+    assignee = developer if developer and _is_project_member(project, developer) else ""
+    description = "<p>{0}</p><p>{1}</p>".format(
+        escape_html(reason),
+        _("Copilot run {0}; see the diagnosis on the ticket.").format(run.name),
+    )
+    with as_automation_user():
+        if not frappe.has_permission("HD Ticket", "write", ticket.name):
+            frappe.log_error(
+                title=f"Copilot could not hand over {ticket.name}",
+                message=f"{frappe.session.user} may not write the ticket; no task created",
+            )
+            return None
+        result = create_task_from_ticket(
+            ticket.name,
+            project,
+            task_name=_("Copilot hand-over: {0}").format(ticket.subject or ticket.name)[
+                :140
+            ],
+            description=description,
+            assigned_to=assignee,
+            pause_ticket=False,
+        )
+    task = result.get("task")
+    return task.get("name") if isinstance(task, dict) else task
+
+
+@contextmanager
+def as_automation_user():
+    """Runs a block as the hub's own user, so a customer's action can do what an agent would."""
+    previous_user, previous_form = frappe.session.user, frappe.local.form_dict
+    # the hub's own user, for this block only
+    frappe.set_user(automation_user())  # nosemgrep
+    try:
+        yield
+    finally:
+        frappe.set_user(previous_user)  # nosemgrep
+        frappe.local.form_dict = previous_form
+
+
+# --- the agent's reply, the customer's reply ----------------------------------
+
+
+def on_communication_insert(doc, method=None):
+    """Communication after_insert: an agent's reply answers an Explaining run; a customer's
+    message after a question starts a follow-up run."""
+    if doc.reference_doctype != "HD Ticket" or not doc.reference_name:
+        return
+    if doc.communication_type != "Communication":
+        return
+    if doc.sent_or_received == "Received" and not _first_message(doc):
+        # Phase 24: every step reaches the coordinators and the Leaders, the customer's replies too
+        try:
+            from helpdesk.copilot import thread
+
+            thread.on_customer_reply(doc.reference_name, doc.content or "")
+        except Exception:
+            frappe.log_error(
+                title=f"Copilot could not pass on the reply on {doc.reference_name}"
+            )
+    if doc.sent_or_received == "Sent":
+        # testing fixes 1, F3: the person's reply shows in the ticket's chat
+        try:
+            from helpdesk.copilot import thread
+
+            thread.on_person_replied(doc.reference_name, doc.sender, doc.content or "")
+        except Exception:
+            frappe.log_error(
+                title=f"Copilot could not show the reply on {doc.reference_name} in its chat"
+            )
+    run = latest_run(doc.reference_name)
+    if not run:
+        return
+    try:
+        if doc.sent_or_received == "Sent":
+            on_agent_reply(run, doc.content or "")
+        elif doc.sent_or_received == "Received":
+            on_customer_message(run)
+    except Exception:
+        frappe.log_error(
+            title=f"Copilot could not follow the conversation on {doc.reference_name}",
+            message=frappe.get_traceback(),
+        )
+
+
+def on_agent_reply(run, sent: str = ""):
+    if run.state != "Explaining":
+        return
+    waiting = run.root_cause_category == "unclear"
+    edited = explanation_edited(run, sent)
+    run = runs.transition(
+        run,
+        "Answered",
+        runs.SYSTEM,
+        note="the agent sent the reply",
+        **({"explanation_edited": edited} if edited is not None else {}),
+    )
+    if waiting:
+        send_stage(run, "Waiting for you")
+    elif run.root_cause_category == "customization_request":
+        send_stage(
+            run, "With our team"
+        )  # a person estimates the work; the estimate flow follows
+    else:
+        send_stage(
+            run,
+            "Resolved",
+            {"resolution": RESOLUTION_TEXT.get(run.root_cause_category, "")},
+        )
+
+
+def explanation_edited(run, sent: str) -> float | None:
+    """How much the agent changed Copilot's explanation, 0 (as drafted) to 100 (rewritten); None when unknown."""
+    import html
+    import re
+    from difflib import SequenceMatcher
+
+    from helpdesk.copilot import router
+
+    if not sent:
+        return None
+    investigation = frappe.parse_json(run.investigation or "{}") or {}
+    draft = router.explanation_text(investigation, run.root_cause_category or "")
+
+    def plain(text: str) -> str:
+        # tags become spaces, so paragraphs stay apart words
+        return " ".join(
+            html.unescape(re.sub(r"<[^>]+>", " ", text or "")).split()
+        ).lower()
+
+    if not plain(draft):
+        return None
+    ratio = SequenceMatcher(None, plain(draft), plain(sent), autojunk=False).ratio()
+    return round((1 - ratio) * 100, 1)
+
+
+def on_customer_message(run):
+    """The customer answered Copilot's question: a follow-up run picks the ticket up again; not on
+    a ticket whose customer asked for a person (testing fixes 2): the person answers."""
+    from helpdesk.copilot import conversation
+
+    if conversation.asked_for_person(run.ticket):
+        return
+    stage = frappe.db.get_value("HD Ticket", run.ticket, "custom_copilot_stage")
+    if run.state == "Answered" and stage == "Waiting for you":
+        runs.start_run(run.ticket, kind="followup")
+
+
+def _first_message(doc) -> bool:
+    """The ticket's own first message (its description), which the new-ticket card already
+    told: not a reply."""
+    return not frappe.db.exists(
+        "Communication",
+        {
+            "reference_doctype": "HD Ticket",
+            "reference_name": doc.reference_name,
+            "communication_type": "Communication",
+            "name": ["!=", doc.name],
+        },
+    )
+
+
+def on_customer_comment(ticket: str):
+    """The same, for a comment relayed from the customer's site."""
+    run = latest_run(ticket)
+    if run:
+        on_customer_message(run)
+
+
+# --- confirm and reopen -------------------------------------------------------
+
+
+def decide_resolution(
+    ticket: str, confirmed: bool, note: str = "", actor: str = runs.CUSTOMER
+) -> dict:
+    """Confirmed closes the ticket and the run; Reopened sends the ticket to a person."""
+    doc = frappe.get_doc("HD Ticket", ticket)
+    run = latest_run(ticket)
+    note = (note or "").strip()[:1000]
+    if confirmed:
+        frappe.db.set_value(
+            "HD Ticket",
+            ticket,
+            "custom_customer_confirmation",
+            "Confirmed",
+            update_modified=False,
+        )
+        if run:
+            _close_run(run, actor, note)
+        with as_automation_user():  # the hub closes on the customer's behalf; no feedback form
+            _close_ticket(ticket)
+        comment(
+            ticket,
+            _("The customer confirmed the fix.")
+            + (f" <i>{escape_html(note)}</i>" if note else ""),
+        )
+        return {
+            "confirmation": "Confirmed",
+            "run": run.name if run else None,
+            "task": None,
+        }
+
+    if not note:
+        frappe.throw(_("Please say what is still wrong."))
+    frappe.db.set_value(
+        "HD Ticket",
+        ticket,
+        "custom_customer_confirmation",
+        "Reopened",
+        update_modified=False,
+    )
+    # the ticket was read before the line above: saving that copy wrote the old answer back
+    # (found by testing fixes 2)
+    doc.custom_customer_confirmation = "Reopened"
+    with as_automation_user():
+        _reopen_ticket(doc)
+    comment(
+        ticket, _("The customer reopened the ticket:") + f" <i>{escape_html(note)}</i>"
+    )
+    task = None
+    if run:
+        if (run.state, "Escalated") in runs.TRANSITIONS:
+            run = runs.transition(
+                run, "Escalated", actor, note=f"reopened: {note}"[:140]
+            )
+        task = hand_over(
+            run, _("The customer says it is still broken: {0}").format(note)
+        )
+        send_stage(run, "With our team")
+    return {"confirmation": "Reopened", "run": run.name if run else None, "task": task}
+
+
+def _close_run(run, actor: str, note: str):
+    if (run.state, "Closed") in runs.TRANSITIONS:
+        runs.transition(run, "Closed", actor, note=f"confirmed: {note}"[:140])
+    elif run.state in runs.CANCELLABLE:
+        runs.transition(
+            run, "Cancelled", runs.SYSTEM, note="the customer says the ticket is solved"
+        )
+
+
+def _reopen_ticket(doc):
+    if doc.status_category != "Resolved":
+        return  # still open: nothing to reopen, the note is on the ticket
+    doc.status = doc.ticket_reopen_status or doc.default_open_status
+    doc.save(ignore_permissions=True)
