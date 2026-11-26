@@ -53,6 +53,7 @@ export const SALES_EMPLOYEE_ROUTES = new Set([
   "AssignLeads",
   // a Sales Manager of a division (docs/divisions.md)
   "DivisionOverview",
+  "DivisionLeads",
   "DivisionReports",
   "SalesTargets",
   "TeamTargets",

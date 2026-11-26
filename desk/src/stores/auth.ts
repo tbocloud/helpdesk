@@ -145,6 +145,10 @@ export const useAuthStore = defineStore("auth", () => {
     () => !!user__.value.can_assign_sales_targets
   );
   // Sales targets (their own): Presales Executives and Sales Users read theirs
+  // Sales team: Sales Heads only; a Division Admin sets targets but not the team's roles
+  const canManageSalesTeam: ComputedRef<boolean> = computed(
+    () => !!user__.value.can_manage_sales_team
+  );
   const hasSalesTargets: ComputedRef<boolean> = computed(
     () => !!user__.value.has_sales_targets
   );
@@ -271,6 +275,7 @@ export const useAuthStore = defineStore("auth", () => {
     canViewDivisionOverview,
     overviewDivision,
     canAssignSalesTargets,
+    canManageSalesTeam,
     hasSalesTargets,
     hasWeeklyLeadReport,
     inSales,

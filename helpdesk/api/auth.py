@@ -25,6 +25,7 @@ from helpdesk.helpdesk.doctype.hd_customer.hd_customer import can_set_ticket_own
 from helpdesk.integrations.crm.leads import can_use_lead_bank, can_use_leads
 from helpdesk.sales_targets import (
     can_assign_targets,
+    can_give_targets,
     has_own_targets,
     hides_todays_calls,
 )
@@ -127,8 +128,11 @@ def get_user():
         and not leads_closed_by_site(current_user),
         # Add a lead and My leads: every active agent while Leads is on (docs/lead-bank.md)
         "can_use_lead_bank": can_use_lead_bank(current_user),
-        # Sales targets: Sales Heads set each month's targets (docs/sales-targets.md)
-        "can_assign_sales_targets": can_assign_targets(current_user),
+        # Assign sales targets and Team targets: Sales Heads, and Division Admins for their
+        # division's people (docs/sales-targets.md)
+        "can_assign_sales_targets": can_give_targets(current_user),
+        # Sales team: Sales Heads only (docs/sales-team.md)
+        "can_manage_sales_team": can_assign_targets(current_user),
         # Sales targets (their own): Presales Executives and Sales Users read theirs
         "has_sales_targets": has_own_targets(current_user),
         # Sales → Lead report, in a division that keeps it (docs/weekly-lead-report.md)

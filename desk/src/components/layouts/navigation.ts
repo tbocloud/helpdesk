@@ -70,8 +70,10 @@ export interface NavItem {
   customerReportOnly?: boolean;
   /** Business overview and Division reports: Super Admins and division managers */
   divisionOverviewOnly?: boolean;
-  /** Sales targets and Sales team: Sales Heads (and admins) */
+  /** Assign sales targets and Team targets: Sales Heads (and admins) and Division Admins */
   salesHeadOnly?: boolean;
+  /** Sales team: Sales Heads (and admins) */
+  salesTeamOnly?: boolean;
   /** Sales targets (their own): Presales Executives and Sales Users */
   ownTargetsOnly?: boolean;
   /** Sales → Dashboard: everyone with Leads but Sales Heads and Sales Managers */
@@ -453,7 +455,7 @@ export const agentNavAreas: NavArea[] = [
             label: __("Sales team"),
             icon: LucideUsers,
             to: "SalesTeam",
-            salesHeadOnly: true,
+            salesTeamOnly: true,
           },
           // who is handed which product and how many calls per slot (docs/leads.md)
           {

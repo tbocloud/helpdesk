@@ -6,6 +6,7 @@ from frappe import _
 from frappe.utils import add_days, add_months, cint, get_fullname, getdate, nowdate
 
 from helpdesk.api.leads import READ_TTL, cached_read
+from helpdesk.divisions import DIVISION, active_division, is_division_sales_user
 from helpdesk.integrations.crm.leads import LeadsError, call
 from helpdesk.sales_targets import (
     MEASURES,
@@ -19,8 +20,9 @@ from helpdesk.sales_targets import (
     month_start,
     remind_sales_heads,
     require_assigner,
-    sales_heads,
+    target_givers,
     target_people,
+    targets_division,
 )
 
 TARGET = "HD Sales Target"
@@ -29,7 +31,8 @@ MAX_PEOPLE = 200
 
 @frappe.whitelist()
 def get_team(month: str) -> dict:
-    """Sales Heads: who may be given targets, and what each has for the month."""
+    """Sales Heads and Division Admins: who they may give targets to, and what each has
+    for the month."""
     require_assigner()
     start = month_start(month)
     people = target_people()
@@ -52,8 +55,8 @@ def get_team(month: str) -> dict:
 
 @frappe.whitelist(methods=["POST"])
 def assign_targets(month: str, employees, criteria) -> dict:
-    """Sales Heads: gives every one of `employees` these criteria for the month, replacing
-    what they had for it. All or none: one invalid row saves nobody's."""
+    """Sales Heads and Division Admins: gives every one of `employees` these criteria for
+    the month, replacing what they had for it. All or none: one invalid row saves nobody's."""
     require_assigner()
     start = month_start(month)
     employees = list(dict.fromkeys(frappe.parse_json(employees) or []))
@@ -63,11 +66,12 @@ def assign_targets(month: str, employees, criteria) -> dict:
     if len(employees) > MAX_PEOPLE:
         frappe.throw(_("Assign to {0} people or fewer at a time.").format(MAX_PEOPLE))
     # everyone is checked before anyone is saved
-    refused = [e for e in employees if not has_own_targets(e)]
+    allowed = {p["user"] for p in target_people()}
+    refused = [e for e in employees if e not in allowed]
     if refused:
         frappe.throw(
             _(
-                "{0} can't be given targets: they need the Presales Executive or Sales User role and an enabled account."
+                "{0} can't be given targets by you: they need the Presales Executive or Sales User role, an enabled account and, for a Division Admin, to be in your division."
             ).format(", ".join(frappe.bold(get_fullname(e)) for e in refused))
         )
     for employee in employees:
@@ -100,15 +104,15 @@ def get_my_targets(month: str | None = None) -> dict:
 
 @frappe.whitelist(methods=["POST"])
 def ask_for_targets(month: str) -> dict:
-    """A person with no targets for the month reminds the Sales Heads to set them."""
+    """A person with no targets for the month reminds whoever sets them (`target_givers`)."""
     user = require_own_targets()
     start = month_start(month)
     if targets_for(start, [user]).get(user):
         frappe.throw(
             _("You already have targets for {0}.").format(start.strftime("%B %Y"))
         )
-    if not sales_heads():
-        frappe.throw(_("There's no Sales Head to ask yet. Ask your manager."))
+    if not target_givers(user):
+        frappe.throw(_("There's no one to ask for targets yet. Ask your manager."))
     return {"told": remind_sales_heads(user, start)}
 
 
@@ -126,7 +130,7 @@ def require_own_targets() -> str:
 @frappe.whitelist()
 def get_progress(month: str, employee: str | None = None, fresh: int | str = 0) -> dict:
     """How far a person is with the month's targets, counted from their leads on the ERP
-    site. Their own, or anyone's for a Sales Head."""
+    site. Their own, or, for a Sales Head or Division Admin, one of their people's."""
     start = month_start(month)
     employee = progress_person(employee)
     target = targets_for(start, [employee]).get(employee)
@@ -137,7 +141,8 @@ def get_progress(month: str, employee: str | None = None, fresh: int | str = 0) 
 
 @frappe.whitelist()
 def get_team_progress(month: str, fresh: int | str = 0) -> dict:
-    """Sales Heads: each person's progress for the month, for those with targets."""
+    """Sales Heads and Division Admins: each of their people's progress for the month, for
+    those with targets."""
     require_assigner()
     start = month_start(month)
     people = [p["user"] for p in target_people()]
@@ -169,16 +174,19 @@ def mark_kpi_done(
 def confirm_kpi(
     month: str, employee: str, criterion: str, confirmed: int | str = 1
 ) -> dict:
-    """Sales Heads: confirm a KPI someone marked done, or reopen a confirmed one."""
-    require_assigner()
+    """Sales Heads and Division Admins: confirm a KPI one of their people marked done, or
+    reopen a confirmed one."""
+    require_target_person(employee)
     target = target_doc(employee, month_start(month))
     target.confirm_kpi(criterion, bool(cint(confirmed)), frappe.session.user)
-    target.save()
+    # a Division Admin holds no write permission on targets; require_target_person checked
+    target.save(ignore_permissions=True)
     return targets_for(target.month, [employee])[employee]
 
 
 def progress_person(employee: str | None) -> str:
-    """Whose progress the signed-in person may read: their own, or anyone's as a head."""
+    """Whose progress the signed-in person may read: their own, or one of their people's
+    as a Sales Head or Division Admin."""
     user = frappe.session.user
     if not employee or employee == user:
         if not has_own_targets(user):
@@ -187,8 +195,20 @@ def progress_person(employee: str | None) -> str:
                 SalesTargetsForbiddenError,
             )
         return user
-    require_assigner()
+    require_target_person(employee)
     return employee
+
+
+def require_target_person(employee: str):
+    """Refused unless the signed-in person gives `employee` their targets."""
+    require_assigner()
+    if employee not in {p["user"] for p in target_people()}:
+        frappe.throw(
+            _("{0} isn't one of the people you set targets for.").format(
+                frappe.bold(get_fullname(employee))
+            ),
+            SalesTargetsForbiddenError,
+        )
 
 
 def progress_for(employee: str, start, criteria: list[dict], fresh=0) -> dict:
@@ -297,13 +317,20 @@ def save_target(employee: str, start, criteria: list[dict]):
             },
         )
     target.keep_kpi_state(before)
-    target.save()
+    # a Division Admin holds no write permission on targets; assign_targets checked who
+    target.save(ignore_permissions=True)
 
 
 def currency() -> str:
-    """The reporting currency of the CRM dashboards, else the site's, else INR."""
+    """A division's own currency for a Division Admin's or Division Sales User's targets
+    (their division's ERP site is the one counted), else the CRM dashboards' reporting
+    currency, else the site's, else INR."""
+    division = targets_division() or (
+        active_division() if is_division_sales_user() else None
+    )
     return (
-        frappe.db.get_single_value("HD CRM Settings", "dashboard_currency")
+        (division and frappe.db.get_value(DIVISION, division, "currency"))
+        or frappe.db.get_single_value("HD CRM Settings", "dashboard_currency")
         or frappe.db.get_default("currency")
         or "INR"
     )
