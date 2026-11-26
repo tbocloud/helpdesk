@@ -407,13 +407,13 @@
       v-model="peopleDialog"
       :customer="customer"
       :people="data.people"
-      @saved="setup.setData($event)"
+      @saved="setup.reload()"
     />
     <SiteCardDialog
       v-model="cardDialog"
       :customer="customer"
       :card-name="cardName"
-      @saved="setup.setData($event)"
+      @saved="setup.reload()"
     />
   </div>
 </template>
@@ -435,6 +435,7 @@ import { errorText } from "@/utils";
 import {
   Badge,
   Button,
+  call,
   createResource,
   FormControl,
   Switch,
@@ -463,12 +464,45 @@ const ICON_CLASS: Record<CheckState, string> = {
   later: "text-ink-gray-4",
 };
 
-const setup = createResource({
-  url: `${SETUP_API}.customer`,
-  makeParams: () => ({ name: props.customer }),
-  auto: true,
+// The customer's setup, where only the newest answer counts: a reload started earlier, or a
+// save's older snapshot, never replaces newer data (review of #351). After a dialog saves,
+// the tab reads the server again rather than taking the dialog's copy.
+const setup = reactive({
+  data: undefined as CopilotSetup | undefined,
+  loading: false,
+  error: null as unknown,
+  reload,
+  setData,
 });
-const data = computed(() => setup.data as CopilotSetup | undefined);
+let latest = 0;
+
+async function reload() {
+  const mine = ++latest;
+  setup.loading = true;
+  try {
+    const fresh = (await call(`${SETUP_API}.customer`, {
+      name: props.customer,
+    })) as CopilotSetup;
+    if (mine !== latest) return;
+    setup.data = fresh;
+    setup.error = null;
+  } catch (err) {
+    if (mine === latest) setup.error = err;
+  } finally {
+    if (mine === latest) setup.loading = false;
+  }
+}
+
+// an answer the tab asked for itself (switches, reading apps): newer than any reload in flight
+function setData(fresh: CopilotSetup) {
+  latest += 1;
+  setup.data = fresh;
+  setup.error = null;
+  setup.loading = false;
+}
+
+reload();
+const data = computed(() => setup.data);
 
 const settingsNote = computed(() => {
   const c = data.value?.copilot;
