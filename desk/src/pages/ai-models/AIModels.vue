@@ -3055,28 +3055,23 @@ function usedByLine(u: UsedBy) {
     .join("; ");
 }
 
-// a refresh fills only the fields nobody changed since the last one: a draft being typed stays
-function refill<T extends object>(
-  form: T,
-  before: Partial<T> | null,
-  now: Partial<T>
-) {
-  for (const field of Object.keys(now) as (keyof T)[]) {
-    if (!before || String(form[field]) === String(before[field]))
-      form[field] = now[field] as T[keyof T];
-  }
-}
-
 const alertForm = reactive({ error_rate: 0, fallback_rate: 0 });
 const alertBusy = ref(false);
 const alertNotice = ref<{ ok: boolean; text: string } | null>(null);
-// after a save that went through, the server's values win (as it stored them); the flag
-// lasts only for the reload that save starts
-let alertsSaved = false;
+// what the last save sent, until a reload is applied: the server's value goes in where the field
+// still holds what was sent (a value typed meanwhile is a new draft, and stays)
+let alertsSent: { error_rate: number; fallback_rate: number } | null = null;
 watch(
   () => settings.value?.alerts,
   (limits, old) => {
-    if (limits) refill(alertForm, alertsSaved ? null : old || null, limits);
+    if (!limits) return;
+    for (const field of ["error_rate", "fallback_rate"] as const) {
+      const untouched = alertsSent
+        ? String(alertForm[field]) === String(alertsSent[field])
+        : !old || String(alertForm[field]) === String(old[field]);
+      if (untouched) alertForm[field] = limits[field];
+    }
+    alertsSent = null;
   },
   { flush: "sync" }
 );
@@ -3086,22 +3081,25 @@ function limitText(limit: number) {
 async function saveAlerts() {
   alertBusy.value = true;
   alertNotice.value = null;
+  const sent = {
+    error_rate: alertForm.error_rate,
+    fallback_rate: alertForm.fallback_rate,
+  };
   try {
     await call(`${API}.save_alerts`, {
       values: JSON.stringify({
-        error_rate: Number(alertForm.error_rate) || 0,
-        fallback_rate: Number(alertForm.fallback_rate) || 0,
+        error_rate: Number(sent.error_rate) || 0,
+        fallback_rate: Number(sent.fallback_rate) || 0,
       }),
     });
     alertNotice.value = { ok: true, text: __("Alert limits saved.") };
-    alertsSaved = true;
+    alertsSent = sent;
   } catch (err) {
     alertNotice.value = { ok: false, text: errorText(err, __("Not saved")) };
-  } finally {
-    alertBusy.value = false;
-    await load();
-    alertsSaved = false;
   }
+  // busy until the reload is in, so two saves never overlap
+  await load();
+  alertBusy.value = false;
 }
 
 // --- the AI gateway ---------------------------------------------------------------------------
@@ -3117,26 +3115,29 @@ const gw = reactive({
 const gwBusy = ref(false);
 // the gateway's own results, shown in its card
 const gwNotice = ref<{ ok: boolean; text: string } | null>(null);
-// the typed keys are never read back: they stay until saved, so a refused save can be corrected
-// after a save of these settings, the server's values win: all of them when it went through,
-// the switches when it was refused (so the card never shows a state the server didn't keep; a
-// typed address stays for correction). It lasts only for the reload that save starts.
-let gwTake: "all" | "switches" | null = null;
+// the typed keys are never read back: they stay until saved, so a refused save can be corrected.
+// After a save, until a reload is applied: the server's value goes in where a field still holds
+// what was sent (a value typed meanwhile stays). After a refused save only the switches take it,
+// so the card never shows a state the server didn't keep; a typed address stays for correction.
+type GatewayForm = { url: string; on: boolean; forAll: boolean };
+let gwSent: (GatewayForm & { ok: boolean }) | null = null;
 watch(
   () => settings.value?.gateway,
   (g, old) => {
     if (!g) return;
-    const before = old
+    const now: GatewayForm = { url: g.url, on: g.on, forAll: g.for_all };
+    const before: GatewayForm | null = old
       ? { url: old.url, on: old.on, forAll: old.for_all }
       : null;
-    if (gwTake === "all") {
-      refill(gw, null, { url: g.url, on: g.on, forAll: g.for_all });
-    } else if (gwTake === "switches") {
-      refill(gw, null, { on: g.on, forAll: g.for_all });
-      refill(gw, before, { url: g.url });
-    } else {
-      refill(gw, before, { url: g.url, on: g.on, forAll: g.for_all });
+    for (const field of ["url", "on", "forAll"] as const) {
+      const afterSave = gwSent && (gwSent.ok || field !== "url");
+      const untouched =
+        gwSent && afterSave
+          ? String(gw[field]) === String(gwSent[field])
+          : !before || String(gw[field]) === String(before[field]);
+      if (untouched) Object.assign(gw, { [field]: now[field] });
     }
+    gwSent = null;
   },
   { flush: "sync" }
 );
@@ -3144,7 +3145,7 @@ async function gatewayCall(
   method: string,
   args: Record<string, unknown>,
   done: string,
-  saving = false
+  sent?: GatewayForm
 ) {
   gwBusy.value = true;
   gwNotice.value = null;
@@ -3162,11 +3163,10 @@ async function gatewayCall(
   } catch (err) {
     gwNotice.value = { ok: false, text: errorText(err, __("Not saved")) };
   }
-  // only a save of these settings takes the server's values (a read of usage leaves a draft);
-  // the buttons stay busy until that reload is in, so no second save shares the flag
-  if (saving) gwTake = ok ? "all" : "switches";
+  // only a save of these settings is reconciled (a read of usage leaves a draft alone)
+  if (sent) gwSent = { ...sent, ok };
+  // busy until the reload is in, so two saves never overlap
   await load();
-  gwTake = null;
   gwBusy.value = false;
   return ok;
 }
@@ -3179,17 +3179,18 @@ async function saveGateway() {
   if (gw.key) values.key = gw.key;
   if (gw.callKey) values.call_key = gw.callKey;
   if (gw.adminKey) values.admin_key = gw.adminKey;
-  // what was sent: a key typed while the save is on its way is a new one, and stays
-  const sent = { key: gw.key, callKey: gw.callKey, adminKey: gw.adminKey };
+  // what was sent: a key or value typed while the save is on its way is a new one, and stays
+  const keys = { key: gw.key, callKey: gw.callKey, adminKey: gw.adminKey };
+  const form: GatewayForm = { url: gw.url, on: gw.on, forAll: gw.forAll };
   const ok = await gatewayCall(
     "save_gateway",
     { values: JSON.stringify(values) },
     __("AI gateway saved."),
-    true
+    form
   );
   if (!ok) return;
   for (const field of ["key", "callKey", "adminKey"] as const) {
-    if (gw[field] === sent[field]) gw[field] = "";
+    if (gw[field] === keys[field]) gw[field] = "";
   }
 }
 function readGateway() {

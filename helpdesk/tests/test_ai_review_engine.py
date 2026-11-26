@@ -327,9 +327,18 @@ class TestTheTestSetRequests(ModelsCase):
             EVAL_REQUEST, asked, {"status": "Done", "eval_run": imported}
         )
 
-        run = worker_api.report_eval("glm-5", REPORT, request=asked)
+        with patch.object(frappe.db, "get_value", wraps=frappe.db.get_value) as read:
+            run = worker_api.report_eval("glm-5", REPORT, request=asked)
 
         self.assertNotEqual(run["eval_run"], imported)
+        self.assertEqual(frappe.db.count("HDS Model Eval Run", {"model": "glm-5"}), 2)
+        # the request is read with a lock, and now names the worker's own run
+        self.assertTrue(any(c.kwargs.get("for_update") for c in read.call_args_list))
+        self.assertEqual(
+            frappe.db.get_value(EVAL_REQUEST, asked, "eval_run"), run["eval_run"]
+        )
+        # so a copy of the report sent again stores nothing more
+        self.assertEqual(worker_api.report_eval("glm-5", REPORT, request=asked), run)
         self.assertEqual(frappe.db.count("HDS Model Eval Run", {"model": "glm-5"}), 2)
 
     def test_a_report_that_came_in_meanwhile_is_never_given_up(self):

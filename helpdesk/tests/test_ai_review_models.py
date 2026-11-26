@@ -774,12 +774,26 @@ class TestTheGatewaysCredentials(GatewayCase):
         self.assertEqual(
             [c.args[0] for c in self.admin.call_args_list], ["PATCH", "DELETE", "POST"]
         )
-
-    def test_a_credential_without_an_address_is_written_new(self):
-        ai_gateway.save_credential("Claude", {"api_key": "sk-claude-123456"})
-        self.assertEqual(
-            [c.args[0] for c in self.admin.call_args_list], ["DELETE", "POST"]
+        self.assertNotIn(
+            "credential_values_to_delete", self.admin.call_args.kwargs["json"]
         )
+
+    def test_a_credential_without_an_address_changes_in_place_too(self):
+        ai_gateway.save_credential("Claude", {"api_key": "sk-claude-123456"})
+        self.assertEqual([c.args[0] for c in self.admin.call_args_list], ["PATCH"])
+        # an earlier address goes explicitly: the gateway merges a change into what it has
+        self.assertEqual(
+            self.admin.call_args.kwargs["json"]["credential_values_to_delete"],
+            ["api_base"],
+        )
+
+    def test_a_refused_change_without_an_address_keeps_the_key_too(self):
+        self.admin.side_effect = lambda method, url, **kwargs: answered(
+            503 if method == "PATCH" else 200
+        )
+        with self.assertRaises(ai_gateway.GatewayError):
+            ai_gateway.save_credential("Claude", {"api_key": "sk-claude-new-123456"})
+        self.assertEqual([c.args[0] for c in self.admin.call_args_list], ["PATCH"])
 
     def test_a_model_written_back_after_a_timeout_meets_no_twin(self):
         calls = []
