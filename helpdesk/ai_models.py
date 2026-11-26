@@ -1152,7 +1152,10 @@ def write_all() -> dict:
         # what the gateway serves now is written back if it refuses the replacement
         _write_model(name, _served(name))
     for job in ai_engine.DESKTOP_GATEWAY_NAMES:
-        write_level(job)
+        # the level as it is saved is what the gateway serves: written back if the gateway
+        # refuses part of it, never taken off as if it were a first save
+        row = ai_engine.job_row(job)
+        write_level(job, (row.model, row.backup_model) if row else ())
     return {**job_settings(), "written": {"keys": keys, "models": len(models)}}
 
 
