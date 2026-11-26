@@ -153,7 +153,8 @@ const props = defineProps<{
   /** the card to change; empty: a new card */
   cardName?: string;
 }>();
-const emit = defineEmits<{ saved: [setup: CopilotSetup] }>();
+// "saved": the customer changed on the server; the page reads it again
+const emit = defineEmits<{ saved: [] }>();
 const show = defineModel<boolean>({ default: false });
 
 const chosen = ref("");
@@ -285,12 +286,12 @@ async function submit() {
   if (!editing.value) values.customer_name = forCustomer.value;
   savingFor.value = mine;
   try {
-    const data = (await call(`${SETUP_API}.save_site_card`, {
+    await call(`${SETUP_API}.save_site_card`, {
       values: JSON.stringify(values),
       name: props.cardName || undefined,
-    })) as CopilotSetup;
+    });
     toast.success(__("Site card saved"));
-    emit("saved", data);
+    emit("saved");
     if (mine === opening.value) show.value = false;
   } catch (err) {
     if (mine === opening.value) {
