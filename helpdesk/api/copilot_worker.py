@@ -296,13 +296,16 @@ def report_eval(
                 named.name, named.model, named.job
             )
         )
-    if (
-        named
-        and named.status == "Done"
-        and named.eval_run
-        and frappe.db.get_value(ai_models.EVAL_RUN, named.eval_run, "source")
-        == "Worker"
-    ):
+    # the run that answered it, read with a lock too: a locking read sees the newest committed
+    # row, so a copy of this report that waited on the request sees the run the first one stored
+    answered_by = (
+        frappe.db.get_value(
+            ai_models.EVAL_RUN, named.eval_run, "source", for_update=True
+        )
+        if named and named.status == "Done" and named.eval_run
+        else None
+    )
+    if answered_by == "Worker":
         # the worker's own report sent again (its answer was lost on the way): nothing is
         # stored twice; a request a manager's import answered still takes the worker's run
         return {"eval_run": named.eval_run}
@@ -314,13 +317,7 @@ def report_eval(
         waiting = named and named.status in OPEN_EVAL_REQUEST
         # a manager's import answered it first: the worker's own run takes its place, so a
         # copy of this report sent again is recognised
-        replaced = (
-            named
-            and named.status == "Done"
-            and named.eval_run
-            and frappe.db.get_value(ai_models.EVAL_RUN, named.eval_run, "source")
-            == "Imported"
-        )
+        replaced = answered_by == "Imported"
         answered = [named.name] if waiting or late or replaced else []
     else:
         answered = frappe.get_all(

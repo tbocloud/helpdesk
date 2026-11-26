@@ -166,8 +166,9 @@ one)
   key, an address or a model the desktop levels use, run it again. Removing a model or a provider still takes its
   copies off the gateway when it answers. Desktop levels are always written to the gateway (with the admin key),
   and switching on runs "Write all" first.
-- **A provider's credential** is changed in place on the gateway, so a refused change leaves the working one; a
-  credential without an address of its own is written new.
+- **A provider's credential** is changed in place on the gateway (PATCH), so a refused change leaves the working one;
+  one without an address of its own drops an earlier address explicitly. It is written new only when the gateway has
+  none yet.
 - **While the switch is on,** a change the gateway can't take isn't saved. A model or desktop level the gateway
   refuses keeps what it had (the old one is written back); if even that fails, the message says to use "Write all".
 - **A provider test** through the gateway tests only that account's own models.
@@ -233,9 +234,10 @@ summary.
 - **Ask for a run** records a request. A model can have only one open request.
 - **A worker claims** the oldest waiting request with a locking read, so two workers never take the same one.
 - **A report** answers the request it names, or else the model's open request for the same job. A report for
-  another model or job is refused.
+  another model or job is refused. A worker's run takes the place of a manager's import that answered the request
+  first, and a copy of a report sent again is stored once.
 - **A run never reported** within 24 hours is given up (Failed, with a note) the next time a worker asks for one;
-  a late report still answers it, and a report sent twice is stored once.
+  a late report still answers it.
 - **Take back** deletes a request that hasn't been answered.
 - The live worker doesn't run the test set by itself, because the cases' tickets exist only on
   the test hub.

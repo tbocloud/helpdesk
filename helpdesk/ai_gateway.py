@@ -238,10 +238,11 @@ def save_credential(name: str, values: dict) -> None:
     except GatewayError as e:
         if e.status not in (404, 405):
             raise
-    # none there yet (or no change in place on this gateway): written new
-    body.pop("credential_values_to_delete", None)
+    # none there yet (or no change in place on this gateway): written new, without the
+    # PATCH-only list
+    fresh = {k: v for k, v in body.items() if k != "credential_values_to_delete"}
     _admin("DELETE", f"/credentials/{name}", missing_ok=True)
-    _admin("POST", "/credentials", body)
+    _admin("POST", "/credentials", fresh)
 
 
 def delete_credential(name: str) -> None:

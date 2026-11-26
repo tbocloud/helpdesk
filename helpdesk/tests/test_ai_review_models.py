@@ -778,6 +778,19 @@ class TestTheGatewaysCredentials(GatewayCase):
             "credential_values_to_delete", self.admin.call_args.kwargs["json"]
         )
 
+    def test_a_credential_without_an_address_not_there_yet_is_written_new(self):
+        self.admin.side_effect = lambda method, url, **kwargs: answered(
+            404 if method == "PATCH" else 200
+        )
+        ai_gateway.save_credential("Claude", {"api_key": "sk-claude-123456"})
+        calls = self.admin.call_args_list
+        self.assertEqual([c.args[0] for c in calls], ["PATCH", "DELETE", "POST"])
+        # the PATCH-only list goes with the PATCH, never with the new credential
+        self.assertEqual(
+            calls[0].kwargs["json"]["credential_values_to_delete"], ["api_base"]
+        )
+        self.assertNotIn("credential_values_to_delete", calls[2].kwargs["json"])
+
     def test_a_credential_without_an_address_changes_in_place_too(self):
         ai_gateway.save_credential("Claude", {"api_key": "sk-claude-123456"})
         self.assertEqual([c.args[0] for c in self.admin.call_args_list], ["PATCH"])
