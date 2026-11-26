@@ -88,7 +88,8 @@ rather than filtering leads itself, so every Leads screen keeps the site's one r
 - **Their screens** (owner, 2026-11-17): both roles are on the sales wall like a Sales Employee
   (`content_team.is_sales_employee`: sales screens only, no tasks, projects, tickets or
   content). A **Division Admin** gets Add a lead, My leads, Leads, Commission, Overview and the
-  Scoreboard (plus Business, Assign leads and Today's calls where the ERP site allows them): they
+  Scoreboard, and Reports → Business overview, Lead status and Division reports (plus Business,
+  Assign leads and Today's calls where the ERP site allows them): they
   are never a BD, so they get the team's view, and, as a Sales Manager on the division's site,
   pick many leads on the list to set their category or merge them (the site checks it again).
   A **Division Sales User** is a salesperson (owner, 2026-11-24): no BD (`content_team.
@@ -307,7 +308,9 @@ theirs, nobody else.
 `/helpdesk/lead-status` (Reports → Lead status, `DivisionLeads.vue`), served by
 `helpdesk.api.division_overview.get_lead_status` (`division_overview.lead_status`). Same
 access and division scope as the overview (`scope`): Super Admins every division, managers
-theirs, nobody else.
+theirs, nobody else. A Division Admin, who is on the sales wall, reaches it too
+(`DivisionLeads` is in `SALES_EMPLOYEE_ROUTES`, owner, 2026-11-26); a Division Sales User has
+no overview role, so it stays hidden from them.
 
 - **What it counts**: the reporting copy (`HD CRM Report Lead`) of each division's ERP site,
   leads created in the period, by their own status on the site (Lead, Replied, Interested,
