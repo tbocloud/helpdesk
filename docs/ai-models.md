@@ -162,8 +162,9 @@ one)
 - **Write all to the gateway** writes everything again: the keys still held here, and every model. A key is
   forgotten here only while the switch is on; with it off, the key is copied and kept, and **switching on later**
   moves every key still kept here to the gateway and forgets it here (a refusal leaves the switch off).
-- **With the switch off,** a provider or model already on the gateway (the desktop levels use it) still follows its
-  changes there: a new key or address, a model unticked or removed, a provider removed.
+- **With the switch off,** the gateway's copies change only with "Write all": after changing a key, an address or a
+  model the desktop levels use, run it again. Ordinary edits never wait for the gateway. Removing a provider still
+  takes its copied key and models off the gateway when it answers.
 - **A provider's credential** is changed in place on the gateway, so a refused change leaves the working one; a
   credential without an address of its own is written new.
 - **While the switch is on,** a change the gateway can't take isn't saved. A model or desktop level the gateway

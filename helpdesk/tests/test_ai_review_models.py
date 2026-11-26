@@ -689,7 +689,7 @@ class TestWriteAllBeforeTheSwitch(ReviewCase):
         deepseek = next(p for p in ai_models.provider_list() if p["name"] == DEEPSEEK)
         self.assertTrue(deepseek["ready"])
 
-    def test_a_new_key_reaches_the_gateways_copy_while_the_switch_is_off(self):
+    def test_with_the_switch_off_edits_never_wait_for_the_gateway(self):
         ai_models.write_all()
         self.admin.reset_mock()
 
@@ -701,29 +701,16 @@ class TestWriteAllBeforeTheSwitch(ReviewCase):
                 "key": "sk-deepseek-rotated-123456",
             }
         )
+        ai_models.save_model({"model": "deepseek-chat", "input_price": 0.5})
 
-        sent = patched(self.admin, "/credentials/" + DEEPSEEK)
-        self.assertEqual(
-            sent[0]["credential_values"]["api_key"], "sk-deepseek-rotated-123456"
-        )
-        # TBO Support still calls DeepSeek itself: it keeps the key too
+        # the gateway's copies change only with "Write all" while the switch is off
+        self.admin.assert_not_called()
         self.assertEqual(
             get_decrypted_password(
                 PROVIDER, DEEPSEEK, "api_key", raise_exception=False
             ),
             "sk-deepseek-rotated-123456",
         )
-
-    def test_a_model_on_the_gateway_follows_its_changes_while_the_switch_is_off(self):
-        ai_models.write_all()
-        ai_models.save_job("triage", {"model": ""})
-        self.admin.reset_mock()
-
-        ai_models.save_model({"model": "deepseek-chat", "listed": 0})
-        self.assertEqual(
-            posted(self.admin, "/model/delete"), [{"id": "tbo-support:deepseek-chat"}]
-        )
-        self.assertFalse(frappe.db.get_value(PRICING, "deepseek-chat", "on_gateway"))
 
 
 class TestTheGatewaysCredentials(GatewayCase):

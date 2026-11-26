@@ -956,14 +956,6 @@ def save_provider(values: dict) -> dict:
     doc.save(ignore_permissions=True)
     if key and to_gateway:
         _key_to_gateway(doc.name, key, doc.base_url)
-    elif not to_gateway and (key or moved) and _on_gateway(doc.name):
-        # the desktop levels call this account through the gateway's copy of its key: a new
-        # key or address reaches it too, or the save is refused
-        kept = key or get_decrypted_password(
-            PROVIDER, doc.name, "api_key", raise_exception=False
-        )
-        if kept:
-            _key_to_gateway(doc.name, kept, doc.base_url, forget=False)
     return job_settings()
 
 
@@ -1147,12 +1139,6 @@ def write_all() -> dict:
     _only_system_managers(_("Only System Managers set up the AI gateway."))
     if not (ai_gateway.base_url() and ai_gateway.admin_key()):
         frappe.throw(_("Set the gateway's address and its admin key first."))
-    # a model or level saved while this runs waits for it, rather than being overwritten on
-    # the gateway with the choice read here
-    singles = frappe.qb.Table("tabSingles")
-    frappe.qb.from_(singles).select(singles.field).where(
-        singles.doctype == SETTINGS
-    ).for_update().run()
     keys = _keys_to_gateway(forget=ai_gateway.for_all())
     models = frappe.get_all(
         PRICING, filters={"ai_provider": ["is", "set"]}, pluck="name"
@@ -1190,15 +1176,6 @@ def _keys_to_gateway(forget: bool) -> int:
     return keys
 
 
-def _on_gateway(account: str) -> bool:
-    """Some model of `account` is served by the gateway (the desktop levels may use it even
-    while TBO Support calls the providers itself), so its credential must stay in step."""
-    return bool(
-        admin_ready()
-        and frappe.db.exists(PRICING, {"ai_provider": account, "on_gateway": 1})
-    )
-
-
 def remove_provider(name: str) -> dict:
     """Takes a provider account away; its models stay in the list, no longer allowed."""
     _only_system_managers(_("Only System Managers change the AI providers."))
@@ -1211,7 +1188,7 @@ def remove_provider(name: str) -> dict:
         in_use = ai_engine.in_use_message(model)
         if in_use:
             frappe.throw(in_use)
-    if ai_gateway.for_all() or _on_gateway(name):
+    if ai_gateway.for_all():
         try:
             for model in models:
                 ai_gateway.delete_model(model)
@@ -1219,8 +1196,11 @@ def remove_provider(name: str) -> dict:
         except ai_gateway.GatewayError as e:
             frappe.throw(_("The gateway did not let go of it: {0}").format(str(e)))
     elif admin_ready():
-        # a key "Write all" copied while the switch was off: no stale key stays on the gateway
+        # what "Write all" copied while the switch was off: no key of a removed provider stays
+        # on the gateway (best effort: TBO Support doesn't need the gateway while it is off)
         with contextlib.suppress(ai_gateway.GatewayError):
+            for model in models:
+                ai_gateway.delete_model(model)
             ai_gateway.delete_credential(name)
     for model in models:
         frappe.db.set_value(
@@ -1352,8 +1332,7 @@ def save_model(values: dict) -> dict:
     if "listed" in values:
         doc.listed = 1 if sbool(values.get("listed")) else 0
     doc.save(ignore_permissions=True)
-    # with the switch off, a model already on the gateway (for the desktop levels) follows too
-    if ai_gateway.for_all() or (previous is not None and admin_ready()):
+    if ai_gateway.for_all():
         _write_model(doc.name, previous)
     return job_settings()
 
@@ -1367,8 +1346,7 @@ def remove_model(model: str) -> dict:
     in_use = ai_engine.in_use_message(model)
     if in_use:
         frappe.throw(in_use)
-    served = frappe.db.get_value(PRICING, model, "on_gateway")
-    if ai_gateway.for_all() or (served and admin_ready()):
+    if ai_gateway.for_all():
         try:
             ai_gateway.delete_model(model)
         except ai_gateway.GatewayError as e:
