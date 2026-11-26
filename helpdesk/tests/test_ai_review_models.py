@@ -688,6 +688,31 @@ class TestWriteAllBeforeTheSwitch(ReviewCase):
         self.assertTrue(frappe.db.get_value(PROVIDER, DEEPSEEK, "key_on_gateway"))
         deepseek = next(p for p in ai_models.provider_list() if p["name"] == DEEPSEEK)
         self.assertTrue(deepseek["ready"])
+        # the models go too, as they are now: switching on is a full "Write all"
+        self.assertIn(
+            "tbo-support:deepseek-chat",
+            [w["model_info"]["id"] for w in posted(self.admin, "/model/new")],
+        )
+
+    def test_switching_on_without_the_admin_key_is_refused(self):
+        set_hub(gateway_admin_key="")
+        if frappe.db.exists("DocType", "TBO Desktop Settings"):
+            frappe.db.set_single_value("TBO Desktop Settings", "gateway_admin_key", "")
+        with patch("requests.get", return_value=answered()):
+            with self.assertRaises(frappe.ValidationError) as refused:
+                ai_models.save_gateway({"call_key": GATEWAY_KEY, "for_all": 1})
+        self.assertIn("admin key", str(refused.exception))
+
+    def test_a_model_removed_while_the_switch_is_off_leaves_the_gateway(self):
+        ai_models.write_all()
+        ai_models.save_job("triage", {"model": ""})
+        self.admin.reset_mock()
+
+        ai_models.remove_model("deepseek-chat")
+
+        self.assertEqual(
+            posted(self.admin, "/model/delete"), [{"id": "tbo-support:deepseek-chat"}]
+        )
 
     def test_with_the_switch_off_edits_never_wait_for_the_gateway(self):
         ai_models.write_all()

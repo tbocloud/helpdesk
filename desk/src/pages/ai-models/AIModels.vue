@@ -3161,13 +3161,13 @@ async function gatewayCall(
     ok = true;
   } catch (err) {
     gwNotice.value = { ok: false, text: errorText(err, __("Not saved")) };
-  } finally {
-    gwBusy.value = false;
   }
-  // only a save of these settings takes the server's values (a read of usage leaves a draft)
+  // only a save of these settings takes the server's values (a read of usage leaves a draft);
+  // the buttons stay busy until that reload is in, so no second save shares the flag
   if (saving) gwTake = ok ? "all" : "switches";
   await load();
   gwTake = null;
+  gwBusy.value = false;
   return ok;
 }
 async function saveGateway() {
