@@ -1353,6 +1353,11 @@ def remove_model(model: str) -> dict:
             frappe.throw(
                 _("The gateway did not let go of {0}: {1}").format(model, str(e))
             )
+    elif admin_ready() and frappe.db.get_value(PRICING, model, "on_gateway"):
+        # a copy "Write all" made while the switch was off: once the model leaves the list,
+        # Write all no longer sees it, so it goes now (best effort)
+        with contextlib.suppress(ai_gateway.GatewayError):
+            ai_gateway.delete_model(model)
     known = frappe.db.exists(LOG, {"model": model}) or frappe.db.exists(
         EVAL_RUN, {"model": model}
     )
@@ -2312,9 +2317,16 @@ def save_gateway(values: dict) -> dict:
                 )
             )
     if probe and not was_on:
-        # switching on: the keys still kept here (a "Write all" before the switch copies them)
-        # move to the gateway and are forgotten here; a refusal rolls the switch back
-        _keys_to_gateway(forget=True)
+        # switching on writes everything the gateway must serve: the keys still kept here (then
+        # forgotten here), every allowed model and the desktop levels, as they are now; a
+        # refusal rolls the switch back
+        if not admin_ready():
+            frappe.throw(
+                _(
+                    "Set the gateway's admin key first: the providers' keys and the models move to the gateway when every call goes through it."
+                )
+            )
+        write_all()
     ai_engine.reset_provider_state()
     return ai_gateway.status()
 
