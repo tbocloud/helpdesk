@@ -41,7 +41,6 @@ import LucideVideo from "~icons/lucide/video";
 import LucideFileChartColumn from "~icons/lucide/file-chart-column";
 import LucideBuilding2 from "~icons/lucide/building-2";
 import LucideChartPie from "~icons/lucide/chart-pie";
-import LucideGauge from "~icons/lucide/gauge";
 import LucideGlobe from "~icons/lucide/globe";
 
 /** A page in the sidebar. The flags are the role rules; see `isNavItemVisible`. */

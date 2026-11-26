@@ -7,8 +7,8 @@ Agent Managers and System Managers can read it. Only System Managers can change 
 and no record shows a prompt or a customer's text.
 
 Code: `helpdesk/ai_models.py`, `helpdesk/ai_gateway.py`, `helpdesk/api/ai_models.py`, and
-`desk/src/pages/ai-models/`. Tests: `helpdesk/tests/test_ai_models.py`. Plan:
-`design/phases/phase-31.md`. Providers, failover and models per job are described in
+`desk/src/pages/ai-models/`. Tests: `helpdesk/tests/test_ai_models.py`. (The plan is in TBO Copilot's
+private design notes, Phase 31.) Providers, failover and models per job are described in
 [ai-providers.md](ai-providers.md).
 
 ## What is recorded
@@ -166,7 +166,9 @@ desktop app's keys (aliases starting with `desktop:`), so nothing is counted twi
 - removing a model;
 - the emergency path with the gateway stopped.
 
-DevOps's steps are in `design/phases/phase-37.md` (section 6).
+DevOps's steps (the gateway's settings, its salt key, Bedrock off, the worker's key) are in tbocloud-infra:
+`docs/copilot-gateway.md`, "Every AI call through the gateway", and operator action 39. They were applied on
+26 Nov 2026.
 
 ## Quality signals
 
