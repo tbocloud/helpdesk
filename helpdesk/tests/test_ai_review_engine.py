@@ -176,8 +176,14 @@ class TestAFailedAttemptOutlivesItsRequest(ModelsCase):
         )
         attempt = enqueue.call_args.kwargs["attempt"]
         self.assertNotIn("sk-secret-123456", frappe.as_json(attempt))
+        # queued at once, not after the commit: a request that rolls back never commits, and
+        # an after-commit job would be dropped with it
+        self.assertFalse(enqueue.call_args.kwargs.get("enqueue_after_commit"))
+        self.assertTrue(attempt.get("at"))
 
-        ai_engine.log_failed_attempt(attempt)  # what the job does
+        # the job runs later; the row keeps the attempt's own time
+        later = dict(attempt, at="2026-11-26 12:00:00")
+        ai_engine.log_failed_attempt(later)  # what the job does
 
         row = frappe.get_last_doc(LOG)
         self.assertEqual(
@@ -187,9 +193,17 @@ class TestAFailedAttemptOutlivesItsRequest(ModelsCase):
         self.assertIn("429", row.error_message)
         self.assertNotIn("sk-secret-123456", row.error_message)
         self.assertIsNotNone(row.duration_ms)
+        self.assertEqual(str(row.creation), "2026-11-26 12:00:00")
 
     def test_a_queue_that_is_down_never_hides_the_providers_error(self):
         with patch("frappe.enqueue", side_effect=RuntimeError("queue down")):
+            self.fail()
+
+    def test_an_error_log_that_is_down_never_stops_failover_either(self):
+        with patch("frappe.enqueue", side_effect=RuntimeError("queue down")), patch(
+            "frappe.log_error", side_effect=RuntimeError("error log down")
+        ):
+            # still the provider's error, so the caller tries the backup
             self.fail()
 
 
@@ -295,6 +309,25 @@ class TestTheTestSetRequests(ModelsCase):
             ("Done", run["eval_run"]),
         )
 
+    def test_a_report_that_came_in_meanwhile_is_never_given_up(self):
+        done = self.ask("glm-5", minutes_ago=60 * 30)
+        frappe.db.set_value(
+            EVAL_REQUEST,
+            done,
+            {
+                "status": "Done",
+                "modified": add_to_date(
+                    now_datetime(), hours=-(worker_api.EVAL_RUN_HOURS + 1)
+                ),
+            },
+            update_modified=False,
+        )
+        # it was still Running when the stale ones were listed, and Done by the update
+        with patch.object(frappe, "get_all", return_value=[done]):
+            worker_api.give_up_stale_eval_requests()
+
+        self.assertEqual(frappe.db.get_value(EVAL_REQUEST, done, "status"), "Done")
+
 
 class TestSafetyCuts(FrappeTestCase):
     def test_tidied_spaces_are_not_a_cut(self):
@@ -305,6 +338,17 @@ class TestSafetyCuts(FrappeTestCase):
         ):
             text = conversation.safe_text(raw, [])
             self.assertFalse(conversation.cut_for_safety(raw, text), raw)
+
+    def test_a_long_answer_cut_at_the_limit_is_not_a_safety_cut(self):
+        raw = "Open Settings. " * 300
+        text = conversation.safe_text(raw, [])
+        self.assertLessEqual(len(text), conversation.MAX_TEXT)
+        self.assertFalse(conversation.cut_for_safety(raw, text))
+        # a link taken out before the limit still counts
+        linked = "Open Settings. See https://evil.example.com/steps now. " + raw
+        self.assertTrue(
+            conversation.cut_for_safety(linked, conversation.safe_text(linked, []))
+        )
 
     def test_a_removed_link_or_promise_is_a_cut(self):
         for raw in (

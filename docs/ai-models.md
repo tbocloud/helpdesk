@@ -267,7 +267,8 @@ name beside it (`gateway_alias`, `gateway_provider`). So the desktop app's calls
 Support's own calls to the same model, and the pages say "Desktop app calls it tbo-default".
 Which real model is behind each name is still set in the gateway's own settings.
 
-**Settings:** `gateway_url` (must be https), `gateway_viewer_key` and `gateway_sync`. A failed read
+**Settings:** `gateway_url` (https; plain http only for a gateway on this machine, `localhost` or `127.0.0.1`),
+`gateway_viewer_key` and `gateway_sync`. A failed read
 is noted on the settings and never raised.
 
 ## Known limits
