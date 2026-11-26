@@ -1031,6 +1031,21 @@ class TestEverythingThroughTheGateway(ModelsCase):
             status = ai_models.save_gateway({"for_all": 1})
         self.assertTrue(status["for_all"])
 
+    def test_turning_it_on_makes_tbo_supports_own_key(self):
+        doc = frappe.get_doc("HDS Hub Settings")
+        doc.update({"gateway_for_all": 0, "gateway_key": ""})
+        doc.save(ignore_permissions=True)
+        self.admin_calls.return_value = answered(body={"key": "sk-made-by-the-gateway"})
+
+        with patch("requests.get", side_effect=[answered(), answered()]):
+            status = ai_models.save_gateway({"for_all": 1})
+
+        self.assertTrue(status["for_all"])
+        self.assertEqual(self.gw.call_key(), "sk-made-by-the-gateway")
+        alias = self.admin_body("/key/generate")["key_alias"]
+        self.assertTrue(alias.startswith("tbo-support:"), alias)
+        self.assertNotIn("sk-made-by-the-gateway", frappe.as_json(status))
+
     def test_the_worker_is_sent_to_the_gateway(self):
         entries = ai_engine.worker_models()["investigate"]
 

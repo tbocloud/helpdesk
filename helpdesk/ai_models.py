@@ -2097,6 +2097,15 @@ def save_gateway(values: dict) -> dict:
     if "for_all" in values:
         doc.gateway_for_all = 1 if turning_on else 0
     doc.save(ignore_permissions=True)
+    if turning_on and not ai_gateway.call_key() and ai_gateway.admin_key():
+        # TBO Support makes its own gateway key: nobody copies one by hand
+        try:
+            doc.gateway_key = ai_gateway.make_call_key()
+        except ai_gateway.GatewayError as e:
+            frappe.throw(
+                _("The gateway did not make TBO Support's key: {0}").format(str(e))
+            )
+        doc.save(ignore_permissions=True)
     if turning_on:
         # every call goes through it only once it answers and takes TBO Support's key
         frappe.cache.delete_value([ai_gateway.ALIVE_KEY, ai_gateway.KEY_WORKS_KEY])

@@ -192,6 +192,22 @@ def _admin(
         return {}
 
 
+def make_call_key() -> str:
+    """TBO Support's own gateway key, made with the admin key, so nobody copies one by hand. Its
+    alias names this site and the time (an alias is unique on the gateway, and any alias but a
+    desktop one keeps these calls out of the desktop app's usage)."""
+    alias = f"tbo-support:{frappe.local.site}:{now_datetime().strftime('%Y%m%d%H%M%S')}"
+    reply = _admin(
+        "POST",
+        "/key/generate",
+        {"key_alias": alias, "metadata": {"made_by": "TBO Support"}},
+    )
+    key = reply.get("key") if isinstance(reply, dict) else None
+    if not key:
+        raise GatewayError(_("the gateway made no key"))
+    return key
+
+
 def save_credential(name: str, values: dict) -> None:
     """A provider's key (and address) as a gateway credential its models refer to."""
     _admin("DELETE", f"/credentials/{name}", missing_ok=True)
