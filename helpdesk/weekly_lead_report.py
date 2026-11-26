@@ -94,13 +94,33 @@ def sees_team(division: str, user: str | None = None) -> bool:
     return is_super_admin(user) or division in overview_divisions(user)
 
 
-def read_week(division: str, start, owner: str | None = None) -> list[dict]:
-    """The leads created or updated in the week starting `start` (only `owner`'s, when
-    given), in the template's columns, read from the division's ERP site with the hub's key."""
+# the longest period read at once: a year of leads stays a page the ERP site answers quickly
+MAX_PERIOD_DAYS = 366
+
+
+def period(from_date: str | None, to_date: str | None) -> tuple:
+    """(first day, last day) of the period asked for; this week (Sunday to Saturday) when
+    no dates are given."""
+    if not from_date and not to_date:
+        start = week_start()
+        return start, start + timedelta(days=6)
+    first, last = getdate(from_date or to_date), getdate(to_date or from_date)
+    if first > last:
+        frappe.throw(frappe._("The from date is after the to date."))
+    if (last - first).days >= MAX_PERIOD_DAYS:
+        frappe.throw(
+            frappe._("Pick a period of {0} days or fewer.").format(MAX_PERIOD_DAYS)
+        )
+    return first, last
+
+
+def read_period(division: str, first, last, owner: str | None = None) -> list[dict]:
+    """The leads created or updated from `first` to `last` (only `owner`'s, when given), in
+    the template's columns, read from the division's ERP site with the hub's key."""
     client = division_client(division)
     filters = [
-        ["modified", ">=", str(start)],
-        ["modified", "<", str(add_days(start, 7))],
+        ["modified", ">=", str(first)],
+        ["modified", "<", str(add_days(last, 1))],
     ]
     if owner:
         filters.append(["lead_owner", "=", owner])

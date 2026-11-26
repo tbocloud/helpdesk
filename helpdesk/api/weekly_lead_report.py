@@ -1,13 +1,12 @@
 """Sales → Lead report (docs/weekly-lead-report.md): the KSA sheet of the leads each
-salesperson owns that were created or updated in a week, read from and written to the leads
+salesperson owns that were created or updated in a period, read from and written to the leads
 on the division's ERP site. A salesperson sees their own; the division's managers everyone's."""
 
-from datetime import timedelta
 from urllib.parse import quote
 
 import frappe
 from frappe import _
-from frappe.utils import cint, formatdate, get_fullname, today
+from frappe.utils import cint, formatdate, get_fullname
 
 from helpdesk.api.division_overview import send_xlsx
 from helpdesk.divisions import DIVISION, MEMBER, division_client, log_activity
@@ -28,18 +27,19 @@ from helpdesk.weekly_lead_report import (
     SEGMENT_LABELS,
     VISITS_FIELD,
     filter_rows,
+    period,
     read_lead,
-    read_week,
+    read_period,
     remarks_html,
     report_division,
     sees_team,
-    week_start,
 )
 
 
 @frappe.whitelist()
-def get_week(
-    week: str | None = None,
+def get_report(
+    from_date: str | None = None,
+    to_date: str | None = None,
     salesperson: str | None = None,
     search: str | None = None,
     requirement: str | None = None,
@@ -47,13 +47,16 @@ def get_week(
     follow_up: str | None = None,
     quoted: str | None = None,
 ) -> dict:
-    """The week's rows: the signed-in salesperson's leads, or (a manager) everyone's or one
-    person's, narrowed by the filters (`filter_rows`)."""
+    """The leads created or updated in the period (this week by default): the signed-in
+    salesperson's, or (a manager) everyone's or one person's, narrowed by the filters
+    (`filter_rows`)."""
     user, division = require_report()
-    start = week_start(week)
+    first, last = period(from_date, to_date)
     team = sees_team(division, user)
     rows = erp(
-        lambda: read_week(division, start, (salesperson or None) if team else user)
+        lambda: read_period(
+            division, first, last, (salesperson or None) if team else user
+        )
     )
     for row in rows:
         row["salesperson_name"] = (
@@ -65,10 +68,8 @@ def get_week(
     return {
         "division": division,
         "division_name": frappe.db.get_value(DIVISION, division, "division_name"),
-        "week_start": str(start),
-        "week_end": str(start + timedelta(days=6)),
-        "this_week": str(week_start()),
-        "today": today(),
+        "from_date": str(first),
+        "to_date": str(last),
         "sees_team": team,
         "people": team_people(division, rows) if team else [],
         "rows": filter_rows(
@@ -109,8 +110,9 @@ def update_lead(lead: str, values) -> dict:
 
 
 @frappe.whitelist()
-def export_week(
-    week: str | None = None,
+def export_report(
+    from_date: str | None = None,
+    to_date: str | None = None,
     salesperson: str | None = None,
     search: str | None = None,
     requirement: str | None = None,
@@ -118,21 +120,27 @@ def export_week(
     follow_up: str | None = None,
     quoted: str | None = None,
 ):
-    """The week's rows as the page shows them (same filters), as an Excel file in the
-    template's columns (with the salesperson first when it holds several people's). Every
-    export is in the audit log."""
-    data = get_week(
-        week, salesperson, search, requirement, conversion, follow_up, quoted
+    """The rows as the page shows them (same period and filters), as an Excel file in the
+    template's columns. Every export is in the audit log."""
+    data = get_report(
+        from_date,
+        to_date,
+        salesperson,
+        search,
+        requirement,
+        conversion,
+        follow_up,
+        quoted,
     )
     # a salesperson's file is always their own; a manager's, one person's when they picked one
     person = salesperson if data["sees_team"] else frappe.session.user
-    columns = export_columns(with_person=not person)
-    period = _("{0} to {1}").format(
-        formatdate(data["week_start"]), formatdate(data["week_end"])
+    columns = export_columns()
+    dates = _("{0} to {1}").format(
+        formatdate(data["from_date"]), formatdate(data["to_date"])
     )
     who = get_fullname(person) if person else _("Everyone")
     log_activity(
-        _("Exported the lead report ({0}, {1})").format(period, who),
+        _("Exported the lead report ({0}, {1})").format(dates, who),
         data["division"],
     )
     send_xlsx(
@@ -141,11 +149,11 @@ def export_week(
         [[export_cell(r, c["key"]) for c in columns] for r in data["rows"]],
         [
             data["division_name"],
-            period,
+            dates,
             who,
             *filter_lines(search, requirement, conversion, follow_up, quoted),
         ],
-        f"lead-report-{data['week_start']}",
+        f"lead-report-{data['from_date']}-to-{data['to_date']}",
     )
 
 
@@ -255,8 +263,8 @@ def team_people(division: str, rows: list[dict]) -> list[dict]:
     return sorted(people, key=lambda p: p["full_name"].casefold())
 
 
-def export_columns(with_person: bool) -> list[dict]:
-    """The KSA template's columns, in its order."""
+def export_columns() -> list[dict]:
+    """The KSA template's columns, in its order (it has no salesperson column)."""
     columns = [
         ("company_name", _("Name")),
         ("contact_number", _("Contact Number")),
@@ -273,8 +281,6 @@ def export_columns(with_person: bool) -> list[dict]:
         ("follow_up", _("Future Follow-up Plan")),
         ("remarks", _("Remarks")),
     ]
-    if with_person:
-        columns.insert(0, ("salesperson_name", _("Salesperson")))
     return [{"key": key, "label": label} for key, label in columns]
 
 
