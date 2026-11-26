@@ -956,6 +956,14 @@ def save_provider(values: dict) -> dict:
     doc.save(ignore_permissions=True)
     if key and to_gateway:
         _key_to_gateway(doc.name, key, doc.base_url)
+    elif not to_gateway and (key or moved) and _on_gateway(doc.name):
+        # the desktop levels call this account through the gateway's copy of its key: a new
+        # key or address reaches it too, or the save is refused
+        kept = key or get_decrypted_password(
+            PROVIDER, doc.name, "api_key", raise_exception=False
+        )
+        if kept:
+            _key_to_gateway(doc.name, kept, doc.base_url, forget=False)
     return job_settings()
 
 
@@ -1011,14 +1019,17 @@ def _served(name: str) -> dict | None:
     return gateway_params(name, row.ai_provider)
 
 
-def _write_model(name: str, previous: dict | None = None) -> None:
+def _write_model(
+    name: str, previous: dict | None = None, credential: bool = True
+) -> None:
     """One model of the list into the gateway, or out of it when it is no longer allowed.
     `previous` (`_served` before the change) is written back if the gateway refuses the new
-    one, so the model keeps answering; saving it again tries once more."""
+    one, so the model keeps answering; saving it again tries once more. `credential=False`:
+    the caller has written the Anthropic-compatible section's credential already."""
     row = frappe.db.get_value(PRICING, name, ["listed", "ai_provider"], as_dict=True)
     try:
         if row and row.listed and row.ai_provider:
-            if row.ai_provider == ai_engine.ANTHROPIC_SLOT:
+            if credential and row.ai_provider == ai_engine.ANTHROPIC_SLOT:
                 _section_credential()
             ai_gateway.save_model(
                 name, gateway_params(name, row.ai_provider), previous=previous
@@ -1136,27 +1147,56 @@ def write_all() -> dict:
     _only_system_managers(_("Only System Managers set up the AI gateway."))
     if not (ai_gateway.base_url() and ai_gateway.admin_key()):
         frappe.throw(_("Set the gateway's address and its admin key first."))
-    moving = ai_gateway.for_all()
-    keys = 0
-    for account in frappe.get_all(PROVIDER, fields=["name", "api_style", "base_url"]):
-        key = get_decrypted_password(
-            PROVIDER, account.name, "api_key", raise_exception=False
-        )
-        if key:
-            _key_to_gateway(account.name, key, account.base_url or "", forget=moving)
-            keys += 1
+    # a model or level saved while this runs waits for it, rather than being overwritten on
+    # the gateway with the choice read here
+    singles = frappe.qb.Table("tabSingles")
+    frappe.qb.from_(singles).select(singles.field).where(
+        singles.doctype == SETTINGS
+    ).for_update().run()
+    keys = _keys_to_gateway(forget=ai_gateway.for_all())
     models = frappe.get_all(
         PRICING, filters={"ai_provider": ["is", "set"]}, pluck="name"
     )
+    if frappe.db.exists(
+        PRICING, {"ai_provider": ai_engine.ANTHROPIC_SLOT, "listed": 1}
+    ):
+        # once for every model of the section, not once per model
+        try:
+            _section_credential()
+        except ai_gateway.GatewayError as e:
+            frappe.throw(_("The gateway did not take the key: {0}").format(str(e)))
     for name in models:
         # what the gateway serves now is written back if it refuses the replacement
-        _write_model(name, _served(name))
+        _write_model(name, _served(name), credential=False)
     for job in ai_engine.DESKTOP_GATEWAY_NAMES:
         # the level as it is saved is what the gateway serves: written back if the gateway
         # refuses part of it, never taken off as if it were a first save
         row = ai_engine.job_row(job)
         write_level(job, (row.model, row.backup_model) if row else ())
     return {**job_settings(), "written": {"keys": keys, "models": len(models)}}
+
+
+def _keys_to_gateway(forget: bool) -> int:
+    """Every key still kept here, written to the gateway as a credential; forgotten here when
+    every call goes through the gateway (`forget`). How many were written."""
+    keys = 0
+    for account in frappe.get_all(PROVIDER, fields=["name", "base_url"]):
+        key = get_decrypted_password(
+            PROVIDER, account.name, "api_key", raise_exception=False
+        )
+        if key:
+            _key_to_gateway(account.name, key, account.base_url or "", forget=forget)
+            keys += 1
+    return keys
+
+
+def _on_gateway(account: str) -> bool:
+    """Some model of `account` is served by the gateway (the desktop levels may use it even
+    while TBO Support calls the providers itself), so its credential must stay in step."""
+    return bool(
+        admin_ready()
+        and frappe.db.exists(PRICING, {"ai_provider": account, "on_gateway": 1})
+    )
 
 
 def remove_provider(name: str) -> dict:
@@ -1171,13 +1211,17 @@ def remove_provider(name: str) -> dict:
         in_use = ai_engine.in_use_message(model)
         if in_use:
             frappe.throw(in_use)
-    if ai_gateway.for_all():
+    if ai_gateway.for_all() or _on_gateway(name):
         try:
             for model in models:
                 ai_gateway.delete_model(model)
             ai_gateway.delete_credential(name)
         except ai_gateway.GatewayError as e:
             frappe.throw(_("The gateway did not let go of it: {0}").format(str(e)))
+    elif admin_ready():
+        # a key "Write all" copied while the switch was off: no stale key stays on the gateway
+        with contextlib.suppress(ai_gateway.GatewayError):
+            ai_gateway.delete_credential(name)
     for model in models:
         frappe.db.set_value(
             PRICING,
@@ -1308,7 +1352,8 @@ def save_model(values: dict) -> dict:
     if "listed" in values:
         doc.listed = 1 if sbool(values.get("listed")) else 0
     doc.save(ignore_permissions=True)
-    if ai_gateway.for_all():
+    # with the switch off, a model already on the gateway (for the desktop levels) follows too
+    if ai_gateway.for_all() or (previous is not None and admin_ready()):
         _write_model(doc.name, previous)
     return job_settings()
 
@@ -1322,7 +1367,8 @@ def remove_model(model: str) -> dict:
     in_use = ai_engine.in_use_message(model)
     if in_use:
         frappe.throw(in_use)
-    if ai_gateway.for_all():
+    served = frappe.db.get_value(PRICING, model, "on_gateway")
+    if ai_gateway.for_all() or (served and admin_ready()):
         try:
             ai_gateway.delete_model(model)
         except ai_gateway.GatewayError as e:
@@ -1788,10 +1834,7 @@ def record_references(run: str, references) -> None:
         for m in (listed if isinstance(listed, list) else [])
         if isinstance(m, dict) and m.get("value")
     ][:50]
-    try:
-        checked = cint(references.get("checked"))
-    except (TypeError, ValueError):
-        checked = 0
+    checked = cint(references.get("checked"))
     frappe.db.set_value(
         "HDS Copilot Run",
         run,
@@ -1888,7 +1931,7 @@ def on_communication_insert(doc, method=None):
             frappe.log_error(title="AI draft not compared with the reply")
 
 
-def _customer_answers(model: str, runs: list) -> dict:
+def _customer_answers(runs: list) -> dict:
     """What customers said after Copilot worked on their ticket: fixed, or still broken. A
     ticket keeps only its newest answer, and a new fix asks again, so the answer is about the
     ticket's own run (`custom_copilot_run`, else its newest): it counts for that run's model
@@ -1987,7 +2030,7 @@ def quality(model: str, days: int = 30) -> dict:
         + events.get("Unsupported answer", 0)
         + events.get("Hand-over", 0)
     )
-    answers = _customer_answers(model, runs)
+    answers = _customer_answers(runs)
     answered = answers["Confirmed"] + answers["Reopened"]
     drafts = max(
         events.get("Draft made", 0),
@@ -2290,6 +2333,10 @@ def save_gateway(values: dict) -> dict:
                     else _("Every call keeps going straight to the providers.")
                 )
             )
+    if probe and not was_on:
+        # switching on: the keys still kept here (a "Write all" before the switch copies them)
+        # move to the gateway and are forgotten here; a refusal rolls the switch back
+        _keys_to_gateway(forget=True)
     ai_engine.reset_provider_state()
     return ai_gateway.status()
 

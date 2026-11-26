@@ -91,15 +91,11 @@ def submit_investigation(
     )
     _log_usage(doc.name, cost, "investigate", 1)
     if references and isinstance(references, dict):
-        # which cited files, functions and fields exist (Phase 31): counted per model
+        # which cited files, functions and fields exist (Phase 31): counted per model; a
+        # check of any shape is read without refusing the report (record_references)
         from helpdesk import ai_models
 
-        listed = references.get("missing")
-        # missing references that aren't a list are read as none: they never refuse the report
-        ai_models.record_references(
-            doc.name,
-            {**references, "missing": listed if isinstance(listed, list) else []},
-        )
+        ai_models.record_references(doc.name, references)
     # the lease ends with the investigation: this token stops working now
     return {"run": doc.name, "state": doc.state, "root_cause": doc.root_cause_category}
 

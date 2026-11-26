@@ -7,7 +7,8 @@ Agent Managers and System Managers can read it. Only System Managers can change 
 and no record shows a prompt or a customer's text.
 
 Code: `helpdesk/ai_models.py`, `helpdesk/ai_gateway.py`, `helpdesk/api/ai_models.py`, and
-`desk/src/pages/ai-models/`. Tests: `helpdesk/tests/test_ai_models.py`. (The plan is in TBO Copilot's
+`desk/src/pages/ai-models/`. Tests: `helpdesk/tests/test_ai_models.py`, `test_ai_review_engine.py` and
+`test_ai_review_models.py`. (The plan is in TBO Copilot's
 private design notes, Phase 31.) Providers, failover and models per job are described in
 [ai-providers.md](ai-providers.md).
 
@@ -159,7 +160,12 @@ one)
 | A model of today's OpenAI section | the gateway's own `OPENAI_API_KEY` |
 
 - **Write all to the gateway** writes everything again: the keys still held here, and every model. A key is
-  forgotten here only while the switch is on; with it off, the key is copied and kept.
+  forgotten here only while the switch is on; with it off, the key is copied and kept, and **switching on later**
+  moves every key still kept here to the gateway and forgets it here (a refusal leaves the switch off).
+- **With the switch off,** a provider or model already on the gateway (the desktop levels use it) still follows its
+  changes there: a new key or address, a model unticked or removed, a provider removed.
+- **A provider's credential** is changed in place on the gateway, so a refused change leaves the working one; a
+  credential without an address of its own is written new.
 - **While the switch is on,** a change the gateway can't take isn't saved. A model or desktop level the gateway
   refuses keeps what it had (the old one is written back); if even that fails, the message says to use "Write all".
 - **A provider test** through the gateway tests only that account's own models.
@@ -226,7 +232,8 @@ summary.
 - **A worker claims** the oldest waiting request with a locking read, so two workers never take the same one.
 - **A report** answers the request it names, or else the model's open request for the same job. A report for
   another model or job is refused.
-- **A run never reported** within 24 hours is given up (Failed, with a note); a late report still answers it.
+- **A run never reported** within 24 hours is given up (Failed, with a note) the next time a worker asks for one;
+  a late report still answers it, and a report sent twice is stored once.
 - **Take back** deletes a request that hasn't been answered.
 - The live worker doesn't run the test set by itself, because the cases' tickets exist only on
   the test hub.

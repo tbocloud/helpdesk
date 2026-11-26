@@ -3070,10 +3070,13 @@ function refill<T extends object>(
 const alertForm = reactive({ error_rate: 0, fallback_rate: 0 });
 const alertBusy = ref(false);
 const alertNotice = ref<{ ok: boolean; text: string } | null>(null);
+// after a save that went through, the server's values win (as it stored them)
+let alertsSaved = false;
 watch(
   () => settings.value?.alerts,
   (limits, old) => {
-    if (limits) refill(alertForm, old || null, limits);
+    if (limits) refill(alertForm, alertsSaved ? null : old || null, limits);
+    alertsSaved = false;
   }
 );
 function limitText(limit: number) {
@@ -3090,6 +3093,7 @@ async function saveAlerts() {
       }),
     });
     alertNotice.value = { ok: true, text: __("Alert limits saved.") };
+    alertsSaved = true;
   } catch (err) {
     alertNotice.value = { ok: false, text: errorText(err, __("Not saved")) };
   } finally {
@@ -3112,15 +3116,26 @@ const gwBusy = ref(false);
 // the gateway's own results, shown in its card
 const gwNotice = ref<{ ok: boolean; text: string } | null>(null);
 // the typed keys are never read back: they stay until saved, so a refused save can be corrected
+// after a save, the server's values win: all of them when it went through, the switches when
+// it was refused (so the card never shows a state the server didn't keep; a typed address stays
+// for correction)
+let gwTake: "all" | "switches" | null = null;
 watch(
   () => settings.value?.gateway,
   (g, old) => {
-    if (g)
-      refill(
-        gw,
-        old ? { url: old.url, on: old.on, forAll: old.for_all } : null,
-        { url: g.url, on: g.on, forAll: g.for_all }
-      );
+    if (!g) return;
+    const before = old
+      ? { url: old.url, on: old.on, forAll: old.for_all }
+      : null;
+    if (gwTake === "all") {
+      refill(gw, null, { url: g.url, on: g.on, forAll: g.for_all });
+    } else if (gwTake === "switches") {
+      refill(gw, null, { on: g.on, forAll: g.for_all });
+      refill(gw, before, { url: g.url });
+    } else {
+      refill(gw, before, { url: g.url, on: g.on, forAll: g.for_all });
+    }
+    gwTake = null;
   }
 );
 async function gatewayCall(
@@ -3139,9 +3154,11 @@ async function gatewayCall(
       ok: r.ok !== false,
       text: r.note ? __("AI gateway: {0}", r.note) : done,
     };
+    gwTake = "all";
     return true;
   } catch (err) {
     gwNotice.value = { ok: false, text: errorText(err, __("Not saved")) };
+    gwTake = "switches";
     return false;
   } finally {
     gwBusy.value = false;
