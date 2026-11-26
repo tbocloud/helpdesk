@@ -52,7 +52,10 @@ LOGS_PATH = "/spend/logs/v2"
 
 
 class GatewayError(Exception):
-    pass
+    def __init__(self, message: str = "", status: int | None = None):
+        super().__init__(message)
+        # the gateway's HTTP status, when it answered at all
+        self.status = status
 
 
 def configured(settings=None) -> bool:
@@ -194,7 +197,7 @@ def _admin(
     if response.status_code in (401, 403):
         raise GatewayError(_("the gateway refused the admin key"))
     if not response.ok:
-        raise GatewayError(f"HTTP {response.status_code}")
+        raise GatewayError(f"HTTP {response.status_code}", response.status_code)
     try:
         return response.json()
     except ValueError:
@@ -218,17 +221,25 @@ def make_call_key() -> str:
 
 
 def save_credential(name: str, values: dict) -> None:
-    """A provider's key (and address) as a gateway credential its models refer to."""
+    """A provider's key (and address) as a gateway credential its models refer to. Changed in
+    place, so a refused change leaves the working credential as it was; written new when there
+    is none yet (or the gateway can't change one in place)."""
+    body = {
+        "credential_name": name,
+        "credential_values": values,
+        "credential_info": {"written_by": "TBO Support"},
+    }
+    # the gateway merges a change into what it has: without an address of its own, an earlier
+    # address would stay, so that credential is written new instead
+    if "api_base" in values:
+        try:
+            _admin("PATCH", f"/credentials/{name}", body)
+            return
+        except GatewayError as e:
+            if e.status not in (404, 405):
+                raise
     _admin("DELETE", f"/credentials/{name}", missing_ok=True)
-    _admin(
-        "POST",
-        "/credentials",
-        {
-            "credential_name": name,
-            "credential_values": values,
-            "credential_info": {"written_by": "TBO Support"},
-        },
-    )
+    _admin("POST", "/credentials", body)
 
 
 def delete_credential(name: str) -> None:
@@ -261,13 +272,17 @@ def save_model(
     except GatewayError as e:
         if not previous:
             raise
+        # a POST that timed out may still have been stored: take it off, or the write-back
+        # would meet the same id
+        with contextlib.suppress(GatewayError):
+            delete_model(key or name)
         try:
             _admin("POST", "/model/new", _deployment(name, previous, key))
         except GatewayError:
             raise GatewayError(
-                _("{0}; the model it had could not be written back either").format(
-                    str(e)
-                )
+                _(
+                    "{0}; the model it had could not be written back either: use Write all to the gateway once it answers"
+                ).format(str(e))
             ) from None
         raise
 

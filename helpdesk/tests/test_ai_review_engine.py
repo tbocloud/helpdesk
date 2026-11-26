@@ -194,6 +194,8 @@ class TestAFailedAttemptOutlivesItsRequest(ModelsCase):
         self.assertNotIn("sk-secret-123456", row.error_message)
         self.assertIsNotNone(row.duration_ms)
         self.assertEqual(str(row.creation), "2026-11-26 12:00:00")
+        # and the day reports count it on the day it happened
+        self.assertEqual(str(row.timestamp), "2026-11-26 12:00:00")
 
     def test_a_queue_that_is_down_never_hides_the_providers_error(self):
         with patch("frappe.enqueue", side_effect=RuntimeError("queue down")):
@@ -308,6 +310,15 @@ class TestTheTestSetRequests(ModelsCase):
             frappe.db.get_value(EVAL_REQUEST, stuck, ["status", "eval_run"]),
             ("Done", run["eval_run"]),
         )
+
+    def test_a_report_sent_again_stores_nothing_twice(self):
+        asked = self.ask("glm-5")
+        first = worker_api.report_eval("glm-5", REPORT, request=asked)
+        # its answer was lost on the way, and the worker sends it again
+        again = worker_api.report_eval("glm-5", REPORT, request=asked)
+
+        self.assertEqual(again, first)
+        self.assertEqual(frappe.db.count("HDS Model Eval Run", {"model": "glm-5"}), 1)
 
     def test_a_report_that_came_in_meanwhile_is_never_given_up(self):
         done = self.ask("glm-5", minutes_ago=60 * 30)

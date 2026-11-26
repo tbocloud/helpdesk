@@ -128,6 +128,15 @@ def posted(admin, path):
     ]
 
 
+def patched(admin, path):
+    """What TBO Support changed in place on one of the gateway's admin paths, in order."""
+    return [
+        c.kwargs["json"]
+        for c in admin.call_args_list
+        if c.args == ("PATCH", GATEWAY + path)
+    ]
+
+
 def refuse_new_models(admin, when):
     """The gateway refuses a new model when `when(its litellm_params)` says so; every other
     admin call answers."""
@@ -647,7 +656,9 @@ class TestWriteAllBeforeTheSwitch(ReviewCase):
 
         self.assertEqual(result["written"]["keys"], 1)
         self.assertEqual(
-            posted(self.admin, "/credentials")[0]["credential_values"]["api_key"],
+            patched(self.admin, "/credentials/" + DEEPSEEK)[0]["credential_values"][
+                "api_key"
+            ],
             DEEPSEEK_KEY,
         )
         self.assertEqual(
@@ -661,6 +672,149 @@ class TestWriteAllBeforeTheSwitch(ReviewCase):
             [(p.slot, p.model) for p in ai_engine.get_providers("triage")],
             [(DEEPSEEK, "deepseek-chat")],
         )
+
+    def test_switching_on_afterwards_moves_the_keys_kept_here(self):
+        ai_models.write_all()
+        self.admin.reset_mock()
+        # the gateway answers its health check and takes TBO Support's key
+        with patch("requests.get", return_value=answered()):
+            ai_models.save_gateway({"call_key": GATEWAY_KEY, "for_all": 1})
+
+        # the key now lives only in the gateway, and the account is ready through it
+        self.assertTrue(patched(self.admin, "/credentials/" + DEEPSEEK))
+        self.assertIsNone(
+            get_decrypted_password(PROVIDER, DEEPSEEK, "api_key", raise_exception=False)
+        )
+        self.assertTrue(frappe.db.get_value(PROVIDER, DEEPSEEK, "key_on_gateway"))
+        deepseek = next(p for p in ai_models.provider_list() if p["name"] == DEEPSEEK)
+        self.assertTrue(deepseek["ready"])
+
+    def test_a_new_key_reaches_the_gateways_copy_while_the_switch_is_off(self):
+        ai_models.write_all()
+        self.admin.reset_mock()
+
+        ai_models.save_provider(
+            {
+                "name": DEEPSEEK,
+                "style": "OpenAI-compatible",
+                "url": "https://api.deepseek.test",
+                "key": "sk-deepseek-rotated-123456",
+            }
+        )
+
+        sent = patched(self.admin, "/credentials/" + DEEPSEEK)
+        self.assertEqual(
+            sent[0]["credential_values"]["api_key"], "sk-deepseek-rotated-123456"
+        )
+        # TBO Support still calls DeepSeek itself: it keeps the key too
+        self.assertEqual(
+            get_decrypted_password(
+                PROVIDER, DEEPSEEK, "api_key", raise_exception=False
+            ),
+            "sk-deepseek-rotated-123456",
+        )
+
+    def test_a_model_on_the_gateway_follows_its_changes_while_the_switch_is_off(self):
+        ai_models.write_all()
+        ai_models.save_job("triage", {"model": ""})
+        self.admin.reset_mock()
+
+        ai_models.save_model({"model": "deepseek-chat", "listed": 0})
+        self.assertEqual(
+            posted(self.admin, "/model/delete"), [{"id": "tbo-support:deepseek-chat"}]
+        )
+        self.assertFalse(frappe.db.get_value(PRICING, "deepseek-chat", "on_gateway"))
+
+
+class TestTheGatewaysCredentials(GatewayCase):
+    def test_a_refused_change_never_takes_the_working_key_off(self):
+        add_provider()
+
+        def answer(method, url, **kwargs):
+            if method == "PATCH":
+                return answered(503)
+            return answered()
+
+        self.admin.side_effect = answer
+        self.admin.reset_mock()
+        with self.assertRaises(frappe.ValidationError):
+            ai_models.save_provider(
+                {
+                    "name": DEEPSEEK,
+                    "style": "OpenAI-compatible",
+                    "url": "https://api.deepseek.test",
+                    "key": "sk-deepseek-new-123456",
+                }
+            )
+        methods = [c.args[0] for c in self.admin.call_args_list]
+        self.assertNotIn("DELETE", methods)
+
+    def test_a_credential_not_there_yet_is_written_new(self):
+        def answer(method, url, **kwargs):
+            if method == "PATCH":
+                return answered(404)
+            return answered()
+
+        self.admin.side_effect = answer
+        ai_gateway.save_credential(
+            "Fresh", {"api_key": "sk-fresh-123456", "api_base": "https://x.test"}
+        )
+        self.assertEqual(
+            [c.args[0] for c in self.admin.call_args_list], ["PATCH", "DELETE", "POST"]
+        )
+
+    def test_a_credential_without_an_address_is_written_new(self):
+        ai_gateway.save_credential("Claude", {"api_key": "sk-claude-123456"})
+        self.assertEqual(
+            [c.args[0] for c in self.admin.call_args_list], ["DELETE", "POST"]
+        )
+
+    def test_a_model_written_back_after_a_timeout_meets_no_twin(self):
+        calls = []
+
+        def answer(method, url, **kwargs):
+            calls.append((method, url.replace(GATEWAY, "")))
+            if (
+                url.endswith("/model/new")
+                and len([c for c in calls if c[1] == "/model/new"]) == 1
+            ):
+                raise requests.ReadTimeout("slow")
+            return answered()
+
+        self.admin.side_effect = answer
+        with self.assertRaises(ai_gateway.GatewayError):
+            ai_gateway.save_model(
+                "glm-5", {"model": "openai/glm-5"}, previous={"model": "openai/old"}
+            )
+        # delete, the timed-out write, delete again, then the write-back
+        self.assertEqual(
+            calls,
+            [
+                ("POST", "/model/delete"),
+                ("POST", "/model/new"),
+                ("POST", "/model/delete"),
+                ("POST", "/model/new"),
+            ],
+        )
+
+
+class TestWriteAllOnce(GatewayCase):
+    def test_the_sections_credential_is_written_once_for_all_its_models(self):
+        set_hub(anthropic_api_key="sk-section-review-123456")
+        add_model("kimi-a", "Anthropic-compatible")
+        add_model("kimi-b", "Anthropic-compatible")
+        self.admin.reset_mock()
+
+        ai_models.write_all()
+
+        section = [
+            c
+            for c in self.admin.call_args_list
+            if c.args[0] in ("PATCH", "POST")
+            and (c.kwargs.get("json") or {}).get("credential_name")
+            == ai_engine.ANTHROPIC_SLOT
+        ]
+        self.assertEqual(len(section), 1)
 
 
 class TestARedraftByAnotherModel(ReviewCase):

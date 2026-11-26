@@ -829,11 +829,11 @@ class TestEverythingThroughTheGateway(ModelsCase):
             for c in self.admin_calls.call_args_list
         ]
 
-    def admin_body(self, path):
+    def admin_body(self, path, method="POST"):
         return next(
             c.kwargs["json"]
             for c in self.admin_calls.call_args_list
-            if c.args[1] == GATEWAY + path and c.args[0] == "POST"
+            if c.args[1] == GATEWAY + path and c.args[0] == method
         )
 
     def test_every_call_goes_to_the_gateway_with_tbo_supports_key(self):
@@ -969,8 +969,10 @@ class TestEverythingThroughTheGateway(ModelsCase):
 
         result = add_provider()
 
-        self.assertIn(("DELETE", "/credentials/DeepSeek"), self.admin_paths())
-        body = self.admin_body("/credentials")
+        # changed in place, so a refused change leaves the working credential
+        self.assertIn(("PATCH", "/credentials/DeepSeek"), self.admin_paths())
+        self.assertNotIn(("DELETE", "/credentials/DeepSeek"), self.admin_paths())
+        body = self.admin_body("/credentials/DeepSeek", "PATCH")
         self.assertEqual(body["credential_name"], DEEPSEEK)
         self.assertEqual(
             body["credential_values"],
@@ -1029,7 +1031,9 @@ class TestEverythingThroughTheGateway(ModelsCase):
 
         self.assertEqual(result["written"], {"keys": 1, "models": 1})
         self.assertEqual(
-            self.admin_body("/credentials")["credential_values"]["api_key"],
+            self.admin_body("/credentials/DeepSeek", "PATCH")["credential_values"][
+                "api_key"
+            ],
             DEEPSEEK_KEY,
         )
         self.assertEqual(self.admin_body("/model/new")["model_name"], "deepseek-chat")
@@ -1150,7 +1154,9 @@ class TestDesktopLevels(ModelsCase):
             ["tbo-support:tbo-simple:1", "tbo-support:tbo-simple:2"],
         )
         # DeepSeek's key reached the gateway; TBO Support still calls DeepSeek itself, so it keeps it too
-        self.assertEqual(self.sent("/credentials")[0]["credential_name"], DEEPSEEK)
+        self.assertEqual(
+            self.sent("/credentials/DeepSeek")[0]["credential_name"], DEEPSEEK
+        )
         self.assertTrue(
             get_decrypted_password(
                 "HDS AI Provider", DEEPSEEK, "api_key", raise_exception=False

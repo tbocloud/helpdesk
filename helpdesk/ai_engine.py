@@ -1314,8 +1314,9 @@ def log_usage(
             }
         ).insert(ignore_permissions=True)
         if at:
-            # the call's own time, so a fallback that answered after it still sorts after it
-            row.db_set("creation", at, update_modified=False)
+            # the call's own time, so a fallback that answered after it still sorts after it,
+            # and the day reports count it on the day it happened
+            row.db_set({"creation": at, "timestamp": at}, update_modified=False)
     except Exception:
         frappe.log_error("Failed to log AI usage")
 
