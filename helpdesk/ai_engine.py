@@ -1098,6 +1098,7 @@ def call_haiku(system_prompt, user_message, ticket_name=None, job=None, images=N
                 "cache_write_tokens": getattr(usage, "cache_creation_input_tokens", 0),
             },
             "cost": estimate_cost(provider.model, usage),
+            "model": provider.model,
         }
 
     frappe.cache.set_value(OUTAGE_KEY, 1, expires_in_sec=STATUS_SECONDS)

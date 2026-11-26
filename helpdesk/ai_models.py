@@ -8,6 +8,8 @@ Everything is read from HDS AI Usage Log, where every attempt is a row: TBO Supp
 Copilot worker's stages. Nothing here reads or returns a prompt or a customer's text.
 """
 
+import contextlib
+
 import frappe
 from frappe import _
 from frappe.utils import add_days, cint, getdate, nowdate
@@ -194,7 +196,8 @@ def overview(days: int = 30) -> dict:
     by_model: dict[str, list] = {}
     for row in rows:
         by_model.setdefault(row.model or _("(no model)"), []).append(row)
-    names = sorted(set(by_model) | set(used))
+    scores = latest_scores()
+    names = sorted(set(by_model) | set(used) | set(scores))
     models = []
     for name in names:
         mine = by_model.get(name, [])
@@ -206,6 +209,7 @@ def overview(days: int = 30) -> dict:
                 or _section_of(name, plan),
                 "used_for": used.get(name, {"primary": [], "fallback": []}),
                 **figures,
+                "benchmark": scores.get(name),
                 "status": _status(name, figures, paused),
             }
         )
@@ -494,4 +498,365 @@ def try_job(job: str) -> dict:
         "message": _("{0} answered in {1} s.").format(
             provider.model, round(monotonic() - started, 1)
         ),
+    }
+
+
+# --- benchmarks: our own test set, and public numbers beside it ---------------------------------
+
+EVAL_RUN = "HDS Model Eval Run"
+EVAL_REQUEST = "HDS Model Eval Request"
+PUBLIC = "HDS Public Benchmark"
+
+
+def store_eval(
+    model: str,
+    results: list,
+    job: str = "investigate",
+    source: str = "Worker",
+    ran_on=None,
+) -> str:
+    """Keeps one run of the test set as scores per case number. A case's text, its expected
+    answer and Copilot's own summary are dropped here: they never reach the hub's records."""
+    model = str(model or "").strip()
+    if not model:
+        frappe.throw(_("The report names no model."))
+    rows = []
+    for item in results if isinstance(results, list) else []:
+        if not isinstance(item, dict):
+            continue
+        case = item.get("case")
+        case_id = case.get("id") if isinstance(case, dict) else case
+        if not case_id:
+            continue
+        found = item.get("filesFound", item.get("files_found"))
+        rows.append(
+            {
+                "case_id": str(case_id)[:40],
+                "right": 1 if item.get("right") else 0,
+                "confidence": frappe.utils.flt(item.get("confidence")),
+                "files_found": len(found) if isinstance(found, list) else cint(found),
+                "tokens": cint(item.get("tokens")),
+                "cost_usd": frappe.utils.flt(item.get("costUsd", item.get("cost_usd"))),
+                "minutes": frappe.utils.flt(item.get("minutes")),
+                "outcome": str(item.get("outcome") or "")[:140],
+            }
+        )
+    if not rows:
+        frappe.throw(_("The report has no cases."))
+    right = sum(r["right"] for r in rows)
+    doc = frappe.get_doc(
+        {
+            "doctype": EVAL_RUN,
+            "model": model,
+            "job": job if job in ai_engine.JOBS else "investigate",
+            "ran_on": getdate(ran_on or nowdate()),
+            "source": source,
+            "cases_total": len(rows),
+            "cases_right": right,
+            "accuracy": round(right / len(rows) * 100, 1),
+            "avg_minutes": round(sum(r["minutes"] for r in rows) / len(rows), 1),
+            "total_cost_usd": round(sum(r["cost_usd"] for r in rows), 2),
+            "results": rows,
+        }
+    ).insert(ignore_permissions=True)
+    return doc.name
+
+
+def _eval_runs(model: str | None = None) -> list:
+    return frappe.get_all(
+        EVAL_RUN,
+        filters={"model": model} if model else {},
+        fields=[
+            "name",
+            "model",
+            "job",
+            "ran_on",
+            "source",
+            "cases_total",
+            "cases_right",
+            "accuracy",
+            "avg_minutes",
+            "total_cost_usd",
+        ],
+        order_by="ran_on desc, creation desc",
+        limit=50,
+    )
+
+
+def _cases(run: str) -> list[dict]:
+    rows = frappe.get_all(
+        "HDS Model Eval Result",
+        filters={"parent": run, "parenttype": EVAL_RUN},
+        fields=["case_id", "right", "minutes", "cost_usd"],
+        order_by="idx asc",
+    )
+    return [
+        {"case": r.case_id, "right": bool(r.right), "minutes": r.minutes} for r in rows
+    ]
+
+
+def latest_scores() -> dict[str, dict]:
+    """Each model's newest run: {model: {accuracy, ran_on}}."""
+    scores: dict[str, dict] = {}
+    for run in _eval_runs():
+        scores.setdefault(
+            run.model, {"accuracy": run.accuracy, "ran_on": str(run.ran_on)}
+        )
+    return scores
+
+
+def benchmarks(model: str, against: str | None = None) -> dict:
+    """One model's runs of our test set, case by case for the newest, head to head with
+    another model's newest run, and the public numbers a manager added."""
+    runs = _eval_runs(model)
+    for run in runs:
+        run["cost_per_right_case"] = (
+            round(run.total_cost_usd / run.cases_right, 2) if run.cases_right else None
+        )
+        run["ran_on"] = str(run.ran_on)
+    others = sorted({r.model for r in _eval_runs() if r.model != model})
+    against = against if against in others else (others[0] if others else "")
+    theirs = _eval_runs(against)[:1] if against else []
+    return {
+        "model": model,
+        "runs": runs,
+        "cases": _cases(runs[0].name) if runs else [],
+        "others": others,
+        "against": against,
+        "against_cases": _cases(theirs[0].name) if theirs else [],
+        "against_accuracy": theirs[0].accuracy if theirs else None,
+        "public": frappe.get_all(
+            PUBLIC,
+            filters={"model": model},
+            fields=["name", "benchmark", "score", "measured_on", "source_url", "note"],
+            order_by="measured_on desc",
+        ),
+        "requests": frappe.get_all(
+            EVAL_REQUEST,
+            filters={"model": model, "status": ["in", ["Queued", "Running", "Failed"]]},
+            fields=["name", "status", "requested_by", "creation", "error"],
+            order_by="creation desc",
+            limit=5,
+        ),
+        "can_change": can_change(),
+    }
+
+
+def add_public_benchmark(model: str, values: dict) -> dict:
+    """A public number for a model, with its date and where it came from."""
+    if not can_change():
+        frappe.throw(
+            _("Only System Managers add public benchmarks."), frappe.PermissionError
+        )
+    benchmark = str(values.get("benchmark") or "").strip()
+    score = str(values.get("score") or "").strip()
+    if not (benchmark and score):
+        frappe.throw(_("Give the benchmark's name and the score."))
+    url = str(values.get("source_url") or "").strip()
+    if url and not url.startswith(("https://", "http://")):
+        frappe.throw(_("The source must be a web address."))
+    frappe.get_doc(
+        {
+            "doctype": PUBLIC,
+            "model": model,
+            "benchmark": benchmark[:140],
+            "score": score[:140],
+            "measured_on": values.get("measured_on") or None,
+            "source_url": url[:500],
+            "note": str(values.get("note") or "").strip()[:500],
+        }
+    ).insert(ignore_permissions=True)
+    return benchmarks(model)
+
+
+def remove_public_benchmark(name: str) -> dict:
+    if not can_change():
+        frappe.throw(
+            _("Only System Managers remove public benchmarks."), frappe.PermissionError
+        )
+    model = frappe.db.get_value(PUBLIC, name, "model")
+    frappe.delete_doc(PUBLIC, name, ignore_permissions=True)
+    return benchmarks(model)
+
+
+def request_eval(model: str, job: str = "investigate") -> dict:
+    """Queues a run of the test set on a model for the Copilot worker; one at a time per model."""
+    if not can_change():
+        frappe.throw(
+            _("Only System Managers run the test set."), frappe.PermissionError
+        )
+    model = str(model or "").strip()
+    if not model:
+        frappe.throw(_("Choose a model."))
+    if frappe.db.exists(
+        EVAL_REQUEST, {"model": model, "status": ["in", ["Queued", "Running"]]}
+    ):
+        frappe.throw(
+            _("A run of the test set on {0} is already waiting.").format(model)
+        )
+    frappe.get_doc(
+        {
+            "doctype": EVAL_REQUEST,
+            "model": model,
+            "job": job if job in ai_engine.WORKER_JOBS else "investigate",
+            "requested_by": frappe.session.user,
+        }
+    ).insert(ignore_permissions=True)
+    return benchmarks(model)
+
+
+# --- quality: what people and checks say about a model's work -----------------------------------
+
+EVENT = "HDS AI Quality Event"
+EVENT_KINDS = (
+    "Unsupported answer",
+    "Safety cut",
+    "Bad answer format",
+    "Missing reference",
+    "Hand-over",
+    "Answered",
+)
+
+
+def record_event(kind: str, model: str | None = None, **more) -> None:
+    """One quality signal. Never raises and never blocks the caller: a lost event is better
+    than a reply that fails. `detail` is a short code or a file or field name, never a
+    customer's text."""
+    try:
+        if kind not in EVENT_KINDS:
+            return
+        frappe.get_doc(
+            {
+                "doctype": EVENT,
+                "kind": kind,
+                "model": (model or "")[:140],
+                "job": more.get("job"),
+                "ticket": more.get("ticket"),
+                "copilot_run": more.get("copilot_run"),
+                "value": more.get("value"),
+                "detail": str(more.get("detail") or "")[:140],
+            }
+        ).insert(ignore_permissions=True)
+    except Exception:
+        # not even a failing error log may reach the caller
+        with contextlib.suppress(Exception):
+            frappe.log_error(title="AI quality event not recorded")
+
+
+def record_references(run: str, references) -> None:
+    """What the worker's reference check found for a run: how many cited files, functions,
+    doctypes and fields it checked, and which do not exist."""
+    if not isinstance(references, dict):
+        return
+    missing = [
+        {
+            "kind": str(m.get("kind") or "")[:40],
+            "value": str(m.get("value") or "")[:200],
+        }
+        for m in references.get("missing") or []
+        if isinstance(m, dict) and m.get("value")
+    ][:50]
+    frappe.db.set_value(
+        "HDS Copilot Run",
+        run,
+        {
+            "references_checked": cint(references.get("checked")),
+            "references_missing": len(missing),
+            "missing_references": frappe.as_json(missing) if missing else None,
+        },
+        update_modified=False,
+    )
+    model = frappe.db.get_value("HDS Copilot Run", run, "model_used")
+    for item in missing:
+        record_event(
+            "Missing reference",
+            model,
+            job="investigate",
+            copilot_run=run,
+            detail=f"{item['kind']}: {item['value']}",
+        )
+
+
+def quality(model: str, days: int = 30) -> dict:
+    """One model's quality for the period: Copilot's outcomes, the chat's, and the two
+    hallucination checks, each on its own."""
+    days = period(days)
+    start = since(days)
+    runs = frappe.get_all(
+        "HDS Copilot Run",
+        filters={"model_used": model, "creation": [">=", start]},
+        fields=[
+            "name",
+            "state",
+            "review_verdict",
+            "explanation_edited",
+            "references_checked",
+            "references_missing",
+        ],
+        limit=0,
+    )
+    names = [r.name for r in runs]
+    approvals = (
+        frappe.get_all(
+            "HDS Copilot Approval",
+            filters={
+                "run": ["in", names],
+                "status": ["in", ["Approved", "Merged", "Rejected"]],
+            },
+            fields=["status"],
+            limit=0,
+        )
+        if names
+        else []
+    )
+    approved = sum(1 for a in approvals if a.status != "Rejected")
+    reviewed = [r for r in runs if r.review_verdict]
+    edited = [r.explanation_edited for r in runs if r.explanation_edited is not None]
+    checked = [r for r in runs if r.references_checked]
+    events: dict[str, int] = {}
+    for row in frappe.get_all(
+        EVENT,
+        filters={"model": model, "creation": [">=", start]},
+        fields=["kind"],
+        limit=0,
+    ):
+        events[row.kind] = events.get(row.kind, 0) + 1
+    chat = (
+        events.get("Answered", 0)
+        + events.get("Unsupported answer", 0)
+        + events.get("Hand-over", 0)
+    )
+    return {
+        "model": model,
+        "days": days,
+        "copilot": {
+            "runs": len(runs),
+            "failed": sum(1 for r in runs if r.state == "Failed"),
+            "approvals": len(approvals),
+            "approval_rate": rate(approved, len(approvals)),
+            "reviewed": len(reviewed),
+            "right_rate": rate(
+                sum(1 for r in reviewed if r.review_verdict == "Right"), len(reviewed)
+            ),
+            "wrong_rate": rate(
+                sum(1 for r in reviewed if r.review_verdict == "Wrong"), len(reviewed)
+            ),
+            "avg_edited": round(sum(edited) / len(edited), 1) if edited else None,
+        },
+        "chat": {
+            "replies": chat,
+            "answered_rate": rate(events.get("Answered", 0), chat),
+            "handover_rate": rate(events.get("Hand-over", 0), chat),
+        },
+        "hallucination": {
+            "runs_checked": len(checked),
+            "missing_reference_rate": rate(
+                sum(1 for r in checked if r.references_missing), len(checked)
+            ),
+            "missing_references": events.get("Missing reference", 0),
+            "unsupported_rate": rate(events.get("Unsupported answer", 0), chat),
+            "unsupported": events.get("Unsupported answer", 0),
+            "safety_cuts": events.get("Safety cut", 0),
+            "bad_format": events.get("Bad answer format", 0),
+        },
     }

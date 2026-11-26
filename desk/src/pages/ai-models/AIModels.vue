@@ -115,6 +115,9 @@
                   <th scope="col" class="px-3 py-2.5 text-right font-medium">
                     {{ __("Ran as fallback") }}
                   </th>
+                  <th scope="col" class="px-3 py-2.5 text-right font-medium">
+                    {{ __("Our test set") }}
+                  </th>
                   <th scope="col" class="px-4 py-2.5 font-medium">
                     {{ __("Status") }}
                   </th>
@@ -152,6 +155,12 @@
                   </td>
                   <td class="px-3 py-3 text-right tabular-nums">
                     {{ pct(m.fallback_rate) }}
+                  </td>
+                  <td class="px-3 py-3 text-right tabular-nums">
+                    {{ m.benchmark ? pct(m.benchmark.accuracy) : "-" }}
+                    <div v-if="m.benchmark" class="text-ink-gray-5">
+                      {{ m.benchmark.ran_on }}
+                    </div>
                   </td>
                   <td class="px-4 py-3">
                     <Badge
@@ -245,7 +254,9 @@
             </div>
 
             <p
-              v-if="!detail.calls"
+              v-if="
+                !detail.calls && (tab === 'performance' || tab === 'errors')
+              "
               class="rounded-lg border border-dashed border-outline-gray-3 px-4 py-6 text-center text-p-sm text-ink-gray-6"
             >
               {{ __("No calls to this model in this period.") }}
@@ -341,7 +352,7 @@
               </SectionCard>
             </template>
 
-            <template v-else>
+            <template v-else-if="tab === 'errors'">
               <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
                 <SectionCard :title="__('Error rate per day (%)')">
                   <WeekLineChart
@@ -438,6 +449,350 @@
                       </tr>
                     </tbody>
                   </table>
+                </div>
+              </SectionCard>
+            </template>
+
+            <template v-else-if="tab === 'quality' && quality">
+              <div class="grid grid-cols-1 gap-3 lg:grid-cols-3">
+                <SectionCard
+                  :title="__('Copilot')"
+                  :description="
+                    __('{0} runs in this period', String(quality.copilot.runs))
+                  "
+                >
+                  <dl class="flex flex-col gap-2 px-4 pb-4 text-p-sm">
+                    <QualityLine
+                      :label="__('Fixes approved')"
+                      :value="pct(quality.copilot.approval_rate)"
+                      :note="
+                        __('{0} decided', String(quality.copilot.approvals))
+                      "
+                    />
+                    <QualityLine
+                      :label="__('Root cause rated right')"
+                      :value="pct(quality.copilot.right_rate)"
+                      :note="
+                        __('{0} reviewed', String(quality.copilot.reviewed))
+                      "
+                    />
+                    <QualityLine
+                      :label="__('Root cause rated wrong')"
+                      :value="pct(quality.copilot.wrong_rate)"
+                    />
+                    <QualityLine
+                      :label="__('Explanation changed by the agent')"
+                      :value="pct(quality.copilot.avg_edited)"
+                      :note="__('average share of the text')"
+                    />
+                    <QualityLine
+                      :label="__('Runs that failed')"
+                      :value="String(quality.copilot.failed)"
+                    />
+                  </dl>
+                </SectionCard>
+                <SectionCard
+                  :title="__('Chat replies')"
+                  :description="
+                    __(
+                      '{0} replies in this period',
+                      String(quality.chat.replies)
+                    )
+                  "
+                >
+                  <dl class="flex flex-col gap-2 px-4 pb-4 text-p-sm">
+                    <QualityLine
+                      :label="__('Answered from an article')"
+                      :value="pct(quality.chat.answered_rate)"
+                    />
+                    <QualityLine
+                      :label="__('Handed to a person')"
+                      :value="pct(quality.chat.handover_rate)"
+                    />
+                  </dl>
+                </SectionCard>
+                <SectionCard
+                  :title="__('Hallucination flags')"
+                  :description="
+                    __('Two separate checks, never one blended number')
+                  "
+                >
+                  <dl class="flex flex-col gap-2 px-4 pb-4 text-p-sm">
+                    <QualityLine
+                      :label="
+                        __('Runs citing a file or field that does not exist')
+                      "
+                      :value="pct(quality.hallucination.missing_reference_rate)"
+                      :note="
+                        __(
+                          '{0} runs checked, {1} missing references',
+                          String(quality.hallucination.runs_checked),
+                          String(quality.hallucination.missing_references)
+                        )
+                      "
+                    />
+                    <QualityLine
+                      :label="__('Chat answers with no article behind them')"
+                      :value="pct(quality.hallucination.unsupported_rate)"
+                      :note="
+                        __(
+                          '{0} stopped before the customer saw them',
+                          String(quality.hallucination.unsupported)
+                        )
+                      "
+                    />
+                    <QualityLine
+                      :label="__('Links, prices or promises removed')"
+                      :value="String(quality.hallucination.safety_cuts)"
+                    />
+                    <QualityLine
+                      :label="__('Answers in a broken format')"
+                      :value="String(quality.hallucination.bad_format)"
+                    />
+                  </dl>
+                </SectionCard>
+              </div>
+              <p class="text-p-xs text-ink-gray-5">
+                {{
+                  __(
+                    "A dash means nothing was measured yet. The reference check needs the updated Copilot worker."
+                  )
+                }}
+              </p>
+            </template>
+
+            <template v-else-if="tab === 'benchmarks' && bench">
+              <p
+                v-if="benchNotice"
+                role="status"
+                class="rounded-lg px-3 py-2 text-p-sm"
+                :class="
+                  benchNotice.ok
+                    ? 'bg-success-soft text-success'
+                    : 'bg-warning-soft text-warning'
+                "
+              >
+                {{ benchNotice.text }}
+              </p>
+              <SectionCard
+                :title="__('Our test set')"
+                :description="
+                  __('Past tickets with known answers. This is what decides.')
+                "
+              >
+                <template #actions>
+                  <Button
+                    v-if="bench.can_change"
+                    variant="solid"
+                    :label="__('Run the test set')"
+                    :loading="benchBusy"
+                    @click="runEval"
+                  />
+                </template>
+                <div class="flex flex-col gap-4 px-4 pb-4">
+                  <p
+                    v-for="r in bench.requests"
+                    :key="r.name"
+                    class="text-p-sm text-ink-gray-6"
+                  >
+                    {{
+                      r.status === "Failed"
+                        ? __("A run failed: {0}", r.error || "")
+                        : __(
+                            "A run is {0}: the Copilot worker takes it when it has no ticket work.",
+                            r.status === "Running"
+                              ? __("running")
+                              : __("waiting")
+                          )
+                    }}
+                  </p>
+                  <p
+                    v-if="!bench.runs.length"
+                    class="text-p-sm text-ink-gray-6"
+                  >
+                    {{ __("No run of the test set on this model yet.") }}
+                  </p>
+                  <div v-else class="overflow-x-auto">
+                    <table class="w-full min-w-[36rem] text-p-sm">
+                      <thead>
+                        <tr class="text-left text-ink-gray-5">
+                          <th scope="col" class="py-1.5 pr-3 font-medium">
+                            {{ __("Ran on") }}
+                          </th>
+                          <th
+                            scope="col"
+                            class="px-3 py-1.5 text-right font-medium"
+                          >
+                            {{ __("Accuracy") }}
+                          </th>
+                          <th
+                            scope="col"
+                            class="px-3 py-1.5 text-right font-medium"
+                          >
+                            {{ __("Right") }}
+                          </th>
+                          <th
+                            scope="col"
+                            class="px-3 py-1.5 text-right font-medium"
+                          >
+                            {{ __("Cost per right case") }}
+                          </th>
+                          <th
+                            scope="col"
+                            class="px-3 py-1.5 text-right font-medium"
+                          >
+                            {{ __("Minutes per case") }}
+                          </th>
+                          <th scope="col" class="py-1.5 pl-3 font-medium">
+                            {{ __("From") }}
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr
+                          v-for="r in bench.runs"
+                          :key="r.name"
+                          class="border-t border-outline-gray-1"
+                        >
+                          <td class="py-1.5 pr-3">{{ r.ran_on }}</td>
+                          <td class="px-3 py-1.5 text-right tabular-nums">
+                            {{ pct(r.accuracy) }}
+                          </td>
+                          <td class="px-3 py-1.5 text-right tabular-nums">
+                            {{ r.cases_right }} / {{ r.cases_total }}
+                          </td>
+                          <td class="px-3 py-1.5 text-right tabular-nums">
+                            {{
+                              r.cost_per_right_case === null
+                                ? "-"
+                                : money(r.cost_per_right_case)
+                            }}
+                          </td>
+                          <td class="px-3 py-1.5 text-right tabular-nums">
+                            {{ r.avg_minutes }}
+                          </td>
+                          <td class="py-1.5 pl-3 text-ink-gray-6">
+                            {{ r.source }}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <template v-if="bench.cases.length">
+                    <CaseGrid
+                      :title="__('{0}, latest run', bench.model)"
+                      :cases="bench.cases"
+                    />
+                    <div v-if="bench.others.length" class="flex flex-col gap-2">
+                      <div class="w-full sm:w-72">
+                        <FormControl
+                          type="select"
+                          :label="__('Head to head with')"
+                          :model-value="bench.against"
+                          :options="
+                            bench.others.map((o) => ({ label: o, value: o }))
+                          "
+                          @update:model-value="go({ against: $event })"
+                        />
+                      </div>
+                      <CaseGrid
+                        :title="
+                          __(
+                            '{0}: {1}',
+                            bench.against,
+                            pct(bench.against_accuracy)
+                          )
+                        "
+                        :cases="bench.against_cases"
+                      />
+                    </div>
+                    <p class="text-p-xs text-ink-gray-5">
+                      {{
+                        __(
+                          "Only case numbers are shown. The questions and the expected answers stay private."
+                        )
+                      }}
+                    </p>
+                  </template>
+                </div>
+              </SectionCard>
+
+              <SectionCard
+                :title="__('Public benchmarks')"
+                :description="
+                  __('For reference only: self-reported and often out of date')
+                "
+              >
+                <div class="flex flex-col gap-3 px-4 pb-4">
+                  <ul class="flex flex-col gap-1.5 text-p-sm">
+                    <li
+                      v-for="b in bench.public"
+                      :key="b.name"
+                      class="flex flex-wrap items-center gap-x-3 gap-y-1"
+                    >
+                      <span class="text-base-medium text-ink-gray-9">{{
+                        b.benchmark
+                      }}</span>
+                      <span class="tabular-nums">{{ b.score }}</span>
+                      <span class="text-ink-gray-5">{{
+                        b.measured_on || __("no date")
+                      }}</span>
+                      <a
+                        v-if="b.source_url"
+                        :href="b.source_url"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="underline underline-offset-2"
+                      >
+                        {{ __("source") }}
+                      </a>
+                      <span v-if="b.note" class="text-ink-gray-6">{{
+                        b.note
+                      }}</span>
+                      <Button
+                        v-if="bench.can_change"
+                        variant="ghost"
+                        size="sm"
+                        :label="__('Remove')"
+                        @click="removePublic(b.name)"
+                      />
+                    </li>
+                    <li v-if="!bench.public.length" class="text-ink-gray-5">
+                      {{ __("None added yet.") }}
+                    </li>
+                  </ul>
+                  <form
+                    v-if="bench.can_change"
+                    class="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_7rem_10rem_minmax(0,1fr)_auto]"
+                    @submit.prevent="addPublic"
+                  >
+                    <FormControl
+                      v-model="pub.benchmark"
+                      type="text"
+                      :label="__('Benchmark')"
+                    />
+                    <FormControl
+                      v-model="pub.score"
+                      type="text"
+                      :label="__('Score')"
+                    />
+                    <FormControl
+                      v-model="pub.measured_on"
+                      type="date"
+                      :label="__('Measured on')"
+                    />
+                    <FormControl
+                      v-model="pub.source_url"
+                      type="text"
+                      :label="__('Source link')"
+                      placeholder="https://"
+                    />
+                    <Button
+                      type="submit"
+                      :label="__('Add')"
+                      :loading="benchBusy"
+                    />
+                  </form>
                 </div>
               </SectionCard>
             </template>
@@ -635,10 +990,12 @@ import {
   TabButtons,
   usePageMeta,
 } from "frappe-ui";
-import { computed, ref, watch } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import BarList from "./BarList.vue";
+import CaseGrid from "./CaseGrid.vue";
+import QualityLine from "./QualityLine.vue";
 
 const API = "helpdesk.api.ai_models";
 const STATUS_THEME: Record<string, "green" | "orange" | "red" | "gray"> = {
@@ -659,6 +1016,7 @@ type Figures = {
 };
 type UsedFor = { primary: string[]; fallback: string[] };
 type ModelRow = Figures & {
+  benchmark?: { accuracy: number; ran_on: string } | null;
   model: string;
   provider: string;
   used_for: UsedFor;
@@ -685,6 +1043,54 @@ type Detail = ModelRow & {
     fallback_answered: boolean;
   }[];
   slowest: { when: string; job: string; ticket: string; seconds: number }[];
+};
+type Quality = {
+  copilot: {
+    runs: number;
+    failed: number;
+    approvals: number;
+    approval_rate: number | null;
+    reviewed: number;
+    right_rate: number | null;
+    wrong_rate: number | null;
+    avg_edited: number | null;
+  };
+  chat: {
+    replies: number;
+    answered_rate: number | null;
+    handover_rate: number | null;
+  };
+  hallucination: {
+    runs_checked: number;
+    missing_reference_rate: number | null;
+    missing_references: number;
+    unsupported_rate: number | null;
+    unsupported: number;
+    safety_cuts: number;
+    bad_format: number;
+  };
+};
+type Case = { case: string; right: boolean };
+type Bench = {
+  model: string;
+  runs: {
+    name: string;
+    ran_on: string;
+    accuracy: number;
+    cases_right: number;
+    cases_total: number;
+    cost_per_right_case: number | null;
+    avg_minutes: number;
+    source: string;
+  }[];
+  cases: Case[];
+  others: string[];
+  against: string;
+  against_cases: Case[];
+  against_accuracy: number | null;
+  public: Record<string, string>[];
+  requests: { name: string; status: string; error: string }[];
+  can_change: boolean;
 };
 type Step = { section: string; model: string; ready: boolean };
 type JobRow = Figures & {
@@ -718,9 +1124,13 @@ const days = computed(() =>
   [7, 30, 90].includes(Number(route.query.days)) ? Number(route.query.days) : 30
 );
 const model = computed(() => (route.query.model as string) || "");
+const TABS = ["performance", "errors", "quality", "benchmarks"];
 const tab = computed(() =>
-  route.query.tab === "errors" ? "errors" : "performance"
+  TABS.includes(route.query.tab as string)
+    ? (route.query.tab as string)
+    : "performance"
 );
+const against = computed(() => (route.query.against as string) || "");
 const views = [
   { label: __("Models"), value: "models" },
   { label: __("One model"), value: "model" },
@@ -734,6 +1144,8 @@ const periods = [
 const tabs = [
   { label: __("Performance"), value: "performance" },
   { label: __("Errors"), value: "errors" },
+  { label: __("Quality"), value: "quality" },
+  { label: __("Benchmarks"), value: "benchmarks" },
 ];
 
 function go(change: Record<string, string>) {
@@ -742,6 +1154,8 @@ function go(change: Record<string, string>) {
 
 const overview = ref<Overview | null>(null);
 const detail = ref<Detail | null>(null);
+const quality = ref<Quality | null>(null);
+const bench = ref<Bench | null>(null);
 const settings = ref<Settings | null>(null);
 const loading = ref(false);
 const error = ref<unknown>(null);
@@ -766,6 +1180,17 @@ async function load() {
             days: days.value,
           })) as Detail)
         : null;
+      if (name && tab.value === "quality") {
+        quality.value = (await call(`${API}.quality`, {
+          model: name,
+          days: days.value,
+        })) as Quality;
+      } else if (name && tab.value === "benchmarks") {
+        bench.value = (await call(`${API}.benchmarks`, {
+          model: name,
+          against: against.value || undefined,
+        })) as Bench;
+      }
     } else if (view.value === "settings") {
       settings.value = (await call(`${API}.job_settings`, {
         days: days.value,
@@ -777,7 +1202,7 @@ async function load() {
     if (mine === latest) loading.value = false;
   }
 }
-watch([view, days, model], load, { immediate: true });
+watch([view, days, model, tab, against], load, { immediate: true });
 
 const shown = computed(() =>
   view.value === "models"
@@ -910,5 +1335,59 @@ async function tryJob(job: string) {
   } finally {
     trying.value = "";
   }
+}
+
+// --- benchmarks ---------------------------------------------------------------------------------
+
+const benchBusy = ref(false);
+const benchNotice = ref<{ ok: boolean; text: string } | null>(null);
+const pub = reactive({
+  benchmark: "",
+  score: "",
+  measured_on: "",
+  source_url: "",
+});
+
+async function benchCall(
+  method: string,
+  args: Record<string, unknown>,
+  done: string
+) {
+  benchBusy.value = true;
+  benchNotice.value = null;
+  try {
+    bench.value = (await call(`${API}.${method}`, args)) as Bench;
+    benchNotice.value = { ok: true, text: done };
+    return true;
+  } catch (err) {
+    benchNotice.value = { ok: false, text: errorText(err, __("Not saved")) };
+    return false;
+  } finally {
+    benchBusy.value = false;
+  }
+}
+function runEval() {
+  benchCall(
+    "request_eval",
+    { model: model.value },
+    __("Queued. The result appears here as a new run.")
+  );
+}
+async function addPublic() {
+  const ok = await benchCall(
+    "add_public_benchmark",
+    { model: model.value, values: JSON.stringify(pub) },
+    __("Added.")
+  );
+  if (ok)
+    Object.assign(pub, {
+      benchmark: "",
+      score: "",
+      measured_on: "",
+      source_url: "",
+    });
+}
+function removePublic(name: string) {
+  benchCall("remove_public_benchmark", { name }, __("Removed."));
 }
 </script>

@@ -56,3 +56,54 @@ def try_job(job: str) -> dict:
     """A tiny test call with the job's first model."""
     check_manager()
     return ai_models.try_job(job)
+
+
+@frappe.whitelist()
+def quality(model: str, days: int | str = 30) -> dict:
+    """One model's quality: outcomes and the hallucination checks."""
+    check_manager()
+    return ai_models.quality(model, days)
+
+
+@frappe.whitelist()
+def benchmarks(model: str, against: str | None = None) -> dict:
+    """One model's test-set runs, head to head, and public benchmarks."""
+    check_manager()
+    return ai_models.benchmarks(model, against or None)
+
+
+@frappe.whitelist(methods=["POST"])
+def add_public_benchmark(model: str, values: dict | str) -> dict:
+    check_manager()
+    values = frappe.parse_json(values) or {}
+    if not isinstance(values, dict):
+        frappe.throw(_("values must be an object"))
+    return ai_models.add_public_benchmark(model, values)
+
+
+@frappe.whitelist(methods=["POST"])
+def remove_public_benchmark(name: str) -> dict:
+    check_manager()
+    return ai_models.remove_public_benchmark(name)
+
+
+@frappe.whitelist(methods=["POST"])
+def request_eval(model: str, job: str = "investigate") -> dict:
+    """Queue a run of the test set on a model."""
+    check_manager()
+    return ai_models.request_eval(model, job)
+
+
+@frappe.whitelist(methods=["POST"])
+def import_eval(model: str, report: list | str, ran_on: str | None = None) -> dict:
+    """A test-set report from the worker's `eval` command, brought in by a System Manager.
+    Only case numbers and scores are kept."""
+    check_manager()
+    if not ai_models.can_change():
+        frappe.throw(
+            _("Only System Managers bring in a test-set report."),
+            frappe.PermissionError,
+        )
+    report = frappe.parse_json(report)
+    ai_models.store_eval(model, report, source="Imported", ran_on=ran_on)
+    return ai_models.benchmarks(model)
