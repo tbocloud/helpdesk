@@ -136,7 +136,8 @@ const props = defineProps<{
   customer: string;
   people: CopilotSetup["people"];
 }>();
-const emit = defineEmits<{ saved: [setup: CopilotSetup] }>();
+// "saved": the customer changed on the server; the page reads it again
+const emit = defineEmits<{ saved: [] }>();
 const show = defineModel<boolean>({ default: false });
 
 type EditRow = Omit<PeopleRow, "full_name"> & { key: number };
@@ -193,7 +194,7 @@ async function submit() {
   problem.value = "";
   savingFor.value = mine;
   try {
-    const data = (await call(`${SETUP_API}.save_people`, {
+    await call(`${SETUP_API}.save_people`, {
       name: props.customer,
       rows: JSON.stringify(
         rows.value.map((r) => ({
@@ -205,9 +206,9 @@ async function submit() {
           note: r.note,
         }))
       ),
-    })) as CopilotSetup;
+    });
     toast.success(__("Copilot People saved"));
-    emit("saved", data);
+    emit("saved");
     if (mine === opening.value) show.value = false;
   } catch (err) {
     if (mine === opening.value) {

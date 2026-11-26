@@ -1,14 +1,24 @@
 <template>
-  <Combobox
-    v-model="model"
-    :options="shown"
-    :label="label"
-    :placeholder="placeholder"
-    :loading="loading"
-    :empty-text="__('Nothing found')"
-    open-on-focus
-    @update:query="onQuery"
-  />
+  <div class="flex flex-col gap-1">
+    <Combobox
+      v-model="model"
+      :options="shown"
+      :label="label"
+      :placeholder="placeholder"
+      :loading="loading"
+      :empty-text="failed ? __('The search failed') : __('Nothing found')"
+      open-on-focus
+      @update:query="onQuery"
+    />
+    <p
+      v-if="failed"
+      role="alert"
+      class="flex items-center gap-2 text-p-xs text-ink-red-4"
+    >
+      {{ __("Couldn't search. Check your connection.") }}
+      <Button variant="ghost" size="sm" :label="__('Retry')" @click="retry" />
+    </p>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -18,7 +28,7 @@
 // latest search fills the list.
 import { __ } from "@/translation";
 import { useDebounceFn } from "@vueuse/core";
-import { call, Combobox } from "frappe-ui";
+import { Button, call, Combobox } from "frappe-ui";
 import { computed, onMounted, ref, watch } from "vue";
 
 type Picked = "HD Customer" | "HD Agent";
@@ -41,6 +51,9 @@ const TITLE: Record<Picked, string> = {
 const options = ref<Option[]>([]);
 const selected = ref<Option | null>(null);
 const loading = ref(false);
+// a failed search is told apart from a search that found nothing (review of #351)
+const failed = ref(false);
+let lastQuery = "";
 let latest = 0;
 
 function asOption(row: Record<string, string>): Option {
@@ -54,6 +67,7 @@ function asOption(row: Record<string, string>): Option {
 
 async function search(query: string) {
   const mine = ++latest;
+  lastQuery = query;
   loading.value = true;
   const title = TITLE[props.doctype];
   try {
@@ -70,14 +84,23 @@ async function search(query: string) {
       order_by: `${title} asc`,
       limit_page_length: 20,
     })) as Record<string, string>[];
-    if (mine === latest) options.value = rows.map(asOption);
+    if (mine === latest) {
+      options.value = rows.map(asOption);
+      failed.value = false;
+    }
   } catch {
-    if (mine === latest) options.value = [];
+    if (mine === latest) {
+      options.value = [];
+      failed.value = true;
+    }
   } finally {
     if (mine === latest) loading.value = false;
   }
 }
 const onQuery = useDebounceFn((query: string) => search(query || ""), 250);
+function retry() {
+  search(lastQuery);
+}
 
 // the chosen record stays in the list (and so keeps its name) whatever the search shows
 watch(
