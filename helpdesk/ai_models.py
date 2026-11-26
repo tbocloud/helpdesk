@@ -699,15 +699,9 @@ LITELLM_PREFIX = {
     "Anthropic": "anthropic",
     "Anthropic-compatible": "anthropic",
 }
-# what "Add a provider" fills in; the Copilot worker knows the same names (tbo-worker config.ts)
+# what "Add a provider" fills in, DeepSeek's own API first (the owner's choice, 26 Nov); the Copilot
+# worker knows the same names (tbo-worker config.ts)
 PRESETS = (
-    {
-        "name": "AWS Bedrock",
-        "style": "AWS Bedrock",
-        "url": "",
-        "region": "ap-south-1",
-        "note": "Amazon's AI service in TBO's own AWS account (Mumbai): DeepSeek and others, with the data kept in that account. Through the TBO AI gateway only: its AWS role signs the calls, so there is no key.",
-    },
     {
         "name": "DeepSeek",
         "style": "OpenAI-compatible",
@@ -726,6 +720,13 @@ PRESETS = (
         "style": "OpenAI",
         "url": ai_engine.OPENAI_BASE_URL,
         "note": "OpenAI's own API.",
+    },
+    {
+        "name": "AWS Bedrock",
+        "style": "AWS Bedrock",
+        "url": "",
+        "region": "ap-south-1",
+        "note": "Amazon's AI service in TBO's own AWS account (Mumbai): DeepSeek and others, with the data kept in that account. Through the TBO AI gateway only: its AWS role signs the calls, so there is no key.",
     },
 )
 # HDS Model Pricing's older `provider` field (cost reports), from the account's API style
