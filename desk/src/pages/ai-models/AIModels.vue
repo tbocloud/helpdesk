@@ -3070,14 +3070,15 @@ function refill<T extends object>(
 const alertForm = reactive({ error_rate: 0, fallback_rate: 0 });
 const alertBusy = ref(false);
 const alertNotice = ref<{ ok: boolean; text: string } | null>(null);
-// after a save that went through, the server's values win (as it stored them)
+// after a save that went through, the server's values win (as it stored them); the flag
+// lasts only for the reload that save starts
 let alertsSaved = false;
 watch(
   () => settings.value?.alerts,
   (limits, old) => {
     if (limits) refill(alertForm, alertsSaved ? null : old || null, limits);
-    alertsSaved = false;
-  }
+  },
+  { flush: "sync" }
 );
 function limitText(limit: number) {
   return limit ? `${limit}%` : __("off");
@@ -3098,7 +3099,8 @@ async function saveAlerts() {
     alertNotice.value = { ok: false, text: errorText(err, __("Not saved")) };
   } finally {
     alertBusy.value = false;
-    load();
+    await load();
+    alertsSaved = false;
   }
 }
 
@@ -3116,9 +3118,9 @@ const gwBusy = ref(false);
 // the gateway's own results, shown in its card
 const gwNotice = ref<{ ok: boolean; text: string } | null>(null);
 // the typed keys are never read back: they stay until saved, so a refused save can be corrected
-// after a save, the server's values win: all of them when it went through, the switches when
-// it was refused (so the card never shows a state the server didn't keep; a typed address stays
-// for correction)
+// after a save of these settings, the server's values win: all of them when it went through,
+// the switches when it was refused (so the card never shows a state the server didn't keep; a
+// typed address stays for correction). It lasts only for the reload that save starts.
 let gwTake: "all" | "switches" | null = null;
 watch(
   () => settings.value?.gateway,
@@ -3135,16 +3137,18 @@ watch(
     } else {
       refill(gw, before, { url: g.url, on: g.on, forAll: g.for_all });
     }
-    gwTake = null;
-  }
+  },
+  { flush: "sync" }
 );
 async function gatewayCall(
   method: string,
   args: Record<string, unknown>,
-  done: string
+  done: string,
+  saving = false
 ) {
   gwBusy.value = true;
   gwNotice.value = null;
+  let ok = false;
   try {
     const r = (await call(`${API}.${method}`, args)) as {
       ok?: boolean;
@@ -3154,16 +3158,17 @@ async function gatewayCall(
       ok: r.ok !== false,
       text: r.note ? __("AI gateway: {0}", r.note) : done,
     };
-    gwTake = "all";
-    return true;
+    ok = true;
   } catch (err) {
     gwNotice.value = { ok: false, text: errorText(err, __("Not saved")) };
-    gwTake = "switches";
-    return false;
   } finally {
     gwBusy.value = false;
-    load();
   }
+  // only a save of these settings takes the server's values (a read of usage leaves a draft)
+  if (saving) gwTake = ok ? "all" : "switches";
+  await load();
+  gwTake = null;
+  return ok;
 }
 async function saveGateway() {
   const values: Record<string, unknown> = {
@@ -3179,7 +3184,8 @@ async function saveGateway() {
   const ok = await gatewayCall(
     "save_gateway",
     { values: JSON.stringify(values) },
-    __("AI gateway saved.")
+    __("AI gateway saved."),
+    true
   );
   if (!ok) return;
   for (const field of ["key", "callKey", "adminKey"] as const) {

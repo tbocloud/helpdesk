@@ -294,8 +294,15 @@ def report_eval(
                 named.name, named.model, named.job
             )
         )
-    if named and named.status == "Done" and named.eval_run:
-        # the same report sent again (its answer was lost on the way): nothing is stored twice
+    if (
+        named
+        and named.status == "Done"
+        and named.eval_run
+        and frappe.db.get_value(ai_models.EVAL_RUN, named.eval_run, "source")
+        == "Worker"
+    ):
+        # the worker's own report sent again (its answer was lost on the way): nothing is
+        # stored twice; a request a manager's import answered still takes the worker's run
         return {"eval_run": named.eval_run}
     name = ai_models.store_eval(model, frappe.parse_json(results), job=job)
     if request:

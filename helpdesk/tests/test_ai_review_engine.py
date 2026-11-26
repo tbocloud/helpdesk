@@ -320,6 +320,18 @@ class TestTheTestSetRequests(ModelsCase):
         self.assertEqual(again, first)
         self.assertEqual(frappe.db.count("HDS Model Eval Run", {"model": "glm-5"}), 1)
 
+    def test_a_request_a_managers_import_answered_still_takes_the_workers_run(self):
+        asked = self.ask("glm-5")
+        imported = ai_models.store_eval("glm-5", REPORT, source="Imported")
+        frappe.db.set_value(
+            EVAL_REQUEST, asked, {"status": "Done", "eval_run": imported}
+        )
+
+        run = worker_api.report_eval("glm-5", REPORT, request=asked)
+
+        self.assertNotEqual(run["eval_run"], imported)
+        self.assertEqual(frappe.db.count("HDS Model Eval Run", {"model": "glm-5"}), 2)
+
     def test_a_report_that_came_in_meanwhile_is_never_given_up(self):
         done = self.ask("glm-5", minutes_ago=60 * 30)
         frappe.db.set_value(
@@ -371,6 +383,13 @@ class TestSafetyCuts(FrappeTestCase):
 
 
 class TestTheChatsSafetyCut(ChatwootCase):
+    def setUp(self):
+        super().setUp()
+        # the chat's per-minute message counts live in Redis and outlast the test: other chat
+        # tests in the same run must not find this class's messages counted against them
+        frappe.cache().delete_keys(conversation.RATE_KEY)
+        self.addCleanup(frappe.cache().delete_keys, conversation.RATE_KEY)
+
     def cuts(self):
         return frappe.db.count("HDS AI Quality Event", {"kind": "Safety cut"})
 
