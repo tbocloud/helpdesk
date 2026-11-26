@@ -396,6 +396,45 @@ class TestALevelTheGatewayRefuses(ReviewCase):
         self.assertIn("tbo-support:tbo-medium:1", removed_after)
         self.assertIn("tbo-support:tbo-medium:2", removed_after)
 
+    def test_write_all_keeps_a_level_the_gateway_refuses_half_way(self):
+        ai_models.save_job(
+            "desktop_simple",
+            {"model": "deepseek-chat", "backup_model": "gpt-test-model"},
+        )
+        self.admin.reset_mock()
+        refusals = []
+
+        def answer(method, url, **kwargs):
+            # the backup is refused once, as the level is written again
+            body = kwargs.get("json") or {}
+            if (
+                (method, url) == ("POST", GATEWAY + "/model/new")
+                and body.get("model_info", {}).get("id") == "tbo-support:tbo-simple:2"
+                and not refusals
+            ):
+                refusals.append(1)
+                return answered(503)
+            return answered()
+
+        self.admin.side_effect = answer
+        with self.assertRaises(frappe.ValidationError) as refused:
+            ai_models.write_all()
+
+        self.assertIn("keeps the models it had", str(refused.exception))
+        level = [
+            (w["model_info"]["id"], w["litellm_params"]["model"])
+            for w in posted(self.admin, "/model/new")
+            if w["model_info"]["id"].startswith("tbo-support:tbo-simple")
+        ]
+        # written, refused at the backup, then both written back as they were
+        self.assertEqual(
+            level[-2:],
+            [
+                ("tbo-support:tbo-simple:1", "openai/deepseek-chat"),
+                ("tbo-support:tbo-simple:2", "openai/gpt-test-model"),
+            ],
+        )
+
     def test_a_level_not_written_back_says_how_to_repair_it(self):
         refuse_new_models(self.admin, lambda params: True)
 
