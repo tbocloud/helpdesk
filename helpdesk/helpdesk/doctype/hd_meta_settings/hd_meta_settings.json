@@ -35,6 +35,13 @@
 			"description": "Lets staff boost published posts and asks clients for the ads permissions when they connect. Needs App Review for ads_management and ads_read."
 		},
 		{
+			"fieldname": "insights_enabled",
+			"fieldtype": "Check",
+			"label": "Enable Reach Reports",
+			"default": "0",
+			"description": "Asks clients for the insights permissions when they connect and syncs their Page and Instagram numbers every night for the Reach report. Needs App Review for read_insights and instagram_manage_insights."
+		},
+		{
 			"fieldname": "app_secret",
 			"fieldtype": "Password",
 			"label": "App Secret",
@@ -61,7 +68,7 @@
 	"engine": "InnoDB",
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-10-30 12:00:00.000000",
+	"modified": "2026-11-22 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Meta Settings",
@@ -73,6 +80,7 @@
 		"enabled",
 		"app_id",
 		"ads_enabled",
+		"insights_enabled",
 		"app_secret",
 		"graph_api_version",
 		"redirect_url"

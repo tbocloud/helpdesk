@@ -1009,6 +1009,27 @@ def make_content_project(customer: str) -> str:
     return project
 
 
+def make_customer_branch(
+    customer: str,
+    branch_name: str,
+    project: str | None = None,
+    approvers: list[str] | None = None,
+    **kwargs,
+):
+    """Creates an HD Customer Branch ("<customer> - <branch_name>"), optionally with its
+    own project and the emails that approve its posts."""
+    return frappe.get_doc(
+        {
+            "doctype": "HD Customer Branch",
+            "customer": customer,
+            "branch_name": branch_name,
+            "project": project,
+            "approvers": [{"email": email} for email in approvers or []],
+            **kwargs,
+        }
+    ).insert(ignore_permissions=True)
+
+
 def make_content_post(
     title: str, customer: str | None = None, with_project: bool = True, **kwargs
 ):
@@ -5640,6 +5661,150 @@ def make_ads_connection(project: str, **values):
     )
 
 
+def enable_meta_insights():
+    """Switches on Enable Reach Reports in HD Meta Settings (after enable_meta)."""
+    frappe.db.set_single_value("HD Meta Settings", "insights_enabled", 1)
+    frappe.clear_cache(doctype="HD Meta Settings")
+
+
+def make_insights_connection(project: str, **values):
+    """A Connected HD Meta Connection whose client allowed the insights permissions."""
+    return make_meta_connection(project, insights_allowed=1, **values)
+
+
+def make_daily_insight(project: str, platform: str, day, **values):
+    """One day of reach numbers (HD Meta Daily Insight) for `project` on `platform`."""
+    return frappe.get_doc(
+        {
+            "doctype": "HD Meta Daily Insight",
+            "project": project,
+            "platform": platform,
+            "day": day,
+            **values,
+        }
+    ).insert(ignore_permissions=True)
+
+
+def make_post_insight(project: str, platform: str, media_id: str, posted_on, **values):
+    """One post and its numbers (HD Meta Post Insight) for `project` on `platform`."""
+    return frappe.get_doc(
+        {
+            "doctype": "HD Meta Post Insight",
+            "project": project,
+            "platform": platform,
+            "media_id": media_id,
+            "posted_on": posted_on,
+            **values,
+        }
+    ).insert(ignore_permissions=True)
+
+
+def insights_graph_routes(day, **overrides) -> dict:
+    """FakeGraph routes for one insights sync of a Page ("page-1") and its Instagram
+    account ("ig-1") whose only day is `day`: daily numbers, one Facebook photo post
+    ("page-1_555"), one Instagram Reel ("ig-media-9") and follower totals."""
+    from frappe.utils import add_days
+
+    end = f"{add_days(day, 1)}T08:00:00+0000"
+
+    def series(name, value):
+        return {
+            "name": name,
+            "period": "day",
+            "values": [{"value": value, "end_time": end}],
+        }
+
+    def lifetime(name, value):
+        return {"name": name, "period": "lifetime", "values": [{"value": value}]}
+
+    def total(name, value):
+        return {"name": name, "period": "day", "total_value": {"value": value}}
+
+    return {
+        "GET page-1/insights": {
+            "data": [
+                series("page_total_media_view_unique", 1200),
+                series("page_media_view", 3000),
+                series("page_post_engagements", 150),
+                series("page_daily_follows_unique", 12),
+                series("page_daily_unfollows_unique", 2),
+            ]
+        },
+        "GET page-1/published_posts": {
+            "data": [
+                {
+                    "id": "page-1_555",
+                    "message": "Monday offer",
+                    "created_time": f"{day}T04:30:00+0000",
+                    "permalink_url": "https://facebook.com/post/555",
+                    "full_picture": "https://cdn.example/555.jpg",
+                    "attachments": {"data": [{"media_type": "photo"}]},
+                    "shares": {"count": 4},
+                    "comments": {"summary": {"total_count": 6}},
+                }
+            ]
+        },
+        "GET page-1_555/insights": {
+            "data": [
+                lifetime("post_total_media_view_unique", 800),
+                lifetime("post_media_view", 1100),
+                lifetime("post_clicks", 30),
+                lifetime("post_reactions_by_type_total", {"like": 40, "love": 10}),
+            ]
+        },
+        "GET ig-1/insights": {
+            "data": [
+                total("reach", 2500),
+                total("views", 6000),
+                total("accounts_engaged", 300),
+                total("total_interactions", 420),
+                {
+                    "name": "follows_and_unfollows",
+                    "total_value": {
+                        "breakdowns": [
+                            {
+                                "dimension_keys": ["follow_type"],
+                                "results": [
+                                    {"dimension_values": ["FOLLOWER"], "value": 25},
+                                    {"dimension_values": ["NON_FOLLOWER"], "value": 5},
+                                ],
+                            }
+                        ]
+                    },
+                },
+            ]
+        },
+        "GET ig-1/media": {
+            "data": [
+                {
+                    "id": "ig-media-9",
+                    "caption": "Reel of the week",
+                    "media_type": "VIDEO",
+                    "media_product_type": "REELS",
+                    "permalink": "https://instagram.com/reel/9",
+                    "timestamp": f"{day}T06:00:00+0000",
+                    "thumbnail_url": "https://cdn.example/9.jpg",
+                }
+            ]
+        },
+        "GET ig-media-9/insights": {
+            "data": [
+                lifetime("reach", 1900),
+                lifetime("views", 4200),
+                lifetime("likes", 210),
+                lifetime("comments", 14),
+                lifetime("shares", 9),
+                lifetime("saved", 21),
+                lifetime("total_interactions", 254),
+            ]
+        },
+        "GET ig-1/stories": {"data": []},
+        "GET page-1": {"id": "page-1", "followers_count": 5400},
+        "GET ig-1": {"id": "ig-1", "followers_count": 8100},
+        **overrides,
+    }
+
+
 def publish_post_on_meta(post: str, *targets: str, link: str | None = None):
     """Marks a content post Published on these targets (default Facebook), the way the
     publisher leaves it: a Published row per target with its Meta post id."""
@@ -6744,3 +6909,82 @@ class FakeERPSales:
             <= bounds.get(("transaction_date", "<="), "9999")
         ]
         return rows[start : start + page_length]
+
+
+class FakeWeeklyLeadERP:
+    """The KSA ERP site for the weekly lead report (docs/weekly-lead-report.md): its Leads
+    (with `lead_owner` and `modified`) and Quotations. `visible` is {user: leads} the site
+    shows each salesperson: `get_lead` refuses any other with a 403, as TBO Smart does. Set
+    `error` (a CRMError) to fail every REST read and write."""
+
+    def __init__(
+        self,
+        leads: list[dict],
+        quotations: list[dict] | None = None,
+        visible: dict[str, set] | None = None,
+    ):
+        self.base = "https://ksa.example"
+        self.leads = {lead["name"]: lead for lead in leads}
+        self.quotations = list(quotations or [])
+        self.visible = visible or {}
+        self.error = None
+
+    def call(self, method, post=False, acting_user=None, **params):
+        from helpdesk.integrations.crm.client import CRMError
+
+        name = params.get("name")
+        if name not in self.visible.get(acting_user, set()):
+            raise CRMError(
+                "403",
+                status=403,
+                detail="No permission for Lead",
+                user_message=f"No permission for Lead {name}",
+            )
+        return {"lead": self.leads[name]}
+
+    def request(self, method, path, **kwargs):
+        from urllib.parse import unquote
+
+        if self.error:
+            raise self.error
+        assert method == "PUT"
+        self.leads[unquote(path.rsplit("/", 1)[-1])].update(kwargs["json"])
+        return {"data": {}}
+
+    def get_list(self, doctype, fields, filters=None):
+        if self.error:
+            raise self.error
+        if doctype == "Lead":
+            return [
+                {f: lead.get(f) for f in fields}
+                for lead in self.leads.values()
+                if all(self.matches(lead, f) for f in filters or [])
+            ]
+        names = next(f[2] for f in filters if f[0] == "party_name")
+        return [q for q in self.quotations if q["party_name"] in names]
+
+    @staticmethod
+    def matches(row: dict, condition: list) -> bool:
+        field, operator, value = condition
+        have = row.get(field)
+        if operator == "in":
+            return have in value
+        have = str(have or "")
+        return {">=": have >= value, "<": have < value, "=": have == value}[operator]
+
+
+def weekly_report_lead(name: str, company: str, **fields) -> dict:
+    """A Lead on FakeWeeklyLeadERP, with the template's fields empty unless given."""
+    return {
+        "name": name,
+        "company_name": company,
+        "lead_owner": None,
+        "modified": "2026-11-24 10:00:00",
+        "lead_name": "",
+        "job_title": "",
+        "mobile_no": "",
+        "phone": "",
+        "email_id": "",
+        "industry": "",
+        **fields,
+    }

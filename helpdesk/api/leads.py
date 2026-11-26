@@ -11,6 +11,7 @@ from frappe.utils import (
     add_days,
     add_months,
     cint,
+    flt,
     get_first_day,
     get_last_day,
     getdate,
@@ -20,7 +21,11 @@ from frappe.utils import (
 from helpdesk import lead_mirror_read, whatsapp_outreach
 from helpdesk.api import pending_calls
 from helpdesk.content_team import is_sales_bd_role, only_sales_team
-from helpdesk.divisions import active_division, on_crm_connection
+from helpdesk.divisions import (
+    active_division,
+    is_division_sales_user,
+    on_crm_connection,
+)
 from helpdesk.integrations.crm.leads import (
     LeadsError,
     LeadsNotDeployedError,
@@ -55,6 +60,8 @@ DAYS_AGO = {"today": 0, "yesterday": 1}
 BUSINESS_PERIODS = ("month", "last_month", "quarter", "fy", "custom")
 FY_START_MONTH = 4
 MESSAGE_CHANNELS = ("whatsapp", "email")
+# moving here needs what the lead was won for: its won value on Sales targets
+CLOSED_WON = "Closed – Won"
 # the call batch outcomes; an ERP site before them also takes the first two below, which
 # TBO Smart still reads as Not answered
 CALL_OUTCOMES = (
@@ -121,6 +128,17 @@ def refuse_bd() -> None:
     if is_bd():
         frappe.throw(
             _("This is for managers. Use Today's calls and My leads."),
+            frappe.PermissionError,
+        )
+
+
+def refuse_team() -> None:
+    """For the team's figures (Overview, Business, the team dashboard): not for a BD, nor a
+    Division Sales User, who works their own and allocated leads (docs/divisions.md)."""
+    refuse_bd()
+    if is_division_sales_user():
+        frappe.throw(
+            _("This is for managers. Use your leads."),
             frappe.PermissionError,
         )
 
@@ -378,7 +396,7 @@ def get_overview(
     """The Overview: the pipeline, the funnel and the period's figures for the
     leads the signed-in person may see (theirs, their team's or everyone's)."""
     require_leads()
-    refuse_bd()
+    refuse_team()
     check_period(period, from_date, to_date)
     return read_overview(period, from_date, to_date, owner, fresh)
 
@@ -430,7 +448,7 @@ def get_lead_intake(fresh: int | str = 0) -> dict:
     daily target from HD CRM Settings (0: none). `available` is false while the ERP
     site's TBO Smart is older than this, so the page leaves the strip out."""
     require_leads()
-    refuse_bd()
+    refuse_team()
     return read_lead_intake(fresh)
 
 
@@ -483,7 +501,7 @@ def get_proposal_money(
     period, and every payment split still to come in. `available` is false while the
     ERP site's TBO Smart is older than this."""
     require_leads()
-    refuse_bd()
+    refuse_team()
     check_period(period, from_date, to_date)
     return read_proposal_money(period, from_date, to_date, owner, fresh)
 
@@ -515,7 +533,7 @@ def get_business_overview(
     (System Manager or its TBO Management role) and nowhere else: a refusal there is a
     403 here. `available` is false while the ERP site's TBO Smart is older than this."""
     require_leads()
-    refuse_bd()
+    refuse_team()
     start, end = business_range(period, from_date, to_date)
     params = {
         "from_date": str(start),
@@ -604,7 +622,7 @@ def get_overview_page(
     another here instead of as parallel requests that wait on each other. The last three
     are optional: one that fails leaves the overview whole and says why in `errors`."""
     require_leads()
-    refuse_bd()
+    refuse_team()
     check_period(period, from_date, to_date)
     page = {
         "overview": read_overview(period, from_date, to_date, owner, fresh),
@@ -1071,20 +1089,31 @@ def category_write(method: str, permission_message: str, **params) -> dict:
 
 
 @frappe.whitelist(methods=["POST"])
-def set_stage(name: str, stage: str, note: str | None = None) -> dict:
+def set_stage(
+    name: str,
+    stage: str,
+    note: str | None = None,
+    won_amount: float | str | None = None,
+) -> dict:
+    """Move the lead on the ERP site. Closed – Won needs `won_amount`, what it was won for.
+    An ERP site without the won amount drops it silently, so the reply then says
+    `won_amount_not_kept` for the page to warn."""
     require_leads()
-    result = (
-        call(
-            "set_stage",
-            post=True,
-            name=name,
-            stage=stage,
-            note=(note or "").strip() or None,
-        )
-        or {}
-    )
+    params = {"name": name, "stage": stage, "note": (note or "").strip() or None}
+    if stage == CLOSED_WON:
+        params["won_amount"] = required_won_amount(won_amount)
+    result = call("set_stage", post=True, **params) or {}
     clear_cached_reads()
+    if stage == CLOSED_WON and "won_amount" not in (result.get("lead") or {}):
+        result["won_amount_not_kept"] = True
     return result
+
+
+def required_won_amount(won_amount: float | str | None) -> float:
+    amount = flt(won_amount)
+    if amount <= 0:
+        frappe.throw(_("Enter the amount the lead was won for."), title=_("Won amount"))
+    return amount
 
 
 @frappe.whitelist(methods=["POST"])

@@ -156,6 +156,12 @@ const portalRoutes = [
     name: "ContentReport",
     component: () => import("@/pages/content/ContentReport.vue"),
   },
+  // how far each client's Facebook and Instagram reached (docs/meta-insights.md)
+  {
+    path: "/content/reach",
+    name: "ContentReach",
+    component: () => import("@/pages/content/ContentReach.vue"),
+  },
   {
     path: "/content/plans",
     name: "ContentPlans",
@@ -279,11 +285,25 @@ const portalRoutes = [
     component: () => import("@/pages/sales-targets/TeamTargets.vue"),
     beforeEnter: () => useAuthStore().canAssignSalesTargets || { name: "Home" },
   },
+  // the sales team a Sales Head adds to, changes and removes from (docs/sales-team.md)
+  {
+    path: "/sales-team",
+    name: "SalesTeam",
+    component: () => import("@/pages/sales-team/SalesTeam.vue"),
+    beforeEnter: () => useAuthStore().canAssignSalesTargets || { name: "Home" },
+  },
   {
     path: "/my-targets",
     name: "MyTargets",
     component: () => import("@/pages/sales-targets/MyTargets.vue"),
     beforeEnter: () => useAuthStore().hasSalesTargets || { name: "Home" },
+  },
+  // a division's salespeople's leads of the week, with filters (docs/weekly-lead-report.md)
+  {
+    path: "/lead-report",
+    name: "LeadReport",
+    component: () => import("@/pages/weekly-lead-report/WeeklyLeadReport.vue"),
+    beforeEnter: () => useAuthStore().hasWeeklyLeadReport || { name: "Home" },
   },
   // expense claims on the division's ERP site: claim and approve (docs/expenses.md)
   {

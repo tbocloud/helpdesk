@@ -38,7 +38,7 @@
     <div class="relative flex-1">
       <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
         <!-- the day's new leads; the reports bring their own figures -->
-        <template v-if="isList && !isBd">
+        <template v-if="isList && seesTeam">
           <!-- hidden quietly until the ERP site's TBO Smart counts it, and on a failed read -->
           <div
             v-if="!intakeData && intakeLoading"
@@ -1072,6 +1072,8 @@ const TABS: { value: LeadTab; label: string }[] = [
   ...LEAD_VIEWS,
 ];
 // what a BD may open; Commission is their own, the ERP site shows them nobody else's
+// the team's figures, closed to a Division Sales User (docs/divisions.md)
+const TEAM_TABS: LeadTab[] = ["overview", "business"];
 const BD_TABS: LeadTab[] = [
   "today",
   "call_today",
@@ -1126,11 +1128,13 @@ function defaultTab(): LeadTab {
   if (authStore.isSalesBd && (!loaded || !loaded.departments)) return today;
   if (loaded?.is_bd ?? authStore.isSalesBd)
     return batchesOn(loaded) ? today : "call_today";
-  return authStore.isSalesEmployee &&
+  if (
+    authStore.isSalesEmployee &&
     batchesOn(loaded) &&
     !authStore.hideTodaysCalls
-    ? "today"
-    : "overview";
+  )
+    return "today";
+  return authStore.isDivisionSalesUser ? "all" : "overview";
 }
 
 function queryView(): LeadTab {
@@ -1295,9 +1299,12 @@ const emptyCategories = (): LeadCategories => ({
   last_reply_class: [],
 });
 
-// managers pick many leads and set their category at once
+// managers pick many leads and set their category at once; a Division Admin is a Sales
+// Manager on their division's ERP site, which checks it again
 const canCategorise = computed(
-  () => authStore.isManager && !!options.value?.org_sizes
+  () =>
+    (authStore.isManager || authStore.isActiveDivisionAdmin) &&
+    !!options.value?.org_sizes
 );
 const selected = ref(new Set<string>());
 const showSet = ref(false);
@@ -1515,10 +1522,12 @@ const hasOutreach = computed(() => !!options.value?.outreach);
 // a BD (a salesperson who is no manager or head) sees Today's calls, their own leads and
 // follow-ups, nothing of the team's: another BD may be calling the same lead (docs/leads.md)
 const isBd = computed(() => options.value?.is_bd ?? authStore.isSalesBd);
+const seesTeam = computed(() => !isBd.value && !authStore.isDivisionSalesUser);
 // Today's calls is the Call today list for people who get call batches: one place
 const tabs = computed(() =>
   TABS.filter((tab) => {
     if (isBd.value && !BD_TABS.includes(tab.value)) return false;
+    if (!seesTeam.value && TEAM_TABS.includes(tab.value)) return false;
     if (tab.value === "daily") return hasDaily.value;
     if (tab.value === "business") return canViewBusiness.value;
     if (tab.value === "outreach") return hasOutreach.value;
@@ -1611,6 +1620,8 @@ watch(options, (value) => {
   if (!value.outreach && view.value === "outreach") view.value = "overview";
   // an old link to a tab a BD doesn't have
   if (isBd.value && !BD_TABS.includes(view.value)) view.value = homeTab.value;
+  if (!seesTeam.value && TEAM_TABS.includes(view.value))
+    view.value = homeTab.value;
 });
 
 const stageOptions = computed(() => [
@@ -1637,6 +1648,13 @@ const ownerOptions = computed(() => [
     value: o.email,
   })),
 ]);
+
+// Follow-up has its own cards (when they are due), so the stage cards stay out there. Declared
+// before the list: its makeParams runs as the page sets up, and a const declared later throws
+// there ("Cannot access before initialization"), so the list never loads
+const hasStageCards = computed(
+  () => isList.value && view.value !== "follow_up"
+);
 
 const leads = createResource({
   url: "helpdesk.api.leads.list_leads",
@@ -1685,7 +1703,7 @@ const leads = createResource({
 // Overview brings it with its own request, so only the list asks for it here.
 const intake = createResource({
   url: "helpdesk.api.leads.get_lead_intake",
-  auto: isList.value && !authStore.isSalesBd,
+  auto: isList.value && !authStore.isSalesBd && !authStore.isDivisionSalesUser,
   onSuccess(data: LeadIntake) {
     intakeData.value = data;
   },
@@ -1707,7 +1725,7 @@ function takeOverviewIntake(value: LeadIntake | undefined) {
 if (isList.value) staleLeads.fetch();
 
 watch(view, (tab) => {
-  if (isList.value && !intakeData.value && !isBd.value) intake.fetch();
+  if (isList.value && !intakeData.value && seesTeam.value) intake.fetch();
   if (isList.value && !staleLeads.data && !staleLeads.loading)
     staleLeads.fetch();
 });
@@ -1764,10 +1782,6 @@ const quiet = computed(
 );
 const statuses = computed(
   () => new Map((data.value?.rows ?? []).map((r) => [r.name, clientStatus(r)]))
-);
-// Follow-up has its own cards (when they are due), so the stage cards stay out there
-const hasStageCards = computed(
-  () => isList.value && view.value !== "follow_up"
 );
 // "All stages" first, then the stages with leads in their pipeline order; the one picked stays
 // even at 0, so it can be seen and let go

@@ -198,6 +198,38 @@ for the pages to match. What that allows, on those pages only:
   groups under 11 px uppercase headings, 36 px rows (the current one `brand-soft`), counts
   as brand pills, and the "Needs your attention" card at the foot.
 
+### The owner's exception: the command center look, everywhere (2026-11-25)
+
+The owner sent photos of a neon "command center" sales dashboard, had Sales → Team dashboard
+built like it, then asked for **the same look across the whole app: neon on a near-black canvas
+in the dark theme, and the same design light in the light theme**. The owner chose it over the
+colour rules above where they disagree. What it allows, and nothing beyond it:
+
+- **Surfaces** (`theme.css`): light, white cards on a cool `#eef2f7` canvas with `#e1e7ef`
+  borders; dark, navy cards `#0c1324` on a `#060a14` canvas, `#0a1020` menu panel, navy grays
+  (`surface-gray-1…5` `#111a2e`…`#33456a`) and borders (`outline-gray-1…4` `#141e33`…`#3a4b70`).
+  Text on them: `ink-gray-5` 5.55 and `ink-gray-6` 7.77 on a dark card, `ink-gray-6` 5.31 on
+  the light canvas.
+- **The command center palette** (`--cc-*`): blue, violet, pink, red, orange, amber, green and
+  cyan; neon in the dark theme (`#4f8dff`, `#a78bfa`, `#f472b6`, `#ff6b6b`, `#ff9f43`,
+  `#fbbf24`, `#34d399`, `#22d3ee`, 5.8:1 or more on a dark card) and deep in the light one
+  (`#1d4ed8`, `#6d28d9`, `#be185d`, `#c81e1e`, `#c2410c`, `#a16207`, `#047857`, `#0e7490`,
+  4.9:1 or more on white).
+- **Every card has a colour**: each card (`rounded-xl border-outline-gray-2 bg-surface-base`)
+  carries a 3 px top edge in one palette colour; cards side by side take turns through the
+  palette (`nth-child` in `theme.css`), and a card whose colour means something sets its own
+  `--accent`. In the dark theme the card glows softly in its colour. A card's own heading (an
+  `h2` with `text-base font-semibold`) is small, bold and uppercase.
+- **Number cards** (`StatTile`): the top edge and the icon square in the tile's colour, the
+  label small uppercase, the figure in Geist Mono (glowing in the dark theme). A tile with a
+  tone keeps its meaning in the palette: info blue, success green, danger red, warning amber,
+  brand cyan, hot orange; a neutral tile takes its turn.
+- **Sales → Team dashboard** goes furthest (`CcCard`, `CcStat`, `cc-pill` outlined pills,
+  the leaderboard's orange column lines, the gauge and bars glowing in the dark theme).
+- **Unchanged:** the brand teal stays the one colour of the primary action, links and the
+  current menu item; status colours keep their meaning, always with an icon or words; the
+  highlight orange stays the focus ring; still no gradients (a glow is one colour).
+
 ### The owner's exception: soft status circles (2026-10-10)
 
 The owner asked for the Scoreboard mockup's feel across the app, so a soft tinted circle

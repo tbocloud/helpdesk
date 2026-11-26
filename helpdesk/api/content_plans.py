@@ -45,10 +45,13 @@ def get_plans() -> dict:
         or DEFAULT_PLAN_DAY
     )
     plans = []
-    for name in frappe.get_list(PACKAGE, pluck="name", order_by="customer asc"):
+    for name in frappe.get_list(
+        PACKAGE, pluck="name", order_by="customer asc, branch asc"
+    ):
         doc = frappe.get_doc(PACKAGE, name)
         plan = {
-            field: doc.get(field) for field in ("name", "customer", *PACKAGE_FIELDS)
+            field: doc.get(field)
+            for field in ("name", "customer", "branch", *PACKAGE_FIELDS)
         }
         plan["posts_per_month"] = doc.posts_per_month
         plan["last_planned_month"] = doc.last_planned_month
@@ -79,7 +82,7 @@ def get_plans() -> dict:
 
 @frappe.whitelist(methods=["POST"])
 def save_plan(values: str | dict, name: str | None = None) -> str:
-    """Create a customer's plan, or update it when `name` is given."""
+    """Create a customer's (or branch's) plan, or update it when `name` is given."""
     values = json.loads(values) if isinstance(values, str) else values
     if name:
         doc = frappe.get_doc(PACKAGE, name)
@@ -88,6 +91,7 @@ def save_plan(values: str | dict, name: str | None = None) -> str:
         frappe.has_permission(PACKAGE, "create", throw=True)
         doc = frappe.new_doc(PACKAGE)
         doc.customer = values.get("customer")
+        doc.branch = values.get("branch") or None
     doc.update(
         {field: values.get(field) for field in PACKAGE_FIELDS if field in values}
     )

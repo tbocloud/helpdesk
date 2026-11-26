@@ -77,7 +77,7 @@
             v-if="!filtersCustomer"
             class="max-w-[12rem] truncate px-3 py-3 text-ink-gray-7"
           >
-            {{ post.customer }}
+            {{ clientOf(post) }}
           </td>
           <td class="px-3 py-3 text-ink-gray-7">
             {{ platformsOf(post).join(", ") }}
@@ -127,6 +127,7 @@ import {
   type RolePerson,
   TEAM_ROLES,
   type TeamRole,
+  clientOf,
   copyOf,
 } from "../constants";
 import { firstFromToday, revealIfLow } from "../dayFocus";

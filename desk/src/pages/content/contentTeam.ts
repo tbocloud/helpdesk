@@ -6,6 +6,7 @@
 export const CONTENT_ROUTES = new Set([
   "ContentCalendar",
   "ContentReport",
+  "ContentReach",
   "ContentPlans",
   "Performance",
 ]);
@@ -55,11 +56,16 @@ export const SALES_EMPLOYEE_ROUTES = new Set([
   "DivisionReports",
   "SalesTargets",
   "TeamTargets",
+  "SalesTeam",
   "MyTargets",
+  "LeadReport",
   "Expenses",
   "TeamDashboard",
   // their meetings, holidays and leave; the server lists them no tasks
   "WorkCalendar",
+  // their own meetings (no Team view) and the meeting types, to schedule calls
+  "MeetingCalendar",
+  "MeetingTypes",
   "Notifications",
   "Invalid Page",
   ...LEAD_BANK_ROUTES,
@@ -71,6 +77,7 @@ export const CONTENT_TEAM_ROUTES = new Set([
   "Lead",
   "ContentCalendar",
   "ContentReport",
+  "ContentReach",
   "Performance",
   "TaskyProjects",
   "TaskyProject",

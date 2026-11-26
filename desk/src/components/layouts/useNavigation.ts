@@ -63,11 +63,9 @@ export function useNavigation() {
       )
   );
   const canViewBusiness = computed(() => !!leadOptions.data?.can_view_business);
-  // a division's sales user gets Add a lead, My leads, Leads and the Scoreboard only
-  const isDivisionSalesUser = computed(
-    () =>
-      authStore.divisions.find((d) => d.name === authStore.activeDivision)
-        ?.role === "Division Sales User"
+  // the team's figures: not for a BD, nor a Division Sales User (docs/divisions.md)
+  const seesTeam = computed(
+    () => !isBd.value && !authStore.isDivisionSalesUser
   );
 
   function isLeadTabVisible(tab: NonNullable<NavItem["leadTab"]>) {
@@ -78,11 +76,9 @@ export function useNavigation() {
         // a BD with Today's calls has it in its place
         return !(isBd.value && todaysCalls.value);
       case "overview":
-        return !isBd.value;
+        return seesTeam.value;
       case "business":
-        return !isBd.value && canViewBusiness.value;
-      case "commission":
-        return !isDivisionSalesUser.value;
+        return seesTeam.value && canViewBusiness.value;
       default:
         return true;
     }
@@ -94,9 +90,8 @@ export function useNavigation() {
       if (todaysCalls.value) return "today";
       return hasBatches.value ? "mine" : "call_today";
     }
-    return authStore.isSalesEmployee && todaysCalls.value
-      ? "today"
-      : "overview";
+    if (authStore.isSalesEmployee && todaysCalls.value) return "today";
+    return seesTeam.value ? "overview" : "all";
   }
 
   function isItemVisible(item: NavItem) {
@@ -119,7 +114,8 @@ export function useNavigation() {
       (!item.divisionOverviewOnly || authStore.canViewDivisionOverview) &&
       (!item.salesHeadOnly || authStore.canAssignSalesTargets) &&
       (!item.ownTargetsOnly || authStore.hasSalesTargets) &&
-      (!item.salesManagersOnly || !isBd.value) &&
+      (!item.weeklyLeadReportOnly || authStore.hasWeeklyLeadReport) &&
+      (!item.salesManagersOnly || seesTeam.value) &&
       (!item.ownDashboardOnly || authStore.hasOwnSalesDashboard) &&
       (!authStore.isContentTeam || CONTENT_TEAM_ROUTES.has(to))
     );

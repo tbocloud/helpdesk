@@ -274,6 +274,13 @@ def leads_role(user: str | None = None) -> str | None:
     return role if role in ERP_SALES_ROLES else None
 
 
+def is_division_sales_user(user: str | None = None) -> bool:
+    """A Division Sales User of their active division (not a Super Admin): a salesperson who
+    works their own and allocated leads and sees none of the team's figures."""
+    user = user or frappe.session.user
+    return leads_role(user) == DIVISION_SALES_USER and not is_super_admin(user)
+
+
 def scoreboard_people(user: str | None = None) -> set[str] | None:
     """Whose numbers the user sees on the Scoreboard: a Division Admin their division's
     members, a Division Sales User only themselves; None for everyone else, who sees the

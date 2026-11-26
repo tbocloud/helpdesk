@@ -1,4 +1,30 @@
 <template>
+  <DefineUnrankedRow v-slot="{ row }">
+    <span class="flex min-w-0 items-center gap-3">
+      <PersonAvatar :name="row.person.full_name" size="lg" class="!size-10" />
+      <span class="truncate text-sm font-semibold text-ink-gray-9">{{
+        row.person.full_name
+      }}</span>
+    </span>
+    <span
+      v-if="row.person.target && !row.progress"
+      class="h-1 w-16 animate-pulse rounded-full bg-surface-gray-3"
+      :aria-label="__('Counting')"
+    />
+    <span
+      v-else
+      class="flex shrink-0 items-center gap-1.5 rounded-full border border-outline-gray-2 bg-surface-gray-1 px-2.5 py-0.5 text-xs text-ink-gray-6"
+      :title="row.progress?.reason || undefined"
+    >
+      <LucideCircleDashed class="size-3" aria-hidden="true" />
+      {{
+        row.person.target
+          ? uncountedText(row.progress!)
+          : __("No targets")
+      }}
+    </span>
+  </DefineUnrankedRow>
+
   <!-- the month's ranking by the month overall: the top three on a podium, the leader,
        everyone in order, and who isn't on the board yet with why -->
   <TaskyState
@@ -193,45 +219,22 @@
         </div>
         <ul class="divide-y divide-outline-gray-1">
           <li v-for="row in unranked" :key="row.person.user">
-            <component
-              :is="single ? 'div' : 'button'"
-              :type="single ? undefined : 'button'"
-              class="flex w-full items-center justify-between gap-3 px-5 py-3 text-left"
-              :class="
-                single
-                  ? ''
-                  : 'transition-colors hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-highlight'
-              "
-              @click="!single && emit('open', row.person.user)"
+            <!-- not <component :is="'button'">: that resolves to frappe-ui's global
+                 Button, whose fixed height and border squashed the rows -->
+            <div
+              v-if="single"
+              class="flex w-full items-center justify-between gap-3 px-5 py-3"
             >
-              <span class="flex min-w-0 items-center gap-3">
-                <PersonAvatar
-                  :name="row.person.full_name"
-                  size="lg"
-                  class="!size-10"
-                />
-                <span class="truncate text-sm font-semibold text-ink-gray-9">{{
-                  row.person.full_name
-                }}</span>
-              </span>
-              <span
-                v-if="row.person.target && !row.progress"
-                class="h-1 w-16 animate-pulse rounded-full bg-surface-gray-3"
-                :aria-label="__('Counting')"
-              />
-              <span
-                v-else
-                class="flex shrink-0 items-center gap-1.5 rounded-full border border-outline-gray-2 bg-surface-gray-1 px-2.5 py-0.5 text-xs text-ink-gray-6"
-                :title="row.progress?.reason || undefined"
-              >
-                <LucideCircleDashed class="size-3" aria-hidden="true" />
-                {{
-                  row.person.target
-                    ? uncountedText(row.progress!)
-                    : __("No targets")
-                }}
-              </span>
-            </component>
+              <ReuseUnrankedRow :row="row" />
+            </div>
+            <button
+              v-else
+              type="button"
+              class="flex w-full items-center justify-between gap-3 px-5 py-3 text-left transition-colors hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-highlight"
+              @click="emit('open', row.person.user)"
+            >
+              <ReuseUnrankedRow :row="row" />
+            </button>
           </li>
         </ul>
         <!-- one person: a plain row and a link, as the mockup; more: each row opens them -->
@@ -259,6 +262,7 @@
 import PersonAvatar from "@/components/PersonAvatar.vue";
 import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";
+import { createReusableTemplate } from "@vueuse/core";
 import { computed, useId, type Component } from "vue";
 import LucideArrowRight from "~icons/lucide/arrow-right";
 import LucideCalendarClock from "~icons/lucide/calendar-clock";
@@ -285,6 +289,9 @@ const props = defineProps<{
   pace: ReturnType<typeof monthPace>;
 }>();
 const emit = defineEmits<{ open: [user: string] }>();
+const [DefineUnrankedRow, ReuseUnrankedRow] = createReusableTemplate<{
+  row: TeamRow;
+}>();
 
 const SPLIT =
   "grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] lg:items-stretch";

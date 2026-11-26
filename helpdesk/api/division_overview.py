@@ -1,13 +1,12 @@
 """The division overview page and the division reports (docs/divisions.md)."""
 
-import shutil
-
 import frappe
 from frappe import _
-from frappe.utils import flt, format_datetime, formatdate, now_datetime
+from frappe.utils import flt, formatdate
 
 from helpdesk import division_overview as overview_data
 from helpdesk.divisions import DIVISION, log_activity
+from helpdesk.utils import send_report_pdf
 
 EXPORT_FORMATS = ("xlsx", "pdf")
 
@@ -154,8 +153,7 @@ def send_pdf(
     errors: list,
     filename: str,
 ):
-    can_render_pdf = bool(shutil.which("wkhtmltopdf"))
-    html = frappe.render_template(  # the app's own fixed template, not user input - nosemgrep
+    send_report_pdf(
         "helpdesk/templates/division_report_pdf.html",
         {
             "title": result["title"],
@@ -165,21 +163,6 @@ def send_pdf(
             "errors": errors,
             "columns": [frappe._dict(c) for c in columns],
             "rows": rows,
-            "generated_on": format_datetime(now_datetime()),
-            "generated_by": frappe.utils.get_fullname(frappe.session.user),
-            "auto_print": not can_render_pdf,
         },
+        filename,
     )
-    if can_render_pdf:
-        from frappe.utils.pdf import get_pdf
-
-        frappe.response.filename = f"{filename}.pdf"
-        frappe.response.filecontent = get_pdf(
-            html, {"orientation": "Landscape", "page-size": "A4"}
-        )
-        frappe.response.type = "pdf"
-        return
-    frappe.response.filename = f"{filename}.html"
-    frappe.response.filecontent = html
-    frappe.response.type = "download"
-    frappe.response.display_content_as = "inline"

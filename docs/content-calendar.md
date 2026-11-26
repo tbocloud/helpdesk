@@ -21,7 +21,9 @@ plans, staffs and ships social posts (`HD Content Post`) for customers.
 
 ## Filters and navigation
 
-The filter bar (customer, channel, status, person, **My posts**, Clear) applies to every view.
+The filter bar (customer, branch, channel, status, person, **My posts**, Clear) applies to every
+view. The **branch** filter shows only when the chosen customer has
+[branches](#customer-branches), and picking another customer clears it.
 The person filter (and My posts) also matches the "More people" table (`HD Content Post Member`),
 which joins it to the query, so the post lists sort on `` `tabHD Content Post`.`publish_on` `` /
 `` `creation` ``: a bare `creation` is ambiguous with the joined table and failed with an Internal
@@ -493,7 +495,9 @@ Postponing the post to a later day moves the task's date again, as before.
 ### Which project the tasks go to
 
 A post's tasks go to **one of the customer's open projects, of any type**
-(`content_project_for(customer)` in `hd_content_post.py`). When the customer has several, a
+(`content_project_for(customer, branch)` in `hd_content_post.py`). A post for a
+[branch](#customer-branches) with its own open project goes there instead, and a branch's
+project is never picked as the customer's. When the customer has several, a
 project with Project type "Content Calendar" wins, then the most recently changed one. The
 owner's decision (2026-10-11): the project's customer is what links it, not its type.
 
@@ -580,6 +584,52 @@ task's estimate to 0 so the two agree. "Save and add next" keeps the hours with 
 The **Assign** dialog on a board card (`EntryActionDialog.vue`) has the same Est. hours box next
 to the people, filled with the role's current hours; saving sends them to
 `helpdesk.api.content_board.assign` (`hours`), and clearing the box sets the role to 0.
+
+## Customer branches
+
+A customer with several shops or offices (Roxy's Kochi, Kinassery, Thondayad) can have
+**branches** (`HD Customer Branch`). Each branch has its own posts, monthly plan, approvers
+and, through its own project, its own Meta page. Branches are optional: a customer without any
+works exactly as before, and a customer with branches can still have posts for the whole
+customer (the head office). Owner's answers (2026-11-25): each branch has its own
+Instagram/Facebook page, its own monthly quota and plan, and its own approver.
+
+- **Doctype:** `HD Customer Branch` (`customer`, `branch_name`, `enabled`, `project`, and an
+  `approvers` table of emails, `HD Customer Branch Approver`). It is named
+  "*Customer* - *Branch name*", so the name alone says whose it is; the screens show it wherever
+  they showed the customer (`clientOf` in `constants.ts`). Approvers are plain emails, not a
+  reused `HD Customer Member` table: ticket code reads `HD Customer Member` rows without
+  checking their parent type, and would have taken branches for customers.
+- **Managed on the customer page**, Branches tab (`CustomerBranchesTab.vue`,
+  `helpdesk.api.customer_branches.get_customer_branches` / `save_branch`). System Managers,
+  Agent Managers and Project Managers can add and edit them. A disabled branch keeps its posts
+  but can't be picked for new ones.
+- **Posts:** `HD Content Post.branch`, optional. It must be one of the post's customer's branches
+  (`validate_branch`). Add entry, the post dialog, the monthly plan dialog and Share portal show
+  a Branch picker only for a customer with branches (`BranchSelect.vue`); "Whole customer" means
+  no branch. The pickers read every branch once from
+  `helpdesk.api.customer_branches.get_branches` (`branches.ts`). Add entry pre-fills the team
+  from the branch's last post.
+- **Project and Meta page:** the branch's `project` (one of the customer's, and no other
+  branch's) takes its posts' tasks, and the Meta page connected to that project is where its
+  posts publish ([meta-publishing.md](meta-publishing.md)). With no project of its own, a
+  branch uses the customer's project and page. Changing a post's branch moves its open tasks,
+  like changing its customer.
+- **Monthly plans:** `HD Content Package.branch`. A plan is for the whole customer or for one
+  branch, one plan each (`validate_one_plan`); it is named after the branch, or the customer
+  for a whole-customer plan, so existing plans kept their names. Posts it plans carry the
+  branch. Occasions on the calendar follow the branch's plan, else the customer's.
+- **Approvers and the client portal:** a branch's approvers sign in to `/content-portal` with
+  their email like any contact (`branches_for_email`). Their session lists the branches they
+  approve for, and they see and decide only those branches' posts (`session_reaches`); the
+  account picker lists the customers, then the branches. The customer's own contacts still see
+  every post of the customer, branches included. A branch with no approvers is approved by the
+  customer's contacts. Share portal with a branch picked sends the link to its approvers, and a
+  new address becomes one of them.
+- **Reminders:** the client reminder is sent per customer and branch, to the branch's approvers
+  (`portal_emails(customer, branch)`), so Kochi's manager hears only about Kochi's posts.
+- **Not per branch (yet):** the ERP approval sync (`content_sync`) is per customer, and the
+  Delivery, Performance and Reach reports group by customer.
 
 ## Who sees the content calendar
 

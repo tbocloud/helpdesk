@@ -99,6 +99,27 @@
         </SettingsSection>
 
         <SettingsSection
+          :title="__('Reach reports')"
+          :description="
+            __(
+              'Every night, reads how far each connected Facebook Page and Instagram account reached, for the Reach report. Clients are asked for the insights permissions when they connect.'
+            )
+          "
+        >
+          <Switch
+            v-model="form.insights_enabled"
+            :label="__('Enable reach reports')"
+          />
+          <p class="text-p-sm text-ink-gray-6">
+            {{
+              __(
+                "Turn this on only after App Review has approved read_insights and instagram_manage_insights. Clients already connected must connect again to allow them."
+              )
+            }}
+          </p>
+        </SettingsSection>
+
+        <SettingsSection
           :title="__('OAuth redirect URL')"
           :description="
             __(
@@ -192,6 +213,7 @@ interface SettingsData {
   settings: {
     enabled: number;
     ads_enabled: number;
+    insights_enabled: number;
     app_id: string;
     graph_api_version: string;
   };
@@ -218,6 +240,7 @@ function load(data: SettingsData) {
     ...data.settings,
     enabled: Boolean(data.settings.enabled),
     ads_enabled: Boolean(data.settings.ads_enabled),
+    insights_enabled: Boolean(data.settings.insights_enabled),
   };
   form.value = f;
   initial.value = JSON.stringify(f);
@@ -250,6 +273,7 @@ const save = createResource({
       ...form.value,
       enabled: form.value?.enabled ? 1 : 0,
       ads_enabled: form.value?.ads_enabled ? 1 : 0,
+      insights_enabled: form.value?.insights_enabled ? 1 : 0,
     };
     const secretEdit = secretValue(edit.value);
     if (secretEdit !== undefined) values.app_secret = secretEdit;

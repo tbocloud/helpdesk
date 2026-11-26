@@ -182,6 +182,8 @@ scheduler_events = {
         "helpdesk.lead_mirror.check_drift",
         # nightly: every lead of every ERP site, which drops deleted ones
         "helpdesk.crm_dashboard.sync.full_sync_all",
+        # nightly: each client's Facebook and Instagram reach (docs/meta-insights.md)
+        "helpdesk.integrations.meta.insights.sync_all",
     ],
     "hourly": [
         "helpdesk.triage.fail_stuck_triages",
@@ -193,6 +195,8 @@ scheduler_events = {
         "helpdesk.copilot.assistant.send_digest",
         # spend, reach and status of running boosts (docs/meta-publishing.md)
         "helpdesk.integrations.meta.ads.sync_active_boosts",
+        # Instagram Stories, whose numbers are gone a day after posting
+        "helpdesk.integrations.meta.insights.sync_stories",
     ],
     "hourly_long": [
         "helpdesk.helpdesk.doctype.hd_ticket.hd_ticket.update_sla_status_in_ticket"

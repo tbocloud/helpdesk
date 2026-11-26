@@ -6,7 +6,7 @@
           {{ __("Add content entry") }}
         </h3>
         <p v-if="form.customer" class="text-p-sm text-ink-gray-5">
-          {{ form.customer }}
+          {{ form.branch || form.customer }}
           <template v-if="form.date"
             >· {{ dayjs(form.date).format("dddd, D MMMM") }}</template
           >
@@ -27,8 +27,21 @@
               :label="__('Customer') + ' *'"
               :placeholder="__('Select customer')"
             />
-            <ContentProjectNote :customer="form.customer" />
+            <ContentProjectNote
+              :customer="form.customer"
+              :branch="form.branch"
+            />
           </div>
+          <BranchSelect
+            v-model="form.branch"
+            :customer="form.customer"
+            :label="__('Branch')"
+            :description="
+              __(
+                'Its own plan, approvers and Meta page. Whole customer: the head office.'
+              )
+            "
+          />
           <FormControl
             v-model="form.campaign"
             :label="__('Campaign (optional)')"
@@ -270,6 +283,7 @@ import {
   textToHtml,
 } from "../constants";
 import { useContentOptions } from "../contentOptions";
+import BranchSelect from "./BranchSelect.vue";
 import ContentProjectNote from "./ContentProjectNote.vue";
 import AddOptionChip from "./AddOptionChip.vue";
 import ChannelIcon from "./ChannelIcon.vue";
@@ -283,6 +297,7 @@ const CAPTION_LIMIT = 2200;
 
 const props = defineProps<{
   customer?: string;
+  branch?: string;
   date?: string;
   // set when adding from an occasion chip
   specialDay?: string;
@@ -292,6 +307,7 @@ const emit = defineEmits<{ (e: "saved"): void }>();
 
 const EMPTY = {
   customer: "",
+  branch: "",
   campaign: "",
   special_day: "",
   date: "",
@@ -352,26 +368,33 @@ watch(open, (isOpen) => {
   Object.assign(form, EMPTY, {
     channels: [...EMPTY.channels],
     customer: props.customer || "",
+    branch: props.branch || "",
     date: props.date || "",
     special_day: props.specialDay || "",
   });
   Object.assign(team, emptyTeam());
   Object.assign(hours, emptyHours());
-  loadTeam(form.customer);
+  loadTeam();
 });
 
+// a branch has its own team, so its last post's people come first
 watch(
-  () => form.customer,
-  (customer, previous) => {
-    if (open.value && customer !== previous) loadTeam(customer);
+  () => [form.customer, form.branch],
+  ([customer, branch], [previousCustomer, previousBranch]) => {
+    if (
+      open.value &&
+      (customer !== previousCustomer || branch !== previousBranch)
+    )
+      loadTeam();
   }
 );
 
-async function loadTeam(customer: string) {
-  if (!customer) return;
+async function loadTeam() {
+  if (!form.customer) return;
   try {
     const last = await call("helpdesk.api.content_board.get_team_defaults", {
-      customer,
+      customer: form.customer,
+      branch: form.branch || undefined,
     });
     for (const role of TEAM_ROLES)
       team[role.field] = [...(last[role.field] || [])];
@@ -406,6 +429,7 @@ async function save(addNext: boolean) {
       separate: separate.value ? 1 : 0,
       values: {
         customer: form.customer,
+        branch: form.branch || null,
         campaign: form.campaign.trim(),
         special_day: form.special_day.trim(),
         title: copyPoints(form.title).trim(),

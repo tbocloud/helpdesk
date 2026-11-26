@@ -38,6 +38,7 @@ their own.
 | --- | --- |
 | `HD Division` | Name, code (2–10 capitals or digits; the record's name, can't change), status (Active / Inactive), country, workspace URL (unique host), currency, time zone (IANA), default language, division administrator (added to the members as Division Admin), ERP site (`crm_source` → `HD CRM Source`, unique), members. Tracks changes. Created on = `creation`. |
 | `HD Division Member` | Child: user and their role in the division. A user may be in several divisions, with a role in each. |
+| `HD Division.weekly_lead_report` | The division keeps Sales → Weekly lead report (KSA's weekly sheet of the leads each salesperson worked; [weekly-lead-report.md](weekly-lead-report.md)). Super Admins set it on the profile. |
 | `Project.division` | The project's division. New projects take the maker's active division. Empty = visible as before divisions. |
 | `HD Team.division`, `HD Department.division` | Which division a team or department belongs to (set in Settings → Divisions). |
 
@@ -53,7 +54,7 @@ their own.
 Every membership role from Group Admin to Project Manager above is a **manager role**
 (`OVERVIEW_ROLES`): someone who holds one in several divisions switches between those divisions
 (see The active division).
-| Division Sales User | membership | Their own leads on the division's ERP site (it becomes a Sales User there); opens the Leads page in that division. |
+| Division Sales User | membership | A salesperson in that division: their own and allocated leads on the division's ERP site (it becomes a Sales User there), with proposals and the client documents; none of the team's figures. |
 | Sales Executive, Employee | membership | Their division's records only. |
 
 What each membership role may do *inside* a module (leads, quotations) is still decided where the
@@ -88,9 +89,19 @@ rather than filtering leads itself, so every Leads screen keeps the site's one r
   (`content_team.is_sales_employee`: sales screens only, no tasks, projects, tickets or
   content). A **Division Admin** gets Add a lead, My leads, Leads, Commission, Overview and the
   Scoreboard (plus Business, Assign leads and Today's calls where the ERP site allows them): they
-  are never a BD, so they get the team's view. A **Division Sales User** is a BD
-  (`content_team.is_sales_bd_role`): Add a lead, My leads, their own leads (or Today's calls
-  when the division hands out call batches) and the Scoreboard; the menu leaves out Commission.
+  are never a BD, so they get the team's view, and, as a Sales Manager on the division's site,
+  pick many leads on the list to set their category or merge them (the site checks it again).
+  A **Division Sales User** is a salesperson (owner, 2026-11-24): no BD (`content_team.
+  is_sales_bd_role` is false for both roles), so their lists hold every lead the ERP site's Sales
+  User rule gives them, the ones they own, are allocated or created, and they open each of
+  those; but none of the team's figures: no Overview, Business or Team dashboard
+  (`divisions.is_division_sales_user`; `api.leads.refuse_team` refuses them on the server,
+  `authStore.isDivisionSalesUser` leaves them out of the menu and the Leads tabs, and the Leads
+  page opens on All). They keep Add a lead, My leads, Commission (their own), Daily report (the
+  site shows them their own) and the Scoreboard. On their leads they make proposals,
+  quotations, agreements, BRDs, SRSs and implementation plans as far as the ERP site lets a
+  Sales User. The Project and UAT steps stay with the project team: both roles are on the
+  sales wall, so they neither make nor open projects.
 - **Scoreboard** (`divisions.scoreboard_people`, in `api.team_dashboard.get_team_dashboard`): a
   Division Admin sees only their division's members, a Division Sales User only themselves
   (`team_dashboard.only_people` keeps their rows; a task shared with others counts for them

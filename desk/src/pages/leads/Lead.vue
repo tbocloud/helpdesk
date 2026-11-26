@@ -340,6 +340,11 @@
                 </template>
               </dl>
             </section>
+            <LeadSheetCard
+              v-if="lead && authStore.hasWeeklyLeadReport"
+              ref="sheetCard"
+              :lead-id="leadId"
+            />
             <template v-if="lead?.place">
               <LeadPlace
                 :lead-id="leadId"
@@ -503,7 +508,7 @@
       v-if="lead"
       v-model:open="showEdit"
       :lead="lead"
-      @saved="detail.reload()"
+      @saved="edited"
     />
 
     <Dialog v-model:open="showStage" :title="__('Move stage')" size="md">
@@ -543,6 +548,17 @@
           </label>
         </fieldset>
         <FormControl
+          v-if="needsWonAmount"
+          v-model="wonAmount"
+          type="number"
+          min="1"
+          step="any"
+          inputmode="decimal"
+          required
+          :label="__('Won amount')"
+          :description="wonAmountHint"
+        />
+        <FormControl
           v-model="stageNote"
           type="textarea"
           :rows="3"
@@ -565,7 +581,7 @@
                 ? __('Move to {0}', stageLabel(options, nextStage))
                 : __('Move stage')
             "
-            :disabled="!nextStage"
+            :disabled="!nextStage || (needsWonAmount && !wonAmountValid)"
             :loading="setStage.loading"
           />
         </div>
@@ -618,6 +634,8 @@ import LeadNumbers from "./LeadNumbers.vue";
 import LeadCallEntry from "./LeadCallEntry.vue";
 import LeadCopyNotice from "./LeadCopyNotice.vue";
 import LucideScrollText from "~icons/lucide/scroll-text";
+import LeadSheetCard from "@/pages/weekly-lead-report/LeadSheetCard.vue";
+import { useAuthStore } from "@/stores/auth";
 import LeadFormDialog from "./LeadFormDialog.vue";
 import LeadPhotos from "./LeadPhotos.vue";
 import LeadPlace from "./LeadPlace.vue";
@@ -641,6 +659,7 @@ import {
   stagePillClass,
   stageTone,
   STAGE_PATH,
+  CLOSED_WON,
   unsavedNote,
   type LeadDetail,
   type LeadNumber,
@@ -715,6 +734,14 @@ function merged(keep: string) {
 }
 
 const showEdit = ref(false);
+const authStore = useAuthStore();
+// the KSA lead report's card: the Edit lead dialog changes its fields too
+const sheetCard = ref<InstanceType<typeof LeadSheetCard> | null>(null);
+
+function edited() {
+  detail.reload();
+  sheetCard.value?.reload();
+}
 const showLogCall = ref(false);
 const stageFormId = `lead-stage-${useId()}`;
 
@@ -836,6 +863,11 @@ const detailFields = computed(() => {
       label: __("Owner"),
       value: l.owner_name || ownerName(options.value, l.lead_owner),
     },
+    {
+      label: __("Won amount"),
+      value: l.won_amount ? Number(l.won_amount).toLocaleString() : "",
+      mono: true,
+    },
     // kept when empty, so a missing source is seen and can be filled in with Edit
     {
       label: __("Source"),
@@ -910,6 +942,28 @@ const showStage = ref(false);
 const nextStage = ref("");
 const stageNote = ref("");
 const stageError = ref("");
+const wonAmount = ref<number | string>("");
+
+const needsWonAmount = computed(() => nextStage.value === CLOSED_WON);
+const wonAmountValid = computed(() => Number(wonAmount.value) > 0);
+const quotedAmount = computed(() => Number(lead.value?.quoted_amount) || 0);
+const wonAmountHint = computed(() => {
+  const counts = lead.value?.owner_name
+    ? __("It counts towards {0}'s sales target.", lead.value.owner_name)
+    : __("It counts towards the lead owner's sales target.");
+  return quotedAmount.value && Number(wonAmount.value) === quotedAmount.value
+    ? __(
+        "Filled in from its latest quotation. Change it if the deal closed at a different price. {0}",
+        counts
+      )
+    : __("What the client is paying for the deal. {0}", counts);
+});
+
+// the latest quotation's total is the likely price, so start from it
+watch(needsWonAmount, (needed) => {
+  if (needed && !wonAmountValid.value && quotedAmount.value)
+    wonAmount.value = quotedAmount.value;
+});
 
 /** Only the stages the ERP site allows from here. */
 const stageChoices = computed<LeadStage[]>(() =>
@@ -990,16 +1044,28 @@ function openStageDialog(preselect?: string) {
     (stageChoices.value.length === 1 ? stageChoices.value[0].name : "");
   stageNote.value = "";
   stageError.value = "";
+  wonAmount.value =
+    nextStage.value === CLOSED_WON && quotedAmount.value
+      ? quotedAmount.value
+      : "";
   showStage.value = true;
 }
 
 const setStage = createResource({
   url: "helpdesk.api.leads.set_stage",
   method: "POST",
-  onSuccess() {
-    toast.success(
-      __("Moved to {0}", stageLabel(options.value, nextStage.value))
-    );
+  onSuccess(result: { won_amount_not_kept?: boolean }) {
+    if (result?.won_amount_not_kept)
+      toast.warning(
+        __(
+          "Moved to {0}, but the ERP site didn't keep the won amount. It needs the latest TBO Smart; until then the lead's quotation counts towards the target.",
+          stageLabel(options.value, nextStage.value)
+        )
+      );
+    else
+      toast.success(
+        __("Moved to {0}", stageLabel(options.value, nextStage.value))
+      );
     showStage.value = false;
     detail.reload();
   },
@@ -1013,11 +1079,16 @@ const setStage = createResource({
 
 function submitStage() {
   if (setStage.loading || !nextStage.value) return;
+  if (needsWonAmount.value && !wonAmountValid.value) {
+    stageError.value = __("Enter the amount the lead was won for.");
+    return;
+  }
   stageError.value = "";
   setStage.submit({
     name: props.leadId,
     stage: nextStage.value,
     note: stageNote.value.trim() || null,
+    won_amount: needsWonAmount.value ? Number(wonAmount.value) : null,
   });
 }
 </script>

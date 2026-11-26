@@ -5,6 +5,7 @@ import LucideBadgeIndianRupee from "~icons/lucide/badge-indian-rupee";
 import LucideBookOpen from "~icons/lucide/book-open";
 import LucideBot from "~icons/lucide/bot";
 import LucideBriefcase from "~icons/lucide/briefcase";
+import LucideCalendarCheck from "~icons/lucide/calendar-check";
 import LucideCalendarClock from "~icons/lucide/calendar-clock";
 import LucideCalendarDays from "~icons/lucide/calendar-days";
 import LucideCalendarRange from "~icons/lucide/calendar-range";
@@ -69,7 +70,7 @@ export interface NavItem {
   customerReportOnly?: boolean;
   /** Business overview and Division reports: Super Admins and division managers */
   divisionOverviewOnly?: boolean;
-  /** Sales targets: Sales Heads (and admins) */
+  /** Sales targets and Sales team: Sales Heads (and admins) */
   salesHeadOnly?: boolean;
   /** Sales targets (their own): Presales Executives and Sales Users */
   ownTargetsOnly?: boolean;
@@ -77,6 +78,8 @@ export interface NavItem {
   ownDashboardOnly?: boolean;
   /** the team's sales figures: anyone with Leads but a BD */
   salesManagersOnly?: boolean;
+  /** Lead report: the people of a division that keeps it (KSA) */
+  weeklyLeadReportOnly?: boolean;
 }
 
 /** A page in the tree under a parent item (a saved view). */
@@ -382,6 +385,14 @@ export const agentNavAreas: NavArea[] = [
             leadTab: "commission",
             leadsOnly: true,
           },
+          // the week's leads in the KSA template, with filters (docs/weekly-lead-report.md)
+          {
+            id: "weekly-lead-report",
+            label: __("Lead report"),
+            icon: LucideCalendarCheck,
+            to: "LeadReport",
+            weeklyLeadReportOnly: true,
+          },
           // expense claims on the division's ERP site: claim and approve (docs/expenses.md)
           {
             id: "expenses",
@@ -436,6 +447,14 @@ export const agentNavAreas: NavArea[] = [
             to: "TeamTargets",
             salesHeadOnly: true,
           },
+          // the sales and presales people: add, change roles, remove (docs/sales-team.md)
+          {
+            id: "sales-team",
+            label: __("Sales team"),
+            icon: LucideUsers,
+            to: "SalesTeam",
+            salesHeadOnly: true,
+          },
           // who is handed which product and how many calls per slot (docs/leads.md)
           {
             id: "assign-leads",
@@ -461,7 +480,7 @@ export const agentNavAreas: NavArea[] = [
             label: __("Content"),
             icon: LucideCalendarDays,
             to: "ContentCalendar",
-            also: ["ContentReport", "ContentPlans"],
+            also: ["ContentReport", "ContentReach", "ContentPlans"],
           },
           {
             id: "performance",

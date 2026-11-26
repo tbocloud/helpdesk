@@ -38,8 +38,11 @@ post can be boosted as an ad, see [Phase 2: boost and ads](#phase-2-boost-and-ad
 | **HD Content Publish** (child of the post, `meta_publishes`) | One row per target: `target`, `status` (Queued / Publishing / Published / Failed), `publish_kind`, `publish_at`, `attempts`, `next_try_on`, `meta_post_id`, `permalink`, `published_on`, `error`, `link`, `queued_by` |
 | **HD Content Post** | `meta_publish_on`: when the hub will post it (the calendar's "Auto-publish" indicator) |
 
-A post finds its connection through the customer's content project (`content_project_for`),
-else any Connected connection of the same customer.
+A post finds its connection through its content project (`content_project_for(customer,
+branch)`): a [branch](content-calendar.md#customer-branches)'s own project when it has one,
+else the customer's. Failing that, any Connected connection of the same customer, but never
+one whose project belongs to a branch, so a branch's page only ever gets that branch's posts
+(`connection_for`). Boosts find their project the same way.
 
 ## Graph API version
 
@@ -70,7 +73,9 @@ version**. To upgrade, change the setting; nothing else is edited.
 Scopes: `pages_show_list`, `pages_read_engagement`, `pages_manage_posts`, `instagram_basic`,
 `instagram_content_publish`, `business_management` (`SCOPES`). With **Enable ads** on in the
 settings, `ADS_SCOPES` (`ads_management`, `ads_read`) are asked for too (`connect.scopes()`);
-clients without ads keep exactly these Phase 1 ones.
+clients without ads keep exactly these Phase 1 ones. With **Enable reach reports** on,
+`INSIGHTS_SCOPES` (`read_insights`, `instagram_manage_insights`) are asked for as well, for the
+Reach report; declining them doesn't stop the connection (docs/meta-insights.md).
 
 ## Publishing
 

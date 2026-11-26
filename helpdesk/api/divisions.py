@@ -29,6 +29,7 @@ CENTRAL_FIELDS = (
     "currency",
     "division_admin",
     "crm_source",
+    "weekly_lead_report",
 )
 # what the division's own admins change too
 LOCAL_FIELDS = ("time_zone", "language")

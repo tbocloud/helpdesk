@@ -218,6 +218,17 @@
                 />
               </div>
             </SettingRow>
+            <Switch
+              :model-value="form.weekly_lead_report === '1'"
+              :label="__('Lead report')"
+              :description="
+                __(
+                  'Sales → Lead report for its people: each salesperson\'s leads created or updated in a week, in the KSA template.'
+                )
+              "
+              :disabled="!canEditCentral || !form.crm_source"
+              @update:model-value="form.weekly_lead_report = $event ? '1' : ''"
+            />
           </div>
         </SettingsSection>
 
@@ -383,6 +394,7 @@ import {
   createResource,
   Dropdown,
   FormControl,
+  Switch,
   toast,
 } from "frappe-ui";
 import { computed, reactive, ref, watch } from "vue";
@@ -420,6 +432,8 @@ const FIELDS = [
   "language",
   "division_admin",
   "crm_source",
+  // a Check, kept as "1" or "" like the text fields
+  "weekly_lead_report",
 ] as const;
 type Profile = Record<typeof FIELDS[number], string>;
 
@@ -447,7 +461,7 @@ const division = createResource({
   makeParams: () => ({ name: props.name }),
   onSuccess(data: any) {
     const profile = { ...blank() };
-    for (const f of FIELDS) profile[f] = data.division[f] || "";
+    for (const f of FIELDS) profile[f] = String(data.division[f] || "");
     Object.assign(form, profile);
     saved.value = profile;
     members.value = data.members.map((m: Member) => ({ ...m }));

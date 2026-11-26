@@ -10,7 +10,6 @@ import frappe
 from frappe import _
 from frappe.utils import (
     add_days,
-    format_datetime,
     formatdate,
     get_datetime,
     get_first_day,
@@ -18,6 +17,8 @@ from frappe.utils import (
     getdate,
     now_datetime,
 )
+
+from helpdesk.utils import send_report_pdf
 
 # where a post is in the workflow, grouped the way the calendar colours them
 STAGES = {
@@ -342,20 +343,14 @@ def summary_lines(t: dict) -> list[str]:
 
 @frappe.whitelist()
 def export_pdf(from_date: str, to_date: str, customer: str | None = None):
-    """The delivery report as a PDF download.
-
-    Frappe renders PDFs with wkhtmltopdf. Where it is not installed, the same page is
-    returned ready to print, and the browser's print dialog saves it as a PDF.
-    """
-    import shutil
-
+    """The delivery report as a PDF download (a print-ready page without wkhtmltopdf)."""
     frappe.has_permission("HD Content Post", "read", throw=True)
     filters = frappe._dict(from_date=from_date, to_date=to_date, customer=customer)
     columns = get_columns()
     rows = get_rows(filters)
     totals = get_totals(rows)
-    can_render_pdf = bool(shutil.which("wkhtmltopdf"))
-    html = frappe.render_template(  # the app's own fixed template, not user input - nosemgrep
+    suffix = f"-{frappe.scrub(customer)}" if customer else ""
+    send_report_pdf(
         "helpdesk/helpdesk/report/content_delivery/content_delivery_pdf.html",
         {
             "title": _("Content delivery report"),
@@ -368,25 +363,6 @@ def export_pdf(from_date: str, to_date: str, customer: str | None = None):
             "total": total_row(columns, totals),
             "summary": summary_lines(totals) if rows else [],
             "health_keys": [row["health_key"] for row in rows],
-            "generated_on": format_datetime(now_datetime()),
-            "generated_by": frappe.utils.get_fullname(frappe.session.user),
-            "auto_print": not can_render_pdf,
         },
+        f"content-delivery-{from_date}-to-{to_date}{suffix}",
     )
-    suffix = f"-{frappe.scrub(customer)}" if customer else ""
-    filename = f"content-delivery-{from_date}-to-{to_date}{suffix}"
-
-    if can_render_pdf:
-        from frappe.utils.pdf import get_pdf
-
-        frappe.response.filename = f"{filename}.pdf"
-        frappe.response.filecontent = get_pdf(
-            html, {"orientation": "Landscape", "page-size": "A4"}
-        )
-        frappe.response.type = "pdf"
-        return
-
-    frappe.response.filename = f"{filename}.html"
-    frappe.response.filecontent = html
-    frappe.response.type = "download"
-    frappe.response.display_content_as = "inline"

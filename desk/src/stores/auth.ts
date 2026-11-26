@@ -123,6 +123,14 @@ export const useAuthStore = defineStore("auth", () => {
       divisions.value.find((d) => d.name === activeDivision.value)?.role ===
         "Division Admin"
   );
+  // a Division Sales User of the active division works their own and allocated leads and
+  // sees none of the team's figures (docs/divisions.md)
+  const isDivisionSalesUser: ComputedRef<boolean> = computed(
+    () =>
+      !isSuperAdmin.value &&
+      divisions.value.find((d) => d.name === activeDivision.value)?.role ===
+        "Division Sales User"
+  );
   const canViewDivisionOverview: ComputedRef<boolean> = computed(
     () => !!user__.value.can_view_division_overview
   );
@@ -139,6 +147,10 @@ export const useAuthStore = defineStore("auth", () => {
   // Sales targets (their own): Presales Executives and Sales Users read theirs
   const hasSalesTargets: ComputedRef<boolean> = computed(
     () => !!user__.value.has_sales_targets
+  );
+  // Sales → Lead report, in a division that keeps it (docs/weekly-lead-report.md)
+  const hasWeeklyLeadReport: ComputedRef<boolean> = computed(
+    () => !!user__.value.has_weekly_lead_report
   );
   // Presales Executives don't get Today's calls: no sidebar item, no pill, never the landing tab
   const hideTodaysCalls: ComputedRef<boolean> = computed(
@@ -255,10 +267,12 @@ export const useAuthStore = defineStore("auth", () => {
     canManageDivisions,
     canSwitchDivision,
     isActiveDivisionAdmin,
+    isDivisionSalesUser,
     canViewDivisionOverview,
     overviewDivision,
     canAssignSalesTargets,
     hasSalesTargets,
+    hasWeeklyLeadReport,
     inSales,
     hideTodaysCalls,
     telephonyInstalled,
