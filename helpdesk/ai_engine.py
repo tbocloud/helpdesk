@@ -7,7 +7,7 @@ prompt caching and token tracking (docs/ai-providers.md)."""
 import json
 import re
 from dataclasses import dataclass, field, replace
-from time import monotonic
+from time import monotonic, perf_counter
 
 import anthropic
 import frappe
@@ -364,13 +364,29 @@ def configured_providers(settings=None) -> dict[str, AIProvider | None]:
     return providers
 
 
-def provider_order(settings=None) -> list[str]:
-    """The primary section, then the other one when failover is on."""
+def provider_order(settings=None, job: str | None = None) -> list[str]:
+    """The primary section, then the other one when failover is on. A job's row in Models per
+    job may choose its own first section and switch its own fallback on or off (Phase 31)."""
     settings = settings or get_hub_settings()
     primary = settings.get("primary_ai_provider") or ANTHROPIC_SLOT
-    if not settings.get("ai_failover"):
+    failover = bool(settings.get("ai_failover"))
+    row = job_row(job, settings)
+    if row:
+        if row.get("primary_section") in SLOTS:
+            primary = row.primary_section
+        if row.get("allow_fallback") in ("On", "Off"):
+            failover = row.allow_fallback == "On"
+    if not failover:
         return [primary]
     return [primary, *(slot for slot in SLOTS if slot != primary)]
+
+
+def job_row(job: str | None, settings=None):
+    """The job's row in Models per job, if it has one."""
+    if not job:
+        return None
+    settings = settings or get_hub_settings()
+    return next((r for r in settings.get("ai_jobs") or [] if r.job == job), None)
 
 
 # The AI jobs (docs/ai-providers.md, Models per job): TBO Support's own, then the Copilot worker's
@@ -407,7 +423,7 @@ def get_providers(job: str | None = None) -> list[AIProvider]:
         replace(providers[slot], model=models[slot], override=True)
         if models.get(slot) and models[slot] != providers[slot].model
         else providers[slot]
-        for slot in provider_order(settings)
+        for slot in provider_order(settings, job)
         if providers[slot]
     ]
 
@@ -428,12 +444,11 @@ def worker_models() -> dict[str, list[dict]]:
     model and its price per million tokens. Never a key: the worker holds its own."""
     settings = get_hub_settings()
     providers = configured_providers(settings)
-    order = [slot for slot in provider_order(settings) if providers[slot]]
     out = {}
     for job in WORKER_JOBS:
         models = job_models(job, settings)
         out[job] = []
-        for slot in order:
+        for slot in (s for s in provider_order(settings, job) if providers[s]):
             model = models.get(slot) or providers[slot].model
             cost = get_model_cost(model)
             out[job].append(
@@ -671,9 +686,25 @@ def complete(
         timeout = min(REQUEST_TIMEOUT, deadline - monotonic())
         if timeout < MIN_ATTEMPT_SECONDS:
             raise AIProviderError(provider, "timeout", "no time left for this call")
-        text, usage, ran_out = call(
-            provider, system_prompt, user_message, max_tokens, timeout, images
-        )
+        # its own clock: the deadline's monotonic() is counted by the tests
+        started = perf_counter()
+        try:
+            text, usage, ran_out = call(
+                provider, system_prompt, user_message, max_tokens, timeout, images
+            )
+        except AIProviderError as e:
+            # a failed attempt is a row too: errors and speed are counted per model (Phase 31)
+            log_usage(
+                provider.model,
+                _Usage(0, 0),
+                ticket_name=ticket_name,
+                provider=provider.slot,
+                job=job,
+                fallback=fallback,
+                duration_ms=round((perf_counter() - started) * 1000),
+                error=e,
+            )
+            raise
         log_usage(
             provider.model,
             usage,
@@ -681,6 +712,7 @@ def complete(
             provider=provider.slot,
             job=job,
             fallback=fallback,
+            duration_ms=round((perf_counter() - started) * 1000),
         )
         if text.strip() or not ran_out:
             break
@@ -897,9 +929,13 @@ def log_usage(
     job: str | None = None,
     copilot_run: str | None = None,
     fallback: bool = False,
+    duration_ms: int | None = None,
+    error: "AIProviderError | None" = None,
 ):
     """Log API usage to HDS AI Usage Log. Without `provider` it is an
-    investigation's call: those always run on an Anthropic-compatible provider."""
+    investigation's call: those always run on an Anthropic-compatible provider.
+    `error` makes it a Failed row with the error's kind and the provider's own words
+    (key masked, clipped): never the prompt."""
     try:
         frappe.get_doc(
             {
@@ -911,6 +947,16 @@ def log_usage(
                 "job": job,
                 "copilot_run": copilot_run,
                 "fallback": int(bool(fallback)),
+                "duration_ms": duration_ms,
+                "status": "Failed" if error else "Success",
+                "error_class": error.kind if error else None,
+                "error_message": (
+                    f"HTTP {error.status}: " if error and error.status else ""
+                )
+                + (error.detail or "")[:MAX_ERROR_CHARS]
+                if error
+                else None,
+                "source": "TBO Support",
                 "input_tokens": usage.input_tokens,
                 "output_tokens": usage.output_tokens,
                 "cache_read_tokens": getattr(usage, "cache_read_input_tokens", 0),
@@ -952,6 +998,8 @@ def log_worker_usage(run: str, cost: dict | None, job: str, attempt: int = 1):
                 "provider": stage.get("section") or "Copilot worker",
                 "model": str(stage.get("model") or "")[:140],
                 "fallback": int(bool(stage.get("fallback"))),
+                "source": "Copilot worker",
+                "duration_ms": int(stage.get("ms") or 0) or None,
                 "input_tokens": tokens_in - cached,
                 "cache_read_tokens": cached,
                 "output_tokens": int(stage.get("tokens_out") or 0),

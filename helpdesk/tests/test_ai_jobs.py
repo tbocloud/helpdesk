@@ -258,6 +258,8 @@ class TestThePage(AISettingsCase):
                     "job": "summary",
                     "openai_model": "gpt-6-luna-test",
                     "anthropic_model": "",
+                    "primary_section": "",
+                    "allow_fallback": "",
                 }
             ],
         )

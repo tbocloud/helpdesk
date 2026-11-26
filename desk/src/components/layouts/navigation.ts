@@ -38,6 +38,7 @@ import LucideUserRoundCog from "~icons/lucide/user-round-cog";
 import LucideActivity from "~icons/lucide/activity";
 import LucideVideo from "~icons/lucide/video";
 import LucideFileChartColumn from "~icons/lucide/file-chart-column";
+import LucideGauge from "~icons/lucide/gauge";
 import LucideGlobe from "~icons/lucide/globe";
 
 /** A page in the sidebar. The flags are the role rules; see `isNavItemVisible`. */
@@ -57,6 +58,8 @@ export interface NavItem {
   /** key of `helpdesk.api.sidebar.get_nav_counts` shown as the badge */
   countKey?: string;
   ticketWorkersOnly?: boolean;
+  /** AI models: Agent Managers and System Managers */
+  managersOnly?: boolean;
   leadsOnly?: boolean;
   leadBankOnly?: boolean;
   /** Assign leads: anyone but a BD, once a department hands out call batches */
@@ -295,6 +298,14 @@ export const agentNavAreas: NavArea[] = [
             icon: LucideBot,
             to: "CopilotBoard",
             ticketWorkersOnly: true,
+          },
+          // managers: each AI model's cost, speed and errors, and the model per job (Phase 31)
+          {
+            id: "ai-models",
+            label: __("AI models"),
+            icon: LucideGauge,
+            to: "AIModels",
+            managersOnly: true,
           },
           {
             id: "knowledge-base",

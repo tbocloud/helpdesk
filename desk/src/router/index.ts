@@ -418,6 +418,12 @@ const portalRoutes = [
     name: "CopilotBoard",
     component: () => import("@/pages/copilot/CopilotBoard.vue"),
   },
+  // managers: how each AI model does, and which model each job uses (Phase 31)
+  {
+    path: "/ai-models",
+    name: "AIModels",
+    component: () => import("@/pages/ai-models/AIModels.vue"),
+  },
   {
     path: "/overview",
     name: "WorkOverview",

@@ -22,6 +22,7 @@ PLAIN_FIELDS = (
 )
 SECRET_FIELDS = ("openai_api_key", "anthropic_api_key")
 JOB_FIELDS = ("openai_model", "anthropic_model")
+JOB_CHOICES = ("primary_section", "allow_fallback")
 # enough of a key to tell which kind is saved, nothing of the key itself
 KEY_PREFIXES = ("sk-proj-", "sk-ant-", "sk-")
 # the Messages API kinds of the Anthropic-compatible section; "OpenAI Compatible",
@@ -55,7 +56,10 @@ def settings_payload(doc) -> dict:
         "settings": {
             **{f: doc.get(f) for f in PLAIN_FIELDS},
             "ai_jobs": [
-                {"job": row.job, **{f: row.get(f) or "" for f in JOB_FIELDS}}
+                {
+                    "job": row.job,
+                    **{f: row.get(f) or "" for f in (*JOB_FIELDS, *JOB_CHOICES)},
+                }
                 for row in doc.get("ai_jobs") or []
             ],
         },
@@ -64,15 +68,22 @@ def settings_payload(doc) -> dict:
     }
 
 
-def job_rows(rows: list) -> list[dict]:
+def job_rows(rows: list, existing: dict | None = None) -> list[dict]:
     """Models per job as the page sends them: known jobs with at least one model, trimmed."""
     out = []
     for row in rows:
         if not isinstance(row, dict) or row.get("job") not in ai_engine.JOBS:
             continue
         models = {f: str(row.get(f) or "").strip() for f in JOB_FIELDS}
-        if any(models.values()):
-            out.append({"job": row["job"], **models})
+        # the job's own first section and fallback (Phase 31): a page that doesn't send them
+        # (the older settings page) keeps what is saved
+        was = (existing or {}).get(row["job"]) or {}
+        choice = {
+            f: str(row[f] or "").strip() if f in row else (was.get(f) or "")
+            for f in JOB_CHOICES
+        }
+        if any(models.values()) or any(choice.values()):
+            out.append({"job": row["job"], **models, **choice})
     return out
 
 
@@ -98,7 +109,8 @@ def save_settings(values: dict | str) -> dict:
         if values.get(fieldname) is not None:
             doc.set(fieldname, str(values[fieldname]).strip())
     if isinstance(values.get("ai_jobs"), list):
-        doc.set("ai_jobs", job_rows(values["ai_jobs"]))
+        existing = {r.job: r.as_dict() for r in doc.get("ai_jobs") or []}
+        doc.set("ai_jobs", job_rows(values["ai_jobs"], existing))
     if doc.ai_provider in (ANTHROPIC, ANTHROPIC_COMPATIBLE, None, ""):
         # a base URL is what makes the Messages API endpoint Anthropic-compatible
         doc.ai_provider = ANTHROPIC_COMPATIBLE if doc.ai_base_url else ANTHROPIC
