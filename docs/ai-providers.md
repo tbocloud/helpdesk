@@ -190,7 +190,9 @@ providers**. The Systems card's AI triage row names the provider that answers no
 
 - **HDS AI Usage Log** has `provider` (the section; investigation calls log
   Anthropic-compatible) next to `model`, for every attempt, plus `job`, `fallback` (the
-  answer came from a section other than the first) and `copilot_run`.
+  answer came from a section other than the first) and `copilot_run`. A failed attempt's row is
+  written by a background job on the `short` queue, so it stays when the request rolls back; it
+  appears once that queue's worker has run it.
 - **The worker's spend:** `submit_investigation` and `submit_change` carry the run's `cost`
   with a `stages` list (one entry per job and model: tokens, cached tokens, dollars, section,
   fallback). `log_worker_usage` turns each entry into a usage row with the run and its

@@ -166,6 +166,12 @@
                   </td>
                   <td class="px-3 py-3 text-right tabular-nums">
                     {{ pct(m.fallback_rate) }}
+                    <div
+                      v-if="m.hub_calls !== undefined && m.hub_calls < m.calls"
+                      class="text-ink-gray-5"
+                    >
+                      {{ __("of TBO Support's calls") }}
+                    </div>
                   </td>
                   <td class="px-3 py-3 text-right tabular-nums">
                     {{ m.benchmark ? pct(m.benchmark.accuracy) : "-" }}
@@ -2018,6 +2024,8 @@ type Score = { accuracy: number; ran_on: string };
 
 type Figures = {
   calls: number;
+  /** TBO Support's own calls: the fallback rate is their share, never the gateway's */
+  hub_calls?: number;
   failed: number;
   error_rate: number | null;
   fallback_rate: number | null;
@@ -2462,6 +2470,7 @@ async function save(job: string, values: Record<string, string>) {
   const guarded =
     settings.value?.guarded_jobs.includes(job) &&
     Object.keys(values).some((field) => MODEL_FIELDS.includes(field));
+  let expected: string | undefined;
   if (guarded) {
     saving.value = true;
     notice.value = null;
@@ -2475,6 +2484,8 @@ async function save(job: string, values: Record<string, string>) {
         guardOpen.value = true;
         return;
       }
+      // the save is refused if the job's model changed after this comparison
+      expected = guard.current_model || "";
     } catch (err) {
       notice.value = { ok: false, text: errorText(err, __("Not saved")) };
       formKey.value++;
@@ -2483,7 +2494,7 @@ async function save(job: string, values: Record<string, string>) {
       saving.value = false;
     }
   }
-  await store(job, values);
+  await store(job, values, expected);
 }
 watch(guardOpen, (open) => {
   if (!open && pending.value) {
@@ -2496,7 +2507,7 @@ function confirmGuard() {
   if (!change) return;
   pending.value = null;
   guardOpen.value = false;
-  store(change.job, change.values);
+  store(change.job, change.values, change.guard.current_model || "");
 }
 function scoreText(score: Score | null) {
   return score
@@ -2504,11 +2515,19 @@ function scoreText(score: Score | null) {
     : __("not run on the test set");
 }
 
-async function store(job: string, values: Record<string, string>) {
+async function store(
+  job: string,
+  values: Record<string, string>,
+  expectedModel?: string
+) {
   saving.value = true;
   notice.value = null;
   try {
-    await call(`${API}.save_job`, { job, values: JSON.stringify(values) });
+    const sent =
+      expectedModel === undefined
+        ? values
+        : { ...values, expected_model: expectedModel };
+    await call(`${API}.save_job`, { job, values: JSON.stringify(sent) });
     notice.value = { ok: true, text: __("Saved: {0}", jobLabel(job)) };
   } catch (err) {
     notice.value = { ok: false, text: errorText(err, __("Not saved")) };
