@@ -85,8 +85,19 @@ class ModelsCase(FrappeTestCase):
         frappe.db.delete("HDS AI Provider")
         ai_engine.forget_provider(DEEPSEEK)
         fresh_month()
-        # no job rows: each test starts from the settings' own order and fallback
-        set_ai_providers(ai_jobs=[])
+        from helpdesk import ai_gateway
+
+        frappe.cache.delete_value(
+            [
+                ai_gateway.ALIVE_KEY,
+                ai_gateway.KEY_WORKS_KEY,
+                ai_gateway.DOWN_KEY,
+                ai_gateway.DOWN_ALERT_KEY,
+            ]
+        )
+        # no job rows: each test starts from the settings' own order and fallback, the
+        # providers called straight
+        set_ai_providers(ai_jobs=[], gateway_for_all=0)
 
 
 class TestEveryAttemptIsRecorded(ModelsCase):
@@ -763,14 +774,284 @@ class TestEveryApplication(ModelsCase):
         self.assertEqual(ai_engine.job_row("desktop_medium").model, "deepseek-chat")
         self.assertEqual(ai_engine.job_row("chat").openai_model, "gpt-6-luna")
 
-    def test_a_provider_keeps_its_note_and_the_gateway_is_a_preset(self):
+    def test_a_provider_keeps_its_note_and_bedrock_is_a_preset(self):
         result = add_provider("Mine", note="The data stays in our account.")
 
         mine = next(p for p in result["providers"] if p["name"] == "Mine")
         self.assertEqual(mine["note"], "The data stays in our account.")
         presets = {p["name"]: p for p in result["presets"]}
-        self.assertIn("TBO AI gateway", presets)
+        self.assertEqual(presets["AWS Bedrock"]["style"], "AWS Bedrock")
         self.assertIn("China", presets["DeepSeek"]["note"])
+
+
+GATEWAY = "https://gw.test"
+GATEWAY_KEY = "sk-tbo-support-gateway-0001"
+
+
+def answered(status=200, body=None):
+    from unittest.mock import MagicMock
+
+    return MagicMock(
+        ok=status < 400, status_code=status, json=MagicMock(return_value=body or {})
+    )
+
+
+class TestEverythingThroughTheGateway(ModelsCase):
+    def setUp(self):
+        super().setUp()
+        from helpdesk import ai_gateway
+
+        self.gw = ai_gateway
+        doc = frappe.get_doc("HDS Hub Settings")
+        doc.update(
+            {
+                "gateway_url": GATEWAY,
+                "gateway_key": GATEWAY_KEY,
+                "gateway_admin_key": "sk-gateway-admin-0001",
+                "gateway_for_all": 1,
+            }
+        )
+        doc.save(ignore_permissions=True)
+        # the gateway answers unless a test says otherwise
+        frappe.cache.set_value(ai_gateway.ALIVE_KEY, 1)
+        frappe.cache.set_value(ai_gateway.KEY_WORKS_KEY, 1)
+        ai_engine.forget_provider(ai_gateway.SLOT)
+        self.admin = patch("requests.request", return_value=answered())
+        self.admin_calls = self.admin.start()
+        self.addCleanup(self.admin.stop)
+
+    def admin_paths(self):
+        return [
+            (c.args[0], c.args[1].replace(GATEWAY, ""))
+            for c in self.admin_calls.call_args_list
+        ]
+
+    def admin_body(self, path):
+        return next(
+            c.kwargs["json"]
+            for c in self.admin_calls.call_args_list
+            if c.args[1] == GATEWAY + path and c.args[0] == "POST"
+        )
+
+    def test_every_call_goes_to_the_gateway_with_tbo_supports_key(self):
+        with patch(
+            "requests.post", return_value=openai_http_response(text="{}")
+        ) as post:
+            ai_engine.call_haiku("Answer in JSON", "hello", job="triage")
+
+        self.assertEqual(post.call_args.args[0], GATEWAY + "/v1/chat/completions")
+        self.assertEqual(
+            post.call_args.kwargs["headers"]["Authorization"], f"Bearer {GATEWAY_KEY}"
+        )
+        body = post.call_args.kwargs["json"]
+        self.assertEqual(body["model"], "gpt-test-model")
+        self.assertIn("max_tokens", body)
+        self.assertEqual(body["response_format"], {"type": "json_object"})
+        row = frappe.get_last_doc(LOG)
+        self.assertEqual(
+            (row.provider, row.model, row.status),
+            (self.gw.SLOT, "gpt-test-model", "Success"),
+        )
+
+    def test_the_backup_is_tried_through_the_gateway_too(self):
+        add_provider()
+        add_model("deepseek-chat", DEEPSEEK)
+        add_model("kimi-k2.6", "Anthropic-compatible")
+        ai_models.save_job(
+            "chat", {"model": "deepseek-chat", "backup_model": "kimi-k2.6"}
+        )
+        busy = openai_http_response(429, {"error": {"message": "slow down"}})
+        with patch(
+            "requests.post", side_effect=[busy, openai_http_response(text="{}")]
+        ) as post:
+            result = ai_engine.call_haiku("Answer in JSON", "hello", job="chat")
+
+        self.assertEqual(result["model"], "kimi-k2.6")
+        self.assertEqual(
+            [(c.args[0], c.kwargs["json"]["model"]) for c in post.call_args_list],
+            [
+                (GATEWAY + "/v1/chat/completions", "deepseek-chat"),
+                (GATEWAY + "/v1/chat/completions", "kimi-k2.6"),
+            ],
+        )
+
+    def test_when_the_gateway_does_not_answer_the_emergency_key_answers(self):
+        import requests
+
+        down = requests.ConnectionError("no route")
+        with patch("helpdesk.ai_engine.send_provider_alert") as alert, patch(
+            "requests.get", side_effect=down
+        ), patch(
+            "requests.post", side_effect=[down, openai_http_response(text="{}")]
+        ) as post:
+            first = ai_engine.call_haiku("Answer in JSON", "hello", job="triage")
+
+        self.assertEqual(
+            post.call_args_list[0].args[0], GATEWAY + "/v1/chat/completions"
+        )
+        # the emergency key: TBO Support's own OpenAI section, straight to OpenAI
+        self.assertEqual(
+            post.call_args_list[1].args[0], "https://api.openai.com/v1/chat/completions"
+        )
+        self.assertEqual(first["model"], "gpt-test-model")
+        alert.assert_called_once()
+        self.assertIn("emergency key", alert.call_args.args[0])
+        self.assertTrue(frappe.cache.get_value(self.gw.DOWN_KEY))
+        # the next call goes straight to the emergency key, and nobody is told twice
+        with patch("helpdesk.ai_engine.send_provider_alert") as again, patch(
+            "requests.post", return_value=openai_http_response(text="{}")
+        ) as post:
+            ai_engine.call_haiku("Answer in JSON", "hello", job="triage")
+        self.assertEqual(post.call_count, 1)
+        self.assertEqual(
+            post.call_args.args[0], "https://api.openai.com/v1/chat/completions"
+        )
+        again.assert_not_called()
+
+    def test_a_refused_tbo_support_key_uses_the_emergency_key_too(self):
+        frappe.cache.delete_value(self.gw.KEY_WORKS_KEY)
+        refused = openai_http_response(401, {"error": {"message": "invalid proxy key"}})
+        with patch("helpdesk.ai_engine.send_provider_alert"), patch(
+            "requests.get", return_value=answered(401)
+        ), patch(
+            "requests.post", side_effect=[refused, openai_http_response(text="{}")]
+        ) as post:
+            ai_engine.call_haiku("Answer in JSON", "hello", job="triage")
+
+        self.assertEqual(
+            post.call_args_list[1].args[0], "https://api.openai.com/v1/chat/completions"
+        )
+
+    def test_the_watch_tells_when_it_stops_and_when_it_answers_again(self):
+        import requests
+
+        with patch("helpdesk.ai_engine.send_provider_alert") as alert:
+            with patch("requests.get", side_effect=requests.ConnectionError("down")):
+                self.assertEqual(self.gw.watch(), "down")
+                self.assertEqual(self.gw.watch(), "down")
+            self.assertEqual(alert.call_count, 1)
+            with patch("requests.get", return_value=answered()):
+                self.assertEqual(self.gw.watch(), "back")
+                self.assertEqual(self.gw.watch(), "up")
+        self.assertEqual(alert.call_count, 2)
+        self.assertIn("answers again", alert.call_args.args[0])
+
+    def test_a_providers_key_goes_to_the_gateway_and_is_not_kept(self):
+        from frappe.utils.password import get_decrypted_password
+
+        result = add_provider()
+
+        self.assertIn(("DELETE", "/credentials/DeepSeek"), self.admin_paths())
+        body = self.admin_body("/credentials")
+        self.assertEqual(body["credential_name"], DEEPSEEK)
+        self.assertEqual(
+            body["credential_values"],
+            {"api_key": DEEPSEEK_KEY, "api_base": "https://api.deepseek.test"},
+        )
+        self.assertIsNone(
+            get_decrypted_password(
+                "HDS AI Provider", DEEPSEEK, "api_key", raise_exception=False
+            )
+        )
+        deepseek = next(p for p in result["providers"] if p["name"] == DEEPSEEK)
+        self.assertEqual((deepseek["key_on_gateway"], deepseek["ready"]), (True, True))
+        self.assertNotIn(DEEPSEEK_KEY, frappe.as_json(result))
+
+    def test_an_allowed_model_is_written_and_an_unticked_one_leaves(self):
+        add_provider()
+        add_provider("Bedrock", "AWS Bedrock", "", "")
+        add_model("deepseek-chat", DEEPSEEK)
+        self.assertEqual(
+            self.admin_body("/model/new"),
+            {
+                "model_name": "deepseek-chat",
+                "litellm_params": {
+                    "model": "openai/deepseek-chat",
+                    "litellm_credential_name": DEEPSEEK,
+                },
+                "model_info": {
+                    "id": "tbo-support:deepseek-chat",
+                    "written_by": "TBO Support",
+                },
+            },
+        )
+        self.assertEqual(frappe.db.get_value(PRICING, "deepseek-chat", "on_gateway"), 1)
+        self.admin_calls.reset_mock()
+        add_model("gpt-x", "OpenAI")
+        self.assertEqual(
+            self.admin_body("/model/new")["litellm_params"],
+            {"model": "openai/gpt-x", "api_key": "os.environ/OPENAI_API_KEY"},
+        )
+        self.admin_calls.reset_mock()
+        add_model("deepseek.v3.2", "Bedrock")
+        self.assertEqual(
+            self.admin_body("/model/new")["litellm_params"],
+            {
+                "model": "bedrock/converse/deepseek.v3.2",
+                "aws_region_name": "ap-south-1",
+            },
+        )
+        self.admin_calls.reset_mock()
+        ai_models.save_model({"model": "deepseek-chat", "listed": 0})
+        self.assertEqual(
+            self.admin_body("/model/delete"), {"id": "tbo-support:deepseek-chat"}
+        )
+        self.assertEqual(frappe.db.get_value(PRICING, "deepseek-chat", "on_gateway"), 0)
+
+    def test_write_all_moves_the_keys_and_the_models(self):
+        from frappe.utils.password import get_decrypted_password
+
+        frappe.db.set_single_value("HDS Hub Settings", "gateway_for_all", 0)
+        add_provider()
+        add_model("deepseek-chat", DEEPSEEK)
+        self.assertEqual(self.admin_calls.call_count, 0)
+        frappe.db.set_single_value("HDS Hub Settings", "gateway_for_all", 1)
+
+        result = ai_models.write_all()
+
+        self.assertEqual(result["written"], {"keys": 1, "models": 1})
+        self.assertEqual(
+            self.admin_body("/credentials")["credential_values"]["api_key"],
+            DEEPSEEK_KEY,
+        )
+        self.assertEqual(self.admin_body("/model/new")["model_name"], "deepseek-chat")
+        self.assertIsNone(
+            get_decrypted_password(
+                "HDS AI Provider", DEEPSEEK, "api_key", raise_exception=False
+            )
+        )
+
+    def test_the_switch_turns_on_only_when_the_gateway_answers_and_takes_the_key(self):
+        frappe.db.set_single_value("HDS Hub Settings", "gateway_for_all", 0)
+        with patch("requests.get", side_effect=[answered(), answered(401)]):
+            with self.assertRaises(frappe.ValidationError) as refused:
+                ai_models.save_gateway({"for_all": 1})
+        self.assertIn("refused", str(refused.exception))
+        with patch("requests.get", side_effect=[answered(), answered()]):
+            status = ai_models.save_gateway({"for_all": 1})
+        self.assertTrue(status["for_all"])
+
+    def test_the_worker_is_sent_to_the_gateway(self):
+        entries = ai_engine.worker_models()["investigate"]
+
+        self.assertEqual(
+            [(e["section"], e["model"]) for e in entries],
+            [(self.gw.SLOT, "gpt-test-model"), (self.gw.SLOT, "kimi-k2.6")],
+        )
+
+    def test_the_usage_read_from_the_gateway_is_the_desktop_apps_only(self):
+        def call(alias):
+            return {
+                "model": "openai/gpt-5.6-luna",
+                "model_group": "tbo-default",
+                "user": "dev@example.com",
+                "spend": 0.01,
+                "metadata": {"user_api_key_alias": alias} if alias else {},
+            }
+
+        totals = self.gw.totals([call("desktop:abc"), call("tbo-support"), call("")])
+
+        self.assertEqual(sum(t["requests"] for t in totals.values()), 2)
 
 
 FULL_MARKS = [{**REPORT[0]}, {**REPORT[1], "right": True}]

@@ -188,6 +188,13 @@ def save_gateway(values: dict | str) -> dict:
 
 
 @frappe.whitelist(methods=["POST"])
+def write_all_to_gateway() -> dict:
+    """Every provider key and allowed model into the TBO AI gateway (Phase 37)."""
+    check_manager()
+    return ai_models.write_all()
+
+
+@frappe.whitelist(methods=["POST"])
 def sync_gateway() -> dict:
     """Read the gateway's usage now."""
     check_manager()

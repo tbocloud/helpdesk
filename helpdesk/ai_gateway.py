@@ -1,15 +1,19 @@
 # Copyright (c) 2026, Quark Cyber Systems FZC and contributors
 # For license information, please see license.txt
 
-"""The AI gateway's usage, for AI models (Phase 31).
+"""The TBO AI gateway (LiteLLM): its usage for AI models (Phase 31), and every AI call (Phase 37).
 
-The desktop app's AI calls go through TBO's gateway (LiteLLM), not through TBO Support, so
-its models are read from the gateway itself: every hour, with a read-only key, the calls of
-today and yesterday are fetched and kept as totals per day, model and person. A message's text
-is never asked for and never stored: only the model, who called, tokens, cost, time and whether
-it failed.
+- Usage: every hour, with a read-only key, the desktop app's calls of today and yesterday are
+  fetched and kept as totals per day, model and person. A message's text is never asked for and
+  never stored: only the model, who called, tokens, cost, time and whether it failed.
+- Every call (Phase 37, "Use the gateway for every AI call"): TBO Support's calls go to the
+  gateway with TBO Support's own gateway key, and the AI models page writes the providers'
+  keys (as gateway credentials) and the models into the gateway through its admin API. When
+  the gateway doesn't answer, TBO Support answers with its emergency key and the managers are
+  told (helpdesk.ai_engine).
 """
 
+import contextlib
 import json
 
 import frappe
@@ -26,7 +30,20 @@ from frappe.utils import (
 )
 
 SETTINGS = "HDS Hub Settings"
+DESKTOP_SETTINGS = "TBO Desktop Settings"
 DAY = "HDS Gateway Usage Day"
+# how TBO Support's calls name the gateway in the usage log and the provider list
+SLOT = "TBO AI gateway"
+ALIVE_PATH = "/health/liveliness"
+ALIVE_KEY = "ai_gateway:alive"
+ALIVE_SECONDS = 60
+DOWN_KEY = "ai_gateway:down_since"
+DOWN_ALERT_KEY = "ai_gateway:down_alerted"
+DOWN_ALERT_SECONDS = 6 * 60 * 60
+# the desktop app's keys (tbo_desktop makes them as "desktop:<sign-in>"); the others are TBO
+# Support's and the worker's, whose calls TBO Support logs itself
+DESKTOP_ALIAS = "desktop:"
+MODEL_ID_PREFIX = "tbo-support:"
 PAGE_SIZE = 500
 MAX_PAGES = 200
 TIMEOUT = 30
@@ -48,6 +65,193 @@ def _key() -> str | None:
     return get_decrypted_password(
         SETTINGS, SETTINGS, "gateway_viewer_key", raise_exception=False
     )
+
+
+def _password(doctype: str, field: str) -> str:
+    from frappe.utils.password import get_decrypted_password
+
+    try:
+        return (
+            get_decrypted_password(doctype, doctype, field, raise_exception=False) or ""
+        )
+    except Exception:
+        return ""
+
+
+def base_url(settings=None) -> str:
+    settings = settings or frappe.get_cached_doc(SETTINGS)
+    return (settings.get("gateway_url") or "").strip().rstrip("/")
+
+
+def call_key() -> str:
+    """TBO Support's own gateway key, for its calls."""
+    return _password(SETTINGS, "gateway_key")
+
+
+def admin_key() -> str:
+    """The key that may write providers and models: TBO Support's own, else the one TBO Desktop
+    Settings holds on the same site."""
+    key = _password(SETTINGS, "gateway_admin_key")
+    if key or not frappe.db.exists("DocType", DESKTOP_SETTINGS):
+        return key
+    return _password(DESKTOP_SETTINGS, "gateway_admin_key")
+
+
+def for_all(settings=None) -> bool:
+    """Every TBO Support call goes through the gateway (Phase 37)."""
+    settings = settings or frappe.get_cached_doc(SETTINGS)
+    return bool(settings.get("gateway_for_all") and base_url(settings) and call_key())
+
+
+def alive(fresh: bool = False) -> bool:
+    """Whether the gateway answers its health check; asked again at most once a minute."""
+    if not fresh:
+        cached = frappe.cache.get_value(ALIVE_KEY)
+        if cached is not None:
+            return bool(cint(cached))
+    try:
+        ok = requests.get(base_url() + ALIVE_PATH, timeout=5).ok
+    except requests.RequestException:
+        ok = False
+    frappe.cache.set_value(ALIVE_KEY, 1 if ok else 0, expires_in_sec=ALIVE_SECONDS)
+    return ok
+
+
+KEY_WORKS_KEY = "ai_gateway:key_works"
+
+
+def key_works() -> bool:
+    """Whether the gateway takes TBO Support's own key (its model list answers); asked again
+    at most once a minute."""
+    cached = frappe.cache.get_value(KEY_WORKS_KEY)
+    if cached is not None:
+        return bool(cint(cached))
+    try:
+        ok = requests.get(
+            base_url() + "/v1/models",
+            headers={"Authorization": f"Bearer {call_key()}"},
+            timeout=10,
+        ).ok
+    except requests.RequestException:
+        ok = False
+    frappe.cache.set_value(KEY_WORKS_KEY, 1 if ok else 0, expires_in_sec=ALIVE_SECONDS)
+    return ok
+
+
+def mark_down() -> None:
+    """The gateway can't be used: remember since when, and tell the managers once in 6 hours."""
+    since = frappe.cache.get_value(DOWN_KEY)
+    if not since:
+        since = str(now_datetime())[:16]
+        frappe.cache.set_value(DOWN_KEY, since)
+    if frappe.cache.get_value(DOWN_ALERT_KEY, expires=True):
+        return
+    frappe.cache.set_value(DOWN_ALERT_KEY, 1, expires_in_sec=DOWN_ALERT_SECONDS)
+    _alert(
+        _(
+            "The TBO AI gateway is not answering since {0}. TBO Support answers with its emergency key; the Copilot worker and the desktop app wait until the gateway answers."
+        ).format(since)
+    )
+
+
+def _admin(
+    method: str, path: str, payload: dict | None = None, missing_ok=False
+) -> dict:
+    """One admin call. A key or a provider's answer never reaches an error message."""
+    key = admin_key()
+    if not key:
+        raise GatewayError(_("No gateway admin key is set."))
+    try:
+        response = requests.request(
+            method,
+            base_url() + path,
+            json=payload,
+            headers={"Authorization": f"Bearer {key}"},
+            timeout=TIMEOUT,
+        )
+    except requests.RequestException as e:
+        raise GatewayError(type(e).__name__) from None
+    if missing_ok and response.status_code in (400, 404):
+        return {}
+    if response.status_code in (401, 403):
+        raise GatewayError(_("the gateway refused the admin key"))
+    if not response.ok:
+        raise GatewayError(f"HTTP {response.status_code}")
+    try:
+        return response.json()
+    except ValueError:
+        return {}
+
+
+def save_credential(name: str, values: dict) -> None:
+    """A provider's key (and address) as a gateway credential its models refer to."""
+    _admin("DELETE", f"/credentials/{name}", missing_ok=True)
+    _admin(
+        "POST",
+        "/credentials",
+        {
+            "credential_name": name,
+            "credential_values": values,
+            "credential_info": {"written_by": "TBO Support"},
+        },
+    )
+
+
+def delete_credential(name: str) -> None:
+    _admin("DELETE", f"/credentials/{name}", missing_ok=True)
+
+
+def model_id(name: str) -> str:
+    return MODEL_ID_PREFIX + name
+
+
+def save_model(name: str, params: dict) -> None:
+    """A model the gateway serves under `name`; written again from scratch each time."""
+    delete_model(name)
+    _admin(
+        "POST",
+        "/model/new",
+        {
+            "model_name": name,
+            "litellm_params": params,
+            "model_info": {"id": model_id(name), "written_by": "TBO Support"},
+        },
+    )
+
+
+def delete_model(name: str) -> None:
+    _admin("POST", "/model/delete", {"id": model_id(name)}, missing_ok=True)
+
+
+def watch() -> str:
+    """Every 5 minutes while every call goes through the gateway: tells the managers when it
+    stops answering (once in 6 hours) and when it answers again. Never raises."""
+    try:
+        if not for_all():
+            return ""
+        if alive(fresh=True):
+            since = frappe.cache.get_value(DOWN_KEY)
+            if not since:
+                return "up"
+            frappe.cache.delete_value([DOWN_KEY, DOWN_ALERT_KEY])
+            _alert(
+                _(
+                    "The TBO AI gateway answers again (it did not since {0}). TBO Support's calls go through it again."
+                ).format(since)
+            )
+            return "back"
+        mark_down()
+        return "down"
+    except Exception:
+        with contextlib.suppress(Exception):
+            frappe.log_error(title="TBO AI gateway not checked")
+        return ""
+
+
+def _alert(subject: str) -> None:
+    from helpdesk.ai_engine import send_provider_alert
+
+    send_provider_alert(subject)
 
 
 def fetch_day(url: str, key: str, day) -> list[dict]:
@@ -121,6 +325,18 @@ def _duration_ms(row: dict) -> int | None:
         return None
 
 
+def _key_alias(row: dict) -> str:
+    """The alias of the gateway key that made the call, when the log says it."""
+    metadata = row.get("metadata")
+    if isinstance(metadata, str):
+        try:
+            metadata = json.loads(metadata)
+        except ValueError:
+            metadata = {}
+    alias = (metadata or {}).get("user_api_key_alias") or row.get("key_alias") or ""
+    return str(alias).strip()
+
+
 def real_model(row: dict) -> str:
     """The model behind the gateway's name, without the provider's prefix:
     `openai/gpt-5.6-luna` is gpt-5.6-luna, `bedrock/converse/deepseek.v3.2` is deepseek.v3.2."""
@@ -134,6 +350,9 @@ def totals(rows: list[dict]) -> dict[tuple, dict]:
     the real model, so its calls add up with TBO Support's own calls to the same model."""
     out: dict[tuple, dict] = {}
     for row in rows:
+        key_alias = _key_alias(row)
+        if key_alias and not key_alias.startswith(DESKTOP_ALIAS):
+            continue
         alias = str(row.get("model_group") or "").strip()
         model = real_model(row) or alias
         if not model:
@@ -256,10 +475,17 @@ def day_rows(days: int, model: str | None = None) -> list:
 
 def status() -> dict:
     settings = frappe.get_cached_doc(SETTINGS)
+    everything = bool(settings.get("gateway_for_all"))
     return {
         "on": bool(settings.get("gateway_sync")),
         "url": settings.get("gateway_url") or "",
         "key_set": bool(_key()),
         "synced_at": str(settings.get("gateway_synced_at") or "")[:16],
         "note": settings.get("gateway_sync_note") or "",
+        "for_all": everything,
+        "call_key_set": bool(call_key()),
+        "admin_key_set": bool(_password(SETTINGS, "gateway_admin_key")),
+        "admin_key_from_desktop": not _password(SETTINGS, "gateway_admin_key")
+        and bool(admin_key()),
+        "down_since": (frappe.cache.get_value(DOWN_KEY) or "") if everything else "",
     }

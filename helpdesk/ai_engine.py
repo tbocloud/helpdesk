@@ -495,12 +495,23 @@ def job_chain(job: str | None = None, settings=None) -> list[AIProvider]:
     settings = settings or get_hub_settings()
     if job in COMING_JOBS:
         return []
+    from helpdesk import ai_gateway
+
+    if ai_gateway.for_all(settings):
+        return [gateway_provider(m, settings) for m in chain_models(job, settings)]
     row = job_row(job, settings)
     if row and row.get("model"):
         chosen = (row.model, row.get("backup_model"))
         return [p for p in (model_provider(m, settings) for m in chosen if m) if p]
     if job in OWN_MODEL_JOBS:
         return []
+    return section_chain(job, settings)
+
+
+def section_chain(job: str | None, settings=None) -> list[AIProvider]:
+    """The sections in the job's order, each with the job's model for it; sections without a
+    key are left out. Also the emergency path when the gateway can't be used (Phase 37)."""
+    settings = settings or get_hub_settings()
     providers = configured_providers(settings)
     models = job_models(job, settings)
     return [
@@ -510,6 +521,55 @@ def job_chain(job: str | None = None, settings=None) -> list[AIProvider]:
         for slot in provider_order(settings, job)
         if providers[slot]
     ]
+
+
+def chain_models(job: str | None, settings=None) -> list[str]:
+    """The models a purpose tries, in order, by name: its own model and backup (allowed ones),
+    else its sections' models in its order (sections with a key)."""
+    settings = settings or get_hub_settings()
+    if job in COMING_JOBS:
+        return []
+    row = job_row(job, settings)
+    if row and row.get("model"):
+        return [
+            m
+            for m in (row.model, row.get("backup_model"))
+            if m and frappe.db.get_value(PRICING_DOCTYPE, m, "listed")
+        ]
+    if job in OWN_MODEL_JOBS:
+        return []
+    return list(dict.fromkeys(p.model for p in section_chain(job, settings)))
+
+
+def gateway_provider(model: str, settings=None) -> AIProvider:
+    """`model` as the TBO AI gateway serves it, with TBO Support's own gateway key. The gateway
+    speaks OpenAI's chat completions for every model and passes on the providers' errors."""
+    from helpdesk import ai_gateway
+
+    return AIProvider(
+        ai_gateway.SLOT,
+        "OpenAI Compatible",
+        ai_gateway.base_url(settings) + "/v1",
+        model,
+        ai_gateway.call_key(),
+        override=True,
+        budget_param="max_tokens",
+        json_mode=True,
+    )
+
+
+def gateway_unusable(error: "AIProviderError") -> bool:
+    """Whether a failed call through the gateway means the gateway itself can't be used: it
+    doesn't answer its health check, or it refused TBO Support's own key."""
+    from helpdesk import ai_gateway
+
+    if error.provider.slot != ai_gateway.SLOT:
+        return False
+    if error.kind in ("timeout", "server"):
+        return not ai_gateway.alive(fresh=True)
+    if error.kind == "auth":
+        return not ai_gateway.key_works()
+    return False
 
 
 def within_limits(chain: list[AIProvider]) -> list[AIProvider]:
@@ -568,7 +628,7 @@ def account_provider(account: str, model: str, settings=None) -> AIProvider | No
         ["name", "api_style", "base_url", "enabled", "json_mode"],
         as_dict=True,
     )
-    if not doc or not doc.enabled:
+    if not doc or not doc.enabled or doc.api_style == "AWS Bedrock":
         return None
     from frappe.utils.password import get_decrypted_password
 
@@ -1317,6 +1377,17 @@ def call_haiku(system_prompt, user_message, ticket_name=None, job=None, images=N
                 ).format(used_up)
             )
         frappe.throw(_("AI isn't set up. Add an API key in Settings → AI providers."))
+    from helpdesk import ai_gateway
+
+    if providers[0].slot == ai_gateway.SLOT and not ai_gateway.alive():
+        return _emergency(system_prompt, user_message, ticket_name, job, images)
+    return _answer(providers, system_prompt, user_message, ticket_name, job, images)
+
+
+def _answer(
+    providers, system_prompt, user_message, ticket_name, job, images, emergency=False
+):
+    """The first provider that answers, in order; each failure is recorded and alerted."""
     ready = [provider for provider in providers if not circuit_open(provider)]
     if not ready:
         frappe.cache.set_value(OUTAGE_KEY, 1, expires_in_sec=STATUS_SECONDS)
@@ -1338,6 +1409,8 @@ def call_haiku(system_prompt, user_message, ticket_name=None, job=None, images=N
             )
         except AIProviderError as e:
             error = e
+            if not emergency and gateway_unusable(e):
+                return _emergency(system_prompt, user_message, ticket_name, job, images)
             record_failure(e, ready[index + 1] if index + 1 < len(ready) else None)
             if not e.fails_over:
                 raise
@@ -1357,6 +1430,24 @@ def call_haiku(system_prompt, user_message, ticket_name=None, job=None, images=N
 
     frappe.cache.set_value(OUTAGE_KEY, 1, expires_in_sec=STATUS_SECONDS)
     raise error
+
+
+def _emergency(system_prompt, user_message, ticket_name, job, images):
+    """The gateway can't be used: TBO Support's sections answer with its own keys (the owner's
+    decision for Phase 37), and the managers are told once in 6 hours."""
+    from helpdesk import ai_gateway
+
+    ai_gateway.mark_down()
+    chain = within_limits(section_chain(job))
+    if not chain:
+        frappe.throw(
+            _(
+                "The TBO AI gateway is not answering, and no emergency key is set in Settings → AI providers."
+            )
+        )
+    return _answer(
+        chain, system_prompt, user_message, ticket_name, job, images, emergency=True
+    )
 
 
 def create_investigation_session(

@@ -1206,6 +1206,18 @@
                       </td>
                       <td class="px-3 py-2">
                         {{ m.provider }}
+                        <div
+                          v-if="settings.gateway.for_all && m.listed"
+                          :class="
+                            m.on_gateway ? 'text-ink-gray-5' : 'text-warning'
+                          "
+                        >
+                          {{
+                            m.on_gateway
+                              ? __("on the gateway")
+                              : __("not on the gateway yet")
+                          }}
+                        </div>
                         <div v-if="!m.provider_ready" class="text-warning">
                           {{ __("no key yet, or off") }}
                         </div>
@@ -1579,32 +1591,42 @@
           </div>
 
           <SectionCard
-            :title="__('AI gateway (desktop app)')"
+            :title="__('TBO AI gateway')"
             :description="
               __(
-                'The desktop app\'s AI goes through the TBO AI gateway. Every hour TBO Support reads its totals per day (calls, cost, errors, people) with a read-only key, so the desktop app\'s models show on these pages beside TBO Support\'s own. A message is never read.'
+                'TBO\'s own AI gateway on the Copilot worker\'s server. The desktop app\'s AI already goes through it. With every AI call through it, the providers\' keys live there; TBO Support keeps only its OpenAI key, for emergencies.'
               )
             "
           >
             <div class="flex flex-col gap-3 px-4 pb-4">
-              <p class="text-p-sm text-ink-gray-6">
+              <p
+                class="rounded-lg px-3 py-2 text-p-sm"
+                :class="
+                  settings.gateway.for_all && settings.gateway.down_since
+                    ? 'bg-warning-soft text-warning'
+                    : settings.gateway.for_all
+                    ? 'bg-success-soft text-success'
+                    : 'bg-surface-gray-1 text-ink-gray-7'
+                "
+              >
                 {{
-                  settings.gateway.on
-                    ? settings.gateway.synced_at
+                  settings.gateway.for_all
+                    ? settings.gateway.down_since
                       ? __(
-                          "Last read {0}. {1}",
-                          settings.gateway.synced_at,
-                          settings.gateway.note
+                          "The gateway is not answering since {0}: TBO Support answers with its emergency key, and the managers were told.",
+                          settings.gateway.down_since
                         )
-                      : settings.gateway.note || __("Not read yet.")
+                      : __(
+                          "Every AI call goes through the gateway. If it stops answering, TBO Support answers with its emergency key and the managers are told."
+                        )
                     : __(
-                        "Off: the desktop app's models are not shown. DevOps gives the gateway's address and a read-only key."
+                        "TBO Support and the Copilot worker call the providers straight. The desktop app already goes through the gateway."
                       )
                 }}
               </p>
               <form
                 v-if="settings.can_change"
-                class="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto_auto]"
+                class="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-3"
                 @submit.prevent="saveGateway"
               >
                 <FormControl
@@ -1614,9 +1636,38 @@
                   placeholder="https://"
                 />
                 <FormControl
+                  v-model="gw.callKey"
+                  type="password"
+                  :label="__('TBO Support\'s gateway key')"
+                  :placeholder="
+                    settings.gateway.call_key_set
+                      ? __('saved; type to replace')
+                      : __('from DevOps')
+                  "
+                  autocomplete="off"
+                />
+                <FormControl
+                  v-model="gw.adminKey"
+                  type="password"
+                  :label="__('Admin key (writes the models)')"
+                  :placeholder="
+                    settings.gateway.admin_key_set
+                      ? __('saved; type to replace')
+                      : settings.gateway.admin_key_from_desktop
+                      ? __('TBO Desktop Settings\' key is used')
+                      : ''
+                  "
+                  autocomplete="off"
+                />
+                <FormControl
+                  v-model="gw.forAll"
+                  type="checkbox"
+                  :label="__('Use the gateway for every AI call')"
+                />
+                <FormControl
                   v-model="gw.key"
                   type="password"
-                  :label="__('Read-only key')"
+                  :label="__('Read-only key (the desktop app\'s usage)')"
                   :placeholder="
                     settings.gateway.key_set ? __('saved; type to replace') : ''
                   "
@@ -1625,16 +1676,32 @@
                 <FormControl
                   v-model="gw.on"
                   type="checkbox"
-                  :label="__('Read it')"
+                  :label="__('Read the desktop app\'s usage every hour')"
                 />
-                <Button type="submit" :label="__('Save')" :loading="gwBusy" />
-                <Button
-                  :label="__('Read now')"
-                  :loading="gwBusy"
-                  :disabled="!settings.gateway.on"
-                  @click="readGateway"
-                />
+                <div class="flex flex-wrap gap-2 sm:col-span-2 lg:col-span-3">
+                  <Button
+                    type="submit"
+                    variant="solid"
+                    :label="__('Save')"
+                    :loading="gwBusy"
+                  />
+                  <Button
+                    :label="__('Write all to the gateway')"
+                    :loading="gwBusy"
+                    :disabled="!settings.gateway.url"
+                    @click="writeAll"
+                  />
+                  <Button
+                    :label="__('Read usage now')"
+                    :loading="gwBusy"
+                    :disabled="!settings.gateway.on"
+                    @click="readGateway"
+                  />
+                </div>
               </form>
+              <p v-if="usageLine" class="text-p-xs text-ink-gray-5">
+                {{ usageLine }}
+              </p>
             </div>
           </SectionCard>
 
@@ -1734,6 +1801,18 @@
             :options="STYLE_OPTIONS"
           />
           <FormControl
+            v-if="prov.style === 'AWS Bedrock'"
+            v-model="prov.region"
+            type="text"
+            :label="__('AWS region')"
+            :description="
+              __(
+                'Reached through the TBO AI gateway only; its AWS role signs the calls, so there is no key.'
+              )
+            "
+          />
+          <FormControl
+            v-if="prov.style !== 'AWS Bedrock'"
             v-model="prov.url"
             type="text"
             :label="__('Address')"
@@ -1744,10 +1823,16 @@
             "
           />
           <FormControl
+            v-if="prov.style !== 'AWS Bedrock'"
             v-model="prov.key"
             type="password"
             :label="__('API key')"
             :placeholder="prov.keySet ? __('saved; type to replace') : ''"
+            :description="
+              settings && settings.gateway.for_all && !prov.section
+                ? __('Written to the gateway; TBO Support does not keep it.')
+                : ''
+            "
             autocomplete="off"
           />
           <FormControl
@@ -1910,6 +1995,7 @@ const STYLE_OPTIONS = [
   "OpenAI-compatible",
   "Anthropic",
   "Anthropic-compatible",
+  "AWS Bedrock",
 ].map((style) => ({ label: style, value: style }));
 // the changes that can give a Copilot job another first model
 const MODEL_FIELDS = [
@@ -2064,7 +2150,9 @@ type Provider = {
   section: boolean;
   style: string;
   url: string;
+  region?: string;
   key_set: boolean;
+  key_on_gateway?: boolean;
   enabled: boolean;
   ready: boolean;
   json_mode: boolean;
@@ -2085,9 +2173,16 @@ type CatalogModel = {
   benchmark: Score | null;
   used_for: UsedFor;
   used_by: UsedBy[];
+  on_gateway: boolean;
   in_use: boolean;
 };
-type Preset = { name: string; style: string; url: string; note: string };
+type Preset = {
+  name: string;
+  style: string;
+  url: string;
+  note: string;
+  region?: string;
+};
 type Guard = {
   job: string;
   model: string;
@@ -2104,6 +2199,11 @@ type Settings = {
     key_set: boolean;
     synced_at: string;
     note: string;
+    for_all: boolean;
+    call_key_set: boolean;
+    admin_key_set: boolean;
+    admin_key_from_desktop: boolean;
+    down_since: string;
   };
   jobs: JobRow[];
   sections: Step[];
@@ -2599,8 +2699,10 @@ function askTwice(name: string) {
   return false;
 }
 function keyLabel(p: Provider) {
+  if (p.style === "AWS Bedrock") return __("the gateway's AWS role");
   if (!p.key_set) return __("none yet");
-  return p.enabled ? __("saved") : __("saved, off");
+  const where = p.key_on_gateway ? __("on the gateway") : __("saved");
+  return p.enabled ? where : __("{0}, off", where);
 }
 
 const provOpen = ref(false);
@@ -2623,6 +2725,7 @@ const prov = reactive({
   jsonMode: true,
   enabled: true,
   note: "",
+  region: "ap-south-1",
 });
 const presetOptions = computed(() => [
   ...(settings.value?.presets || []).map((p) => ({
@@ -2639,6 +2742,7 @@ function usePreset(name: string) {
     style: preset ? preset.style : "OpenAI-compatible",
     url: preset ? preset.url : "",
     note: preset ? preset.note : "",
+    region: preset?.region || "ap-south-1",
   });
 }
 function openProvider(p?: Provider) {
@@ -2660,6 +2764,7 @@ function openProvider(p?: Provider) {
       style: p.style,
       url: p.url,
       note: p.note,
+      region: p.region || "ap-south-1",
     });
   else usePreset(settings.value?.presets[0]?.name || "");
   provOpen.value = true;
@@ -2677,7 +2782,8 @@ async function saveProvider() {
     : {
         name: prov.name.trim(),
         style: prov.style,
-        url: prov.url,
+        url: prov.style === "AWS Bedrock" ? "" : prov.url,
+        region: prov.region,
         enabled: prov.enabled ? 1 : 0,
         json_mode: prov.jsonMode ? 1 : 0,
         note: prov.note,
@@ -2926,12 +3032,27 @@ async function saveAlerts() {
 
 // --- the AI gateway ---------------------------------------------------------------------------
 
-const gw = reactive({ url: "", key: "", on: false });
+const gw = reactive({
+  url: "",
+  key: "",
+  on: false,
+  callKey: "",
+  adminKey: "",
+  forAll: false,
+});
 const gwBusy = ref(false);
 watch(
   () => settings.value?.gateway,
   (g) => {
-    if (g) Object.assign(gw, { url: g.url, key: "", on: g.on });
+    if (g)
+      Object.assign(gw, {
+        url: g.url,
+        key: "",
+        on: g.on,
+        callKey: "",
+        adminKey: "",
+        forAll: g.for_all,
+      });
   }
 );
 async function gatewayCall(
@@ -2958,8 +3079,14 @@ async function gatewayCall(
   }
 }
 function saveGateway() {
-  const values: Record<string, unknown> = { url: gw.url, on: gw.on ? 1 : 0 };
+  const values: Record<string, unknown> = {
+    url: gw.url,
+    on: gw.on ? 1 : 0,
+    for_all: gw.forAll ? 1 : 0,
+  };
   if (gw.key) values.key = gw.key;
+  if (gw.callKey) values.call_key = gw.callKey;
+  if (gw.adminKey) values.admin_key = gw.adminKey;
   gatewayCall(
     "save_gateway",
     { values: JSON.stringify(values) },
@@ -2968,5 +3095,35 @@ function saveGateway() {
 }
 function readGateway() {
   gatewayCall("sync_gateway", {}, __("Read."));
+}
+// when the desktop app's usage was last read from the gateway
+const usageLine = computed(() => {
+  const g = settings.value?.gateway;
+  if (!g || !g.on) return "";
+  return g.synced_at
+    ? __("Usage last read {0}. {1}", g.synced_at, g.note)
+    : g.note || __("Usage not read yet.");
+});
+async function writeAll() {
+  gwBusy.value = true;
+  notice.value = null;
+  try {
+    const r = (await call(`${API}.write_all_to_gateway`)) as Settings & {
+      written: { keys: number; models: number };
+    };
+    notice.value = {
+      ok: true,
+      text: __(
+        "Written to the gateway: {0} keys and {1} models.",
+        String(r.written.keys),
+        String(r.written.models)
+      ),
+    };
+  } catch (err) {
+    notice.value = { ok: false, text: errorText(err, __("Not written")) };
+  } finally {
+    gwBusy.value = false;
+    load();
+  }
 }
 </script>

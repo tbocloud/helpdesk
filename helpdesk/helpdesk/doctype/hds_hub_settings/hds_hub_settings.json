@@ -62,6 +62,9 @@
 		"gateway_viewer_key",
 		"gateway_synced_at",
 		"gateway_sync_note",
+		"gateway_for_all",
+		"gateway_key",
+		"gateway_admin_key",
 		"model_alerts_section",
 		"model_alert_error_rate",
 		"model_alert_fallback_rate"
@@ -74,7 +77,7 @@
 		},
 		{
 			"default": "OpenAI",
-			"description": "Tried first for triage, drafts and summaries. Edited in the helpdesk app: Settings \u2192 AI providers.",
+			"description": "Tried first for triage, drafts and summaries. Edited in the helpdesk app: Settings → AI providers.",
 			"fieldname": "primary_ai_provider",
 			"fieldtype": "Select",
 			"label": "Primary AI Provider",
@@ -98,7 +101,7 @@
 			"label": "Anthropic-compatible API",
 			"options": "Anthropic\nAnthropic Compatible\nOpenAI Compatible",
 			"default": "Anthropic",
-			"description": "Anthropic: api.anthropic.com. Anthropic Compatible: Kimi/Moonshot, GLM/Zhipu \u2014 same API shape, set Base URL. OpenAI Compatible (older setting): Poolside, Qwen \u2014 use the OpenAI provider for these now."
+			"description": "Anthropic: api.anthropic.com. Anthropic Compatible: Kimi/Moonshot, GLM/Zhipu — same API shape, set Base URL. OpenAI Compatible (older setting): Poolside, Qwen — use the OpenAI provider for these now."
 		},
 		{
 			"fieldname": "ai_base_url",
@@ -112,7 +115,7 @@
 			"fieldtype": "Select",
 			"label": "Investigation Provider",
 			"options": "\nAnthropic\nAnthropic Compatible",
-			"description": "Optional override: run investigation sessions on a different provider than triage (e.g. cheap OpenAI-compatible triage + Anthropic investigation). Blank = same as Provider above. OpenAI-Compatible is not offered here \u2014 sessions need Anthropic tool-use."
+			"description": "Optional override: run investigation sessions on a different provider than triage (e.g. cheap OpenAI-compatible triage + Anthropic investigation). Blank = same as Provider above. OpenAI-Compatible is not offered here — sessions need Anthropic tool-use."
 		},
 		{
 			"fieldname": "investigation_base_url",
@@ -131,7 +134,7 @@
 			"fieldname": "anthropic_api_key",
 			"fieldtype": "Password",
 			"label": "AI API Key",
-			"description": "Key for the Anthropic-compatible provider. Stored only on the Hub \u2014 customer sites never hold an AI credential."
+			"description": "Key for the Anthropic-compatible provider. Stored only on the Hub — customer sites never hold an AI credential."
 		},
 		{
 			"fieldname": "column_break_api",
@@ -416,6 +419,27 @@
 			"fieldtype": "Small Text",
 			"label": "Last Read: Note",
 			"read_only": 1
+		},
+		{
+			"default": "0",
+			"fieldname": "gateway_for_all",
+			"fieldtype": "Check",
+			"label": "Use the gateway for every AI call",
+			"description": "TBO Support's AI calls go through the TBO AI gateway (Phase 37). The OpenAI section's key stays here for emergencies only: it answers when the gateway doesn't, and the managers are told."
+		},
+		{
+			"fieldname": "gateway_key",
+			"fieldtype": "Password",
+			"label": "TBO Support's gateway key",
+			"length": 1000,
+			"description": "The gateway key TBO Support's own calls use (from DevOps)."
+		},
+		{
+			"fieldname": "gateway_admin_key",
+			"fieldtype": "Password",
+			"label": "Gateway admin key",
+			"length": 1000,
+			"description": "Lets TBO Support write the providers and models into the gateway. Empty: TBO Desktop Settings' admin key is used when that app is installed."
 		},
 		{
 			"fieldname": "model_alerts_section",

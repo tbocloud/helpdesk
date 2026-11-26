@@ -95,6 +95,9 @@ scheduler_events = {
             "helpdesk.integrations.meta.publisher.publish_due",
             "helpdesk.helpdesk.doctype.hd_meeting.hd_meeting.send_reminders",
             "helpdesk.copilot.runs.expire_stale_leases",
+            # the TBO AI gateway while every AI call goes through it (Phase 37): the managers are
+            # told when it stops answering and when it answers again
+            "helpdesk.ai_gateway.watch",
         ],
         # every 10 minutes: new hub errors to the team's chat channel
         "*/10 * * * *": [

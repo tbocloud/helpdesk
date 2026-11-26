@@ -135,7 +135,11 @@ def job_plan(settings=None) -> list[dict]:
                 {
                     "section": model_section(model),
                     "model": model,
-                    "ready": bool(ai_engine.model_provider(model, settings)),
+                    "ready": bool(
+                        frappe.db.get_value(PRICING, model, "on_gateway")
+                        if ai_gateway.for_all(settings)
+                        else ai_engine.model_provider(model, settings)
+                    ),
                 }
                 for model in (own, row.get("backup_model"))
                 if model
@@ -686,14 +690,23 @@ PRICING = "HDS Model Pricing"
 PROVIDER = "HDS AI Provider"
 # a wrong model here changes what Copilot tells a customer or writes as a fix
 GUARDED_JOBS = ai_engine.WORKER_JOBS
-STYLES = tuple(ai_engine.STYLE_KINDS)
+STYLES = (*ai_engine.STYLE_KINDS, "AWS Bedrock")
+BEDROCK = "AWS Bedrock"
+# how the gateway names a provider's models (LiteLLM's prefixes)
+LITELLM_PREFIX = {
+    "OpenAI": "openai",
+    "OpenAI-compatible": "openai",
+    "Anthropic": "anthropic",
+    "Anthropic-compatible": "anthropic",
+}
 # what "Add a provider" fills in; the Copilot worker knows the same names (tbo-worker config.ts)
 PRESETS = (
     {
-        "name": "TBO AI gateway",
-        "style": "OpenAI-compatible",
+        "name": "AWS Bedrock",
+        "style": "AWS Bedrock",
         "url": "",
-        "note": "TBO's own gateway: DeepSeek on AWS Bedrock in TBO's AWS account, so the data stays there. Its address and a key come from DevOps.",
+        "region": "ap-south-1",
+        "note": "Amazon's AI service in TBO's own AWS account (Mumbai): DeepSeek and others, with the data kept in that account. Through the TBO AI gateway only: its AWS role signs the calls, so there is no key.",
     },
     {
         "name": "DeepSeek",
@@ -717,6 +730,7 @@ PRESETS = (
 )
 # HDS Model Pricing's older `provider` field (cost reports), from the account's API style
 PRICING_PROVIDER = {
+    "AWS Bedrock": "OpenAI",
     "OpenAI": "OpenAI",
     "OpenAI-compatible": "OpenAI",
     "Anthropic": "Anthropic",
@@ -798,23 +812,40 @@ def provider_list(settings=None) -> list[dict]:
                 "note": "",
             }
         )
+    through_gateway = ai_gateway.for_all(settings)
     for doc in frappe.get_all(
         PROVIDER,
-        fields=["name", "api_style", "base_url", "enabled", "json_mode", "notes"],
+        fields=[
+            "name",
+            "api_style",
+            "base_url",
+            "enabled",
+            "json_mode",
+            "notes",
+            "region",
+            "key_on_gateway",
+        ],
         order_by="creation asc",
     ):
-        key_set = bool(
+        local_key = bool(
             get_decrypted_password(PROVIDER, doc.name, "api_key", raise_exception=False)
         )
+        bedrock = doc.api_style == BEDROCK
+        if through_gateway:
+            ready = bool(doc.enabled and (doc.key_on_gateway or bedrock))
+        else:
+            ready = bool(doc.enabled and local_key and not bedrock)
         out.append(
             {
                 "name": doc.name,
                 "section": False,
                 "style": doc.api_style,
                 "url": doc.base_url or "",
-                "key_set": key_set,
+                "region": doc.region or "",
+                "key_set": local_key or bool(doc.key_on_gateway),
+                "key_on_gateway": bool(doc.key_on_gateway),
                 "enabled": bool(doc.enabled),
-                "ready": bool(doc.enabled and key_set),
+                "ready": ready,
                 "json_mode": bool(doc.json_mode),
                 "default_model": "",
                 "models": listed.count(doc.name),
@@ -843,6 +874,7 @@ def catalog(plan: list[dict] | None = None) -> list[dict]:
             "monthly_token_limit",
             "input_cost_per_1m",
             "output_cost_per_1m",
+            "on_gateway",
         ],
         order_by="listed desc, ai_provider asc, name asc",
     )
@@ -863,6 +895,7 @@ def catalog(plan: list[dict] | None = None) -> list[dict]:
                 "benchmark": scores.get(row.name),
                 "used_for": jobs,
                 "used_by": used_by.get(row.name, []),
+                "on_gateway": bool(row.on_gateway),
                 "in_use": bool(jobs["primary"] or jobs["fallback"]),
             }
         )
@@ -898,16 +931,117 @@ def save_provider(values: dict) -> dict:
     doc = frappe.get_doc(PROVIDER, name) if exists else frappe.new_doc(PROVIDER)
     if not exists:
         doc.provider_name = name
+    moved = exists and (doc.base_url or "") != url
     doc.api_style = style
-    doc.base_url = url
+    doc.base_url = "" if style == BEDROCK else url
+    doc.region = (
+        str(values.get("region") or doc.get("region") or "ap-south-1").strip()
+        if style == BEDROCK
+        else ""
+    )
     doc.enabled = 1 if sbool(values.get("enabled", True)) else 0
     doc.json_mode = 1 if sbool(values.get("json_mode", True)) else 0
     if "note" in values:
         doc.notes = str(values.get("note") or "").strip()[:500]
-    if key:
+    # through the gateway a key lives only there (the owner's decision for Phase 37)
+    to_gateway = ai_gateway.for_all() and style != BEDROCK
+    if to_gateway and not key and doc.key_on_gateway and moved:
+        frappe.throw(_("Enter the key again: the gateway keeps it with the address."))
+    if key and not to_gateway:
         doc.api_key = key
+        doc.key_on_gateway = 0
     doc.save(ignore_permissions=True)
+    if key and to_gateway:
+        _key_to_gateway(doc.name, key, doc.base_url)
     return job_settings()
+
+
+def _credential_values(key: str, url: str) -> dict:
+    return {"api_key": key, **({"api_base": url} if url else {})}
+
+
+def _key_to_gateway(account: str, key: str, url: str) -> None:
+    """Writes an account's key to the gateway as a credential, and forgets it here."""
+    from frappe.utils.password import remove_encrypted_password
+
+    try:
+        ai_gateway.save_credential(account, _credential_values(key, url))
+    except ai_gateway.GatewayError as e:
+        frappe.throw(_("The gateway did not take the key: {0}").format(str(e)))
+    remove_encrypted_password(PROVIDER, account, "api_key")
+    frappe.db.set_value(PROVIDER, account, "key_on_gateway", 1, update_modified=False)
+
+
+def gateway_params(model: str, account: str) -> dict:
+    """How the gateway calls `model` of `account`: today's OpenAI section with the gateway's own
+    OpenAI key, Bedrock with the gateway's AWS role, any other through its gateway credential."""
+    if account == ai_engine.OPENAI_SLOT:
+        return {"model": f"openai/{model}", "api_key": "os.environ/OPENAI_API_KEY"}
+    if account == ai_engine.ANTHROPIC_SLOT:
+        return {"model": f"anthropic/{model}", "litellm_credential_name": account}
+    style, region = frappe.db.get_value(PROVIDER, account, ["api_style", "region"]) or (
+        "",
+        "",
+    )
+    if style == BEDROCK:
+        return {
+            "model": f"bedrock/converse/{model}",
+            "aws_region_name": region or "ap-south-1",
+        }
+    prefix = LITELLM_PREFIX.get(style, "openai")
+    return {"model": f"{prefix}/{model}", "litellm_credential_name": account}
+
+
+def _section_credential() -> None:
+    """Today's Anthropic-compatible section as a gateway credential, when it has a key."""
+    settings = ai_engine.get_hub_settings()
+    key = settings.get_password("anthropic_api_key", raise_exception=False)
+    if key:
+        ai_gateway.save_credential(
+            ai_engine.ANTHROPIC_SLOT,
+            _credential_values(key, (settings.get("ai_base_url") or "").strip()),
+        )
+
+
+def _write_model(name: str) -> None:
+    """One model of the list into the gateway, or out of it when it is no longer allowed."""
+    row = frappe.db.get_value(PRICING, name, ["listed", "ai_provider"], as_dict=True)
+    try:
+        if row and row.listed and row.ai_provider:
+            if row.ai_provider == ai_engine.ANTHROPIC_SLOT:
+                _section_credential()
+            ai_gateway.save_model(name, gateway_params(name, row.ai_provider))
+            on = 1
+        else:
+            ai_gateway.delete_model(name)
+            on = 0
+    except ai_gateway.GatewayError as e:
+        frappe.throw(_("The gateway did not take {0}: {1}").format(name, str(e)))
+    if row:
+        frappe.db.set_value(PRICING, name, "on_gateway", on, update_modified=False)
+
+
+def write_all() -> dict:
+    """Everything into the gateway: the accounts' keys (then forgotten here), and every allowed
+    model; a model no longer allowed leaves it."""
+    _only_system_managers(_("Only System Managers set up the AI gateway."))
+    if not (ai_gateway.base_url() and ai_gateway.admin_key()):
+        frappe.throw(_("Set the gateway's address and its admin key first."))
+    keys = 0
+    for account in frappe.get_all(PROVIDER, fields=["name", "api_style", "base_url"]):
+        key = get_decrypted_password(
+            PROVIDER, account.name, "api_key", raise_exception=False
+        )
+        if key and account.api_style != BEDROCK:
+            _key_to_gateway(account.name, key, account.base_url or "")
+            keys += 1
+    models = 0
+    for name in frappe.get_all(
+        PRICING, filters={"ai_provider": ["is", "set"]}, pluck="name"
+    ):
+        _write_model(name)
+        models += 1
+    return {**job_settings(), "written": {"keys": keys, "models": models}}
 
 
 def remove_provider(name: str) -> dict:
@@ -922,9 +1056,19 @@ def remove_provider(name: str) -> dict:
         in_use = ai_engine.in_use_message(model)
         if in_use:
             frappe.throw(in_use)
+    if ai_gateway.for_all():
+        try:
+            for model in models:
+                ai_gateway.delete_model(model)
+            ai_gateway.delete_credential(name)
+        except ai_gateway.GatewayError as e:
+            frappe.throw(_("The gateway did not let go of it: {0}").format(str(e)))
     for model in models:
         frappe.db.set_value(
-            PRICING, model, {"listed": 0, "ai_provider": ""}, update_modified=False
+            PRICING,
+            model,
+            {"listed": 0, "ai_provider": "", "on_gateway": 0},
+            update_modified=False,
         )
     frappe.delete_doc(PROVIDER, name, ignore_permissions=True)
     return job_settings()
@@ -955,7 +1099,11 @@ def test_provider(name: str, model: str | None = None) -> dict:
             "ok": False,
             "message": _("Add a model for {0} first, then test it.").format(name),
         }
-    provider = ai_engine.account_provider(name, model)
+    provider = (
+        ai_engine.gateway_provider(model)
+        if ai_gateway.for_all()
+        else ai_engine.account_provider(name, model)
+    )
     if not provider:
         return {
             "ok": False,
@@ -1028,6 +1176,8 @@ def save_model(values: dict) -> dict:
     if "listed" in values:
         doc.listed = 1 if sbool(values.get("listed")) else 0
     doc.save(ignore_permissions=True)
+    if ai_gateway.for_all():
+        _write_model(doc.name)
     return job_settings()
 
 
@@ -1040,12 +1190,22 @@ def remove_model(model: str) -> dict:
     in_use = ai_engine.in_use_message(model)
     if in_use:
         frappe.throw(in_use)
+    if ai_gateway.for_all():
+        try:
+            ai_gateway.delete_model(model)
+        except ai_gateway.GatewayError as e:
+            frappe.throw(
+                _("The gateway did not let go of {0}: {1}").format(model, str(e))
+            )
     known = frappe.db.exists(LOG, {"model": model}) or frappe.db.exists(
         EVAL_RUN, {"model": model}
     )
     if known:
         frappe.db.set_value(
-            PRICING, model, {"listed": 0, "ai_provider": ""}, update_modified=False
+            PRICING,
+            model,
+            {"listed": 0, "ai_provider": "", "on_gateway": 0},
+            update_modified=False,
         )
     else:
         frappe.delete_doc(PRICING, model, ignore_permissions=True)
@@ -1851,7 +2011,33 @@ def save_gateway(values: dict) -> dict:
         doc.gateway_sync = 1 if frappe.utils.sbool(values.get("on")) else 0
     if values.get("key") is not None:
         doc.gateway_viewer_key = str(values.get("key")).strip()
+    if values.get("call_key") is not None:
+        doc.gateway_key = str(values.get("call_key")).strip()
+    if values.get("admin_key") is not None:
+        doc.gateway_admin_key = str(values.get("admin_key")).strip()
+    turning_on = "for_all" in values and frappe.utils.sbool(values.get("for_all"))
+    if "for_all" in values:
+        doc.gateway_for_all = 1 if turning_on else 0
     doc.save(ignore_permissions=True)
+    if turning_on:
+        # every call goes through it only once it answers and takes TBO Support's key
+        frappe.cache.delete_value([ai_gateway.ALIVE_KEY, ai_gateway.KEY_WORKS_KEY])
+        problem = ""
+        if not ai_gateway.for_all():
+            problem = _(
+                "Give the gateway's address and TBO Support's gateway key first."
+            )
+        elif not ai_gateway.alive(fresh=True):
+            problem = _("The gateway does not answer at {0}.").format(
+                ai_gateway.base_url()
+            )
+        elif not ai_gateway.key_works():
+            problem = _("The gateway refused TBO Support's key.")
+        if problem:
+            frappe.throw(
+                problem + " " + _("Every call keeps going straight to the providers.")
+            )
+    ai_engine.reset_provider_state()
     return ai_gateway.status()
 
 

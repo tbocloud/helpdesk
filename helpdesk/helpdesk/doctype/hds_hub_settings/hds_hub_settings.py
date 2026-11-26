@@ -31,7 +31,11 @@ class HDSHubSettings(Document):
         so Settings → AI providers shows them under that field."""
         for fieldname in KEYED_URL_FIELDS:
             value = (self.get(fieldname) or "").strip().rstrip("/")
-            if value and not value.startswith("https://"):
+            # plain http only to this machine, for a local test gateway
+            local = fieldname == "gateway_url" and value.startswith(
+                ("http://localhost", "http://127.0.0.1")
+            )
+            if value and not value.startswith("https://") and not local:
                 frappe.throw(
                     _(
                         "{0}: use an https:// address, so the API key isn't sent in the clear."
