@@ -61,7 +61,10 @@
 		"gateway_url",
 		"gateway_viewer_key",
 		"gateway_synced_at",
-		"gateway_sync_note"
+		"gateway_sync_note",
+		"model_alerts_section",
+		"model_alert_error_rate",
+		"model_alert_fallback_rate"
 	],
 	"fields": [
 		{
@@ -413,11 +416,31 @@
 			"fieldtype": "Small Text",
 			"label": "Last Read: Note",
 			"read_only": 1
+		},
+		{
+			"fieldname": "model_alerts_section",
+			"fieldtype": "Section Break",
+			"label": "AI Model Alerts",
+			"description": "Managers are told when, within one hour, a model fails this often. 0 switches an alert off"
+		},
+		{
+			"fieldname": "model_alert_error_rate",
+			"fieldtype": "Int",
+			"label": "Error Rate (%)",
+			"default": "20",
+			"description": "Of at least 10 calls to one model in the hour"
+		},
+		{
+			"fieldname": "model_alert_fallback_rate",
+			"fieldtype": "Int",
+			"label": "Fallback Answered (%)",
+			"default": "30",
+			"description": "Of at least 10 calls in the hour, answered by a fallback model"
 		}
 	],
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-11-26 16:00:00.000000",
+	"modified": "2026-11-26 18:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Hub Settings",

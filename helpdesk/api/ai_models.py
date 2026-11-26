@@ -105,8 +105,52 @@ def import_eval(model: str, report: list | str, ran_on: str | None = None) -> di
             frappe.PermissionError,
         )
     report = frappe.parse_json(report)
-    ai_models.store_eval(model, report, source="Imported", ran_on=ran_on)
+    run = ai_models.store_eval(model, report, source="Imported", ran_on=ran_on)
+    ai_models.close_requests(model, run)
     return ai_models.benchmarks(model)
+
+
+@frappe.whitelist(methods=["POST"])
+def withdraw_eval_request(name: str) -> dict:
+    """Take back a request for a run nobody has done yet."""
+    check_manager()
+    return ai_models.withdraw_eval_request(name)
+
+
+@frappe.whitelist(methods=["POST"])
+def guard(job: str, values: dict | str) -> dict:
+    """Before saving a Copilot job's model: its test-set score beside the current model's."""
+    check_manager()
+    values = frappe.parse_json(values) or {}
+    if not isinstance(values, dict):
+        frappe.throw(_("values must be an object"))
+    return ai_models.guard(job, values)
+
+
+@frappe.whitelist(methods=["POST"])
+def add_model(values: dict | str) -> dict:
+    """A model to test before any job uses it."""
+    check_manager()
+    values = frappe.parse_json(values) or {}
+    if not isinstance(values, dict):
+        frappe.throw(_("values must be an object"))
+    return ai_models.add_model(values)
+
+
+@frappe.whitelist(methods=["POST"])
+def remove_candidate(model: str) -> dict:
+    check_manager()
+    return ai_models.remove_candidate(model)
+
+
+@frappe.whitelist(methods=["POST"])
+def save_alerts(values: dict | str) -> dict:
+    """The error-rate and fallback-rate limits that alert the managers."""
+    check_manager()
+    values = frappe.parse_json(values) or {}
+    if not isinstance(values, dict):
+        frappe.throw(_("values must be an object"))
+    return ai_models.save_alerts(values)
 
 
 @frappe.whitelist(methods=["POST"])

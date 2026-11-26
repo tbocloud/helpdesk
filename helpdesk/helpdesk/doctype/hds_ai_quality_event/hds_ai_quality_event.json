@@ -18,7 +18,7 @@
    "fieldname": "kind",
    "fieldtype": "Select",
    "label": "Kind",
-   "options": "Unsupported answer\nSafety cut\nBad answer format\nMissing reference\nHand-over\nAnswered",
+   "options": "Unsupported answer\nSafety cut\nBad answer format\nMissing reference\nHand-over\nAnswered\nDraft made\nDraft used\nDraft changed",
    "in_list_view": 1,
    "reqd": 1,
    "search_index": 1
@@ -67,7 +67,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-11-26 14:00:00.000000",
+ "modified": "2026-11-26 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "Helpdesk",
  "name": "HDS AI Quality Event",

@@ -280,6 +280,7 @@ def report_eval(
         frappe.db.set_value(
             ai_models.EVAL_REQUEST, request, {"status": "Done", "eval_run": name}
         )
+    ai_models.close_requests(str(model or "").strip(), name)
     return {"eval_run": name}
 
 

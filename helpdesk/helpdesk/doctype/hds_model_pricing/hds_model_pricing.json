@@ -21,7 +21,8 @@
 		"section_meta",
 		"pricing_source_url",
 		"last_synced_on",
-		"notes"
+		"notes",
+		"candidate"
 	],
 	"fields": [
 		{
@@ -120,11 +121,18 @@
 			"fieldname": "notes",
 			"fieldtype": "Small Text",
 			"label": "Notes"
+		},
+		{
+			"fieldname": "candidate",
+			"fieldtype": "Check",
+			"label": "Candidate",
+			"default": "0",
+			"description": "Being considered: shown on AI models, where it can be benchmarked, before any job uses it"
 		}
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-10-14 12:00:00.000000",
+	"modified": "2026-11-26 18:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Model Pricing",

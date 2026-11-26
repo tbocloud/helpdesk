@@ -9,10 +9,20 @@ Copilot worker's stages. Nothing here reads or returns a prompt or a customer's 
 """
 
 import contextlib
+import re
+import zlib
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, cint, getdate, nowdate
+from frappe.utils import (
+    add_days,
+    add_to_date,
+    cint,
+    flt,
+    getdate,
+    now_datetime,
+    nowdate,
+)
 
 from helpdesk import ai_engine, ai_gateway
 
@@ -158,11 +168,13 @@ def _used_for(plan: list[dict]) -> dict[str, dict]:
     return used
 
 
-def _status(model: str, figures: dict, paused: set[str]) -> str:
+def _status(
+    model: str, figures: dict, paused: set[str], candidate: bool = False
+) -> str:
     if model in paused:
         return "Paused"
     if not figures["calls"]:
-        return "Not used"
+        return "Candidate" if candidate else "Not used"
     if (
         figures["calls"] >= MIN_CALLS
         and (figures["error_rate"] or 0) >= DEGRADED_ERROR_RATE
@@ -197,7 +209,8 @@ def _hub_overview(days: int = 30) -> dict:
     for row in rows:
         by_model.setdefault(row.model or _("(no model)"), []).append(row)
     scores = latest_scores()
-    names = sorted(set(by_model) | set(used) | set(scores))
+    waiting = candidate_names() - set(used)
+    names = sorted(set(by_model) | set(used) | set(scores) | waiting)
     models = []
     for name in names:
         mine = by_model.get(name, [])
@@ -206,11 +219,12 @@ def _hub_overview(days: int = 30) -> dict:
             {
                 "model": name,
                 "provider": (mine[-1].provider if mine else "")
-                or _section_of(name, plan),
+                or _section_of(name, plan)
+                or (candidate_section(name) if name in waiting else ""),
                 "used_for": used.get(name, {"primary": [], "fallback": []}),
                 **figures,
                 "benchmark": scores.get(name),
-                "status": _status(name, figures, paused),
+                "status": _status(name, figures, paused, name in waiting),
             }
         )
     models.sort(key=lambda m: (-m["calls"], m["model"]))
@@ -329,12 +343,15 @@ def _hub_detail(model: str, days: int = 30) -> dict:
         )[:SLOWEST]
     ]
     used = _used_for(plan).get(model, {"primary": [], "fallback": []})
+    waiting = model in candidate_names() and not (used["primary"] or used["fallback"])
     return {
         "model": model,
         "days": days,
-        "provider": (rows[-1].provider if rows else "") or _section_of(model, plan),
+        "provider": (rows[-1].provider if rows else "")
+        or _section_of(model, plan)
+        or (candidate_section(model) if waiting else ""),
         "used_for": used,
-        "status": _status(model, figures, _paused_models(settings)),
+        "status": _status(model, figures, _paused_models(settings), waiting),
         **figures,
         "series": series,
         "by_job": grouped("job"),
@@ -359,9 +376,17 @@ def job_settings(days: int = 30) -> dict:
     by_job: dict[str, list] = {}
     for row in rows:
         by_job.setdefault(row.job or "", []).append(row)
+    scores = latest_scores()
     jobs = []
     for job in job_plan(settings):
-        jobs.append({**job, **_figures(by_job.get(job["job"], []))})
+        first = (job["primary"] or {}).get("model")
+        jobs.append(
+            {
+                **job,
+                **_figures(by_job.get(job["job"], [])),
+                "score": scores.get(first),
+            }
+        )
     return {
         "days": days,
         "jobs": jobs,
@@ -378,7 +403,10 @@ def job_settings(days: int = 30) -> dict:
             or ai_engine.ANTHROPIC_SLOT,
             "failover": bool(settings.get("ai_failover")),
         },
-        "models": sorted({r.model for r in rows if r.model}),
+        "models": sorted({r.model for r in rows if r.model} | candidate_names()),
+        "candidates": candidates(),
+        "alerts": alert_limits(settings),
+        "guarded_jobs": list(GUARDED_JOBS),
         "can_change": can_change(),
         "gateway": ai_gateway.status(),
         "changes": frappe.get_all(
@@ -412,13 +440,7 @@ SETTING_LABELS = {
 }
 
 
-def save_job(job: str, values: dict) -> dict:
-    """One job's first section, fallback and models; each change is written to the history."""
-    if not can_change():
-        frappe.throw(
-            _("Only System Managers change which model a job uses."),
-            frappe.PermissionError,
-        )
+def _clean_job(job: str, values: dict) -> dict:
     if job not in ai_engine.JOBS:
         frappe.throw(_("Unknown AI job {0}").format(job))
     unknown = set(values) - set(JOB_SETTINGS)
@@ -429,8 +451,11 @@ def save_job(job: str, values: dict) -> dict:
         frappe.throw(_("Unknown section {0}").format(clean["primary_section"]))
     if clean.get("allow_fallback") not in (None, "", "On", "Off"):
         frappe.throw(_("Fallback is On, Off or blank (as the settings say)"))
+    return clean
 
-    doc = frappe.get_doc(SETTINGS)
+
+def _apply_job(doc, job: str, clean: dict) -> list[tuple]:
+    """Sets a job's choices on the settings document (not saved); returns what changed."""
     row = next((r for r in doc.get("ai_jobs") or [] if r.job == job), None)
     if not row:
         row = doc.append("ai_jobs", {"job": job})
@@ -440,6 +465,55 @@ def save_job(job: str, values: dict) -> dict:
         if before != value:
             changes.append((field, before, value))
             row.set(field, value)
+    return changes
+
+
+def _first_model(settings, job: str) -> str:
+    step = next(j for j in job_plan(settings) if j["job"] == job)["primary"]
+    return (step or {}).get("model") or ""
+
+
+def guard(job: str, values: dict) -> dict:
+    """Before a Copilot job's model changes: the new first model's newest test-set score beside
+    the current one's, and a warning when it has none or scores lower. Nothing is saved."""
+    clean = _clean_job(job, values)
+    doc = frappe.get_doc(SETTINGS)
+    current = _first_model(doc, job)
+    _apply_job(doc, job, clean)
+    model = _first_model(doc, job)
+    scores = latest_scores()
+    mine, theirs = scores.get(model), scores.get(current)
+    warning = ""
+    if job in GUARDED_JOBS and model and model != current:
+        if not mine:
+            warning = _(
+                "{0} has no run of the test set yet, so nothing says how well it does {1}."
+            ).format(model, job)
+        elif theirs and mine["accuracy"] < theirs["accuracy"]:
+            warning = _(
+                "{0} got {1}% of the test set right; {2}, which {3} uses now, got {4}%."
+            ).format(model, mine["accuracy"], current, job, theirs["accuracy"])
+    return {
+        "job": job,
+        "model": model,
+        "score": mine,
+        "current_model": current,
+        "current_score": theirs,
+        "changes_model": bool(model and model != current),
+        "warning": warning,
+    }
+
+
+def save_job(job: str, values: dict) -> dict:
+    """One job's first section, fallback and models; each change is written to the history."""
+    if not can_change():
+        frappe.throw(
+            _("Only System Managers change which model a job uses."),
+            frappe.PermissionError,
+        )
+    clean = _clean_job(job, values)
+    doc = frappe.get_doc(SETTINGS)
+    changes = _apply_job(doc, job, clean)
     if not changes:
         return job_settings()
     doc.save(ignore_permissions=True)
@@ -500,6 +574,234 @@ def try_job(job: str) -> dict:
             provider.model, round(monotonic() - started, 1)
         ),
     }
+
+
+# --- candidates: models added to be tested before a job uses them --------------------------------
+
+PRICING = "HDS Model Pricing"
+# a wrong model here changes what Copilot tells a customer or writes as a fix
+GUARDED_JOBS = ai_engine.WORKER_JOBS
+
+
+def candidate_names() -> set[str]:
+    return set(frappe.get_all(PRICING, filters={"candidate": 1}, pluck="name"))
+
+
+def candidate_section(model: str) -> str:
+    section = frappe.db.get_value(PRICING, model, "provider") or ""
+    return ai_engine.ANTHROPIC_SLOT if section == "Anthropic" else section
+
+
+def candidates() -> list[dict]:
+    """The models added to be tested, with their prices and newest test-set score."""
+    scores = latest_scores()
+    used = _used_for(job_plan())
+    rows = frappe.get_all(
+        PRICING,
+        filters={"candidate": 1},
+        fields=[
+            "name",
+            "provider",
+            "input_cost_per_1m",
+            "output_cost_per_1m",
+            "notes",
+        ],
+        order_by="creation desc",
+    )
+    return [
+        {
+            "model": r.name,
+            "section": ai_engine.ANTHROPIC_SLOT
+            if r.provider == "Anthropic"
+            else r.provider,
+            "input_price": r.input_cost_per_1m or 0,
+            "output_price": r.output_cost_per_1m or 0,
+            "note": r.notes or "",
+            "benchmark": scores.get(r.name),
+            "in_use": r.name in used,
+        }
+        for r in rows
+    ]
+
+
+def add_model(values: dict) -> dict:
+    """A model to test before any job uses it: its name as the provider writes it, the section
+    it is called through, and its prices per million tokens."""
+    if not can_change():
+        frappe.throw(_("Only System Managers add a model."), frappe.PermissionError)
+    model = str(values.get("model") or "").strip()
+    if not model:
+        frappe.throw(_("Give the model's name as the provider writes it."))
+    if len(model) > 140 or re.search(r"\s", model):
+        frappe.throw(_("A model's name has no spaces and at most 140 characters."))
+    section = str(values.get("section") or "").strip()
+    if section not in ai_engine.SLOTS:
+        frappe.throw(_("Choose the section this model is called through."))
+    prices = {
+        "input_cost_per_1m": flt(values.get("input_price")),
+        "output_cost_per_1m": flt(values.get("output_price")),
+    }
+    if min(prices.values()) < 0:
+        frappe.throw(_("A price cannot be below 0."))
+    note = str(values.get("note") or "").strip()[:500]
+    if frappe.db.exists(PRICING, model):
+        doc = frappe.get_doc(PRICING, model)
+        if doc.candidate:
+            frappe.throw(_("{0} is already a candidate.").format(model))
+        # a model TBO Support already knows keeps its section and a price it already has
+        for field, price in prices.items():
+            if price:
+                doc.set(field, price)
+        if note:
+            doc.notes = note
+    else:
+        doc = frappe.new_doc(PRICING)
+        doc.update(
+            {
+                "model_id": model,
+                "display_name": model,
+                "provider": section,
+                "is_active": 1,
+                "notes": note,
+                **prices,
+            }
+        )
+    doc.candidate = 1
+    doc.save(ignore_permissions=True)
+    return job_settings()
+
+
+def remove_candidate(model: str) -> dict:
+    """Takes a model off the candidates. Its price row goes too when nothing ever used it."""
+    if not can_change():
+        frappe.throw(
+            _("Only System Managers remove a candidate."), frappe.PermissionError
+        )
+    if not frappe.db.get_value(PRICING, model, "candidate"):
+        frappe.throw(_("{0} is not a candidate.").format(model))
+    known = (
+        model in _used_for(job_plan())
+        or frappe.db.exists(LOG, {"model": model})
+        or frappe.db.exists(EVAL_RUN, {"model": model})
+    )
+    if known:
+        frappe.db.set_value(PRICING, model, "candidate", 0)
+    else:
+        frappe.delete_doc(PRICING, model, ignore_permissions=True)
+    return job_settings()
+
+
+# --- alerts: a model that fails, or a fallback that answers, more than the limit ------------------
+
+ALERT_MIN_CALLS = 10
+ALERT_QUIET_HOURS = 6
+ALERT_KEY = "ai_models:alerted:{0}"
+ALERT_FIELDS = {
+    "error_rate": "model_alert_error_rate",
+    "fallback_rate": "model_alert_fallback_rate",
+}
+
+
+def alert_limits(settings=None) -> dict:
+    """The limits in percent; 0 switches that alert off."""
+    settings = settings or ai_engine.get_hub_settings()
+    return {key: cint(settings.get(field)) for key, field in ALERT_FIELDS.items()}
+
+
+def save_alerts(values: dict) -> dict:
+    if not can_change():
+        frappe.throw(
+            _("Only System Managers change the alert limits."), frappe.PermissionError
+        )
+    doc = frappe.get_doc(SETTINGS)
+    for key, field in ALERT_FIELDS.items():
+        if key not in values:
+            continue
+        limit = cint(values.get(key))
+        if not 0 <= limit <= 100:
+            frappe.throw(_("A limit is a percentage from 0 (off) to 100."))
+        doc.set(field, limit)
+    doc.save(ignore_permissions=True)
+    return alert_limits(doc)
+
+
+def send_alert(subject: str) -> None:
+    """To the System and Agent Managers, in the app and in the team's chat channel."""
+    from helpdesk.github_sync import admin_users
+    from helpdesk.work_reminders import notify_users
+
+    notify_users(
+        admin_users(),
+        SETTINGS,
+        SETTINGS,
+        subject,
+        escalate=True,
+        link="/ai-models",
+        once=False,
+    )
+
+
+def _alert_once(key: str, subject: str, sent: list[str]) -> None:
+    cache_key = ALERT_KEY.format(key)
+    if frappe.cache.get_value(cache_key, expires=True):
+        return
+    send_alert(subject)
+    frappe.cache.set_value(cache_key, 1, expires_in_sec=ALERT_QUIET_HOURS * 3600)
+    sent.append(subject)
+
+
+def watch() -> list[str]:
+    """Hourly: tells the managers when a model failed, or the fallback answered, more often
+    than the limit in the last hour. One alert per model in six hours. Never raises."""
+    sent: list[str] = []
+    try:
+        limits = alert_limits()
+        if not (limits["error_rate"] or limits["fallback_rate"]):
+            return sent
+        rows = frappe.get_all(
+            LOG,
+            filters={"creation": [">=", add_to_date(now_datetime(), hours=-1)]},
+            fields=["model", "status", "fallback"],
+            limit=0,
+        )
+        by_model: dict[str, list] = {}
+        for row in rows:
+            if row.model:
+                by_model.setdefault(row.model, []).append(row)
+        for model, mine in by_model.items():
+            failed = sum(1 for r in mine if r.status == "Failed")
+            share = rate(failed, len(mine)) or 0
+            if (
+                limits["error_rate"]
+                and len(mine) >= ALERT_MIN_CALLS
+                and share >= limits["error_rate"]
+            ):
+                _alert_once(
+                    f"errors:{model}",
+                    _(
+                        "AI model {0}: {1}% of its calls failed in the last hour ({2} of {3}). See AI models."
+                    ).format(model, share, failed, len(mine)),
+                    sent,
+                )
+        answered = [r for r in rows if r.status != "Failed"]
+        rescued = sum(1 for r in answered if r.fallback)
+        share = rate(rescued, len(answered)) or 0
+        if (
+            limits["fallback_rate"]
+            and len(answered) >= ALERT_MIN_CALLS
+            and share >= limits["fallback_rate"]
+        ):
+            _alert_once(
+                "fallback",
+                _(
+                    "AI fallback: the fallback model gave {0}% of the answers in the last hour ({1} of {2}). See AI models."
+                ).format(share, rescued, len(answered)),
+                sent,
+            )
+    except Exception:
+        with contextlib.suppress(Exception):
+            frappe.log_error(title="AI model alerts not checked")
+    return sent
 
 
 # --- benchmarks: our own test set, and public numbers beside it ---------------------------------
@@ -680,8 +982,36 @@ def remove_public_benchmark(name: str) -> dict:
     return benchmarks(model)
 
 
+def close_requests(model: str, eval_run: str) -> None:
+    """A run of the test set arrived: the model's waiting requests are answered."""
+    for name in frappe.get_all(
+        EVAL_REQUEST,
+        filters={"model": model, "status": ["in", ["Queued", "Running"]]},
+        pluck="name",
+    ):
+        frappe.db.set_value(
+            EVAL_REQUEST, name, {"status": "Done", "eval_run": eval_run}
+        )
+
+
+def withdraw_eval_request(name: str) -> dict:
+    """Takes back a request nobody has run yet."""
+    if not can_change():
+        frappe.throw(
+            _("Only System Managers take back a request."), frappe.PermissionError
+        )
+    request = frappe.db.get_value(EVAL_REQUEST, name, ["model", "status"], as_dict=True)
+    if not request:
+        frappe.throw(_("This request is gone."))
+    if request.status == "Done":
+        frappe.throw(_("This request was already answered."))
+    frappe.delete_doc(EVAL_REQUEST, name, ignore_permissions=True)
+    return benchmarks(request.model)
+
+
 def request_eval(model: str, job: str = "investigate") -> dict:
-    """Queues a run of the test set on a model for the Copilot worker; one at a time per model."""
+    """Asks for a run of the test set on a model; one waiting request per model. The cases
+    live on the test hub, so a person runs the worker's `eval` there and brings the scores in."""
     if not can_change():
         frappe.throw(
             _("Only System Managers run the test set."), frappe.PermissionError
@@ -716,6 +1046,9 @@ EVENT_KINDS = (
     "Missing reference",
     "Hand-over",
     "Answered",
+    "Draft made",
+    "Draft used",
+    "Draft changed",
 )
 
 
@@ -778,6 +1111,98 @@ def record_references(run: str, references) -> None:
         )
 
 
+# --- drafts: whether the agent sent the AI's draft reply as written, changed, or not at all -------
+
+DRAFT_KEY = "ai_models:draft:{0}:{1}"
+DRAFT_HOURS = 24
+DRAFT_USED = 0.9
+DRAFT_CHANGED = 0.4
+MAX_SHINGLES = 3000
+
+
+def shingles(text: str | None) -> set[int]:
+    """A text as checksums of its runs of three words: enough to say how much of one text is
+    in another, and nothing a person could read back."""
+    words = re.findall(r"\w+", frappe.utils.strip_html(text or "").lower())
+    if not words:
+        return set()
+    runs = [" ".join(words[i : i + 3]) for i in range(max(1, len(words) - 2))]
+    return {zlib.crc32(run.encode()) for run in runs[:MAX_SHINGLES]}
+
+
+def note_draft(ticket: str, model: str | None, reply: str) -> None:
+    """An AI draft reply was made for the agent. Only its checksums are kept, for a day, to
+    compare with what the agent sends. A redraft of a waiting draft is the same draft."""
+    try:
+        marks = shingles(reply)
+        if not marks:
+            return
+        key = DRAFT_KEY.format(ticket, frappe.session.user)
+        waiting = frappe.cache.get_value(key, expires=True)
+        frappe.cache.set_value(
+            key,
+            {"model": model or "", "marks": sorted(marks)},
+            expires_in_sec=DRAFT_HOURS * 3600,
+        )
+        if not waiting:
+            record_event("Draft made", model, job="draft", ticket=ticket)
+    except Exception:
+        with contextlib.suppress(Exception):
+            frappe.log_error(title="AI draft not noted")
+
+
+def on_communication_insert(doc, method=None):
+    """Communication after_insert: an agent's sent reply is compared with the AI draft made
+    for it. Never blocks the reply."""
+    try:
+        if doc.reference_doctype != "HD Ticket" or not doc.reference_name:
+            return
+        if doc.communication_type != "Communication" or doc.sent_or_received != "Sent":
+            return
+        key = DRAFT_KEY.format(doc.reference_name, frappe.session.user)
+        draft = frappe.cache.get_value(key, expires=True)
+        if not draft:
+            return
+        frappe.cache.delete_value(key)
+        marks = set(draft.get("marks") or [])
+        kept = len(marks & shingles(doc.content)) / len(marks) if marks else 0
+        if kept >= DRAFT_USED:
+            kind = "Draft used"
+        elif kept >= DRAFT_CHANGED:
+            kind = "Draft changed"
+        else:
+            return
+        record_event(
+            kind,
+            draft.get("model"),
+            job="draft",
+            ticket=doc.reference_name,
+            value=round(kept * 100),
+        )
+    except Exception:
+        with contextlib.suppress(Exception):
+            frappe.log_error(title="AI draft not compared with the reply")
+
+
+def _customer_answers(runs: list) -> dict:
+    """What customers said after Copilot worked on their ticket: fixed, or still broken."""
+    tickets = sorted({r.ticket for r in runs if r.ticket})
+    if not tickets or not frappe.db.has_column(
+        "HD Ticket", "custom_customer_confirmation"
+    ):
+        return {"Confirmed": 0, "Reopened": 0}
+    answers = frappe.get_all(
+        "HD Ticket",
+        filters={
+            "name": ["in", tickets],
+            "custom_customer_confirmation": ["in", ["Confirmed", "Reopened"]],
+        },
+        pluck="custom_customer_confirmation",
+        limit=0,
+    )
+    return {kind: answers.count(kind) for kind in ("Confirmed", "Reopened")}
+
+
 def quality(model: str, days: int = 30) -> dict:
     """One model's quality for the period: Copilot's outcomes, the chat's, and the two
     hallucination checks, each on its own."""
@@ -788,6 +1213,7 @@ def quality(model: str, days: int = 30) -> dict:
         filters={"model_used": model, "creation": [">=", start]},
         fields=[
             "name",
+            "ticket",
             "state",
             "review_verdict",
             "explanation_edited",
@@ -827,6 +1253,12 @@ def quality(model: str, days: int = 30) -> dict:
         + events.get("Unsupported answer", 0)
         + events.get("Hand-over", 0)
     )
+    answers = _customer_answers(runs)
+    answered = answers["Confirmed"] + answers["Reopened"]
+    drafts = max(
+        events.get("Draft made", 0),
+        events.get("Draft used", 0) + events.get("Draft changed", 0),
+    )
     return {
         "model": model,
         "days": days,
@@ -843,6 +1275,19 @@ def quality(model: str, days: int = 30) -> dict:
                 sum(1 for r in reviewed if r.review_verdict == "Wrong"), len(reviewed)
             ),
             "avg_edited": round(sum(edited) / len(edited), 1) if edited else None,
+            "customer_answers": answered,
+            "still_broken": answers["Reopened"],
+            "still_broken_rate": rate(answers["Reopened"], answered),
+        },
+        "drafts": {
+            "made": drafts,
+            "used": events.get("Draft used", 0),
+            "changed": events.get("Draft changed", 0),
+            "not_used": drafts
+            - events.get("Draft used", 0)
+            - events.get("Draft changed", 0),
+            "used_rate": rate(events.get("Draft used", 0), drafts),
+            "changed_rate": rate(events.get("Draft changed", 0), drafts),
         },
         "chat": {
             "replies": chat,
@@ -923,7 +1368,7 @@ def overview(days: int = 30) -> dict:
         figures = _gateway_figures(rows)
         if name in known:
             known[name].update(_add(known[name], figures))
-            if known[name]["status"] == "Not used":
+            if known[name]["status"] in ("Not used", "Candidate"):
                 known[name]["status"] = "Healthy"
         else:
             result["models"].append(
@@ -959,7 +1404,7 @@ def detail(model: str, days: int = 30) -> dict:
     result.update(_add(hub, figures))
     if not result["provider"]:
         result["provider"] = GATEWAY_SOURCE
-    if result["status"] == "Not used":
+    if result["status"] in ("Not used", "Candidate"):
         result["status"] = "Healthy"
     by_day: dict[str, list] = {}
     for row in rows:

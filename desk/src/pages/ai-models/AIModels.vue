@@ -234,6 +234,16 @@
           <p v-if="!model" class="text-p-sm text-ink-gray-6">
             {{ __("Choose a model.") }}
           </p>
+          <p
+            v-if="detail && detail.status === 'Candidate'"
+            class="rounded-lg bg-info-soft px-3 py-2 text-p-sm text-info"
+          >
+            {{
+              __(
+                "A candidate: no job uses it yet. Ask for a run of the test set on it, then choose it for a job in Model settings."
+              )
+            }}
+          </p>
           <template v-else-if="detail">
             <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
               <StatTile
@@ -485,7 +495,7 @@
             </template>
 
             <template v-else-if="tab === 'quality' && quality">
-              <div class="grid grid-cols-1 gap-3 lg:grid-cols-3">
+              <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <SectionCard
                   :title="__('Copilot')"
                   :description="
@@ -517,6 +527,16 @@
                       :note="__('average share of the text')"
                     />
                     <QualityLine
+                      :label="__('Customer said it is still broken')"
+                      :value="pct(quality.copilot.still_broken_rate)"
+                      :note="
+                        __(
+                          '{0} customers answered',
+                          String(quality.copilot.customer_answers)
+                        )
+                      "
+                    />
+                    <QualityLine
                       :label="__('Runs that failed')"
                       :value="String(quality.copilot.failed)"
                     />
@@ -539,6 +559,32 @@
                     <QualityLine
                       :label="__('Handed to a person')"
                       :value="pct(quality.chat.handover_rate)"
+                    />
+                  </dl>
+                </SectionCard>
+                <SectionCard
+                  :title="__('Draft replies')"
+                  :description="
+                    __(
+                      '{0} drafts made for agents in this period',
+                      String(quality.drafts.made)
+                    )
+                  "
+                >
+                  <dl class="flex flex-col gap-2 px-4 pb-4 text-p-sm">
+                    <QualityLine
+                      :label="__('Sent as written')"
+                      :value="pct(quality.drafts.used_rate)"
+                      :note="__('{0} replies', String(quality.drafts.used))"
+                    />
+                    <QualityLine
+                      :label="__('Sent with changes')"
+                      :value="pct(quality.drafts.changed_rate)"
+                      :note="__('{0} replies', String(quality.drafts.changed))"
+                    />
+                    <QualityLine
+                      :label="__('Not sent')"
+                      :value="String(quality.drafts.not_used)"
                     />
                   </dl>
                 </SectionCard>
@@ -586,7 +632,7 @@
               <p class="text-p-xs text-ink-gray-5">
                 {{
                   __(
-                    "A dash means nothing was measured yet. The reference check needs the updated Copilot worker."
+                    "A dash means nothing was measured yet. The reference check needs the updated Copilot worker. A draft counts as sent as written when nine tenths of it went out, and as changed from four tenths."
                   )
                 }}
               </p>
@@ -612,31 +658,66 @@
                 "
               >
                 <template #actions>
-                  <Button
-                    v-if="bench.can_change"
-                    variant="solid"
-                    :label="__('Run the test set')"
-                    :loading="benchBusy"
-                    @click="runEval"
-                  />
+                  <div v-if="bench.can_change" class="flex flex-wrap gap-2">
+                    <Button
+                      :label="__('Bring in a report')"
+                      :loading="benchBusy"
+                      @click="reportInput?.click()"
+                    />
+                    <Button
+                      variant="solid"
+                      :label="__('Ask for a run')"
+                      :loading="benchBusy"
+                      :disabled="
+                        bench.requests.some((r) => r.status !== 'Failed')
+                      "
+                      @click="runEval"
+                    />
+                    <input
+                      ref="reportInput"
+                      type="file"
+                      accept=".json,application/json"
+                      class="hidden"
+                      :aria-label="__('Test-set report')"
+                      @change="bringReport"
+                    />
+                  </div>
                 </template>
                 <div class="flex flex-col gap-4 px-4 pb-4">
-                  <p
-                    v-for="r in bench.requests"
-                    :key="r.name"
-                    class="text-p-sm text-ink-gray-6"
-                  >
+                  <p class="text-p-sm text-ink-gray-6">
                     {{
-                      r.status === "Failed"
-                        ? __("A run failed: {0}", r.error || "")
-                        : __(
-                            "A run is {0}: the Copilot worker takes it when it has no ticket work.",
-                            r.status === "Running"
-                              ? __("running")
-                              : __("waiting")
-                          )
+                      __(
+                        "The test set runs on the test hub, where its tickets are. The Copilot worker's eval command there sends the scores here, or a System Manager brings its report in."
+                      )
                     }}
                   </p>
+                  <div
+                    v-for="r in bench.requests"
+                    :key="r.name"
+                    class="flex flex-wrap items-center gap-2 rounded-lg bg-surface-gray-1 px-3 py-2 text-p-sm text-ink-gray-7"
+                  >
+                    <span>
+                      {{
+                        r.status === "Failed"
+                          ? __("A run failed: {0}", r.error || "")
+                          : r.status === "Running"
+                          ? __("A run is being done.")
+                          : __(
+                              "{0} asked for a run on {1}. It shows here when its scores arrive.",
+                              r.requested_by,
+                              String(r.creation).slice(0, 16)
+                            )
+                      }}
+                    </span>
+                    <Button
+                      v-if="bench.can_change"
+                      variant="ghost"
+                      size="sm"
+                      :label="__('Take back')"
+                      :loading="benchBusy"
+                      @click="withdraw(r.name)"
+                    />
+                  </div>
                   <p
                     v-if="!bench.runs.length"
                     class="text-p-sm text-ink-gray-6"
@@ -889,7 +970,7 @@
               <tbody>
                 <tr
                   v-for="job in settings.jobs"
-                  :key="job.job"
+                  :key="`${job.job}-${formKey}`"
                   class="border-t border-outline-gray-1 align-top"
                 >
                   <td class="px-4 py-3">
@@ -901,6 +982,16 @@
                       <template v-if="job.fallback">
                         → {{ job.fallback.model }}
                       </template>
+                    </div>
+                    <div
+                      v-if="settings.guarded_jobs.includes(job.job)"
+                      class="text-ink-gray-5"
+                    >
+                      {{
+                        job.score
+                          ? __("test set {0}", pct(job.score.accuracy))
+                          : __("not run on the test set")
+                      }}
                     </div>
                   </td>
                   <td class="px-3 py-3">
@@ -984,6 +1075,184 @@
           </p>
 
           <SectionCard
+            :title="__('Candidates')"
+            :description="
+              __('Models added to be tested before a job uses them')
+            "
+          >
+            <div class="flex flex-col gap-3 px-4 pb-4">
+              <p
+                v-if="candNotice"
+                role="status"
+                class="rounded-lg px-3 py-2 text-p-sm"
+                :class="
+                  candNotice.ok
+                    ? 'bg-success-soft text-success'
+                    : 'bg-warning-soft text-warning'
+                "
+              >
+                {{ candNotice.text }}
+              </p>
+              <ul class="flex flex-col gap-1.5 text-p-sm">
+                <li
+                  v-for="c in settings.candidates"
+                  :key="c.model"
+                  class="flex flex-wrap items-center gap-x-3 gap-y-1"
+                >
+                  <button
+                    type="button"
+                    class="rounded text-base-medium text-ink-gray-9 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+                    @click="
+                      go({ view: 'model', model: c.model, tab: 'benchmarks' })
+                    "
+                  >
+                    {{ c.model }}
+                  </button>
+                  <span class="text-ink-gray-5">{{ c.section }}</span>
+                  <span class="tabular-nums text-ink-gray-6">
+                    {{
+                      __(
+                        "{0} in, {1} out per million tokens",
+                        money(c.input_price),
+                        money(c.output_price)
+                      )
+                    }}
+                  </span>
+                  <span class="tabular-nums">
+                    {{
+                      c.benchmark
+                        ? __(
+                            "test set {0} on {1}",
+                            pct(c.benchmark.accuracy),
+                            c.benchmark.ran_on
+                          )
+                        : __("not run on the test set")
+                    }}
+                  </span>
+                  <Badge
+                    v-if="c.in_use"
+                    :label="__('A job uses it')"
+                    theme="green"
+                    size="sm"
+                  />
+                  <span v-if="c.note" class="text-ink-gray-6">{{
+                    c.note
+                  }}</span>
+                  <Button
+                    v-if="settings.can_change"
+                    variant="ghost"
+                    size="sm"
+                    :label="__('Remove')"
+                    :loading="candBusy"
+                    @click="removeCandidate(c.model)"
+                  />
+                </li>
+                <li v-if="!settings.candidates.length" class="text-ink-gray-5">
+                  {{ __("None yet.") }}
+                </li>
+              </ul>
+              <form
+                v-if="settings.can_change"
+                class="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_12rem_8rem_8rem_minmax(0,1fr)_auto]"
+                @submit.prevent="addCandidate"
+              >
+                <FormControl
+                  v-model="cand.model"
+                  type="text"
+                  :label="__('Model name')"
+                  :placeholder="__('as the provider writes it')"
+                />
+                <FormControl
+                  v-model="cand.section"
+                  type="select"
+                  :label="__('Called through')"
+                  :options="SECTIONS"
+                />
+                <FormControl
+                  v-model="cand.input_price"
+                  type="number"
+                  :label="__('Input, $ per 1M')"
+                />
+                <FormControl
+                  v-model="cand.output_price"
+                  type="number"
+                  :label="__('Output, $ per 1M')"
+                />
+                <FormControl
+                  v-model="cand.note"
+                  type="text"
+                  :label="__('Note')"
+                />
+                <Button type="submit" :label="__('Add')" :loading="candBusy" />
+              </form>
+              <p class="text-p-xs text-ink-gray-5">
+                {{
+                  __(
+                    "A candidate is called with its section's key. To use it, type its name as a job's model above."
+                  )
+                }}
+              </p>
+            </div>
+          </SectionCard>
+
+          <SectionCard
+            :title="__('Alerts')"
+            :description="__('Checked every hour on the last hour of calls')"
+          >
+            <div class="flex flex-col gap-3 px-4 pb-4">
+              <p class="text-p-sm text-ink-gray-6">
+                {{
+                  __(
+                    "The System and Agent Managers are told when a model fails, or the fallback gives the answer, at least this share of the time in an hour (from 10 calls). 0 turns an alert off. A model alerts at most once in 6 hours."
+                  )
+                }}
+              </p>
+              <p
+                v-if="alertNotice"
+                role="status"
+                class="rounded-lg px-3 py-2 text-p-sm"
+                :class="
+                  alertNotice.ok
+                    ? 'bg-success-soft text-success'
+                    : 'bg-warning-soft text-warning'
+                "
+              >
+                {{ alertNotice.text }}
+              </p>
+              <form
+                v-if="settings.can_change"
+                class="grid grid-cols-1 items-end gap-3 sm:grid-cols-[12rem_12rem_auto]"
+                @submit.prevent="saveAlerts"
+              >
+                <FormControl
+                  v-model="alertForm.error_rate"
+                  type="number"
+                  :label="__('Errors, % of calls')"
+                />
+                <FormControl
+                  v-model="alertForm.fallback_rate"
+                  type="number"
+                  :label="__('Fallback answers, %')"
+                />
+                <Button
+                  type="submit"
+                  :label="__('Save')"
+                  :loading="alertBusy"
+                />
+              </form>
+              <p v-else class="text-p-sm tabular-nums">
+                {{
+                  __(
+                    "Errors: {0}. Fallback answers: {1}.",
+                    limitText(settings.alerts.error_rate),
+                    limitText(settings.alerts.fallback_rate)
+                  )
+                }}
+              </p>
+            </div>
+          </SectionCard>
+
+          <SectionCard
             :title="__('AI gateway (desktop app)')"
             :description="
               __(
@@ -1061,6 +1330,48 @@
         </template>
       </div>
     </div>
+
+    <Dialog
+      v-model:open="guardOpen"
+      :title="__('Change the model for {0}?', pending?.job || '')"
+    >
+      <template #default>
+        <div v-if="pending" class="flex flex-col gap-3 text-p-sm">
+          <p class="rounded-lg bg-warning-soft px-3 py-2 text-warning">
+            {{ pending.guard.warning }}
+          </p>
+          <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+            <dt class="text-ink-gray-5">{{ __("Now") }}</dt>
+            <dd>
+              {{ pending.guard.current_model || __("not set up") }} ·
+              {{ scoreText(pending.guard.current_score) }}
+            </dd>
+            <dt class="text-ink-gray-5">{{ __("After the change") }}</dt>
+            <dd>
+              {{ pending.guard.model }} · {{ scoreText(pending.guard.score) }}
+            </dd>
+          </dl>
+          <p class="text-ink-gray-6">
+            {{
+              __(
+                "Ask for a run of the test set on it first, or change it anyway."
+              )
+            }}
+          </p>
+        </div>
+      </template>
+      <template #actions>
+        <div class="flex justify-end gap-2">
+          <Button :label="__('Keep it as it is')" @click="guardOpen = false" />
+          <Button
+            variant="solid"
+            theme="red"
+            :label="__('Change anyway')"
+            @click="confirmGuard"
+          />
+        </div>
+      </template>
+    </Dialog>
   </div>
 </template>
 
@@ -1075,6 +1386,7 @@ import {
   Badge,
   Button,
   call,
+  Dialog,
   FormControl,
   TabButtons,
   usePageMeta,
@@ -1087,12 +1399,23 @@ import CaseGrid from "./CaseGrid.vue";
 import QualityLine from "./QualityLine.vue";
 
 const API = "helpdesk.api.ai_models";
-const STATUS_THEME: Record<string, "green" | "orange" | "red" | "gray"> = {
+const STATUS_THEME: Record<
+  string,
+  "green" | "orange" | "red" | "gray" | "blue"
+> = {
   Healthy: "green",
   Degraded: "orange",
   Paused: "red",
   "Not used": "gray",
+  Candidate: "blue",
 };
+const SECTIONS = [
+  { label: "OpenAI", value: "OpenAI" },
+  { label: "Anthropic-compatible", value: "Anthropic-compatible" },
+];
+const MODEL_FIELDS = ["primary_section", "openai_model", "anthropic_model"];
+
+type Score = { accuracy: number; ran_on: string };
 
 type Figures = {
   calls: number;
@@ -1145,6 +1468,17 @@ type Quality = {
     right_rate: number | null;
     wrong_rate: number | null;
     avg_edited: number | null;
+    customer_answers: number;
+    still_broken: number;
+    still_broken_rate: number | null;
+  };
+  drafts: {
+    made: number;
+    used: number;
+    changed: number;
+    not_used: number;
+    used_rate: number | null;
+    changed_rate: number | null;
   };
   chat: {
     replies: number;
@@ -1180,7 +1514,13 @@ type Bench = {
   against_cases: Case[];
   against_accuracy: number | null;
   public: Record<string, string>[];
-  requests: { name: string; status: string; error: string }[];
+  requests: {
+    name: string;
+    status: string;
+    error: string;
+    requested_by: string;
+    creation: string;
+  }[];
   can_change: boolean;
 };
 type Step = { section: string; model: string; ready: boolean };
@@ -1192,6 +1532,25 @@ type JobRow = Figures & {
   allow_fallback: string;
   openai_model: string;
   anthropic_model: string;
+  score: Score | null;
+};
+type Candidate = {
+  model: string;
+  section: string;
+  input_price: number;
+  output_price: number;
+  note: string;
+  benchmark: Score | null;
+  in_use: boolean;
+};
+type Guard = {
+  job: string;
+  model: string;
+  score: Score | null;
+  current_model: string;
+  current_score: Score | null;
+  changes_model: boolean;
+  warning: string;
 };
 type Settings = {
   gateway: {
@@ -1204,6 +1563,9 @@ type Settings = {
   jobs: JobRow[];
   sections: Step[];
   defaults: { primary_section: string; failover: boolean };
+  candidates: Candidate[];
+  alerts: { error_rate: number; fallback_rate: number };
+  guarded_jobs: string[];
   can_change: boolean;
   changes: Record<string, string>[];
 };
@@ -1402,7 +1764,63 @@ function sectionModel(section: string) {
   );
 }
 
+// a refused or cancelled change puts the row's fields back by making them again
+const formKey = ref(0);
+const guardOpen = ref(false);
+const pending = ref<{
+  job: string;
+  values: Record<string, string>;
+  guard: Guard;
+} | null>(null);
+
+// Copilot's jobs show the new model's test-set score first when it has none or a lower one
 async function save(job: string, values: Record<string, string>) {
+  const guarded =
+    settings.value?.guarded_jobs.includes(job) &&
+    Object.keys(values).some((field) => MODEL_FIELDS.includes(field));
+  if (guarded) {
+    saving.value = true;
+    notice.value = null;
+    try {
+      const guard = (await call(`${API}.guard`, {
+        job,
+        values: JSON.stringify(values),
+      })) as Guard;
+      if (guard.changes_model && guard.warning) {
+        pending.value = { job, values, guard };
+        guardOpen.value = true;
+        return;
+      }
+    } catch (err) {
+      notice.value = { ok: false, text: errorText(err, __("Not saved")) };
+      formKey.value++;
+      return;
+    } finally {
+      saving.value = false;
+    }
+  }
+  await store(job, values);
+}
+watch(guardOpen, (open) => {
+  if (!open && pending.value) {
+    pending.value = null;
+    formKey.value++;
+  }
+});
+function confirmGuard() {
+  const change = pending.value;
+  if (!change) return;
+  pending.value = null;
+  guardOpen.value = false;
+  store(change.job, change.values);
+}
+function scoreText(score: Score | null) {
+  return score
+    ? __("test set {0} on {1}", pct(score.accuracy), score.ran_on)
+    : __("not run on the test set");
+}
+
+async function store(job: string, values: Record<string, string>) {
   saving.value = true;
   notice.value = null;
   try {
@@ -1410,6 +1828,7 @@ async function save(job: string, values: Record<string, string>) {
     notice.value = { ok: true, text: __("Saved: {0}", job) };
   } catch (err) {
     notice.value = { ok: false, text: errorText(err, __("Not saved")) };
+    formKey.value++;
   } finally {
     saving.value = false;
     load();
@@ -1468,7 +1887,117 @@ function runEval() {
   benchCall(
     "request_eval",
     { model: model.value },
-    __("Queued. The result appears here as a new run.")
+    __(
+      "Asked. When the eval command has run on the test hub, its scores show here as a new run."
+    )
+  );
+}
+function withdraw(name: string) {
+  benchCall("withdraw_eval_request", { name }, __("Taken back."));
+}
+
+// A report is read here and only case numbers and scores are sent: Copilot's own summaries,
+// the tickets and the expected answers in the worker's full report never leave the browser.
+const reportInput = ref<HTMLInputElement | null>(null);
+type CaseScore = Record<string, string | number | boolean | null>;
+
+function caseScore(item: unknown): CaseScore | null {
+  if (!item || typeof item !== "object") return null;
+  const row = item as Record<string, any>;
+  const id = row.case && typeof row.case === "object" ? row.case.id : row.case;
+  if (!id) return null;
+  const found = row.filesFound;
+  return {
+    case: String(id),
+    right: Boolean(row.right),
+    confidence: typeof row.confidence === "number" ? row.confidence : null,
+    filesFound: Array.isArray(found) ? found.length : Number(found) || 0,
+    tokens: Number(row.tokens) || 0,
+    costUsd: Number(row.costUsd) || 0,
+    minutes: Number(row.minutes) || 0,
+    outcome: typeof row.outcome === "string" ? row.outcome.slice(0, 40) : "",
+  };
+}
+
+function readReport(
+  data: unknown,
+  name: string,
+  fileDate: string
+): { cases: CaseScore[]; ranOn: string } | string {
+  const notReport = __("This file is not a test-set report.");
+  // the scores file the worker writes beside its report: {ranOn, models: {model: [...]}}
+  if (data && typeof data === "object" && !Array.isArray(data)) {
+    const file = data as { ranOn?: string; models?: Record<string, unknown> };
+    if (!file.models || typeof file.models !== "object") return notReport;
+    const mine = file.models[name];
+    if (!Array.isArray(mine))
+      return __(
+        "This report has no scores for {0}. It has: {1}",
+        name,
+        Object.keys(file.models).join(", ")
+      );
+    return {
+      cases: mine.map(caseScore).filter((c): c is CaseScore => !!c),
+      ranOn: file.ranOn || fileDate,
+    };
+  }
+  if (!Array.isArray(data)) return notReport;
+  // the full report: one row per case, with the models that answered it
+  const named = data.filter(
+    (row) => row && typeof row === "object" && typeof row.model === "string"
+  );
+  const rows = named.length
+    ? named.filter((row) => row.model.split(", ").includes(name))
+    : data;
+  if (!rows.length)
+    return __("No case in this report was answered by {0}.", name);
+  return {
+    cases: rows.map(caseScore).filter((c): c is CaseScore => !!c),
+    ranOn: fileDate,
+  };
+}
+
+async function bringReport(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file) return;
+  benchNotice.value = null;
+  let data: unknown;
+  try {
+    data = JSON.parse(await file.text());
+  } catch {
+    benchNotice.value = {
+      ok: false,
+      text: __("This file is not a test-set report."),
+    };
+    return;
+  }
+  const fileDate = new Date(file.lastModified).toISOString().slice(0, 10);
+  const report = readReport(data, model.value, fileDate);
+  if (typeof report === "string" || !report.cases.length) {
+    benchNotice.value = {
+      ok: false,
+      text:
+        typeof report === "string"
+          ? report
+          : __("This file is not a test-set report."),
+    };
+    return;
+  }
+  benchCall(
+    "import_eval",
+    {
+      model: model.value,
+      report: JSON.stringify(report.cases),
+      ran_on: report.ranOn,
+    },
+    report.cases.length === 1
+      ? __("Brought in 1 case. Only case numbers and scores were sent.")
+      : __(
+          "Brought in {0} cases. Only case numbers and scores were sent.",
+          String(report.cases.length)
+        )
   );
 }
 async function addPublic() {
@@ -1487,6 +2016,86 @@ async function addPublic() {
 }
 function removePublic(name: string) {
   benchCall("remove_public_benchmark", { name }, __("Removed."));
+}
+
+// --- candidates and alerts --------------------------------------------------------------------
+
+const cand = reactive({
+  model: "",
+  section: "Anthropic-compatible",
+  input_price: "",
+  output_price: "",
+  note: "",
+});
+const candBusy = ref(false);
+const candNotice = ref<{ ok: boolean; text: string } | null>(null);
+async function candidateCall(
+  method: string,
+  args: Record<string, unknown>,
+  done: string
+) {
+  candBusy.value = true;
+  candNotice.value = null;
+  try {
+    await call(`${API}.${method}`, args);
+    candNotice.value = { ok: true, text: done };
+    return true;
+  } catch (err) {
+    candNotice.value = { ok: false, text: errorText(err, __("Not saved")) };
+    return false;
+  } finally {
+    candBusy.value = false;
+    load();
+  }
+}
+async function addCandidate() {
+  const name = cand.model.trim();
+  const ok = await candidateCall(
+    "add_model",
+    { values: JSON.stringify({ ...cand, model: name }) },
+    __("{0} added. Ask for a run of the test set on its page.", name)
+  );
+  if (ok)
+    Object.assign(cand, {
+      model: "",
+      input_price: "",
+      output_price: "",
+      note: "",
+    });
+}
+function removeCandidate(name: string) {
+  candidateCall("remove_candidate", { model: name }, __("{0} removed.", name));
+}
+
+const alertForm = reactive({ error_rate: 0, fallback_rate: 0 });
+const alertBusy = ref(false);
+const alertNotice = ref<{ ok: boolean; text: string } | null>(null);
+watch(
+  () => settings.value?.alerts,
+  (limits) => {
+    if (limits) Object.assign(alertForm, limits);
+  }
+);
+function limitText(limit: number) {
+  return limit ? `${limit}%` : __("off");
+}
+async function saveAlerts() {
+  alertBusy.value = true;
+  alertNotice.value = null;
+  try {
+    await call(`${API}.save_alerts`, {
+      values: JSON.stringify({
+        error_rate: Number(alertForm.error_rate) || 0,
+        fallback_rate: Number(alertForm.fallback_rate) || 0,
+      }),
+    });
+    alertNotice.value = { ok: true, text: __("Alert limits saved.") };
+  } catch (err) {
+    alertNotice.value = { ok: false, text: errorText(err, __("Not saved")) };
+  } finally {
+    alertBusy.value = false;
+    load();
+  }
 }
 
 // --- the AI gateway ---------------------------------------------------------------------------
