@@ -1,11 +1,7 @@
 <template>
   <DefineUnrankedRow v-slot="{ row }">
     <span class="flex min-w-0 items-center gap-3">
-      <PersonAvatar
-        :name="row.person.full_name"
-        size="lg"
-        class="!size-10"
-      />
+      <PersonAvatar :name="row.person.full_name" size="lg" class="!size-10" />
       <span class="truncate text-sm font-semibold text-ink-gray-9">{{
         row.person.full_name
       }}</span>
