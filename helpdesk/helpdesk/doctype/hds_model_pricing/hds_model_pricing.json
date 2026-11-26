@@ -21,7 +21,13 @@
 		"section_meta",
 		"pricing_source_url",
 		"last_synced_on",
-		"notes"
+		"notes",
+		"section_model_list",
+		"ai_provider",
+		"listed",
+		"column_break_model_list",
+		"monthly_token_limit",
+		"on_gateway"
 	],
 	"fields": [
 		{
@@ -120,11 +126,49 @@
 			"fieldname": "notes",
 			"fieldtype": "Small Text",
 			"label": "Notes"
+		},
+		{
+			"fieldname": "section_model_list",
+			"fieldtype": "Section Break",
+			"label": "AI models"
+		},
+		{
+			"fieldname": "ai_provider",
+			"fieldtype": "Data",
+			"label": "Provider account",
+			"in_list_view": 1,
+			"description": "Today's section (OpenAI or Anthropic-compatible) or a provider under AI models → Model settings."
+		},
+		{
+			"default": "0",
+			"fieldname": "listed",
+			"fieldtype": "Check",
+			"label": "Allowed for jobs",
+			"in_list_view": 1,
+			"description": "Only allowed models can be chosen as a job's model or backup."
+		},
+		{
+			"fieldname": "column_break_model_list",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "monthly_token_limit",
+			"fieldtype": "Float",
+			"label": "Monthly token limit (millions)",
+			"description": "Input plus output tokens in a calendar month, TBO Support's and the Copilot worker's. Empty or 0: no limit. When it is used up, a job that uses this model first stops until next month."
+		},
+		{
+			"default": "0",
+			"fieldname": "on_gateway",
+			"fieldtype": "Check",
+			"label": "On the gateway",
+			"read_only": 1,
+			"description": "TBO Support wrote this model into the TBO AI gateway (Phase 37)."
 		}
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-10-14 12:00:00.000000",
+	"modified": "2026-11-26 18:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Model Pricing",

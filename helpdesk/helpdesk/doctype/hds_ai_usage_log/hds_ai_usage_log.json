@@ -22,7 +22,14 @@
 		"cache_read_tokens",
 		"cache_write_tokens",
 		"column_break_tokens2",
-		"estimated_cost_usd"
+		"estimated_cost_usd",
+		"outcome_section",
+		"status",
+		"duration_ms",
+		"source",
+		"column_break_outcome",
+		"error_class",
+		"error_message"
 	],
 	"fields": [
 		{
@@ -143,11 +150,53 @@
 			"label": "Cost (USD)",
 			"options": "USD",
 			"precision": "4"
+		},
+		{
+			"fieldname": "outcome_section",
+			"fieldtype": "Section Break",
+			"label": "Outcome"
+		},
+		{
+			"fieldname": "status",
+			"fieldtype": "Select",
+			"label": "Status",
+			"options": "Success\nFailed",
+			"default": "Success",
+			"in_standard_filter": 1,
+			"search_index": 1
+		},
+		{
+			"fieldname": "duration_ms",
+			"fieldtype": "Int",
+			"label": "Duration (ms)"
+		},
+		{
+			"fieldname": "source",
+			"fieldtype": "Select",
+			"label": "Source",
+			"options": "TBO Support\nCopilot worker",
+			"default": "TBO Support"
+		},
+		{
+			"fieldname": "column_break_outcome",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "error_class",
+			"fieldtype": "Data",
+			"label": "Error Type",
+			"description": "billing, auth, config, rate_limit, server, timeout, bad_answer or other"
+		},
+		{
+			"fieldname": "error_message",
+			"fieldtype": "Small Text",
+			"label": "Provider's Message",
+			"description": "The provider's own words, clipped, with any key masked. Never customer text."
 		}
 	],
 	"in_create": 1,
 	"links": [],
-	"modified": "2026-10-17 17:26:05.254044",
+	"modified": "2026-11-26 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS AI Usage Log",
