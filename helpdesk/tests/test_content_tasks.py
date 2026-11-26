@@ -24,6 +24,7 @@ from helpdesk.test_utils import (
     saved_due,
     set_content_settings,
 )
+from helpdesk.work_calendar import previous_working_day
 
 CUSTOMER = "Content Tasks Traders"
 WRITER = ("writer.ct@content-tasks.example", "Faris Writer")
@@ -285,9 +286,10 @@ class TestTasksFromPosts(ContentTaskCase):
         post.reload()
         post.postpone(self.at(20), "Client asked for later")
 
+        # three days before publishing, brought back to a working day when that is a day off
         self.assertEqual(
             getdate(frappe.db.get_value("Task", writer, "exp_end_date")),
-            add_days(getdate(self.at(20)), -3),
+            previous_working_day(add_days(getdate(self.at(20)), -3)),
         )
 
     def test_a_cancelled_part_is_not_recreated(self):

@@ -39,6 +39,7 @@ from helpdesk.test_utils import (
     send_task_reminder,
     start_task_timer,
 )
+from helpdesk.work_calendar import next_working_day
 
 CUSTOMER = "Al Noor Trading LLC"
 OTHER_CUSTOMER = "Gulf Star Logistics"
@@ -919,7 +920,8 @@ class TestTaskHold(WorkControlCase):
 
         doc = frappe.get_doc("Task", task)
         self.assertEqual(doc.status, "Open")
-        self.assertEqual(str(doc.exp_end_date), str(add_days(due, 2)))
+        # moved by the days on hold, then off a day off (a task is never due on one)
+        self.assertEqual(str(doc.exp_end_date), str(next_working_day(add_days(due, 2))))
         self.assertEqual(doc.hold_days_total, 2)
         self.assertIsNone(doc.hold_since)
         comments = frappe.get_all(
@@ -1472,8 +1474,10 @@ class TestHelpAndHandOver(WorkControlCase):
 
     def test_help_must_fit_before_the_task_is_due(self):
         task = self.make_task("Import opening balances", add_days(nowdate(), 3))
+        # the task's own due date, after it was moved off a day off
+        due = getdate(frappe.db.get_value("Task", task, "exp_end_date"))
         with self.assertRaises(frappe.ValidationError):
-            self.ask(task, due=add_days(nowdate(), 4))
+            self.ask(task, due=str(add_days(due, 1)))
         with self.assertRaises(frappe.ValidationError):
             self.ask(task, due=add_days(nowdate(), -1))
 
