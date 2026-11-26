@@ -46,7 +46,11 @@ class ModelsCase(FrappeTestCase):
         hold_commits(self)
         self.addCleanup(frappe.set_user, "Administrator")
         frappe.db.delete(LOG)
-        for doctype in ("HDS Model Eval Run", "HDS AI Quality Event"):
+        for doctype in (
+            "HDS Model Eval Run",
+            "HDS AI Quality Event",
+            "HDS Gateway Usage Day",
+        ):
             frappe.db.delete(doctype)
         # no job rows: each test starts from the settings' own order and fallback
         set_ai_providers(ai_jobs=[])
@@ -325,3 +329,103 @@ class TestQuality(ModelsCase):
         result = ai_models.quality("kimi-k2.6", 30)
         self.assertEqual(result["hallucination"]["missing_reference_rate"], 100.0)
         self.assertEqual(result["copilot"]["runs"], 1)
+
+
+def gateway_call(model="tbo-default", user="dev@example.com", ms=2000, **more):
+    return {
+        "request_id": frappe.generate_hash(length=8),
+        "model_group": model,
+        "user": user,
+        "spend": 0.02,
+        "prompt_tokens": 100,
+        "completion_tokens": 50,
+        "request_duration_ms": ms,
+        "status": "success",
+        "messages": "A PROMPT THAT MUST NOT BE KEPT",
+        **more,
+    }
+
+
+class TestTheGateway(ModelsCase):
+    def setUp(self):
+        super().setUp()
+        from helpdesk import ai_gateway
+
+        self.gw = ai_gateway
+        frappe.db.delete("HDS Gateway Usage Day")
+        doc = frappe.get_doc("HDS Hub Settings")
+        doc.update(
+            {
+                "gateway_sync": 1,
+                "gateway_url": "https://ai.example.com",
+                "gateway_viewer_key": "sk-viewer-test",
+            }
+        )
+        doc.save(ignore_permissions=True)
+
+    def answer(self, calls, status=200):
+        from unittest.mock import MagicMock
+
+        return MagicMock(
+            ok=status < 400,
+            status_code=status,
+            json=MagicMock(return_value={"data": calls, "total_pages": 1}),
+        )
+
+    def test_calls_become_totals_per_day_model_and_person(self):
+        failed = gateway_call(
+            status="failure",
+            metadata={"error_information": {"error_class": "RateLimitError"}},
+        )
+        calls = [gateway_call(ms=1000), gateway_call(ms=3000), failed]
+        calls.append(gateway_call(user="lead@example.com"))
+        with patch("requests.get", return_value=self.answer(calls)) as get:
+            result = self.gw.sync(days=1)
+            again = self.gw.sync(days=1)  # reading again never doubles
+
+        self.assertTrue(result["ok"] and again["ok"])
+        self.assertEqual(
+            get.call_args.kwargs["headers"]["Authorization"], "Bearer sk-viewer-test"
+        )
+        rows = frappe.get_all(
+            "HDS Gateway Usage Day", fields=["*"], order_by="gateway_user asc"
+        )
+        self.assertEqual(
+            [(r.gateway_user, r.requests, r.failures) for r in rows],
+            [("dev@example.com", 3, 1), ("lead@example.com", 1, 0)],
+        )
+        self.assertEqual((rows[0].p50_ms, rows[0].p95_ms), (1000, 3000))
+        self.assertIn("RateLimitError", rows[0].error_classes)
+        self.assertNotIn("PROMPT", frappe.as_json(rows))
+
+    def test_the_pages_show_the_gateways_models(self):
+        with patch(
+            "requests.get", return_value=self.answer([gateway_call(), gateway_call()])
+        ):
+            self.gw.sync(days=1)
+        log("gpt-test-model")
+
+        models = {m["model"]: m for m in ai_models.overview(7)["models"]}
+        self.assertEqual(models["tbo-default"]["calls"], 2)
+        self.assertEqual(models["tbo-default"]["provider"], ai_models.GATEWAY_SOURCE)
+        one = ai_models.detail("tbo-default", 7)
+        self.assertEqual((one["calls"], one["cost"]), (2, 0.04))
+        self.assertEqual(one["by_person"][0]["name"], "dev@example.com")
+        self.assertEqual(one["series"][-1]["calls"], 2)
+
+    def test_a_refused_key_is_noted_not_raised(self):
+        with patch("requests.get", return_value=self.answer([], status=401)):
+            result = self.gw.sync(days=1)
+        self.assertFalse(result["ok"])
+        self.assertIn("refused", self.gw.status()["note"])
+
+    def test_off_means_nothing_is_asked(self):
+        frappe.db.set_single_value("HDS Hub Settings", "gateway_sync", 0)
+        frappe.clear_document_cache("HDS Hub Settings", "HDS Hub Settings")
+        with patch("requests.get") as get:
+            self.assertFalse(self.gw.sync()["ok"])
+        get.assert_not_called()
+
+    def test_the_address_must_be_https(self):
+        with self.assertRaises(frappe.ValidationError):
+            ai_models.save_gateway({"url": "http://ai.example.com"})

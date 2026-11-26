@@ -107,3 +107,20 @@ def import_eval(model: str, report: list | str, ran_on: str | None = None) -> di
     report = frappe.parse_json(report)
     ai_models.store_eval(model, report, source="Imported", ran_on=ran_on)
     return ai_models.benchmarks(model)
+
+
+@frappe.whitelist(methods=["POST"])
+def save_gateway(values: dict | str) -> dict:
+    """The AI gateway's address, read-only key and on/off."""
+    check_manager()
+    values = frappe.parse_json(values) or {}
+    if not isinstance(values, dict):
+        frappe.throw(_("values must be an object"))
+    return ai_models.save_gateway(values)
+
+
+@frappe.whitelist(methods=["POST"])
+def sync_gateway() -> dict:
+    """Read the gateway's usage now."""
+    check_manager()
+    return ai_models.sync_gateway()

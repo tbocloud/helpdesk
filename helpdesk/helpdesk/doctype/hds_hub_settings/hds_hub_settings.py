@@ -6,7 +6,7 @@ from frappe import _
 from frappe.model.document import Document
 
 # the base URLs an AI key is sent to
-KEYED_URL_FIELDS = ("ai_base_url", "openai_base_url")
+KEYED_URL_FIELDS = ("ai_base_url", "openai_base_url", "gateway_url")
 
 
 class HDSHubSettings(Document):

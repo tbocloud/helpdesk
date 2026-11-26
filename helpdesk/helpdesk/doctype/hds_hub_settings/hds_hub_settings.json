@@ -55,7 +55,13 @@
 		"auto_repair_pause_reason",
 		"column_break_auto_repair",
 		"auto_repair_off",
-		"auto_repair_max_per_hour"
+		"auto_repair_max_per_hour",
+		"gateway_section",
+		"gateway_sync",
+		"gateway_url",
+		"gateway_viewer_key",
+		"gateway_synced_at",
+		"gateway_sync_note"
 	],
 	"fields": [
 		{
@@ -65,7 +71,7 @@
 		},
 		{
 			"default": "OpenAI",
-			"description": "Tried first for triage, drafts and summaries. Edited in the helpdesk app: Settings → AI providers.",
+			"description": "Tried first for triage, drafts and summaries. Edited in the helpdesk app: Settings \u2192 AI providers.",
 			"fieldname": "primary_ai_provider",
 			"fieldtype": "Select",
 			"label": "Primary AI Provider",
@@ -89,7 +95,7 @@
 			"label": "Anthropic-compatible API",
 			"options": "Anthropic\nAnthropic Compatible\nOpenAI Compatible",
 			"default": "Anthropic",
-			"description": "Anthropic: api.anthropic.com. Anthropic Compatible: Kimi/Moonshot, GLM/Zhipu — same API shape, set Base URL. OpenAI Compatible (older setting): Poolside, Qwen — use the OpenAI provider for these now."
+			"description": "Anthropic: api.anthropic.com. Anthropic Compatible: Kimi/Moonshot, GLM/Zhipu \u2014 same API shape, set Base URL. OpenAI Compatible (older setting): Poolside, Qwen \u2014 use the OpenAI provider for these now."
 		},
 		{
 			"fieldname": "ai_base_url",
@@ -103,7 +109,7 @@
 			"fieldtype": "Select",
 			"label": "Investigation Provider",
 			"options": "\nAnthropic\nAnthropic Compatible",
-			"description": "Optional override: run investigation sessions on a different provider than triage (e.g. cheap OpenAI-compatible triage + Anthropic investigation). Blank = same as Provider above. OpenAI-Compatible is not offered here — sessions need Anthropic tool-use."
+			"description": "Optional override: run investigation sessions on a different provider than triage (e.g. cheap OpenAI-compatible triage + Anthropic investigation). Blank = same as Provider above. OpenAI-Compatible is not offered here \u2014 sessions need Anthropic tool-use."
 		},
 		{
 			"fieldname": "investigation_base_url",
@@ -122,7 +128,7 @@
 			"fieldname": "anthropic_api_key",
 			"fieldtype": "Password",
 			"label": "AI API Key",
-			"description": "Key for the Anthropic-compatible provider. Stored only on the Hub — customer sites never hold an AI credential."
+			"description": "Key for the Anthropic-compatible provider. Stored only on the Hub \u2014 customer sites never hold an AI credential."
 		},
 		{
 			"fieldname": "column_break_api",
@@ -372,11 +378,46 @@
 			"label": "Automatic repairs per hour",
 			"default": "6",
 			"description": "Across every runbook; more waits for the next hour."
+		},
+		{
+			"fieldname": "gateway_section",
+			"fieldtype": "Section Break",
+			"label": "AI Gateway (desktop app)",
+			"description": "The gateway's usage is read every hour with a read-only key, as totals per day: never a message's text"
+		},
+		{
+			"fieldname": "gateway_sync",
+			"fieldtype": "Check",
+			"label": "Read the Gateway's Usage",
+			"default": "0"
+		},
+		{
+			"fieldname": "gateway_url",
+			"fieldtype": "Data",
+			"label": "Gateway Address",
+			"description": "For example https://ai.example.com"
+		},
+		{
+			"fieldname": "gateway_viewer_key",
+			"fieldtype": "Password",
+			"label": "Gateway Read-only Key"
+		},
+		{
+			"fieldname": "gateway_synced_at",
+			"fieldtype": "Datetime",
+			"label": "Last Read",
+			"read_only": 1
+		},
+		{
+			"fieldname": "gateway_sync_note",
+			"fieldtype": "Small Text",
+			"label": "Last Read: Note",
+			"read_only": 1
 		}
 	],
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-11-17 18:00:00.000000",
+	"modified": "2026-11-26 16:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HDS Hub Settings",

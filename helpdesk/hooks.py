@@ -147,6 +147,11 @@ scheduler_events = {
         "40 * * * *": [
             "helpdesk.offboarding.run",
         ],
+        # hourly at :20: the AI gateway's usage as totals per day, for AI models (Phase 31; off
+        # until a gateway address and read-only key are set)
+        "20 * * * *": [
+            "helpdesk.ai_gateway.sync",
+        ],
         # 00:30: champions of every period that ended yesterday (team dashboard)
         "30 0 * * *": [
             "helpdesk.team_dashboard.close_periods",

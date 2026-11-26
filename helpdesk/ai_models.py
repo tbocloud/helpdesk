@@ -14,7 +14,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, cint, getdate, nowdate
 
-from helpdesk import ai_engine
+from helpdesk import ai_engine, ai_gateway
 
 LOG = "HDS AI Usage Log"
 SETTINGS = "HDS Hub Settings"
@@ -185,7 +185,7 @@ def _paused_models(settings) -> set[str]:
     return paused
 
 
-def overview(days: int = 30) -> dict:
+def _hub_overview(days: int = 30) -> dict:
     """Every model side by side for the period, with the totals above them."""
     days = period(days)
     rows = _rows(days)
@@ -249,7 +249,7 @@ def _recorded_since() -> str:
     return str(getdate(first[0].creation)) if first else ""
 
 
-def detail(model: str, days: int = 30) -> dict:
+def _hub_detail(model: str, days: int = 30) -> dict:
     """One model's performance and errors for the period."""
     days = period(days)
     rows = _rows(days, model)
@@ -380,6 +380,7 @@ def job_settings(days: int = 30) -> dict:
         },
         "models": sorted({r.model for r in rows if r.model}),
         "can_change": can_change(),
+        "gateway": ai_gateway.status(),
         "changes": frappe.get_all(
             "HDS Model Change",
             fields=[
@@ -860,3 +861,156 @@ def quality(model: str, days: int = 30) -> dict:
             "bad_format": events.get("Bad answer format", 0),
         },
     }
+
+
+# --- the AI gateway's models (the desktop app), beside TBO Support's own ------------------------
+
+GATEWAY_SOURCE = "Desktop app (AI gateway)"
+
+
+def _gateway_figures(days_rows: list) -> dict:
+    """Figures from the gateway's daily totals. The speed is the request-weighted middle of
+    the days' medians, and the slow end the slowest day's: close, not exact."""
+    calls = sum(r.requests or 0 for r in days_rows)
+    failed = sum(r.failures or 0 for r in days_rows)
+    weighted = [
+        (r.p50_ms, (r.requests or 0) - (r.failures or 0)) for r in days_rows if r.p50_ms
+    ]
+    weight = sum(w for _ms, w in weighted)
+    p50 = (
+        round(sum(ms * w for ms, w in weighted) / weight / 1000, 1) if weight else None
+    )
+    slow = [r.p95_ms for r in days_rows if r.p95_ms]
+    return {
+        "calls": calls,
+        "failed": failed,
+        "error_rate": rate(failed, calls),
+        "as_fallback": 0,
+        "fallback_rate": None,
+        "cost": round(sum(r.spend_usd or 0 for r in days_rows), 2),
+        "tokens": 0,
+        "p50": p50,
+        "p95": round(max(slow) / 1000, 1) if slow else None,
+    }
+
+
+def _add(figures: dict, more: dict) -> dict:
+    """Two sources' figures as one: counts and cost add up; the speed stays the first's."""
+    calls = figures["calls"] + more["calls"]
+    failed = figures["failed"] + more["failed"]
+    return {
+        **figures,
+        "calls": calls,
+        "failed": failed,
+        "error_rate": rate(failed, calls),
+        "fallback_rate": rate(figures["as_fallback"], calls),
+        "cost": round(figures["cost"] + more["cost"], 2),
+        "p50": figures["p50"] if figures["p50"] is not None else more["p50"],
+        "p95": figures["p95"] if figures["p95"] is not None else more["p95"],
+    }
+
+
+def overview(days: int = 30) -> dict:
+    """Every model side by side: TBO Support's and the Copilot worker's, and the gateway's."""
+    result = _hub_overview(days)
+    by_model: dict[str, list] = {}
+    for row in ai_gateway.day_rows(result["days"]):
+        by_model.setdefault(row.model, []).append(row)
+    if not by_model:
+        return result
+    known = {m["model"]: m for m in result["models"]}
+    for name, rows in by_model.items():
+        figures = _gateway_figures(rows)
+        if name in known:
+            known[name].update(_add(known[name], figures))
+            if known[name]["status"] == "Not used":
+                known[name]["status"] = "Healthy"
+        else:
+            result["models"].append(
+                {
+                    "model": name,
+                    "provider": GATEWAY_SOURCE,
+                    "used_for": {"primary": [], "fallback": []},
+                    **figures,
+                    "benchmark": latest_scores().get(name),
+                    "status": "Degraded"
+                    if figures["calls"] >= MIN_CALLS
+                    and (figures["error_rate"] or 0) >= DEGRADED_ERROR_RATE
+                    else "Healthy",
+                }
+            )
+        result["totals"] = _add(result["totals"], figures)
+    result["models"].sort(key=lambda m: (-m["calls"], m["model"]))
+    result["attention"] = [
+        m["model"] for m in result["models"] if m["status"] in ("Paused", "Degraded")
+    ]
+    return result
+
+
+def detail(model: str, days: int = 30) -> dict:
+    """One model's performance and errors, with the gateway's share when it has one."""
+    result = _hub_detail(model, days)
+    rows = ai_gateway.day_rows(result["days"], model)
+    result["by_person"] = []
+    if not rows:
+        return result
+    figures = _gateway_figures(rows)
+    hub = {k: result[k] for k in figures}
+    result.update(_add(hub, figures))
+    if not result["provider"]:
+        result["provider"] = GATEWAY_SOURCE
+    if result["status"] == "Not used":
+        result["status"] = "Healthy"
+    by_day: dict[str, list] = {}
+    for row in rows:
+        by_day.setdefault(str(row.day), []).append(row)
+    for point in result["series"]:
+        mine = by_day.get(point["day"])
+        if mine:
+            f = _gateway_figures(mine)
+            point["calls"] += f["calls"]
+            point["failed"] += f["failed"]
+            point["cost"] = round(point["cost"] + f["cost"], 2)
+            point["error_rate"] = rate(point["failed"], point["calls"]) or 0
+    result["by_source"].append({"name": GATEWAY_SOURCE, **figures})
+    kinds = {e["kind"]: e["count"] for e in result["errors_by_kind"]}
+    for row in rows:
+        for kind, count in (frappe.parse_json(row.error_classes) or {}).items():
+            kinds[kind] = kinds.get(kind, 0) + cint(count)
+    result["errors_by_kind"] = sorted(
+        ({"kind": k, "count": n} for k, n in kinds.items()), key=lambda e: -e["count"]
+    )
+    people: dict[str, list] = {}
+    for row in rows:
+        people.setdefault(row.gateway_user or _("(no name)"), []).append(row)
+    result["by_person"] = sorted(
+        ({"name": name, **_gateway_figures(mine)} for name, mine in people.items()),
+        key=lambda g: -g["cost"],
+    )
+    return result
+
+
+def save_gateway(values: dict) -> dict:
+    """The gateway's address, its read-only key and whether to read it."""
+    if not can_change():
+        frappe.throw(
+            _("Only System Managers set up the AI gateway."), frappe.PermissionError
+        )
+    doc = frappe.get_doc(SETTINGS)
+    if "url" in values:
+        doc.gateway_url = str(values.get("url") or "").strip()
+    if "on" in values:
+        doc.gateway_sync = 1 if frappe.utils.sbool(values.get("on")) else 0
+    if values.get("key") is not None:
+        doc.gateway_viewer_key = str(values.get("key")).strip()
+    doc.save(ignore_permissions=True)
+    return ai_gateway.status()
+
+
+def sync_gateway() -> dict:
+    if not can_change():
+        frappe.throw(
+            _("Only System Managers read the AI gateway now."), frappe.PermissionError
+        )
+    result = ai_gateway.sync()
+    return {**ai_gateway.status(), "ok": result["ok"], "note": result["note"]}

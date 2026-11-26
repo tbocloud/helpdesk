@@ -298,6 +298,37 @@
                     "
                   />
                 </SectionCard>
+                <SectionCard :title="__('Where the calls come from')">
+                  <BarList
+                    class="px-4 pb-4"
+                    :rows="
+                      bars(
+                        detail.by_source,
+                        'calls',
+                        (v) => String(v),
+                        '',
+                        'name'
+                      )
+                    "
+                  />
+                </SectionCard>
+                <SectionCard
+                  v-if="detail.by_person && detail.by_person.length"
+                  :title="__('Desktop app: cost by person')"
+                >
+                  <BarList
+                    class="px-4 pb-4"
+                    :rows="
+                      bars(
+                        detail.by_person,
+                        'cost',
+                        (v) => money(v),
+                        '',
+                        'name'
+                      )
+                    "
+                  />
+                </SectionCard>
               </div>
               <SectionCard :title="__('Slowest calls')">
                 <div class="overflow-x-auto px-4 pb-4">
@@ -952,6 +983,64 @@
             }}
           </p>
 
+          <SectionCard
+            :title="__('AI gateway (desktop app)')"
+            :description="
+              __(
+                'Read every hour with a read-only key, as totals per day. A message is never read.'
+              )
+            "
+          >
+            <div class="flex flex-col gap-3 px-4 pb-4">
+              <p class="text-p-sm text-ink-gray-6">
+                {{
+                  settings.gateway.on
+                    ? settings.gateway.synced_at
+                      ? __(
+                          "Last read {0}. {1}",
+                          settings.gateway.synced_at,
+                          settings.gateway.note
+                        )
+                      : settings.gateway.note || __("Not read yet.")
+                    : __("Off: the desktop app's models are not shown.")
+                }}
+              </p>
+              <form
+                v-if="settings.can_change"
+                class="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto_auto]"
+                @submit.prevent="saveGateway"
+              >
+                <FormControl
+                  v-model="gw.url"
+                  type="text"
+                  :label="__('Gateway address')"
+                  placeholder="https://"
+                />
+                <FormControl
+                  v-model="gw.key"
+                  type="password"
+                  :label="__('Read-only key')"
+                  :placeholder="
+                    settings.gateway.key_set ? __('saved; type to replace') : ''
+                  "
+                  autocomplete="off"
+                />
+                <FormControl
+                  v-model="gw.on"
+                  type="checkbox"
+                  :label="__('Read it')"
+                />
+                <Button type="submit" :label="__('Save')" :loading="gwBusy" />
+                <Button
+                  :label="__('Read now')"
+                  :loading="gwBusy"
+                  :disabled="!settings.gateway.on"
+                  @click="readGateway"
+                />
+              </form>
+            </div>
+          </SectionCard>
+
           <SectionCard :title="__('Change history')">
             <ul class="flex flex-col gap-1.5 px-4 pb-4 text-p-sm">
               <li v-for="(c, i) in settings.changes" :key="i">
@@ -1031,6 +1120,8 @@ type Overview = {
   recorded_since: string;
 };
 type Detail = ModelRow & {
+  by_source: (Figures & { name: string })[];
+  by_person?: (Figures & { name: string })[];
   series: { day: string; calls: number; cost: number; error_rate: number }[];
   by_job: (Figures & { name: string })[];
   errors_by_kind: { kind: string; count: number }[];
@@ -1103,6 +1194,13 @@ type JobRow = Figures & {
   anthropic_model: string;
 };
 type Settings = {
+  gateway: {
+    on: boolean;
+    url: string;
+    key_set: boolean;
+    synced_at: string;
+    note: string;
+  };
   jobs: JobRow[];
   sections: Step[];
   defaults: { primary_section: string; failover: boolean };
@@ -1389,5 +1487,51 @@ async function addPublic() {
 }
 function removePublic(name: string) {
   benchCall("remove_public_benchmark", { name }, __("Removed."));
+}
+
+// --- the AI gateway ---------------------------------------------------------------------------
+
+const gw = reactive({ url: "", key: "", on: false });
+const gwBusy = ref(false);
+watch(
+  () => settings.value?.gateway,
+  (g) => {
+    if (g) Object.assign(gw, { url: g.url, key: "", on: g.on });
+  }
+);
+async function gatewayCall(
+  method: string,
+  args: Record<string, unknown>,
+  done: string
+) {
+  gwBusy.value = true;
+  notice.value = null;
+  try {
+    const r = (await call(`${API}.${method}`, args)) as {
+      ok?: boolean;
+      note?: string;
+    };
+    notice.value = {
+      ok: r.ok !== false,
+      text: r.note ? __("AI gateway: {0}", r.note) : done,
+    };
+  } catch (err) {
+    notice.value = { ok: false, text: errorText(err, __("Not saved")) };
+  } finally {
+    gwBusy.value = false;
+    load();
+  }
+}
+function saveGateway() {
+  const values: Record<string, unknown> = { url: gw.url, on: gw.on ? 1 : 0 };
+  if (gw.key) values.key = gw.key;
+  gatewayCall(
+    "save_gateway",
+    { values: JSON.stringify(values) },
+    __("AI gateway saved.")
+  );
+}
+function readGateway() {
+  gatewayCall("sync_gateway", {}, __("Read."));
 }
 </script>
