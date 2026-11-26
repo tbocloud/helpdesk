@@ -834,6 +834,21 @@ def safe_text(text: str, articles: list[dict]) -> str:
     return " ".join(kept).strip()[:MAX_TEXT]
 
 
+def cut_for_safety(raw: str, text: str) -> bool:
+    """`safe_text` took something out of `raw` to make `text`: a link, a price or a promise.
+    The spaces and line breaks it tidies aren't a cut."""
+
+    def squeezed(value: str) -> str:
+        return re.sub(r"\s+", " ", re.sub(r"\*\*|__", "", value)).strip()
+
+    kept, said = squeezed(text), squeezed(raw)
+    if len(text) >= MAX_TEXT:
+        # cut at the length limit, which isn't for safety: only something taken out before
+        # that point counts
+        return not said.startswith(kept)
+    return len(kept) < len(said)
+
+
 def _offer(doc) -> str:
     if doc.language == "ar":
         return "لم أجد إجابة في أدلتنا. هل يمكنك أن تخبرني بما حدث بالضبط حتى أرفع تذكرة إلى فريقنا؟"
@@ -1516,7 +1531,11 @@ def chatwoot_decision(row, chat_prompt: str, articles: list[dict]) -> dict | Non
         },
         update_modified=False,
     )
+    from helpdesk import ai_models
+
+    model = result.get("model")
     if not answer or answer.get("parse_error"):
+        ai_models.record_event("Bad answer format", model, job="chat")
         return None
     for field, value in (answer.get("fields") or {}).items():
         if field in FIELDS and value:
@@ -1532,10 +1551,20 @@ def chatwoot_decision(row, chat_prompt: str, articles: list[dict]) -> dict | Non
         doc.db_set("language", reported, update_modified=False)
     doc.reload()
     step = answer.get("next") if answer.get("next") in NEXT else "question"
-    text = safe_text(str(answer.get("text") or ""), articles)
+    raw = str(answer.get("text") or "")
+    text = safe_text(raw, articles)
+    if cut_for_safety(raw, text):
+        # a link, a price or a promise was taken out before the customer saw it
+        ai_models.record_event("Safety cut", model, job="chat")
     sources = cited(answer, articles)
     if step == "answer" and not sources:
+        # an answer with no article behind it never reaches the customer; it is counted
+        ai_models.record_event("Unsupported answer", model, job="chat")
         step, text = "question", _offer(doc)
+    elif step == "answer":
+        ai_models.record_event("Answered", model, job="chat")
+    elif step == "handover":
+        ai_models.record_event("Hand-over", model, job="chat")
     if step == "summary" and doc.title and doc.actual:
         summary = "\n".join(
             f"{_(FIELD_LABELS[f])}: {doc.get(f)}"

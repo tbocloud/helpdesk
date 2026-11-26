@@ -125,6 +125,16 @@ so with an empty table every job runs as before. A change applies from the job's
 - `get_providers(job)` gives each section with the job's model. A provider with its own
   model has `override` set, and its pause, failure and alert keys are `<section>|<model>`
   (`AIProvider.key`), so a mistyped job model pauses only that job, not its section.
+- **Phase 31:** a job row may also choose its own first section (`primary_section`) and switch
+  its own fallback On or Off (`allow_fallback`); blank follows the settings. `provider_order`
+  applies them. A job may instead have its own **model and backup** from the model list, each
+  called through its provider account (HDS AI Provider: DeepSeek, Qwen, Claude, GPT or any
+  other, each with its own key), with an optional monthly token limit per model. The AI models
+  page (Model settings) sets all of it, with a change history and a test-set guard for the
+  worker's jobs. See [ai-models.md](ai-models.md).
+- **Phase 37:** with "Use the gateway for every AI call" on, every call goes through the TBO AI gateway, and the
+  sections' keys stay only as the emergency path when the gateway can't be used (ai-models.md, "Every AI call
+  through the TBO AI gateway").
 - `HDSHubSettings.validate` refuses a second row for the same job (`check_job_rows`).
 - **The worker's jobs:** `run_context.models` (`ai_engine.worker_models()`) lists, for
   `investigate`, `fix` and `review`, each set-up section in the hub's order with the job's
@@ -180,7 +190,9 @@ providers**. The Systems card's AI triage row names the provider that answers no
 
 - **HDS AI Usage Log** has `provider` (the section; investigation calls log
   Anthropic-compatible) next to `model`, for every attempt, plus `job`, `fallback` (the
-  answer came from a section other than the first) and `copilot_run`.
+  answer came from a section other than the first) and `copilot_run`. A failed attempt's row is
+  written by a background job on the `short` queue, so it stays when the request rolls back; it
+  appears once that queue's worker has run it.
 - **The worker's spend:** `submit_investigation` and `submit_change` carry the run's `cost`
   with a `stages` list (one entry per job and model: tokens, cached tokens, dollars, section,
   fallback). `log_worker_usage` turns each entry into a usage row with the run and its

@@ -1,0 +1,81 @@
+{
+ "actions": [],
+ "creation": "2026-11-26 14:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "model",
+  "benchmark",
+  "score",
+  "measured_on",
+  "source_url",
+  "note"
+ ],
+ "fields": [
+  {
+   "fieldname": "model",
+   "fieldtype": "Data",
+   "label": "Model",
+   "in_list_view": 1,
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "benchmark",
+   "fieldtype": "Data",
+   "label": "Benchmark",
+   "in_list_view": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "score",
+   "fieldtype": "Data",
+   "label": "Score",
+   "in_list_view": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "measured_on",
+   "fieldtype": "Date",
+   "label": "Measured On",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "source_url",
+   "fieldtype": "Data",
+   "label": "Source",
+   "length": 500,
+   "options": "URL"
+  },
+  {
+   "fieldname": "note",
+   "fieldtype": "Small Text",
+   "label": "Note"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-26 20:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Helpdesk",
+ "name": "HDS Public Benchmark",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "read": 1,
+   "report": 1,
+   "role": "System Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Agent Manager"
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "autoname": "hash",
+ "naming_rule": "Random",
+ "in_create": 1
+}

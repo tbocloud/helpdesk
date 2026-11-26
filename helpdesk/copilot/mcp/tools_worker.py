@@ -61,6 +61,7 @@ def submit_investigation(
     cost: dict | None = None,
     change_set: dict | None = None,
     error_signatures: list | None = None,
+    references: dict | None = None,
 ) -> dict:
     if runs.fixing(_run(caller)):
         frappe.throw(
@@ -89,6 +90,12 @@ def submit_investigation(
         },
     )
     _log_usage(doc.name, cost, "investigate", 1)
+    if references and isinstance(references, dict):
+        # which cited files, functions and fields exist (Phase 31): counted per model; a
+        # check of any shape is read without refusing the report (record_references)
+        from helpdesk import ai_models
+
+        ai_models.record_references(doc.name, references)
     # the lease ends with the investigation: this token stops working now
     return {"run": doc.name, "state": doc.state, "root_cause": doc.root_cause_category}
 
@@ -281,6 +288,12 @@ register_tool(
             "maxItems": 10,
             "description": "The site errors the diagnosis rests on, each as 'app | method | the error's last line' "
             "from get_error_log (app, method and the last line of error). Links the ticket to Copilot's known issues.",
+        },
+        "references": {
+            "type": "object",
+            "description": "Filled by the worker program, not the model: how many cited files, functions, doctypes "
+            "and fields were checked against the code, and which do not exist: "
+            "{checked: int, missing: [{kind: file|function|doctype|field, value}]}.",
         },
     },
     required=["root_cause_category", "confidence"],

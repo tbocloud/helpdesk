@@ -262,3 +262,141 @@ def pr_result(pull_request: str, lease_token: str, result: dict | str) -> dict:
     from helpdesk.copilot import pulls
 
     return pulls.result(pull_request, lease_token, _parse(result, "result") or {})
+
+
+OPEN_EVAL_REQUEST = ("Queued", "Running")
+
+
+@frappe.whitelist(methods=["POST"])
+def report_eval(
+    model: str,
+    results: list | str,
+    job: str = "investigate",
+    request: str | None = None,
+) -> dict:
+    """A run of the test set, from the worker (Phase 31): scores per case number only. It
+    answers the request it names, or else the model's open request for the same job."""
+    from helpdesk import ai_engine, ai_models
+
+    worker_only()
+    model = str(model or "").strip()
+    # the job as store_eval keeps it
+    job = job if job in ai_engine.JOBS else "investigate"
+    # locked while it is checked and answered: two copies of one report never both store a run
+    named = request and frappe.db.get_value(
+        ai_models.EVAL_REQUEST,
+        request,
+        ["name", "model", "job", "status", "eval_run"],
+        as_dict=True,
+        for_update=True,
+    )
+    if named and (named.model, named.job) != (model, job):
+        frappe.throw(
+            _("Request {0} is for {1} ({2}), not this report's model and job.").format(
+                named.name, named.model, named.job
+            )
+        )
+    # the run that answered it, read with a lock too: a locking read sees the newest committed
+    # row, so a copy of this report that waited on the request sees the run the first one stored
+    answered_by = (
+        frappe.db.get_value(
+            ai_models.EVAL_RUN, named.eval_run, "source", for_update=True
+        )
+        if named and named.status == "Done" and named.eval_run
+        else None
+    )
+    if answered_by == "Worker":
+        # the worker's own report sent again (its answer was lost on the way): nothing is
+        # stored twice; a request a manager's import answered still takes the worker's run
+        return {"eval_run": named.eval_run}
+    name = ai_models.store_eval(model, frappe.parse_json(results), job=job)
+    if request:
+        # only the request it names, while it waits or after it was given up for taking too
+        # long (a late report still answers it); a report sent again answers nothing
+        late = named and named.status == "Failed" and not named.eval_run
+        waiting = named and named.status in OPEN_EVAL_REQUEST
+        # a manager's import answered it first: the worker's own run takes its place, so a
+        # copy of this report sent again is recognised
+        replaced = answered_by == "Imported"
+        answered = [named.name] if waiting or late or replaced else []
+    else:
+        answered = frappe.get_all(
+            ai_models.EVAL_REQUEST,
+            filters={
+                "model": model,
+                "job": job,
+                "status": ["in", list(OPEN_EVAL_REQUEST)],
+            },
+            pluck="name",
+        )
+    for open_request in answered:
+        frappe.db.set_value(
+            ai_models.EVAL_REQUEST, open_request, {"status": "Done", "eval_run": name}
+        )
+    return {"eval_run": name}
+
+
+# a test-set run a worker claimed and never reported (it stopped, or lost the file): after this
+# long the request is Failed with a note, and a manager can ask for a run again
+EVAL_RUN_HOURS = 24
+
+
+def give_up_stale_eval_requests() -> int:
+    """Running test-set requests with no report for EVAL_RUN_HOURS become Failed. A late report
+    for one still answers it (report_eval accepts a Failed request that names it)."""
+    from frappe.utils import add_to_date, now_datetime
+
+    from helpdesk import ai_models
+
+    cutoff = add_to_date(now_datetime(), hours=-EVAL_RUN_HOURS)
+    stale = frappe.get_all(
+        ai_models.EVAL_REQUEST,
+        filters={"status": "Running", "modified": ["<", cutoff]},
+        pluck="name",
+    )
+    if not stale:
+        return 0
+    # one update that touches only requests still Running and still stale: a report that
+    # came in meanwhile (Done) is never turned into Failed
+    request = frappe.qb.DocType(ai_models.EVAL_REQUEST)
+    (
+        frappe.qb.update(request)
+        .set(request.status, "Failed")
+        .set(
+            request.error,
+            _("No report came back within {0} hours. Ask for a run again.").format(
+                EVAL_RUN_HOURS
+            ),
+        )
+        .set(request.modified, now_datetime())
+        .where(request.name.isin(stale))
+        .where(request.status == "Running")
+        .where(request.modified < cutoff)
+    ).run()
+    return len(stale)
+
+
+@frappe.whitelist(methods=["POST"])
+def claim_eval_request() -> dict | None:
+    """The oldest waiting request to run the test set on a model, marked Running; None when
+    there is none. The worker asks only when it has no ticket work."""
+    from helpdesk import ai_models
+
+    worker_only()
+    give_up_stale_eval_requests()
+    # a locking read that passes over a request another worker is claiming: no two workers
+    # get the same one
+    name = frappe.db.get_value(
+        ai_models.EVAL_REQUEST,
+        {"status": "Queued"},
+        "name",
+        order_by="creation asc",
+        for_update=True,
+        skip_locked=True,
+    )
+    if not name:
+        return None
+    frappe.db.set_value(ai_models.EVAL_REQUEST, name, "status", "Running")
+    return frappe.db.get_value(
+        ai_models.EVAL_REQUEST, name, ["name", "model", "job"], as_dict=True
+    )
