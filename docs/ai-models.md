@@ -35,17 +35,42 @@ Rows written before the deploy have only the cost. The pages show this as "recor
 
 ## Model settings
 
-Three parts, top to bottom. Only System Managers change them.
+Three numbered parts, top to bottom. Only System Managers change them.
+
+**Applications and purposes** (`ai_engine.APPLICATIONS`): every application that uses AI, with its purposes.
+Each purpose gets a model and a backup. A new application or purpose is one entry there; it then shows on the page.
+
+| Application | Purposes | Without a model of its own |
+|---|---|---|
+| TBO Support | triage, draft, summary, task, chat | follows the sections, as before |
+| Copilot worker | investigate, fix, review | follows the sections, as before |
+| Desktop app | `desktop_simple`, `desktop_medium`, `desktop_hard`, `desktop_very_hard` (Simple … Very hard) | nothing: the gateway's own models answer (`OWN_MODEL_JOBS`) |
+| Inbox | `inbox_reply`, `inbox_purpose`, `inbox_voice`, `inbox_files` | waits for phases 32–35 (`COMING_JOBS`); no model can be chosen yet |
+
+- **Desktop levels:** a level takes only a model and a backup; the section settings don't apply to it. The desktop
+  app follows its level only once the gateway connection is built (plan addendum 31.9, step 2, with DevOps):
+  1. TBO Support writes each level to the gateway as `tbo-simple` … `tbo-very-hard`;
+  2. each person's key allows them;
+  3. the app shows them in its model picker.
+
+  Until then the gateway's own models answer.
+- **The older Settings → AI providers page** keeps the desktop levels when it saves.
 
 **1. Providers and keys**
 - Today's two sections, OpenAI and Anthropic-compatible, stay in HDS Hub Settings and show as
   the first two rows. Editing one here goes through `api.ai_settings.save_settings`.
 - **HDS AI Provider** adds provider accounts: name, API style, address (https), encrypted key,
-  on/off, and whether the provider supports JSON mode and a token budget.
+  on/off, whether the provider supports JSON mode and a token budget, and a note shown under its
+  name, for example where its data goes. An account can be switched on or off in its row.
   - API styles: OpenAI, OpenAI-compatible, Anthropic or Anthropic-compatible.
-  - Presets fill in DeepSeek (`https://api.deepseek.com`), Qwen
-    (`https://dashscope-intl.aliyuncs.com/compatible-mode/v1`; keys work only in their own
-    region), Claude (the SDK's address) and GPT.
+  - Presets fill in the address and the note:
+    - the TBO AI gateway (its address and a key come from DevOps; DeepSeek on AWS Bedrock, so
+      customer data stays in TBO's AWS account);
+    - DeepSeek (`https://api.deepseek.com`; data goes to DeepSeek's servers in China);
+    - Qwen (`https://dashscope-intl.aliyuncs.com/compatible-mode/v1`; Alibaba Cloud's Singapore
+      region, and keys work only in their own region);
+    - Claude (the SDK's address);
+    - GPT.
   - A provider may not take a section's name.
 - **Keys:** a key is sent only to replace the saved one. The page and the API return only
   whether one is saved.
@@ -62,7 +87,9 @@ Three parts, top to bottom. Only System Managers change them.
 - **Allowed models:** a model a job uses can't be unticked or removed.
 - **Removing:** a model that was never called and has no test-set run is deleted. Otherwise it
   only leaves the list, and its prices stay for the cost reports.
-- **Candidate:** a listed model that no job uses.
+- **Candidate:** a listed model that no purpose uses.
+- **Used by:** one line per application, with the purposes that use the model first and those it backs up, for
+  example "TBO Support: draft, chat; backup for triage".
 - **Patch:** `v16_0_3.ai_model_list_from_sections` starts the list with the models today's
   sections use, allowed and called through their section.
 
