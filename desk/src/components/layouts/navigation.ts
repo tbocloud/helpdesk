@@ -38,7 +38,6 @@ import LucideUserRoundCog from "~icons/lucide/user-round-cog";
 import LucideActivity from "~icons/lucide/activity";
 import LucideVideo from "~icons/lucide/video";
 import LucideFileChartColumn from "~icons/lucide/file-chart-column";
-import LucideGauge from "~icons/lucide/gauge";
 import LucideGlobe from "~icons/lucide/globe";
 
 /** A page in the sidebar. The flags are the role rules; see `isNavItemVisible`. */
