@@ -1437,8 +1437,8 @@ def _emergency(system_prompt, user_message, ticket_name, job, images):
     decision for Phase 37), and the managers are told once in 6 hours."""
     from helpdesk import ai_gateway
 
-    ai_gateway.mark_down()
     chain = within_limits(section_chain(job))
+    ai_gateway.mark_down(emergency=bool(chain))
     if not chain:
         frappe.throw(
             _(

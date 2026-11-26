@@ -138,8 +138,9 @@ def key_works() -> bool:
     return ok
 
 
-def mark_down() -> None:
-    """The gateway can't be used: remember since when, and tell the managers once in 6 hours."""
+def mark_down(emergency: bool | None = None) -> None:
+    """The gateway can't be used: remember since when, and tell the managers once in 6 hours,
+    saying whether TBO Support's emergency key answers meanwhile."""
     since = frappe.cache.get_value(DOWN_KEY)
     if not since:
         since = str(now_datetime())[:16]
@@ -147,11 +148,19 @@ def mark_down() -> None:
     if frappe.cache.get_value(DOWN_ALERT_KEY, expires=True):
         return
     frappe.cache.set_value(DOWN_ALERT_KEY, 1, expires_in_sec=DOWN_ALERT_SECONDS)
-    _alert(
-        _(
+    if emergency is None:
+        from helpdesk.ai_engine import configured_providers
+
+        emergency = any(configured_providers().values())
+    if emergency:
+        subject = _(
             "The TBO AI gateway is not answering since {0}. TBO Support answers with its emergency key; the Copilot worker and the desktop app wait until the gateway answers."
         ).format(since)
-    )
+    else:
+        subject = _(
+            "The TBO AI gateway is not answering since {0}, and TBO Support has no emergency key: its AI waits too, like the Copilot worker's and the desktop app's."
+        ).format(since)
+    _alert(subject)
 
 
 def _admin(
