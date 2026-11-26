@@ -105,3 +105,4 @@ helpdesk.patches.v16_0_3.copilot_takes_prs_default
 helpdesk.patches.v16_0_3.conversation_asked_for_person
 helpdesk.patches.v16_0_3.copilot_level_fix_and_data
 helpdesk.patches.v16_0_3.model_alert_limits
+helpdesk.patches.v16_0_3.ai_model_list_from_sections

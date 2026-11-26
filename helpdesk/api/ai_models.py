@@ -127,20 +127,44 @@ def guard(job: str, values: dict | str) -> dict:
     return ai_models.guard(job, values)
 
 
-@frappe.whitelist(methods=["POST"])
-def add_model(values: dict | str) -> dict:
-    """A model to test before any job uses it."""
-    check_manager()
+def _values(values) -> dict:
     values = frappe.parse_json(values) or {}
     if not isinstance(values, dict):
         frappe.throw(_("values must be an object"))
-    return ai_models.add_model(values)
+    return values
 
 
 @frappe.whitelist(methods=["POST"])
-def remove_candidate(model: str) -> dict:
+def save_provider(values: dict | str) -> dict:
+    """A provider account (or one of today's sections): address, key, on/off."""
     check_manager()
-    return ai_models.remove_candidate(model)
+    return ai_models.save_provider(_values(values))
+
+
+@frappe.whitelist(methods=["POST"])
+def remove_provider(name: str) -> dict:
+    check_manager()
+    return ai_models.remove_provider(name)
+
+
+@frappe.whitelist(methods=["POST"])
+def test_provider(name: str, model: str | None = None) -> dict:
+    """A tiny test call through a provider account."""
+    check_manager()
+    return ai_models.test_provider(name, model)
+
+
+@frappe.whitelist(methods=["POST"])
+def save_model(values: dict | str) -> dict:
+    """A model of the list: added, or its provider, prices, tick or monthly limit changed."""
+    check_manager()
+    return ai_models.save_model(_values(values))
+
+
+@frappe.whitelist(methods=["POST"])
+def remove_model(model: str) -> dict:
+    check_manager()
+    return ai_models.remove_model(model)
 
 
 @frappe.whitelist(methods=["POST"])

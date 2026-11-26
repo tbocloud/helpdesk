@@ -9,6 +9,8 @@
  "field_order": [
   "day",
   "model",
+  "gateway_alias",
+  "gateway_provider",
   "gateway_user",
   "day_key",
   "column_break_day",
@@ -37,6 +39,19 @@
    "in_list_view": 1,
    "reqd": 1,
    "search_index": 1
+  },
+  {
+   "fieldname": "gateway_alias",
+   "fieldtype": "Data",
+   "label": "Gateway name",
+   "read_only": 1,
+   "description": "The name the desktop app uses, for example tbo-default; Model is the real model behind it."
+  },
+  {
+   "fieldname": "gateway_provider",
+   "fieldtype": "Data",
+   "label": "Gateway provider",
+   "read_only": 1
   },
   {
    "fieldname": "gateway_user",
@@ -101,7 +116,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-11-26 16:00:00.000000",
+ "modified": "2026-11-26 14:00:00.000000",
  "modified_by": "Administrator",
  "module": "Helpdesk",
  "name": "HDS Gateway Usage Day",

@@ -9,7 +9,9 @@
   "openai_model",
   "anthropic_model",
   "primary_section",
-  "allow_fallback"
+  "allow_fallback",
+  "model",
+  "backup_model"
  ],
  "fields": [
   {
@@ -50,12 +52,27 @@
    "options": "\nOn\nOff",
    "in_list_view": 1,
    "description": "Whether this job may move to the other section when its first one fails. Blank: as the settings say (Failover)."
+  },
+  {
+   "fieldname": "model",
+   "fieldtype": "Link",
+   "options": "HDS Model Pricing",
+   "label": "Model",
+   "in_list_view": 1,
+   "description": "From the allowed models of any provider. With a model set, the job ignores the sections and their fallback."
+  },
+  {
+   "fieldname": "backup_model",
+   "fieldtype": "Link",
+   "options": "HDS Model Pricing",
+   "label": "Backup",
+   "description": "Answers only when the model's provider can't (an outage), never when a monthly limit is used up."
   }
  ],
  "index_web_pages_for_search": 0,
  "istable": 1,
  "links": [],
- "modified": "2026-11-26 12:00:00.000000",
+ "modified": "2026-11-26 14:00:00.000000",
  "modified_by": "Administrator",
  "module": "Helpdesk",
  "name": "HDS AI Job",

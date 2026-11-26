@@ -260,6 +260,8 @@ class TestThePage(AISettingsCase):
                     "anthropic_model": "",
                     "primary_section": "",
                     "allow_fallback": "",
+                    "model": "",
+                    "backup_model": "",
                 }
             ],
         )

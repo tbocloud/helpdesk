@@ -22,7 +22,9 @@ PLAIN_FIELDS = (
 )
 SECRET_FIELDS = ("openai_api_key", "anthropic_api_key")
 JOB_FIELDS = ("openai_model", "anthropic_model")
-JOB_CHOICES = ("primary_section", "allow_fallback")
+# a job's own first section and fallback, and its own model and backup (Phase 31): set on the
+# AI models page, kept when this page saves
+JOB_CHOICES = ("primary_section", "allow_fallback", "model", "backup_model")
 # enough of a key to tell which kind is saved, nothing of the key itself
 KEY_PREFIXES = ("sk-proj-", "sk-ant-", "sk-")
 # the Messages API kinds of the Anthropic-compatible section; "OpenAI Compatible",

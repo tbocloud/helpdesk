@@ -1,0 +1,95 @@
+{
+ "actions": [],
+ "autoname": "field:provider_name",
+ "creation": "2026-11-26 14:00:00.000000",
+ "description": "An AI provider account with its own API key (AI models → Model settings). Today's two sections, OpenAI and Anthropic-compatible, stay in HDS Hub Settings.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "provider_name",
+  "api_style",
+  "base_url",
+  "column_break_main",
+  "enabled",
+  "json_mode",
+  "api_key",
+  "notes"
+ ],
+ "fields": [
+  {
+   "description": "As TBO Support shows it, for example DeepSeek. The Copilot worker finds its own key for this provider by this name.",
+   "fieldname": "provider_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Provider",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "default": "OpenAI-compatible",
+   "fieldname": "api_style",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "API style",
+   "options": "OpenAI\nOpenAI-compatible\nAnthropic\nAnthropic-compatible",
+   "reqd": 1
+  },
+  {
+   "description": "The API's base address (https). Empty only for Anthropic's own API.",
+   "fieldname": "base_url",
+   "fieldtype": "Data",
+   "label": "Address"
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "On"
+  },
+  {
+   "default": "1",
+   "description": "OpenAI-compatible only: send a token budget (max_tokens) and ask for JSON when the job wants it. DeepSeek and Qwen support both.",
+   "fieldname": "json_mode",
+   "fieldtype": "Check",
+   "label": "Supports JSON mode and a token budget"
+  },
+  {
+   "fieldname": "api_key",
+   "fieldtype": "Password",
+   "label": "API key",
+   "length": 1000
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-26 14:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Helpdesk",
+ "name": "HDS AI Provider",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

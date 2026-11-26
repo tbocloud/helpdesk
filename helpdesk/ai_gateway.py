@@ -121,16 +121,28 @@ def _duration_ms(row: dict) -> int | None:
         return None
 
 
+def real_model(row: dict) -> str:
+    """The model behind the gateway's name, without the provider's prefix:
+    `openai/gpt-5.6-luna` is gpt-5.6-luna, `bedrock/converse/deepseek.v3.2` is deepseek.v3.2."""
+    model = str(row.get("model") or "").strip()
+    return model.rsplit("/", 1)[-1] if model else ""
+
+
 def totals(rows: list[dict]) -> dict[tuple, dict]:
-    """The day's calls as totals per (model, person)."""
+    """The day's calls as totals per (real model, the gateway's name for it, its provider,
+    person). The desktop app sees only TBO's names (tbo-default, tbo-deepseek); the page shows
+    the real model, so its calls add up with TBO Support's own calls to the same model."""
     out: dict[tuple, dict] = {}
     for row in rows:
-        model = str(row.get("model_group") or row.get("model") or "").strip()
+        alias = str(row.get("model_group") or "").strip()
+        model = real_model(row) or alias
         if not model:
             continue
+        alias = "" if alias == model else alias
+        provider = str(row.get("custom_llm_provider") or "").strip()
         person = str(row.get("user") or row.get("end_user") or "").strip()
         t = out.setdefault(
-            (model, person),
+            (model, alias, provider, person),
             {
                 "requests": 0,
                 "failures": 0,
@@ -161,14 +173,16 @@ def store_day(day, rows: list[dict]) -> int:
     day = str(getdate(day))
     frappe.db.delete(DAY, {"day": day})
     found = totals(rows)
-    for (model, person), t in found.items():
+    for (model, alias, provider, person), t in found.items():
         frappe.get_doc(
             {
                 "doctype": DAY,
                 "day": day,
                 "model": model[:140],
+                "gateway_alias": alias[:140],
+                "gateway_provider": provider[:140],
                 "gateway_user": person[:140],
-                "day_key": f"{day}|{model}|{person}"[:140],
+                "day_key": f"{day}|{model}|{alias}|{person}"[:140],
                 "requests": t["requests"],
                 "failures": t["failures"],
                 "error_classes": json.dumps(t["errors"]) if t["errors"] else None,
@@ -226,6 +240,8 @@ def day_rows(days: int, model: str | None = None) -> list:
         fields=[
             "day",
             "model",
+            "gateway_alias",
+            "gateway_provider",
             "gateway_user",
             "requests",
             "failures",

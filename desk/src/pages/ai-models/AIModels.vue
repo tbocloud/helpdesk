@@ -138,6 +138,17 @@
                       {{ m.model }}
                     </button>
                     <div class="text-ink-gray-5">{{ m.provider }}</div>
+                    <div
+                      v-if="m.gateway_aliases && m.gateway_aliases.length"
+                      class="text-ink-gray-5"
+                    >
+                      {{
+                        __(
+                          "Desktop app calls it {0}",
+                          m.gateway_aliases.join(", ")
+                        )
+                      }}
+                    </div>
                     <div class="text-ink-gray-5">{{ usedFor(m.used_for) }}</div>
                   </td>
                   <td class="px-3 py-3 text-right tabular-nums">
@@ -220,6 +231,17 @@
               />
               <span class="text-p-sm text-ink-gray-5">
                 {{ detail.provider }} · {{ usedFor(detail.used_for) }}
+                <template
+                  v-if="detail.gateway_aliases && detail.gateway_aliases.length"
+                >
+                  ·
+                  {{
+                    __(
+                      "Desktop app calls it {0}",
+                      detail.gateway_aliases.join(", ")
+                    )
+                  }}
+                </template>
               </span>
             </template>
             <TabButtons
@@ -911,284 +933,499 @@
           </template>
         </template>
 
-        <!-- 3. which model each job uses -->
+        <!-- 3. model settings: providers and keys, the model list, a model and backup per job -->
         <template v-else-if="view === 'settings' && settings">
           <p class="text-p-sm text-ink-gray-6">
             {{
               settings.can_change
                 ? __(
-                    "Each job has its own first model and its own fallback. Turn the fallback off where a weaker answer is worse than no answer."
+                    "Add each AI provider with its own key, allow the models TBO Support may use, then choose a model and a backup for each job."
                   )
                 : __("Only System Managers change these.")
             }}
           </p>
-          <p
-            v-if="notice"
-            role="status"
-            class="rounded-lg px-3 py-2 text-p-sm"
-            :class="
-              notice.ok
-                ? 'bg-success-soft text-success'
-                : 'bg-warning-soft text-warning'
-            "
-          >
-            {{ notice.text }}
-          </p>
-          <div class="overflow-x-auto rounded-xl border border-outline-gray-2">
-            <table class="w-full min-w-[68rem] text-p-sm">
-              <thead>
-                <tr class="bg-surface-gray-1 text-left text-ink-gray-5">
-                  <th scope="col" class="px-4 py-2.5 font-medium">
-                    {{ __("Job") }}
-                  </th>
-                  <th scope="col" class="px-3 py-2.5 font-medium">
-                    {{ __("Tries first") }}
-                  </th>
-                  <th scope="col" class="px-3 py-2.5 font-medium">
-                    {{ __("Fallback") }}
-                  </th>
-                  <th scope="col" class="px-3 py-2.5 font-medium">
-                    {{ __("OpenAI model") }}
-                  </th>
-                  <th scope="col" class="px-3 py-2.5 font-medium">
-                    {{ __("Anthropic-compatible model") }}
-                  </th>
-                  <th scope="col" class="px-3 py-2.5 text-right font-medium">
-                    {{ __("Calls") }}
-                  </th>
-                  <th scope="col" class="px-3 py-2.5 text-right font-medium">
-                    {{ __("Errors") }}
-                  </th>
-                  <th scope="col" class="px-3 py-2.5 text-right font-medium">
-                    {{ __("Cost") }}
-                  </th>
-                  <th scope="col" class="px-4 py-2.5">
-                    <span class="sr-only">{{ __("Test") }}</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="job in settings.jobs"
-                  :key="`${job.job}-${formKey}`"
-                  class="border-t border-outline-gray-1 align-top"
-                >
-                  <td class="px-4 py-3">
-                    <div class="text-base-medium text-ink-gray-9">
-                      {{ job.job }}
-                    </div>
-                    <div class="text-ink-gray-5">
-                      {{ job.primary ? job.primary.model : __("not set up") }}
-                      <template v-if="job.fallback">
-                        → {{ job.fallback.model }}
-                      </template>
-                    </div>
-                    <div
-                      v-if="settings.guarded_jobs.includes(job.job)"
-                      class="text-ink-gray-5"
-                    >
-                      {{
-                        job.score
-                          ? __("test set {0}", pct(job.score.accuracy))
-                          : __("not run on the test set")
-                      }}
-                    </div>
-                  </td>
-                  <td class="px-3 py-3">
-                    <FormControl
-                      type="select"
-                      :aria-label="__('First section for {0}', job.job)"
-                      :model-value="job.primary_section"
-                      :options="sectionOptions"
-                      :disabled="!settings.can_change || saving"
-                      @update:model-value="
-                        save(job.job, { primary_section: $event })
-                      "
-                    />
-                  </td>
-                  <td class="px-3 py-3">
-                    <FormControl
-                      type="select"
-                      :aria-label="__('Fallback for {0}', job.job)"
-                      :model-value="job.allow_fallback"
-                      :options="fallbackOptions"
-                      :disabled="!settings.can_change || saving"
-                      @update:model-value="
-                        save(job.job, { allow_fallback: $event })
-                      "
-                    />
-                  </td>
-                  <td class="px-3 py-3">
-                    <FormControl
-                      type="text"
-                      :aria-label="__('OpenAI model for {0}', job.job)"
-                      :model-value="job.openai_model"
-                      :placeholder="sectionModel('OpenAI')"
-                      :disabled="!settings.can_change || saving"
-                      @change="
-                        save(job.job, { openai_model: $event.target.value })
-                      "
-                    />
-                  </td>
-                  <td class="px-3 py-3">
-                    <FormControl
-                      type="text"
-                      :aria-label="
-                        __('Anthropic-compatible model for {0}', job.job)
-                      "
-                      :model-value="job.anthropic_model"
-                      :placeholder="sectionModel('Anthropic-compatible')"
-                      :disabled="!settings.can_change || saving"
-                      @change="
-                        save(job.job, { anthropic_model: $event.target.value })
-                      "
-                    />
-                  </td>
-                  <td class="px-3 py-3 text-right tabular-nums">
-                    {{ job.calls.toLocaleString() }}
-                  </td>
-                  <td class="px-3 py-3 text-right tabular-nums">
-                    {{ pct(job.error_rate) }}
-                  </td>
-                  <td class="px-3 py-3 text-right tabular-nums">
-                    {{ money(job.cost) }}
-                  </td>
-                  <td class="px-4 py-3 text-right">
-                    <Button
-                      v-if="settings.can_change"
-                      :label="__('Try')"
-                      :loading="trying === job.job"
-                      :disabled="!!trying"
-                      @click="tryJob(job.job)"
-                    />
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <p class="text-p-xs text-ink-gray-5">
-            {{
-              __(
-                "Blank model: the section's own model. Keys and the sections themselves are in Settings → AI providers."
-              )
-            }}
-          </p>
 
           <SectionCard
-            :title="__('Candidates')"
+            :title="__('Providers and keys')"
             :description="
-              __('Models added to be tested before a job uses them')
+              __(
+                'A key is stored encrypted, and is never shown again or sent to the browser.'
+              )
             "
           >
+            <template #actions>
+              <Button
+                v-if="settings.can_change"
+                :label="__('Add a provider')"
+                @click="openProvider()"
+              >
+                <template #prefix>
+                  <LucidePlus class="size-4" aria-hidden="true" />
+                </template>
+              </Button>
+            </template>
             <div class="flex flex-col gap-3 px-4 pb-4">
               <p
-                v-if="candNotice"
+                v-if="provNotice"
                 role="status"
                 class="rounded-lg px-3 py-2 text-p-sm"
                 :class="
-                  candNotice.ok
+                  provNotice.ok
                     ? 'bg-success-soft text-success'
                     : 'bg-warning-soft text-warning'
                 "
               >
-                {{ candNotice.text }}
+                {{ provNotice.text }}
               </p>
-              <ul class="flex flex-col gap-1.5 text-p-sm">
-                <li
-                  v-for="c in settings.candidates"
-                  :key="c.model"
-                  class="flex flex-wrap items-center gap-x-3 gap-y-1"
-                >
-                  <button
-                    type="button"
-                    class="rounded text-base-medium text-ink-gray-9 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
-                    @click="
-                      go({ view: 'model', model: c.model, tab: 'benchmarks' })
-                    "
-                  >
-                    {{ c.model }}
-                  </button>
-                  <span class="text-ink-gray-5">{{ c.section }}</span>
-                  <span class="tabular-nums text-ink-gray-6">
-                    {{
-                      __(
-                        "{0} in, {1} out per million tokens",
-                        money(c.input_price),
-                        money(c.output_price)
-                      )
-                    }}
-                  </span>
-                  <span class="tabular-nums">
-                    {{
-                      c.benchmark
-                        ? __(
-                            "test set {0} on {1}",
-                            pct(c.benchmark.accuracy),
-                            c.benchmark.ran_on
-                          )
-                        : __("not run on the test set")
-                    }}
-                  </span>
-                  <Badge
-                    v-if="c.in_use"
-                    :label="__('A job uses it')"
-                    theme="green"
-                    size="sm"
-                  />
-                  <span v-if="c.note" class="text-ink-gray-6">{{
-                    c.note
-                  }}</span>
-                  <Button
-                    v-if="settings.can_change"
-                    variant="ghost"
-                    size="sm"
-                    :label="__('Remove')"
-                    :loading="candBusy"
-                    @click="removeCandidate(c.model)"
-                  />
-                </li>
-                <li v-if="!settings.candidates.length" class="text-ink-gray-5">
-                  {{ __("None yet.") }}
-                </li>
-              </ul>
-              <form
+              <div class="overflow-x-auto">
+                <table class="w-full min-w-[52rem] text-p-sm">
+                  <thead>
+                    <tr class="text-left text-ink-gray-5">
+                      <th scope="col" class="py-1.5 pr-3 font-medium">
+                        {{ __("Provider") }}
+                      </th>
+                      <th scope="col" class="px-3 py-1.5 font-medium">
+                        {{ __("API style") }}
+                      </th>
+                      <th scope="col" class="px-3 py-1.5 font-medium">
+                        {{ __("Address") }}
+                      </th>
+                      <th scope="col" class="px-3 py-1.5 font-medium">
+                        {{ __("Key") }}
+                      </th>
+                      <th
+                        scope="col"
+                        class="px-3 py-1.5 text-right font-medium"
+                      >
+                        {{ __("Allowed models") }}
+                      </th>
+                      <th scope="col" class="py-1.5 pl-3">
+                        <span class="sr-only">{{ __("Actions") }}</span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="p in settings.providers"
+                      :key="p.name"
+                      class="border-t border-outline-gray-1 align-middle"
+                    >
+                      <td class="py-2 pr-3">
+                        <div class="text-base-medium text-ink-gray-9">
+                          {{ p.name }}
+                        </div>
+                        <div v-if="p.section" class="text-ink-gray-5">
+                          {{
+                            __(
+                              "Today's section. Default model: {0}",
+                              p.default_model || "-"
+                            )
+                          }}
+                        </div>
+                      </td>
+                      <td class="px-3 py-2">{{ p.style }}</td>
+                      <td class="break-all px-3 py-2 text-ink-gray-6">
+                        {{ p.url || __("the SDK's own") }}
+                      </td>
+                      <td class="px-3 py-2">
+                        <Badge
+                          :label="keyLabel(p)"
+                          :theme="
+                            p.ready ? 'green' : p.key_set ? 'orange' : 'gray'
+                          "
+                          size="sm"
+                        />
+                      </td>
+                      <td class="px-3 py-2 text-right tabular-nums">
+                        {{ p.models }}
+                      </td>
+                      <td class="py-2 pl-3">
+                        <div
+                          v-if="settings.can_change"
+                          class="flex flex-wrap justify-end gap-1"
+                        >
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            :label="__('Test')"
+                            :loading="testing === p.name"
+                            :disabled="!!testing"
+                            @click="testProvider(p.name)"
+                          />
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            :label="__('Edit')"
+                            @click="openProvider(p)"
+                          />
+                          <Button
+                            v-if="!p.section"
+                            variant="ghost"
+                            size="sm"
+                            :theme="confirming === p.name ? 'red' : 'gray'"
+                            :label="
+                              confirming === p.name
+                                ? __('Click again to remove')
+                                : __('Remove')
+                            "
+                            @click="removeProvider(p.name)"
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </SectionCard>
+
+          <SectionCard
+            :title="__('Models')"
+            :description="
+              __(
+                'Only allowed models can be chosen for a job. A monthly token limit is optional.'
+              )
+            "
+          >
+            <template #actions>
+              <Button
                 v-if="settings.can_change"
-                class="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_12rem_8rem_8rem_minmax(0,1fr)_auto]"
-                @submit.prevent="addCandidate"
+                :label="__('Add a model')"
+                @click="openModel()"
               >
-                <FormControl
-                  v-model="cand.model"
-                  type="text"
-                  :label="__('Model name')"
-                  :placeholder="__('as the provider writes it')"
-                />
-                <FormControl
-                  v-model="cand.section"
-                  type="select"
-                  :label="__('Called through')"
-                  :options="SECTIONS"
-                />
-                <FormControl
-                  v-model="cand.input_price"
-                  type="number"
-                  :label="__('Input, $ per 1M')"
-                />
-                <FormControl
-                  v-model="cand.output_price"
-                  type="number"
-                  :label="__('Output, $ per 1M')"
-                />
-                <FormControl
-                  v-model="cand.note"
-                  type="text"
-                  :label="__('Note')"
-                />
-                <Button type="submit" :label="__('Add')" :loading="candBusy" />
-              </form>
+                <template #prefix>
+                  <LucidePlus class="size-4" aria-hidden="true" />
+                </template>
+              </Button>
+            </template>
+            <div class="flex flex-col gap-3 px-4 pb-4">
+              <p
+                v-if="listNotice"
+                role="status"
+                class="rounded-lg px-3 py-2 text-p-sm"
+                :class="
+                  listNotice.ok
+                    ? 'bg-success-soft text-success'
+                    : 'bg-warning-soft text-warning'
+                "
+              >
+                {{ listNotice.text }}
+              </p>
+              <p
+                v-if="!settings.catalog.length"
+                class="text-p-sm text-ink-gray-6"
+              >
+                {{ __("No models yet. Add a model for one of the providers.") }}
+              </p>
+              <div v-else class="overflow-x-auto">
+                <table class="w-full min-w-[64rem] text-p-sm">
+                  <thead>
+                    <tr class="text-left text-ink-gray-5">
+                      <th scope="col" class="py-1.5 pr-3 font-medium">
+                        {{ __("Model") }}
+                      </th>
+                      <th scope="col" class="px-3 py-1.5 font-medium">
+                        {{ __("Provider") }}
+                      </th>
+                      <th scope="col" class="px-3 py-1.5 font-medium">
+                        {{ __("Allowed") }}
+                      </th>
+                      <th scope="col" class="px-3 py-1.5 font-medium">
+                        {{ __("Monthly limit (millions)") }}
+                      </th>
+                      <th scope="col" class="px-3 py-1.5 font-medium">
+                        {{ __("Used this month") }}
+                      </th>
+                      <th scope="col" class="px-3 py-1.5 font-medium">
+                        {{ __("Price per 1M (in / out)") }}
+                      </th>
+                      <th
+                        scope="col"
+                        class="px-3 py-1.5 text-right font-medium"
+                      >
+                        {{ __("Our test set") }}
+                      </th>
+                      <th scope="col" class="px-3 py-1.5 font-medium">
+                        {{ __("Used by") }}
+                      </th>
+                      <th scope="col" class="py-1.5 pl-3">
+                        <span class="sr-only">{{ __("Actions") }}</span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="m in settings.catalog"
+                      :key="`${m.model}-${formKey}`"
+                      class="border-t border-outline-gray-1 align-middle"
+                    >
+                      <td class="py-2 pr-3">
+                        <button
+                          type="button"
+                          class="rounded text-left text-base-medium text-ink-gray-9 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+                          @click="
+                            go({
+                              view: 'model',
+                              model: m.model,
+                              tab: 'benchmarks',
+                            })
+                          "
+                        >
+                          {{ m.name }}
+                        </button>
+                        <div v-if="m.name !== m.model" class="text-ink-gray-5">
+                          {{ m.model }}
+                        </div>
+                      </td>
+                      <td class="px-3 py-2">
+                        {{ m.provider }}
+                        <div v-if="!m.provider_ready" class="text-warning">
+                          {{ __("no key yet, or off") }}
+                        </div>
+                      </td>
+                      <td class="px-3 py-2">
+                        <FormControl
+                          type="checkbox"
+                          :model-value="m.listed"
+                          :aria-label="__('Allow {0} for jobs', m.model)"
+                          :disabled="!settings.can_change || listBusy"
+                          @update:model-value="
+                            saveModel({
+                              model: m.model,
+                              listed: $event ? 1 : 0,
+                            })
+                          "
+                        />
+                      </td>
+                      <td class="px-3 py-2">
+                        <FormControl
+                          type="number"
+                          class="w-28"
+                          :model-value="m.limit_m || ''"
+                          :placeholder="__('none')"
+                          :aria-label="
+                            __(
+                              'Monthly token limit for {0}, in millions',
+                              m.model
+                            )
+                          "
+                          :disabled="!settings.can_change || listBusy"
+                          @change="
+                            saveModel({
+                              model: m.model,
+                              limit_m: Number($event.target.value) || 0,
+                            })
+                          "
+                        />
+                      </td>
+                      <td class="px-3 py-2 tabular-nums">
+                        {{
+                          m.limit_m
+                            ? __(
+                                "{0}M of {1}M",
+                                String(m.used_m),
+                                String(m.limit_m)
+                              )
+                            : __("{0}M", String(m.used_m))
+                        }}
+                        <div
+                          v-if="m.limit_m"
+                          class="mt-1 h-1.5 w-28 overflow-hidden rounded-full bg-surface-gray-2"
+                          aria-hidden="true"
+                        >
+                          <div
+                            class="h-full rounded-full"
+                            :class="limitTone(m)"
+                            :style="{ width: `${limitShare(m)}%` }"
+                          />
+                        </div>
+                      </td>
+                      <td class="px-3 py-2 tabular-nums">
+                        {{ money(m.input_price) }} / {{ money(m.output_price) }}
+                      </td>
+                      <td class="px-3 py-2 text-right tabular-nums">
+                        {{ m.benchmark ? pct(m.benchmark.accuracy) : "-" }}
+                      </td>
+                      <td class="px-3 py-2">
+                        <span v-if="m.in_use">{{ usedByText(m) }}</span>
+                        <Badge
+                          v-else-if="m.listed"
+                          :label="__('Candidate')"
+                          theme="blue"
+                          size="sm"
+                        />
+                        <span v-else class="text-ink-gray-5">-</span>
+                      </td>
+                      <td class="py-2 pl-3">
+                        <div
+                          v-if="settings.can_change"
+                          class="flex flex-wrap justify-end gap-1"
+                        >
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            :label="__('Edit')"
+                            @click="openModel(m)"
+                          />
+                          <Button
+                            v-if="!m.in_use"
+                            variant="ghost"
+                            size="sm"
+                            :theme="confirming === m.model ? 'red' : 'gray'"
+                            :label="
+                              confirming === m.model
+                                ? __('Click again to remove')
+                                : __('Remove')
+                            "
+                            @click="removeModel(m.model)"
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </SectionCard>
+
+          <SectionCard
+            :title="__('Model and backup for each job')"
+            :description="
+              __(
+                'The backup answers only when the first model\'s provider can\'t. Both empty: the job works as today.'
+              )
+            "
+          >
+            <div class="flex flex-col gap-3 px-4 pb-4">
+              <p
+                v-if="notice"
+                role="status"
+                class="rounded-lg px-3 py-2 text-p-sm"
+                :class="
+                  notice.ok
+                    ? 'bg-success-soft text-success'
+                    : 'bg-warning-soft text-warning'
+                "
+              >
+                {{ notice.text }}
+              </p>
+              <div class="overflow-x-auto">
+                <table class="w-full min-w-[60rem] text-p-sm">
+                  <thead>
+                    <tr class="text-left text-ink-gray-5">
+                      <th scope="col" class="py-1.5 pr-3 font-medium">
+                        {{ __("Job") }}
+                      </th>
+                      <th scope="col" class="px-3 py-1.5 font-medium">
+                        {{ __("Model") }}
+                      </th>
+                      <th scope="col" class="px-3 py-1.5 font-medium">
+                        {{ __("Backup (optional)") }}
+                      </th>
+                      <th
+                        scope="col"
+                        class="px-3 py-1.5 text-right font-medium"
+                      >
+                        {{ __("Calls") }}
+                      </th>
+                      <th
+                        scope="col"
+                        class="px-3 py-1.5 text-right font-medium"
+                      >
+                        {{ __("Errors") }}
+                      </th>
+                      <th
+                        scope="col"
+                        class="px-3 py-1.5 text-right font-medium"
+                      >
+                        {{ __("Backup answered") }}
+                      </th>
+                      <th
+                        scope="col"
+                        class="px-3 py-1.5 text-right font-medium"
+                      >
+                        {{ __("Cost") }}
+                      </th>
+                      <th scope="col" class="py-1.5 pl-3">
+                        <span class="sr-only">{{ __("Test") }}</span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="job in settings.jobs"
+                      :key="`${job.job}-${formKey}`"
+                      class="border-t border-outline-gray-1 align-top"
+                    >
+                      <td class="py-2 pr-3">
+                        <div class="text-base-medium text-ink-gray-9">
+                          {{ job.job }}
+                        </div>
+                        <div class="text-ink-gray-5">{{ chainText(job) }}</div>
+                        <div
+                          v-if="settings.guarded_jobs.includes(job.job)"
+                          class="text-ink-gray-5"
+                        >
+                          {{
+                            job.score
+                              ? __("test set {0}", pct(job.score.accuracy))
+                              : __("not run on the test set")
+                          }}
+                        </div>
+                      </td>
+                      <td class="w-64 px-3 py-2">
+                        <FormControl
+                          type="select"
+                          :aria-label="__('Model for {0}', job.job)"
+                          :model-value="job.model"
+                          :options="jobModelOptions()"
+                          :disabled="!settings.can_change || saving"
+                          @update:model-value="save(job.job, { model: $event })"
+                        />
+                      </td>
+                      <td class="w-64 px-3 py-2">
+                        <FormControl
+                          type="select"
+                          :aria-label="__('Backup for {0}', job.job)"
+                          :model-value="job.backup_model"
+                          :options="backupOptions(job)"
+                          :disabled="
+                            !settings.can_change || saving || !job.model
+                          "
+                          @update:model-value="
+                            save(job.job, { backup_model: $event })
+                          "
+                        />
+                      </td>
+                      <td class="px-3 py-2 text-right tabular-nums">
+                        {{ job.calls.toLocaleString() }}
+                      </td>
+                      <td class="px-3 py-2 text-right tabular-nums">
+                        {{ pct(job.error_rate) }}
+                      </td>
+                      <td class="px-3 py-2 text-right tabular-nums">
+                        {{ pct(job.fallback_rate) }}
+                      </td>
+                      <td class="px-3 py-2 text-right tabular-nums">
+                        {{ money(job.cost) }}
+                      </td>
+                      <td class="py-2 pl-3 text-right">
+                        <Button
+                          v-if="settings.can_change"
+                          :label="__('Try')"
+                          :loading="trying === job.job"
+                          :disabled="!!trying"
+                          @click="tryJob(job.job)"
+                        />
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
               <p class="text-p-xs text-ink-gray-5">
                 {{
                   __(
-                    "A candidate is called with its section's key. To use it, type its name as a job's model above."
+                    "Copilot's jobs (investigate, fix, review) run on the Copilot worker, which needs the same provider's key in its own settings. A job set to As today follows the sections and their fallback, as before."
                   )
                 }}
               </p>
@@ -1203,7 +1440,7 @@
               <p class="text-p-sm text-ink-gray-6">
                 {{
                   __(
-                    "The System and Agent Managers are told when a model fails, or the fallback gives the answer, at least this share of the time in an hour (from 10 calls). 0 turns an alert off. A model alerts at most once in 6 hours."
+                    "The System and Agent Managers are told when a model fails, or the fallback gives the answer, at least this share of the time in an hour (from 10 calls). 0 turns an alert off. A model alerts at most once in 6 hours. They are also told when a model reaches 80% and 100% of its monthly token limit."
                   )
                 }}
               </p>
@@ -1372,6 +1609,161 @@
         </div>
       </template>
     </Dialog>
+
+    <Dialog
+      v-model:open="provOpen"
+      :title="prov.existing ? __('Edit {0}', prov.name) : __('Add a provider')"
+    >
+      <template #default>
+        <form class="flex flex-col gap-3" @submit.prevent="saveProvider">
+          <FormControl
+            v-if="!prov.existing"
+            type="select"
+            :label="__('Start from')"
+            :model-value="prov.preset"
+            :options="presetOptions"
+            @update:model-value="usePreset"
+          />
+          <FormControl
+            v-model="prov.name"
+            type="text"
+            :label="__('Name')"
+            :disabled="prov.existing"
+            :description="
+              __(
+                'The Copilot worker finds its own key for this provider by this name.'
+              )
+            "
+          />
+          <FormControl
+            v-if="!prov.section"
+            v-model="prov.style"
+            type="select"
+            :label="__('API style')"
+            :options="STYLE_OPTIONS"
+          />
+          <FormControl
+            v-model="prov.url"
+            type="text"
+            :label="__('Address')"
+            :placeholder="
+              prov.style === 'Anthropic'
+                ? __('empty: the SDK\'s own')
+                : 'https://'
+            "
+          />
+          <FormControl
+            v-model="prov.key"
+            type="password"
+            :label="__('API key')"
+            :placeholder="prov.keySet ? __('saved; type to replace') : ''"
+            autocomplete="off"
+          />
+          <FormControl
+            v-if="prov.section"
+            v-model="prov.defaultModel"
+            type="text"
+            :label="__('Default model')"
+            :description="__('Used by the jobs set to As today.')"
+          />
+          <FormControl
+            v-if="!prov.section && prov.style === 'OpenAI-compatible'"
+            v-model="prov.jsonMode"
+            type="checkbox"
+            :label="__('Supports JSON mode and a token budget')"
+          />
+          <FormControl
+            v-if="!prov.section"
+            v-model="prov.enabled"
+            type="checkbox"
+            :label="__('On')"
+          />
+          <p v-if="provError" role="alert" class="text-p-sm text-danger">
+            {{ provError }}
+          </p>
+        </form>
+      </template>
+      <template #actions>
+        <div class="flex justify-end gap-2">
+          <Button :label="__('Cancel')" @click="provOpen = false" />
+          <Button
+            variant="solid"
+            :label="__('Save')"
+            :loading="provSaving"
+            @click="saveProvider"
+          />
+        </div>
+      </template>
+    </Dialog>
+
+    <Dialog
+      v-model:open="modelOpen"
+      :title="mform.existing ? __('Edit {0}', mform.model) : __('Add a model')"
+    >
+      <template #default>
+        <form class="flex flex-col gap-3" @submit.prevent="saveModelDialog">
+          <FormControl
+            v-model="mform.model"
+            type="text"
+            :label="__('Model, as the provider writes it')"
+            :disabled="mform.existing"
+            placeholder="deepseek-chat"
+          />
+          <FormControl
+            v-model="mform.name"
+            type="text"
+            :label="__('Name to show')"
+          />
+          <FormControl
+            v-model="mform.provider"
+            type="select"
+            :label="__('Provider')"
+            :options="providerOptions"
+          />
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <FormControl
+              v-model="mform.input_price"
+              type="number"
+              :label="__('Input, $ per 1M tokens')"
+            />
+            <FormControl
+              v-model="mform.output_price"
+              type="number"
+              :label="__('Output, $ per 1M tokens')"
+            />
+          </div>
+          <FormControl
+            v-model="mform.limit_m"
+            type="number"
+            :label="__('Monthly token limit, millions')"
+            :description="
+              __(
+                'Empty: no limit. When it is used up, the jobs that use this model first stop until next month.'
+              )
+            "
+          />
+          <FormControl
+            v-model="mform.listed"
+            type="checkbox"
+            :label="__('Allowed for jobs')"
+          />
+          <p v-if="modelError" role="alert" class="text-p-sm text-danger">
+            {{ modelError }}
+          </p>
+        </form>
+      </template>
+      <template #actions>
+        <div class="flex justify-end gap-2">
+          <Button :label="__('Cancel')" @click="modelOpen = false" />
+          <Button
+            variant="solid"
+            :label="__('Save')"
+            :loading="modelSaving"
+            @click="saveModelDialog"
+          />
+        </div>
+      </template>
+    </Dialog>
   </div>
 </template>
 
@@ -1393,6 +1785,7 @@ import {
 } from "frappe-ui";
 import { computed, reactive, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
+import LucidePlus from "~icons/lucide/plus";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import BarList from "./BarList.vue";
 import CaseGrid from "./CaseGrid.vue";
@@ -1409,11 +1802,19 @@ const STATUS_THEME: Record<
   "Not used": "gray",
   Candidate: "blue",
 };
-const SECTIONS = [
-  { label: "OpenAI", value: "OpenAI" },
-  { label: "Anthropic-compatible", value: "Anthropic-compatible" },
+const STYLE_OPTIONS = [
+  "OpenAI",
+  "OpenAI-compatible",
+  "Anthropic",
+  "Anthropic-compatible",
+].map((style) => ({ label: style, value: style }));
+// the changes that can give a Copilot job another first model
+const MODEL_FIELDS = [
+  "model",
+  "primary_section",
+  "openai_model",
+  "anthropic_model",
 ];
-const MODEL_FIELDS = ["primary_section", "openai_model", "anthropic_model"];
 
 type Score = { accuracy: number; ran_on: string };
 
@@ -1431,6 +1832,7 @@ type ModelRow = Figures & {
   benchmark?: { accuracy: number; ran_on: string } | null;
   model: string;
   provider: string;
+  gateway_aliases?: string[];
   used_for: UsedFor;
   status: string;
 };
@@ -1513,7 +1915,14 @@ type Bench = {
   against: string;
   against_cases: Case[];
   against_accuracy: number | null;
-  public: Record<string, string>[];
+  public: {
+    name: string;
+    benchmark: string;
+    score: string;
+    measured_on: string;
+    source_url: string;
+    note: string;
+  }[];
   requests: {
     name: string;
     status: string;
@@ -1532,17 +1941,37 @@ type JobRow = Figures & {
   allow_fallback: string;
   openai_model: string;
   anthropic_model: string;
+  model: string;
+  backup_model: string;
   score: Score | null;
 };
-type Candidate = {
+type Provider = {
+  name: string;
+  section: boolean;
+  style: string;
+  url: string;
+  key_set: boolean;
+  enabled: boolean;
+  ready: boolean;
+  json_mode: boolean;
+  default_model: string;
+  models: number;
+};
+type CatalogModel = {
   model: string;
-  section: string;
+  name: string;
+  provider: string;
+  provider_ready: boolean;
+  listed: boolean;
+  limit_m: number;
+  used_m: number;
   input_price: number;
   output_price: number;
-  note: string;
   benchmark: Score | null;
+  used_for: UsedFor;
   in_use: boolean;
 };
+type Preset = { name: string; style: string; url: string };
 type Guard = {
   job: string;
   model: string;
@@ -1563,7 +1992,9 @@ type Settings = {
   jobs: JobRow[];
   sections: Step[];
   defaults: { primary_section: string; failover: boolean };
-  candidates: Candidate[];
+  providers: Provider[];
+  catalog: CatalogModel[];
+  presets: Preset[];
   alerts: { error_rate: number; fallback_rate: number };
   guarded_jobs: string[];
   can_change: boolean;
@@ -1739,29 +2170,31 @@ function line(
 const saving = ref(false);
 const trying = ref("");
 const notice = ref<{ ok: boolean; text: string } | null>(null);
-const sectionOptions = computed(() => [
-  {
-    label: __("Default ({0})", settings.value?.defaults.primary_section || ""),
-    value: "",
-  },
-  { label: "OpenAI", value: "OpenAI" },
-  { label: "Anthropic-compatible", value: "Anthropic-compatible" },
-]);
-const fallbackOptions = computed(() => [
-  {
-    label: __(
-      "Default ({0})",
-      settings.value?.defaults.failover ? __("On") : __("Off")
-    ),
-    value: "",
-  },
-  { label: __("On"), value: "On" },
-  { label: __("Off"), value: "Off" },
-]);
-function sectionModel(section: string) {
-  return (
-    settings.value?.sections.find((s) => s.section === section)?.model || ""
-  );
+function allowedModels() {
+  return (settings.value?.catalog || []).filter((m) => m.listed);
+}
+function jobModelOptions() {
+  return [
+    { label: __("As today (the sections)"), value: "" },
+    ...allowedModels().map((m) => ({
+      label: `${m.name} · ${m.provider}`,
+      value: m.model,
+    })),
+  ];
+}
+function backupOptions(job: JobRow) {
+  return [
+    { label: __("No backup"), value: "" },
+    ...allowedModels()
+      .filter((m) => m.model !== job.model)
+      .map((m) => ({ label: `${m.name} · ${m.provider}`, value: m.model })),
+  ];
+}
+function chainText(job: JobRow) {
+  if (!job.primary) return __("not set up");
+  return job.fallback
+    ? `${job.primary.model} → ${job.fallback.model}`
+    : job.primary.model;
 }
 
 // a refused or cancelled change puts the row's fields back by making them again
@@ -2018,53 +2451,275 @@ function removePublic(name: string) {
   benchCall("remove_public_benchmark", { name }, __("Removed."));
 }
 
-// --- candidates and alerts --------------------------------------------------------------------
+// --- providers and the model list ----------------------------------------------------------
 
-const cand = reactive({
-  model: "",
-  section: "Anthropic-compatible",
-  input_price: "",
-  output_price: "",
-  note: "",
-});
-const candBusy = ref(false);
-const candNotice = ref<{ ok: boolean; text: string } | null>(null);
-async function candidateCall(
-  method: string,
-  args: Record<string, unknown>,
-  done: string
-) {
-  candBusy.value = true;
-  candNotice.value = null;
-  try {
-    await call(`${API}.${method}`, args);
-    candNotice.value = { ok: true, text: done };
+// a remove asks for a second click within 5 seconds
+const confirming = ref("");
+function askTwice(name: string) {
+  if (confirming.value === name) {
+    confirming.value = "";
     return true;
+  }
+  confirming.value = name;
+  setTimeout(() => {
+    if (confirming.value === name) confirming.value = "";
+  }, 5000);
+  return false;
+}
+function keyLabel(p: Provider) {
+  if (!p.key_set) return __("none yet");
+  return p.enabled ? __("saved") : __("saved, off");
+}
+
+const provOpen = ref(false);
+const provSaving = ref(false);
+const provError = ref("");
+const provNotice = ref<{ ok: boolean; text: string } | null>(null);
+const testing = ref("");
+// each opening of the dialog: a late answer for an earlier opening leaves this one alone
+let provOpening = 0;
+const prov = reactive({
+  existing: false,
+  section: false,
+  preset: "",
+  name: "",
+  style: "OpenAI-compatible",
+  url: "",
+  key: "",
+  keySet: false,
+  defaultModel: "",
+  jsonMode: true,
+  enabled: true,
+});
+const presetOptions = computed(() => [
+  ...(settings.value?.presets || []).map((p) => ({
+    label: p.name,
+    value: p.name,
+  })),
+  { label: __("Other"), value: "" },
+]);
+function usePreset(name: string) {
+  const preset = (settings.value?.presets || []).find((p) => p.name === name);
+  Object.assign(prov, {
+    preset: name,
+    name: preset ? preset.name : "",
+    style: preset ? preset.style : "OpenAI-compatible",
+    url: preset ? preset.url : "",
+  });
+}
+function openProvider(p?: Provider) {
+  provOpening++;
+  provError.value = "";
+  Object.assign(prov, {
+    existing: !!p,
+    section: !!p?.section,
+    key: "",
+    keySet: !!p?.key_set,
+    defaultModel: p?.default_model || "",
+    jsonMode: p ? p.json_mode : true,
+    enabled: p ? p.enabled : true,
+  });
+  if (p)
+    Object.assign(prov, {
+      preset: "",
+      name: p.name,
+      style: p.style,
+      url: p.url,
+    });
+  else usePreset(settings.value?.presets[0]?.name || "");
+  provOpen.value = true;
+}
+// the key never stays in the page after the dialog closes
+watch(provOpen, (open) => {
+  if (!open) prov.key = "";
+});
+async function saveProvider() {
+  const at = provOpening;
+  provSaving.value = true;
+  provError.value = "";
+  const values: Record<string, unknown> = prov.section
+    ? { name: prov.name, url: prov.url, default_model: prov.defaultModel }
+    : {
+        name: prov.name.trim(),
+        style: prov.style,
+        url: prov.url,
+        enabled: prov.enabled ? 1 : 0,
+        json_mode: prov.jsonMode ? 1 : 0,
+        new: prov.existing ? 0 : 1,
+      };
+  if (prov.key) values.key = prov.key;
+  try {
+    await call(`${API}.save_provider`, { values: JSON.stringify(values) });
+    provNotice.value = {
+      ok: true,
+      text: __("{0} saved.", String(values.name)),
+    };
+    if (at === provOpening) provOpen.value = false;
   } catch (err) {
-    candNotice.value = { ok: false, text: errorText(err, __("Not saved")) };
-    return false;
+    if (at === provOpening) provError.value = errorText(err, __("Not saved"));
   } finally {
-    candBusy.value = false;
+    provSaving.value = false;
     load();
   }
 }
-async function addCandidate() {
-  const name = cand.model.trim();
-  const ok = await candidateCall(
-    "add_model",
-    { values: JSON.stringify({ ...cand, model: name }) },
-    __("{0} added. Ask for a run of the test set on its page.", name)
-  );
-  if (ok)
-    Object.assign(cand, {
-      model: "",
-      input_price: "",
-      output_price: "",
-      note: "",
-    });
+async function testProvider(name: string) {
+  testing.value = name;
+  provNotice.value = null;
+  try {
+    const r = (await call(`${API}.test_provider`, { name })) as {
+      ok: boolean;
+      message: string;
+    };
+    provNotice.value = { ok: r.ok, text: r.message };
+  } catch (err) {
+    provNotice.value = {
+      ok: false,
+      text: errorText(err, __("The test call failed")),
+    };
+  } finally {
+    testing.value = "";
+  }
 }
-function removeCandidate(name: string) {
-  candidateCall("remove_candidate", { model: name }, __("{0} removed.", name));
+async function removeProvider(name: string) {
+  if (!askTwice(name)) return;
+  provNotice.value = null;
+  try {
+    await call(`${API}.remove_provider`, { name });
+    provNotice.value = {
+      ok: true,
+      text: __("{0} removed, with its key.", name),
+    };
+  } catch (err) {
+    provNotice.value = { ok: false, text: errorText(err, __("Not removed")) };
+  } finally {
+    load();
+  }
+}
+
+const listBusy = ref(false);
+const listNotice = ref<{ ok: boolean; text: string } | null>(null);
+const modelOpen = ref(false);
+const modelSaving = ref(false);
+const modelError = ref("");
+let modelOpening = 0;
+const mform = reactive({
+  existing: false,
+  model: "",
+  name: "",
+  provider: "",
+  input_price: "" as string | number,
+  output_price: "" as string | number,
+  limit_m: "" as string | number,
+  listed: true,
+});
+const providerOptions = computed(() =>
+  (settings.value?.providers || []).map((p) => ({
+    label: p.ready ? p.name : __("{0} (no key yet, or off)", p.name),
+    value: p.name,
+  }))
+);
+function openModel(m?: CatalogModel) {
+  modelOpening++;
+  modelError.value = "";
+  Object.assign(
+    mform,
+    m
+      ? {
+          existing: true,
+          model: m.model,
+          name: m.name,
+          provider: m.provider,
+          input_price: m.input_price,
+          output_price: m.output_price,
+          limit_m: m.limit_m || "",
+          listed: m.listed,
+        }
+      : {
+          existing: false,
+          model: "",
+          name: "",
+          provider:
+            settings.value?.providers.find((p) => !p.section)?.name || "",
+          input_price: "",
+          output_price: "",
+          limit_m: "",
+          listed: true,
+        }
+  );
+  modelOpen.value = true;
+}
+async function saveModelDialog() {
+  const at = modelOpening;
+  modelSaving.value = true;
+  modelError.value = "";
+  const values = {
+    model: mform.model.trim(),
+    name: mform.name.trim(),
+    provider: mform.provider,
+    input_price: Number(mform.input_price) || 0,
+    output_price: Number(mform.output_price) || 0,
+    limit_m: Number(mform.limit_m) || 0,
+    listed: mform.listed ? 1 : 0,
+    new: mform.existing ? 0 : 1,
+  };
+  try {
+    await call(`${API}.save_model`, { values: JSON.stringify(values) });
+    listNotice.value = { ok: true, text: __("{0} saved.", values.model) };
+    if (at === modelOpening) modelOpen.value = false;
+  } catch (err) {
+    if (at === modelOpening) modelError.value = errorText(err, __("Not saved"));
+  } finally {
+    modelSaving.value = false;
+    load();
+  }
+}
+async function saveModel(values: Record<string, unknown>) {
+  listBusy.value = true;
+  listNotice.value = null;
+  try {
+    await call(`${API}.save_model`, { values: JSON.stringify(values) });
+    listNotice.value = {
+      ok: true,
+      text: __("{0} saved.", String(values.model)),
+    };
+  } catch (err) {
+    listNotice.value = { ok: false, text: errorText(err, __("Not saved")) };
+    formKey.value++;
+  } finally {
+    listBusy.value = false;
+    load();
+  }
+}
+async function removeModel(name: string) {
+  if (!askTwice(name)) return;
+  listNotice.value = null;
+  try {
+    await call(`${API}.remove_model`, { model: name });
+    listNotice.value = {
+      ok: true,
+      text: __("{0} removed from the list.", name),
+    };
+  } catch (err) {
+    listNotice.value = { ok: false, text: errorText(err, __("Not removed")) };
+  } finally {
+    load();
+  }
+}
+function limitShare(m: CatalogModel) {
+  return m.limit_m
+    ? Math.max(2, Math.min(100, (m.used_m / m.limit_m) * 100))
+    : 0;
+}
+function limitTone(m: CatalogModel) {
+  const share = m.limit_m ? (m.used_m / m.limit_m) * 100 : 0;
+  if (share >= 100) return "bg-danger";
+  return share >= 80 ? "bg-warning" : "bg-surface-gray-7";
+}
+function usedByText(m: CatalogModel) {
+  return [
+    ...m.used_for.primary,
+    ...m.used_for.fallback.map((job) => __("{0} (backup)", job)),
+  ].join(", ");
 }
 
 const alertForm = reactive({ error_rate: 0, fallback_rate: 0 });

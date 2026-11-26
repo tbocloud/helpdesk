@@ -13,6 +13,7 @@ from frappe.tests.utils import FrappeTestCase
 from helpdesk import ai_engine, ai_models
 from helpdesk.api import ai_models as api
 from helpdesk.test_utils import (
+    anthropic_answer,
     create_agent,
     hold_commits,
     openai_http_response,
@@ -23,6 +24,31 @@ from helpdesk.test_utils import (
 
 LOG = "HDS AI Usage Log"
 PRICING = "HDS Model Pricing"
+DEEPSEEK = "DeepSeek"
+DEEPSEEK_KEY = "sk-deepseek-secret-123456"
+
+
+def fresh_month():
+    """Forget the counted tokens of the month, so the next count reads the log."""
+    frappe.cache.delete_keys("ai_engine:month_tokens:")
+
+
+def add_provider(
+    name=DEEPSEEK,
+    style="OpenAI-compatible",
+    url="https://api.deepseek.test",
+    key=DEEPSEEK_KEY,
+    **more,
+):
+    return ai_models.save_provider(
+        {"name": name, "style": style, "url": url, "key": key, "new": 1, **more}
+    )
+
+
+def add_model(model, provider, **more):
+    return ai_models.save_model(
+        {"model": model, "provider": provider, "listed": 1, "new": 1, **more}
+    )
 
 
 def log(model, job="triage", status="Success", ms=1200, **more):
@@ -54,7 +80,11 @@ class ModelsCase(FrappeTestCase):
             "HDS Gateway Usage Day",
         ):
             frappe.db.delete(doctype)
-        frappe.db.set_value(PRICING, {"candidate": 1}, "candidate", 0)
+        # an empty model list and no provider accounts
+        frappe.db.delete(PRICING)
+        frappe.db.delete("HDS AI Provider")
+        ai_engine.forget_provider(DEEPSEEK)
+        fresh_month()
         # no job rows: each test starts from the settings' own order and fallback
         set_ai_providers(ai_jobs=[])
 
@@ -334,75 +364,333 @@ class TestQuality(ModelsCase):
         self.assertEqual(result["copilot"]["runs"], 1)
 
 
-FULL_MARKS = [{**REPORT[0]}, {**REPORT[1], "right": True}]
+class TestProviders(ModelsCase):
+    def test_a_provider_is_saved_and_its_key_never_comes_back(self):
+        result = add_provider()
 
+        deepseek = next(p for p in result["providers"] if p["name"] == DEEPSEEK)
+        self.assertEqual(
+            (
+                deepseek["style"],
+                deepseek["url"],
+                deepseek["key_set"],
+                deepseek["ready"],
+            ),
+            ("OpenAI-compatible", "https://api.deepseek.test", True, True),
+        )
+        self.assertEqual(
+            [p["name"] for p in result["providers"]],
+            ["OpenAI", "Anthropic-compatible", DEEPSEEK],
+        )
+        self.assertNotIn(DEEPSEEK_KEY, frappe.as_json(result))
+        # saved again without a key, it keeps the one it has
+        ai_models.save_provider(
+            {"name": DEEPSEEK, "style": "OpenAI-compatible", "url": "https://x.test"}
+        )
+        provider = ai_engine.account_provider(DEEPSEEK, "deepseek-chat")
+        self.assertEqual(
+            (provider.api_key, provider.base_url, provider.budget_param),
+            (DEEPSEEK_KEY, "https://x.test", "max_tokens"),
+        )
 
-class TestCandidatesAndTheGuard(ModelsCase):
-    def test_a_candidate_is_listed_before_any_job_uses_it(self):
-        result = ai_models.add_model(
+    def test_what_a_provider_needs(self):
+        for values in (
+            {"name": "Mars", "style": "Mars", "url": "https://x.test"},
+            {"name": "Plain", "style": "OpenAI-compatible", "url": "http://x.test"},
+            {"name": "No address", "style": "OpenAI-compatible", "url": ""},
+            {"name": "", "style": "OpenAI-compatible", "url": "https://x.test"},
+        ):
+            with self.assertRaises(frappe.ValidationError, msg=values):
+                ai_models.save_provider({**values, "new": 1})
+        add_provider()
+        with self.assertRaises(frappe.ValidationError):
+            add_provider()
+        with self.assertRaises(frappe.ValidationError):
+            frappe.get_doc(
+                {
+                    "doctype": "HDS AI Provider",
+                    "provider_name": "OpenAI",
+                    "api_style": "OpenAI",
+                    "base_url": "https://x.test",
+                }
+            ).insert(ignore_permissions=True)
+        # Anthropic's own API needs no address
+        add_provider("Claude", "Anthropic", "", "sk-ant-test-123456")
+        claude = ai_engine.account_provider("Claude", "claude-sonnet-5-5")
+        self.assertEqual((claude.kind, claude.base_url), ("Anthropic", None))
+
+    def test_a_section_is_changed_from_here(self):
+        result = ai_models.save_provider(
             {
-                "model": "glm-5",
-                "section": "Anthropic-compatible",
-                "input_price": 0.6,
-                "output_price": 2.2,
-                "note": "to compare with kimi",
+                "name": "OpenAI",
+                "url": "https://api.openai.com/v1",
+                "key": "sk-proj-new-key-123456",
+                "default_model": "gpt-6-luna",
             }
         )
 
-        candidate = result["candidates"][0]
+        settings = frappe.get_doc("HDS Hub Settings")
         self.assertEqual(
-            (candidate["model"], candidate["section"], candidate["input_price"]),
-            ("glm-5", "Anthropic-compatible", 0.6),
+            settings.get_password("openai_api_key"), "sk-proj-new-key-123456"
         )
-        self.assertFalse(candidate["in_use"])
-        self.assertIn("glm-5", result["models"])
-        listed = {m["model"]: m for m in ai_models.overview(30)["models"]}["glm-5"]
-        self.assertEqual(
-            (listed["status"], listed["provider"]),
-            ("Candidate", "Anthropic-compatible"),
-        )
+        self.assertEqual(settings.openai_model, "gpt-6-luna")
+        self.assertNotIn("sk-proj-new-key", frappe.as_json(result))
         with self.assertRaises(frappe.ValidationError):
-            ai_models.add_model({"model": "glm-5", "section": "OpenAI"})
+            ai_models.remove_provider("OpenAI")
 
-        # once a job uses it, it is a model like any other
-        ai_models.save_job(
-            "chat",
-            {"anthropic_model": "glm-5", "primary_section": "Anthropic-compatible"},
+    def test_a_provider_a_job_uses_stays(self):
+        add_provider()
+        add_model("deepseek-chat", DEEPSEEK)
+        ai_models.save_job("task", {"model": "deepseek-chat"})
+        with self.assertRaises(frappe.ValidationError):
+            ai_models.remove_provider(DEEPSEEK)
+
+        ai_models.save_job("task", {"model": ""})
+        ai_models.remove_provider(DEEPSEEK)
+
+        self.assertFalse(frappe.db.exists("HDS AI Provider", DEEPSEEK))
+        listed, account = frappe.db.get_value(
+            PRICING, "deepseek-chat", ["listed", "ai_provider"]
         )
-        listed = {m["model"]: m for m in ai_models.overview(30)["models"]}["glm-5"]
-        self.assertEqual(listed["status"], "Not used")
-        self.assertEqual(listed["used_for"]["primary"], ["chat"])
-        self.assertTrue(ai_models.candidates()[0]["in_use"])
+        self.assertEqual((listed, account or ""), (0, ""))
 
-    def test_what_a_candidate_needs(self):
+    def test_a_provider_is_tested_with_its_first_model(self):
+        add_provider()
+        add_model("deepseek-chat", DEEPSEEK)
+        with patch(
+            "requests.post", return_value=openai_http_response(text="OK")
+        ) as post:
+            result = ai_models.test_provider(DEEPSEEK)
+
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(post.call_args.kwargs["json"]["model"], "deepseek-chat")
+        add_provider("Empty", url="https://empty.test")
+        self.assertIn("Add a model", ai_models.test_provider("Empty")["message"])
+
+
+class TestTheModelList(ModelsCase):
+    def setUp(self):
+        super().setUp()
+        add_provider()
+
+    def test_what_the_list_refuses(self):
         for values in (
-            {"section": "OpenAI"},
-            {"model": "two words", "section": "OpenAI"},
-            {"model": "glm-5", "section": "Mars"},
-            {"model": "glm-5", "section": "OpenAI", "input_price": -1},
+            {"model": "two words", "provider": DEEPSEEK},
+            {"model": "glm-5", "provider": "Mars"},
+            {"model": "glm-5", "provider": DEEPSEEK, "input_price": -1},
+            {"model": "glm-5", "provider": DEEPSEEK, "limit_m": -2},
+            {"model": "glm-5"},
         ):
             with self.assertRaises(frappe.ValidationError, msg=values):
-                ai_models.add_model(values)
+                ai_models.save_model({**values, "new": 1})
 
-    def test_removing_a_candidate_keeps_a_known_models_price(self):
-        ai_models.add_model({"model": "never-used", "section": "OpenAI"})
-        ai_models.remove_candidate("never-used")
+    def test_a_listed_model_no_job_uses_is_a_candidate(self):
+        result = add_model("deepseek-chat", DEEPSEEK, name="DeepSeek chat", limit_m=2)
+
+        row = {m["model"]: m for m in result["catalog"]}["deepseek-chat"]
+        self.assertEqual(
+            (row["name"], row["provider"], row["listed"], row["limit_m"]),
+            ("DeepSeek chat", DEEPSEEK, True, 2.0),
+        )
+        self.assertFalse(row["in_use"])
+        listed = {m["model"]: m for m in ai_models.overview(30)["models"]}
+        self.assertEqual(
+            (listed["deepseek-chat"]["status"], listed["deepseek-chat"]["provider"]),
+            ("Candidate", DEEPSEEK),
+        )
+        log("deepseek-chat", input_tokens=600_000, output_tokens=400_000)
+        fresh_month()
+        row = {m["model"]: m for m in ai_models.catalog()}["deepseek-chat"]
+        self.assertEqual(row["used_m"], 1.0)
+
+    def test_a_model_a_job_uses_stays_allowed(self):
+        add_model("kimi-k2.6", "Anthropic-compatible")
+        ai_models.save_job("chat", {"model": "kimi-k2.6"})
+
+        for change in (
+            lambda: ai_models.remove_model("kimi-k2.6"),
+            lambda: ai_models.save_model({"model": "kimi-k2.6", "listed": 0}),
+        ):
+            with self.assertRaises(frappe.ValidationError):
+                change()
+
+    def test_removing_keeps_a_known_models_prices(self):
+        add_model("never-used", DEEPSEEK)
+        ai_models.remove_model("never-used")
         self.assertFalse(frappe.db.exists(PRICING, "never-used"))
 
         log("seen-model")
-        ai_models.add_model(
-            {"model": "seen-model", "section": "OpenAI", "input_price": 1}
-        )
-        ai_models.remove_candidate("seen-model")
+        add_model("seen-model", DEEPSEEK, input_price=1)
+        ai_models.remove_model("seen-model")
         self.assertEqual(
-            frappe.db.get_value(
-                PRICING, "seen-model", ["candidate", "input_cost_per_1m"]
-            ),
+            frappe.db.get_value(PRICING, "seen-model", ["listed", "input_cost_per_1m"]),
             (0, 1.0),
         )
-        with self.assertRaises(frappe.ValidationError):
-            ai_models.remove_candidate("seen-model")
+        self.assertNotIn("seen-model", [m["model"] for m in ai_models.catalog()])
 
+
+class TestModelAndBackupPerJob(ModelsCase):
+    def setUp(self):
+        super().setUp()
+        add_provider()
+        add_model("deepseek-chat", DEEPSEEK)
+        add_model("kimi-k2.6", "Anthropic-compatible")
+
+    def chain(self, job):
+        return [(p.slot, p.model) for p in ai_engine.get_providers(job)]
+
+    def test_the_job_calls_its_model_then_its_backup(self):
+        ai_models.save_job(
+            "triage", {"model": "deepseek-chat", "backup_model": "kimi-k2.6"}
+        )
+        patch_anthropic_sdk(self, anthropic_answer("{}"))
+        busy = openai_http_response(500, {"error": {"message": "server busy"}})
+        with patch("requests.post", return_value=busy) as post:
+            result = ai_engine.call_haiku("Answer in JSON", "hello", job="triage")
+
+        self.assertEqual(result["model"], "kimi-k2.6")
+        self.assertEqual(
+            post.call_args.args[0], "https://api.deepseek.test/chat/completions"
+        )
+        self.assertEqual(
+            post.call_args.kwargs["headers"]["Authorization"], f"Bearer {DEEPSEEK_KEY}"
+        )
+        body = post.call_args.kwargs["json"]
+        self.assertEqual(body["model"], "deepseek-chat")
+        self.assertIn("max_tokens", body)
+        self.assertEqual(body["response_format"], {"type": "json_object"})
+        rows = frappe.get_all(
+            LOG,
+            fields=["model", "provider", "status", "fallback"],
+            order_by="creation asc",
+        )
+        self.assertEqual(
+            [(r.model, r.provider, r.status, r.fallback) for r in rows],
+            [
+                ("deepseek-chat", DEEPSEEK, "Failed", 0),
+                ("kimi-k2.6", "Anthropic-compatible", "Success", 1),
+            ],
+        )
+
+    def test_a_used_up_limit_stops_the_job_and_the_backup_waits(self):
+        ai_models.save_job(
+            "triage", {"model": "deepseek-chat", "backup_model": "kimi-k2.6"}
+        )
+        ai_models.save_model({"model": "deepseek-chat", "limit_m": 0.001})
+        log("deepseek-chat", input_tokens=900, output_tokens=200)
+        fresh_month()
+
+        with patch("requests.post") as post, self.assertRaises(
+            frappe.ValidationError
+        ) as refused:
+            ai_engine.call_haiku("Answer in JSON", "hello", job="triage")
+
+        self.assertIn("monthly token limit", str(refused.exception))
+        post.assert_not_called()
+        # a backup past its own limit is left out; the model still answers
+        ai_models.save_model({"model": "deepseek-chat", "limit_m": 0})
+        ai_models.save_model({"model": "kimi-k2.6", "limit_m": 0.001})
+        log("kimi-k2.6", input_tokens=2000)
+        fresh_month()
+        self.assertEqual(self.chain("triage"), [(DEEPSEEK, "deepseek-chat")])
+
+    def test_only_allowed_models_and_both_empty_works_as_before(self):
+        add_model("unticked", DEEPSEEK, listed=0)
+        for values in (
+            {"model": "unticked"},
+            {"backup_model": "kimi-k2.6"},
+            {"model": "kimi-k2.6", "backup_model": "kimi-k2.6"},
+        ):
+            with self.assertRaises(frappe.ValidationError, msg=values):
+                ai_models.save_job("triage", values)
+
+        ai_models.save_job(
+            "triage", {"model": "kimi-k2.6", "backup_model": "deepseek-chat"}
+        )
+        self.assertEqual(
+            self.chain("triage"),
+            [("Anthropic-compatible", "kimi-k2.6"), (DEEPSEEK, "deepseek-chat")],
+        )
+        # back to the sections: the backup goes too, and the change is in the history
+        result = ai_models.save_job("triage", {"model": ""})
+        self.assertEqual(
+            self.chain("triage"),
+            [("OpenAI", "gpt-test-model"), ("Anthropic-compatible", "kimi-k2.6")],
+        )
+        self.assertEqual(ai_engine.job_row("triage").backup_model or "", "")
+        settings = {(c.setting, c.new_value) for c in result["changes"]}
+        self.assertIn(("Backup", "(default)"), settings)
+
+    def test_a_provider_switched_off_leaves_the_backup(self):
+        ai_models.save_job(
+            "triage", {"model": "deepseek-chat", "backup_model": "kimi-k2.6"}
+        )
+        ai_models.save_provider(
+            {
+                "name": DEEPSEEK,
+                "style": "OpenAI-compatible",
+                "url": "https://api.deepseek.test",
+                "enabled": 0,
+            }
+        )
+        self.assertEqual(self.chain("triage"), [("Anthropic-compatible", "kimi-k2.6")])
+
+    def test_the_worker_gets_the_jobs_model_and_backup(self):
+        ai_models.save_job(
+            "investigate", {"model": "deepseek-chat", "backup_model": "kimi-k2.6"}
+        )
+        ai_models.save_model(
+            {"model": "deepseek-chat", "input_price": 0.28, "output_price": 0.42}
+        )
+
+        entries = ai_engine.worker_models()["investigate"]
+
+        self.assertEqual(
+            [(e["section"], e["model"]) for e in entries],
+            [(DEEPSEEK, "deepseek-chat"), ("Anthropic-compatible", "kimi-k2.6")],
+        )
+        self.assertEqual(
+            (entries[0]["price_in"], entries[0]["price_out"]), (0.28, 0.42)
+        )
+        self.assertNotIn(DEEPSEEK_KEY, frappe.as_json(ai_engine.worker_models()))
+
+    def test_the_older_settings_page_keeps_the_jobs_model(self):
+        from helpdesk.api import ai_settings
+
+        ai_models.save_job(
+            "chat", {"model": "deepseek-chat", "backup_model": "kimi-k2.6"}
+        )
+        ai_settings.save_settings(
+            {"ai_jobs": [{"job": "chat", "openai_model": "gpt-6-luna"}]}
+        )
+        row = ai_engine.job_row("chat")
+        self.assertEqual(
+            (row.model, row.backup_model, row.openai_model),
+            ("deepseek-chat", "kimi-k2.6", "gpt-6-luna"),
+        )
+
+    def test_the_page_shows_the_jobs_model_but_never_a_key(self):
+        ai_models.save_job(
+            "chat", {"model": "deepseek-chat", "backup_model": "kimi-k2.6"}
+        )
+
+        result = ai_models.job_settings()
+
+        chat = next(j for j in result["jobs"] if j["job"] == "chat")
+        self.assertEqual(
+            (chat["model"], chat["primary"]["section"], chat["fallback"]["model"]),
+            ("deepseek-chat", DEEPSEEK, "kimi-k2.6"),
+        )
+        in_use = {m["model"]: m["in_use"] for m in result["catalog"]}
+        self.assertTrue(in_use["deepseek-chat"])
+        for secret in (DEEPSEEK_KEY, "sk-test", "sk-ant"):
+            self.assertNotIn(secret, frappe.as_json(result))
+
+
+FULL_MARKS = [{**REPORT[0]}, {**REPORT[1], "right": True}]
+
+
+class TestTheGuard(ModelsCase):
     def test_the_guard_warns_before_copilot_gets_an_untested_or_weaker_model(self):
         change = {"primary_section": "Anthropic-compatible"}
         ai_models.store_eval("gpt-test-model", FULL_MARKS, ran_on="2026-10-01")
@@ -430,19 +718,40 @@ class TestCandidatesAndTheGuard(ModelsCase):
         # the guard saves nothing
         self.assertIsNone(ai_engine.job_row("fix"))
 
-    def test_only_system_managers_add_and_remove(self):
+    def test_the_guard_looks_at_a_jobs_own_model(self):
+        add_provider()
+        add_model("deepseek-chat", DEEPSEEK)
+        ai_models.store_eval("gpt-test-model", FULL_MARKS)
+
+        result = ai_models.guard("fix", {"model": "deepseek-chat"})
+
+        self.assertEqual(
+            (result["current_model"], result["model"]),
+            ("gpt-test-model", "deepseek-chat"),
+        )
+        self.assertIn("no run of the test set", result["warning"])
+
+    def test_only_system_managers_change_providers_and_the_list(self):
         manager = create_agent("models.manager2@example.com").name
         frappe.get_doc("User", manager).add_roles("Agent Manager")
-        ai_models.add_model({"model": "glm-5", "section": "OpenAI"})
+        add_provider()
+        add_model("deepseek-chat", DEEPSEEK)
 
         for change in (
-            lambda: api.add_model({"model": "glm-6", "section": "OpenAI"}),
-            lambda: api.remove_candidate("glm-5"),
+            lambda: api.save_provider(
+                {"name": "Qwen", "style": "OpenAI-compatible", "url": "https://q.test"}
+            ),
+            lambda: api.remove_provider(DEEPSEEK),
+            lambda: api.test_provider(DEEPSEEK),
+            lambda: api.save_model({"model": "glm-6", "provider": DEEPSEEK}),
+            lambda: api.remove_model("deepseek-chat"),
             lambda: api.save_alerts({"error_rate": 5}),
         ):
             with self.assertRaises(frappe.PermissionError):
                 run_as_user(manager, change)
-        # a manager may ask what a change would do
+        # a manager sees the page, never a key, and may ask what a change would do
+        seen = run_as_user(manager, lambda: api.job_settings())
+        self.assertNotIn(DEEPSEEK_KEY, frappe.as_json(seen))
         self.assertIn("warning", run_as_user(manager, lambda: api.guard("fix", {})))
 
 
@@ -460,6 +769,28 @@ class TestAlerts(ModelsCase):
                 for key in ("errors:gpt-test-model", "errors:kimi-k2.6", "fallback")
             ]
         )
+        frappe.cache.delete_keys(ai_models.ALERT_KEY.format("limit:"))
+
+    def test_a_model_near_or_past_its_monthly_limit_alerts_once_a_month(self):
+        add_provider()
+        add_model("deepseek-chat", DEEPSEEK, limit_m=1)
+        log("deepseek-chat", input_tokens=850_000, output_tokens=0)
+        fresh_month()
+
+        with patch("helpdesk.ai_models.send_alert") as send:
+            first = ai_models.watch()
+            again = ai_models.watch()
+
+        self.assertEqual(len(first), 1)
+        self.assertIn("85%", first[0])
+        self.assertEqual(again, [])
+        send.assert_called_once()
+        log("deepseek-chat", input_tokens=200_000)
+        fresh_month()
+        with patch("helpdesk.ai_models.send_alert"):
+            used_up = ai_models.watch()
+        self.assertEqual(len(used_up), 1)
+        self.assertIn("has used its monthly token limit", used_up[0])
 
     def test_a_failing_model_alerts_once(self):
         for i in range(12):
@@ -643,10 +974,18 @@ class TestTheTestSetHandOff(ModelsCase):
             ai_models.withdraw_eval_request(name)
 
 
-def gateway_call(model="tbo-default", user="dev@example.com", ms=2000, **more):
+def gateway_call(
+    model="openai/gpt-5.6-luna",
+    alias="tbo-default",
+    user="dev@example.com",
+    ms=2000,
+    **more,
+):
     return {
         "request_id": frappe.generate_hash(length=8),
-        "model_group": model,
+        "model": model,
+        "model_group": alias,
+        "custom_llm_provider": model.split("/")[0] if "/" in model else "",
         "user": user,
         "spend": 0.02,
         "prompt_tokens": 100,
@@ -709,21 +1048,35 @@ class TestTheGateway(ModelsCase):
         self.assertEqual((rows[0].p50_ms, rows[0].p95_ms), (1000, 3000))
         self.assertIn("RateLimitError", rows[0].error_classes)
         self.assertNotIn("PROMPT", frappe.as_json(rows))
+        # the real model, with the desktop app's name for it beside it
+        self.assertEqual(
+            (rows[0].model, rows[0].gateway_alias, rows[0].gateway_provider),
+            ("gpt-5.6-luna", "tbo-default", "openai"),
+        )
 
-    def test_the_pages_show_the_gateways_models(self):
-        with patch(
-            "requests.get", return_value=self.answer([gateway_call(), gateway_call()])
-        ):
+    def test_the_pages_show_the_gateways_models_by_their_real_names(self):
+        deepseek = gateway_call("bedrock/converse/deepseek.v3.2", "tbo-deepseek")
+        calls = [gateway_call(), gateway_call(), deepseek]
+        with patch("requests.get", return_value=self.answer(calls)):
             self.gw.sync(days=1)
-        log("gpt-test-model")
+        log("gpt-5.6-luna")  # TBO Support's own call to the same model
 
         models = {m["model"]: m for m in ai_models.overview(7)["models"]}
-        self.assertEqual(models["tbo-default"]["calls"], 2)
-        self.assertEqual(models["tbo-default"]["provider"], ai_models.GATEWAY_SOURCE)
-        one = ai_models.detail("tbo-default", 7)
-        self.assertEqual((one["calls"], one["cost"]), (2, 0.04))
+        self.assertNotIn("tbo-default", models)
+        self.assertEqual(models["gpt-5.6-luna"]["calls"], 3)
+        self.assertEqual(models["gpt-5.6-luna"]["gateway_aliases"], ["tbo-default"])
+        self.assertEqual(
+            (
+                models["deepseek.v3.2"]["provider"],
+                models["deepseek.v3.2"]["gateway_aliases"],
+            ),
+            (ai_models.GATEWAY_SOURCE, ["tbo-deepseek"]),
+        )
+        one = ai_models.detail("gpt-5.6-luna", 7)
+        self.assertEqual((one["calls"], one["cost"]), (3, 0.05))
+        self.assertEqual(one["gateway_aliases"], ["tbo-default"])
         self.assertEqual(one["by_person"][0]["name"], "dev@example.com")
-        self.assertEqual(one["series"][-1]["calls"], 2)
+        self.assertEqual(one["series"][-1]["calls"], 3)
 
     def test_a_refused_key_is_noted_not_raised(self):
         with patch("requests.get", return_value=self.answer([], status=401)):
