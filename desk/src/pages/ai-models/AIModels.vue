@@ -2285,53 +2285,60 @@ const error = ref<unknown>(null);
 let latest = 0;
 
 // only the newest request fills the page: an older one's answer is dropped after every wait
-async function load() {
+// it says what became of it: applied, overtaken by a newer load, or failed
+async function load(): Promise<"applied" | "superseded" | "failed"> {
   const mine = ++latest;
   loading.value = true;
   error.value = null;
   try {
     // the model list (for the picker) comes with every view
     const o = (await call(`${API}.overview`, { days: days.value })) as Overview;
-    if (mine !== latest) return;
+    if (mine !== latest) return "superseded";
     overview.value = o;
     if (view.value === "model") {
       const name = model.value || o.models[0]?.model || "";
-      if (name && !model.value) return go({ model: name });
+      if (name && !model.value) {
+        go({ model: name });
+        return "superseded";
+      }
       const d = name
         ? ((await call(`${API}.detail`, {
             model: name,
             days: days.value,
           })) as Detail)
         : null;
-      if (mine !== latest) return;
+      if (mine !== latest) return "superseded";
       detail.value = d;
       if (name && tab.value === "quality") {
         const q = (await call(`${API}.quality`, {
           model: name,
           days: days.value,
         })) as Quality;
-        if (mine !== latest) return;
+        if (mine !== latest) return "superseded";
         quality.value = q;
       } else if (name && tab.value === "benchmarks") {
         const b = (await call(`${API}.benchmarks`, {
           model: name,
           against: against.value || undefined,
         })) as Bench;
-        if (mine !== latest) return;
+        if (mine !== latest) return "superseded";
         bench.value = b;
       }
     } else if (view.value === "settings") {
       const s = (await call(`${API}.job_settings`, {
         days: days.value,
       })) as Settings;
-      if (mine !== latest) return;
+      if (mine !== latest) return "superseded";
       settings.value = s;
     }
   } catch (err) {
-    if (mine === latest) error.value = err;
+    if (mine !== latest) return "superseded";
+    error.value = err;
+    return "failed";
   } finally {
     if (mine === latest) loading.value = false;
   }
+  return "applied";
 }
 watch([view, days, model, tab, against], load, { immediate: true });
 // another model's figures and controls never stay on the page while this one loads, or fails
@@ -3097,8 +3104,9 @@ async function saveAlerts() {
   } catch (err) {
     alertNotice.value = { ok: false, text: errorText(err, __("Not saved")) };
   }
-  // busy until the reload is in, so two saves never overlap
-  await load();
+  // busy until the reload is in, so two saves never overlap; a reload that failed leaves
+  // nothing pending for a later, unrelated one
+  if ((await load()) === "failed") alertsSent = null;
   alertBusy.value = false;
 }
 
@@ -3165,8 +3173,9 @@ async function gatewayCall(
   }
   // only a save of these settings is reconciled (a read of usage leaves a draft alone)
   if (sent) gwSent = { ...sent, ok };
-  // busy until the reload is in, so two saves never overlap
-  await load();
+  // busy until the reload is in, so two saves never overlap; a reload that failed leaves
+  // nothing pending for a later, unrelated one
+  if ((await load()) === "failed") gwSent = null;
   gwBusy.value = false;
   return ok;
 }
