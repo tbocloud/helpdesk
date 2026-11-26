@@ -12,6 +12,15 @@ from frappe import _
 from frappe.utils import cint, flt, get_fullname, getdate
 
 from helpdesk.content_team import PRESALES_EXECUTIVE_ROLE, SALES_HEAD_ROLE
+from helpdesk.divisions import (
+    DIVISION,
+    DIVISION_ADMIN,
+    DIVISION_SALES_USER,
+    MEMBER,
+    active_division,
+    leads_role,
+    memberships,
+)
 from helpdesk.work_reminders import new_notification
 
 # ERPNext's role, also given on the hub to the CRM's salespeople (helpdesk.integrations.crm.users)
@@ -69,15 +78,35 @@ class SalesTargetsForbiddenError(frappe.PermissionError):
 
 
 def can_assign_targets(user: str | None = None) -> bool:
+    """A Sales Head or an admin: sets everyone's targets and runs the Sales team."""
     return bool(set(ASSIGNER_ROLES) & set(frappe.get_roles(user)))
 
 
+def targets_division(user: str | None = None) -> str | None:
+    """The division whose people a Division Admin sets targets for: their active one. None
+    for a Sales Head or an admin, who set everyone's, and for anyone else."""
+    user = user or frappe.session.user
+    if can_assign_targets(user) or leads_role(user) != DIVISION_ADMIN:
+        return None
+    return active_division(user)
+
+
+def can_give_targets(user: str | None = None) -> bool:
+    """Opens Assign sales targets and Team targets: a Sales Head or an admin for everyone,
+    a Division Admin for their division's people."""
+    return can_assign_targets(user) or bool(targets_division(user))
+
+
 def has_own_targets(user: str | None = None) -> bool:
-    """An enabled Presales Executive or Sales User: is given targets and sees them."""
+    """An enabled Presales Executive, Sales User or Division Sales User: is given targets
+    and sees them."""
     user = user or frappe.session.user
     return (
         user not in NOT_PEOPLE
-        and bool(set(TARGET_ROLES) & set(frappe.get_roles(user)))
+        and (
+            bool(set(TARGET_ROLES) & set(frappe.get_roles(user)))
+            or DIVISION_SALES_USER in memberships(user).values()
+        )
         and bool(frappe.db.get_value("User", user, "enabled"))
     )
 
@@ -96,7 +125,7 @@ def hides_todays_calls(user: str | None = None) -> bool:
 
 
 def require_assigner():
-    if not can_assign_targets():
+    if not can_give_targets():
         frappe.throw(
             _("Only a Sales Head can set sales targets."), SalesTargetsForbiddenError
         )
@@ -131,6 +160,26 @@ def sales_heads() -> list[str]:
     )
 
 
+def target_givers(user: str) -> list[str]:
+    """Who sets `user`'s targets: a Division Sales User's Division Admins, else the Sales
+    Heads."""
+    divisions = [
+        d for d, role in memberships(user).items() if role == DIVISION_SALES_USER
+    ]
+    if not divisions:
+        return sales_heads()
+    return frappe.get_all(
+        MEMBER,
+        filters={
+            "parent": ["in", divisions],
+            "parenttype": DIVISION,
+            "role": DIVISION_ADMIN,
+        },
+        pluck="user",
+        distinct=True,
+    )
+
+
 def ask_key(user: str, start) -> str:
     """The notice a person's ask for a month's targets is kept under, once per head."""
     return f"sales-targets-ask:{user}:{start:%Y-%m}"
@@ -148,8 +197,9 @@ def asked_heads(user: str, start) -> set[str]:
 
 
 def remind_sales_heads(user: str, start) -> int:
-    """Tell each Sales Head not told yet that `user` has no targets for the month, with a link
-    to the Assign page on them. Asking again tells no one twice. Returns how many were told."""
+    """Tell each of `user`'s target givers (`target_givers`) not told yet that they have no
+    targets for the month, with a link to the Assign page on them. Asking again tells no one
+    twice. Returns how many were told."""
     told = asked_heads(user, start)
     message = _("{0} asks for their sales targets for {1}.").format(
         get_fullname(user), start.strftime("%B %Y")
@@ -157,7 +207,7 @@ def remind_sales_heads(user: str, start) -> int:
     link = "/helpdesk/sales-targets?" + urlencode(
         {"month": f"{start:%Y-%m}", "employee": user}
     )
-    heads = [head for head in sales_heads() if head not in told and head != user]
+    heads = [head for head in target_givers(user) if head not in told and head != user]
     for head in heads:
         new_notification(
             head,
@@ -172,7 +222,9 @@ def remind_sales_heads(user: str, start) -> int:
 
 
 def target_people() -> list[dict]:
-    """Enabled users with a target role, by name: who a Sales Head may give targets to."""
+    """Who the signed-in person may give targets to, by name: for a Sales Head every enabled
+    user with a target role; for a Division Admin those of their division's members, and its
+    Division Sales Users (shown as Sales Users: that is their role on its ERP site)."""
     has_role = frappe.qb.DocType("Has Role")
     user = frappe.qb.DocType("User")
     rows = (
@@ -188,6 +240,9 @@ def target_people() -> list[dict]:
         )
         .run(as_dict=True)
     )
+    division = targets_division()
+    if division:
+        rows = division_target_rows(division, rows)
     people: dict[str, dict] = {}
     for row in rows:
         person = people.setdefault(
@@ -199,11 +254,41 @@ def target_people() -> list[dict]:
                 "roles": [],
             },
         )
-        person["roles"].append(row.role)
+        if row.role not in person["roles"]:
+            person["roles"].append(row.role)
     for person in people.values():
         # the same order everywhere: Presales Executive before Sales User
         person["roles"].sort(key=TARGET_ROLES.index)
     return sorted(people.values(), key=lambda p: p["full_name"].lower())
+
+
+def division_target_rows(division: str, rows: list[dict]) -> list[dict]:
+    """`rows` (user, role) narrowed to the division's members, plus a Sales User row for each
+    of its enabled Division Sales Users."""
+    members = frappe.get_all(
+        MEMBER,
+        filters={"parent": division, "parenttype": DIVISION},
+        fields=["user", "role"],
+    )
+    in_division = {m.user for m in members}
+    rows = [r for r in rows if r.name in in_division]
+    sales_users = [m.user for m in members if m.role == DIVISION_SALES_USER]
+    if sales_users:
+        rows += [
+            frappe._dict(
+                name=u.name,
+                full_name=u.full_name,
+                user_image=u.user_image,
+                role=SALES_USER_ROLE,
+            )
+            for u in frappe.get_all(
+                "User",
+                filters={"name": ["in", sales_users], "enabled": 1},
+                fields=["name", "full_name", "user_image"],
+            )
+            if u.name not in NOT_PEOPLE
+        ]
+    return rows
 
 
 def default_criteria() -> list[dict]:

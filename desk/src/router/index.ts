@@ -290,7 +290,7 @@ const portalRoutes = [
     path: "/sales-team",
     name: "SalesTeam",
     component: () => import("@/pages/sales-team/SalesTeam.vue"),
-    beforeEnter: () => useAuthStore().canAssignSalesTargets || { name: "Home" },
+    beforeEnter: () => useAuthStore().canManageSalesTeam || { name: "Home" },
   },
   {
     path: "/my-targets",

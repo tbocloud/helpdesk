@@ -11,13 +11,37 @@ sees their own on **Sales targets**.
 | Role | What they get |
 | --- | --- |
 | `Sales Head` (or System Manager) | **Assign sales targets** (Sales → Team): picks people and assigns the month's targets. **Team targets** (Sales → Team): how everyone is doing against them. **Sales team** (Sales → Team): adds, changes and removes the team's people (docs/sales-team.md). |
-| `Presales Executive`, `Sales User` | **Sales targets** (Sales): their own targets as cards, month by month, read-only. |
+| Division Admin (a division membership, docs/divisions.md) | **Assign sales targets** and **Team targets**, for the people of their active division only (owner, 2026-11-26). No **Sales team**: it changes hub roles, so it stays the Sales Heads' (`can_manage_sales_team`). |
+| `Presales Executive`, `Sales User`, Division Sales User | **Sales targets** (Sales): their own targets as cards, month by month, read-only. |
 
 `Sales Head` and `Presales Executive` are created on migrate (`ensure_role` in
 `helpdesk/content_team.py`). `Sales User` is ERPNext's role, also given to the CRM's
 salespeople by the CRM user sync. The role names live in `helpdesk/content_team.py` and
 `helpdesk/sales_targets.py`. People also need to be helpdesk agents to open the app at all.
 Administrator and Guest are never listed.
+
+### A Division Admin's targets (2026-11-26)
+
+The owner asked for the KSA Division Admin to set targets. Targets were hub-wide, so a Division
+Admin gets them scoped to their **active division** (`targets_division`, `can_give_targets` in
+`helpdesk/sales_targets.py`); a Sales Head or System Manager keeps the hub-wide view, even with a
+Division Admin membership.
+
+- **Their people** (`target_people` → `division_target_rows`): the division's members who hold a
+  target role on the hub, plus its **Division Sales Users**, shown as Sales Users (their role on
+  the division's ERP site). A Division Sales User holds no target role on the hub, so
+  `has_own_targets` also counts that membership; a Sales Head's list still holds only people
+  with the hub roles.
+- **Every assigner call is held to those people**: `assign_targets` refuses anyone outside the
+  list, and `get_progress` for someone else and `confirm_kpi` go through `require_target_person`.
+  A Division Admin holds no permission on `HD Sales Target`, so the API saves with
+  `ignore_permissions` after those checks (as `mark_kpi_done` already did).
+- **Figures** come from the division's ERP site: `call` reads through `crm_client`, the signed-in
+  person's active division. The **currency** is the division's (`HD Division.currency`, SAR for
+  KSA) for a Division Admin and a Division Sales User.
+- **Asking for targets**: a Division Sales User's ask goes to their division's Division Admins
+  (`target_givers`), not the Sales Heads.
+- The pages still say "Sales Head" in their wording (e.g. *Ask my Sales Head*).
 
 ## Data model
 
@@ -35,7 +59,7 @@ counts.
 
 ### Validation (on save)
 
-- The employee is enabled and has Presales Executive or Sales User.
+- The employee is enabled and has Presales Executive or Sales User, or is a Division Sales User.
 - At least one criterion, and no name twice (case-insensitive).
 - Every criterion has a target. Numbers can't be below 0, and a percent can't be over 100.
 - A measure fits its value type (`MEASURES`): won value and money collected count towards an
@@ -79,8 +103,9 @@ year back, picked with a **Month** select in the header.
   no one matching the filters (with Show everyone; filtered to Not set and none left says
   everyone shown has targets), nobody picked.
 
-The currency is the CRM dashboards' reporting currency (`HD CRM Settings.dashboard_currency`),
-else the site default, else INR.
+The currency is the division's for a Division Admin or Division Sales User (above), else the
+CRM dashboards' reporting currency (`HD CRM Settings.dashboard_currency`), else the site
+default, else INR.
 
 A link with `?employee=<user>` (Team targets' **Edit targets** / **Assign targets**) opens
 the page with that person picked; `?pick=without` (Team targets' **Assign to N people**) opens it
@@ -277,26 +302,30 @@ kind *Text, info only*. A number target is never information only.
 
 ## API (`helpdesk.api.sales_targets`)
 
-- `get_team(month)`: Sales Heads only. Returns the people, their targets for the month, the
-  defaults and the currency.
-- `assign_targets(month, employees, criteria)` (POST): Sales Heads only. Replaces each
-  person's targets for the month.
+- `get_team(month)`: Sales Heads, and Division Admins for their division's people. Returns the
+  people, their targets for the month, the defaults and the currency.
+- `assign_targets(month, employees, criteria)` (POST): Sales Heads and Division Admins, only
+  for the people `get_team` lists them. Replaces each person's targets for the month.
 - `get_my_targets(month)`: Presales Executives and Sales Users. Returns their own targets, the
   months they have targets in, and `asked` (no targets, and a Sales Head was already asked).
 - `ask_for_targets(month)` (POST): the person, with no targets for the month, reminds every
-  enabled Sales Head: an `HD Notification` (Reminder, from the person, linking to the Assign
+  enabled Sales Head (a Division Sales User: their division's Division Admins, `target_givers`): an `HD Notification` (Reminder, from the person, linking to the Assign
   page with them picked), one per head and month (`dedupe_key`
   `sales-targets-ask:<user>:<month>`), so asking again tells no one twice. Refused with
-  targets already set or no Sales Head.
-- `get_progress(month, employee=None, fresh=0)`: the person's own progress, or anyone's for a
-  Sales Head. `{state: counted | not_started | unavailable | no_targets, reason, from_date,
+  targets already set or no one to ask.
+- `get_progress(month, employee=None, fresh=0)`: the person's own progress, or one of their
+  people's for a Sales Head or Division Admin. `{state: counted | not_started | unavailable | no_targets, reason, from_date,
   to_date, month_over, criteria: {name: {achieved, parts?}}}`.
-- `get_team_progress(month, fresh=0)`: Sales Heads. The same for everyone with targets, by user.
+- `get_team_progress(month, fresh=0)`: Sales Heads and Division Admins. The same for each of
+  their people with targets, by user.
 - `mark_kpi_done(month, criterion, done, note)` (POST): the person ticks a KPI off or takes it
   back.
-- `confirm_kpi(month, employee, criterion, confirmed)` (POST): Sales Heads confirm or reopen.
+- `confirm_kpi(month, employee, criterion, confirmed)` (POST): Sales Heads and Division Admins
+  confirm or reopen, for their people.
 
-`get_user` sends `can_assign_sales_targets` and `has_sales_targets`, which show the sidebar
+`get_user` sends `can_assign_sales_targets` (`can_give_targets`), `can_manage_sales_team`
+(`can_assign_targets`: the Sales team route and its `salesTeamOnly` sidebar item) and
+`has_sales_targets`, which show the sidebar
 items and let the router open the pages (Assign sales targets and Team targets on the first,
 Sales targets on the second). All three routes are in `SALES_EMPLOYEE_ROUTES`, so a Sales
 Employee who also has one of these roles can reach them.
@@ -321,4 +350,7 @@ that doesn't fit its value type, and the KPI: marked done and confirmed, only a 
 confirmed, a confirmed one not taken back, and kept or reset on re-assigning; the seven
 defaults with Industry and Location information only, information kept and never ticked off,
 and a number target never information only. Asking for targets: each Sales Head told once, `asked` after, refused with targets set
-and for anyone not given targets.
+and for anyone not given targets. A Division Admin (`TestDivisionAdminTargets`): sees only their
+division's people (its Division Sales Users as Sales Users) in its currency while a Sales Head
+keeps the hub's, sets their targets and is refused anyone else's targets and progress, has no
+Sales team; a Division Sales User is given targets and their ask goes to the Division Admin.

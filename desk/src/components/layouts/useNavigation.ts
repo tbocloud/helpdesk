@@ -113,6 +113,7 @@ export function useNavigation() {
       (!item.customerReportOnly || authStore.canSeeCustomerReport) &&
       (!item.divisionOverviewOnly || authStore.canViewDivisionOverview) &&
       (!item.salesHeadOnly || authStore.canAssignSalesTargets) &&
+      (!item.salesTeamOnly || authStore.canManageSalesTeam) &&
       (!item.ownTargetsOnly || authStore.hasSalesTargets) &&
       (!item.weeklyLeadReportOnly || authStore.hasWeeklyLeadReport) &&
       (!item.salesManagersOnly || seesTeam.value) &&

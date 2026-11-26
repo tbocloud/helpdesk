@@ -88,7 +88,9 @@ rather than filtering leads itself, so every Leads screen keeps the site's one r
 - **Their screens** (owner, 2026-11-17): both roles are on the sales wall like a Sales Employee
   (`content_team.is_sales_employee`: sales screens only, no tasks, projects, tickets or
   content). A **Division Admin** gets Add a lead, My leads, Leads, Commission, Overview and the
-  Scoreboard, and Reports → Business overview, Lead status and Division reports (plus Business,
+  Scoreboard, Assign sales targets and Team targets for their division's people
+  (docs/sales-targets.md, owner 2026-11-26), and Reports → Business overview, Lead status and
+  Division reports (plus Business,
   Assign leads and Today's calls where the ERP site allows them): they
   are never a BD, so they get the team's view, and, as a Sales Manager on the division's site,
   pick many leads on the list to set their category or merge them (the site checks it again).

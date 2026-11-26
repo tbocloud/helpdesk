@@ -4,16 +4,19 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_months, getdate, nowdate
 
+from helpdesk import divisions
 from helpdesk.api import sales_targets as api
 from helpdesk.integrations.crm.leads import LeadsUnavailableError
-from helpdesk.sales_targets import measured
+from helpdesk.sales_targets import can_assign_targets, has_own_targets, measured
 from helpdesk.test_utils import (
     FakeCRM,
     enable_leads,
     hold_commits,
+    make_division,
     make_presales_executive,
     make_sales_head,
     make_sales_target,
+    make_tasky_user,
 )
 
 HEAD = "head@targets.example"
@@ -298,3 +301,77 @@ class TestAskForTargets(FrappeTestCase):
         frappe.set_user(HEAD)
         with self.assertRaises(frappe.PermissionError):
             api.ask_for_targets(THIS_MONTH)
+
+
+class TestDivisionAdminTargets(FrappeTestCase):
+    """A Division Admin sets targets for their division's people only (owner, 2026-11-26)."""
+
+    ADMIN = "admin@ksa-targets.example"
+    SELLER = "seller@ksa-targets.example"
+
+    def setUp(self):
+        hold_commits(self)
+        self.addCleanup(frappe.set_user, "Administrator")
+        enqueue = patch.object(frappe, "enqueue")
+        enqueue.start()
+        self.addCleanup(enqueue.stop)
+        make_sales_head(HEAD, "Hana Head")
+        make_presales_executive(PERSON, "Priya Presales")
+        make_presales_executive(OTHER, "Omar Presales")
+        make_tasky_user(self.ADMIN, "Kamal Admin")
+        # a Division Sales User holds no target role on the hub
+        make_tasky_user(self.SELLER, "Sara Seller")
+        make_division(
+            "KSAT",
+            "KSA Targets",
+            members=[
+                (self.ADMIN, divisions.DIVISION_ADMIN),
+                (PERSON, divisions.EMPLOYEE),
+                (self.SELLER, divisions.DIVISION_SALES_USER),
+            ],
+            country="Saudi Arabia",
+            currency="SAR",
+        )
+
+    def test_the_admin_sees_only_their_divisions_people_in_its_currency(self):
+        frappe.set_user(self.ADMIN)
+        team = api.get_team(THIS_MONTH)
+        people = {p["user"]: p["roles"] for p in team["people"]}
+        self.assertEqual(
+            people,
+            {PERSON: ["Presales Executive"], self.SELLER: ["Sales User"]},
+        )
+        self.assertEqual(team["currency"], "SAR")
+        frappe.set_user(HEAD)
+        everyone = {p["user"] for p in api.get_team(THIS_MONTH)["people"]}
+        self.assertTrue({PERSON, OTHER} <= everyone)
+        self.assertNotIn(self.SELLER, everyone, "a Sales Head keeps the hub's people")
+
+    def test_the_admin_sets_their_peoples_targets_and_no_one_elses(self):
+        frappe.set_user(self.ADMIN)
+        make_sales_target(self.SELLER, THIS_MONTH, CRITERIA)
+        self.assertEqual(
+            frappe.db.get_value(
+                "HD Sales Target", f"{self.SELLER}::{THIS_MONTH}", "assigned_by"
+            ),
+            self.ADMIN,
+        )
+        with self.assertRaises(frappe.ValidationError):
+            make_sales_target(OTHER, THIS_MONTH, CRITERIA)
+        self.assertFalse(frappe.db.exists("HD Sales Target", f"{OTHER}::{THIS_MONTH}"))
+        with self.assertRaises(frappe.PermissionError):
+            api.get_progress(THIS_MONTH, OTHER)
+        # the Sales team changes hub roles: still the Sales Heads' alone
+        self.assertFalse(can_assign_targets(self.ADMIN))
+
+    def test_a_division_sales_user_asks_their_division_admin(self):
+        self.assertTrue(has_own_targets(self.SELLER))
+        frappe.set_user(self.SELLER)
+        self.assertEqual(api.ask_for_targets(THIS_MONTH), {"told": 1})
+        frappe.set_user("Administrator")
+        told = frappe.get_all(
+            "HD Notification",
+            filters={"dedupe_key": f"sales-targets-ask:{self.SELLER}:{THIS_MONTH}"},
+            pluck="user_to",
+        )
+        self.assertEqual(told, [self.ADMIN])
