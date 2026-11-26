@@ -120,6 +120,56 @@ Each purpose gets a model and a backup. A new application or purpose is one entr
   first model has no test-set score, or a lower one than the current model, the page asks before
   saving.
 
+## Every AI call through the TBO AI gateway (Phase 37)
+
+The TBO AI gateway is LiteLLM, running on the Copilot worker's server. It already carries the desktop app. With
+**Use the gateway for every AI call** on (the TBO AI gateway card), TBO Support's calls go through it too.
+
+**How calls go**
+- `ai_engine.job_chain` turns each model a purpose would try (`chain_models`) into a gateway provider
+  (`gateway_provider`): OpenAI's chat completions at `<gateway>/v1`, with TBO Support's own gateway key.
+- The model, then the backup, as before. The provider's errors behind the gateway (429, 401, 5xx) come back with the
+  same codes, so the error kinds on the page stay right.
+- The worker is sent the same models under the provider name "TBO AI gateway". The worker reaches it at
+  `http://127.0.0.1:4100/v1` with its own gateway key, `TBO_PROVIDER_GATEWAY_API_KEY`.
+
+**When the gateway can't be used** (the owner's decision: an emergency key, and alerts)
+- **When it counts as unusable:** the gateway doesn't answer its health check (`/health/liveliness`, asked again at
+  most once a minute), or it refuses TBO Support's own key. In that case `_emergency` answers with TBO Support's
+  sections: its own OpenAI key, kept for this alone.
+- **The managers are told** once in 6 hours (`ai_gateway.mark_down`). The alert says whether an emergency key
+  answers.
+- **Every 5 minutes** `ai_gateway.watch` checks the gateway and says when it answers again.
+- **The switch** turns on only once the gateway answers and accepts TBO Support's key.
+
+**The AI models page writes into the gateway** (admin API, with TBO Support's admin key or TBO Desktop Settings'
+one)
+
+| What | Where it goes in the gateway |
+|---|---|
+| A provider's key | a gateway credential (`/credentials`) under the provider's name; TBO Support then forgets the key (`key_on_gateway`) |
+| An allowed model | `/model/new` with the id `tbo-support:<model>` |
+| An unticked or removed model | `/model/delete` |
+| A model of today's OpenAI section | the gateway's own `OPENAI_API_KEY` |
+| A model of an AWS Bedrock account | `bedrock/converse/<model>` in its region, signed by the gateway's AWS role; no key, and only through the gateway |
+
+- **Write all to the gateway** writes everything again: the keys still held here (then forgotten here), and every
+  model.
+- **While the switch is on,** a change the gateway can't take isn't saved.
+
+**Usage:** TBO Support keeps its own log of its calls and the worker's. From the gateway's usage it reads only the
+desktop app's keys (aliases starting with `desktop:`), so nothing is counted twice.
+
+**Checked on 26 Nov** against a local LiteLLM, the same image the gateway runs:
+- the switch;
+- a credential, and a model referring to it;
+- a test call with TBO Support's key;
+- the usage alias `tbo-support`;
+- removing a model;
+- the emergency path with the gateway stopped.
+
+DevOps's steps are in `design/phases/phase-37.md` (section 6).
+
 ## Quality signals
 
 | Signal | Where it comes from |
