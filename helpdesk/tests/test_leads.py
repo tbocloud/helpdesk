@@ -463,9 +463,7 @@ class TestLeads(FrappeTestCase):
     def test_closed_won_needs_the_won_amount(self):
         self.as_bde()
         for amount in (None, "", 0, -100):
-            with self.subTest(amount=amount), self.assertRaises(
-                frappe.ValidationError
-            ):
+            with self.subTest(amount=amount), self.assertRaises(frappe.ValidationError):
                 leads_api.set_stage("CRM-LEAD-0001", "Closed – Won", won_amount=amount)
         self.assertEqual(self.crm.lead_calls, [])
 

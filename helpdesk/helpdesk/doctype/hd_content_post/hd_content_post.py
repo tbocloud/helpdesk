@@ -956,8 +956,9 @@ def content_project_for(customer: str | None, branch: str | None = None) -> str 
     if taken := branch_projects(customer):
         query = query.where(project.name.notin(taken))
     rows = (
-        query
-        .orderby(Case().when(project.project_type == CONTENT_PROJECT_TYPE, 0).else_(1))
+        query.orderby(
+            Case().when(project.project_type == CONTENT_PROJECT_TYPE, 0).else_(1)
+        )
         .orderby(project.modified, order=Order.desc)
         .limit(1)
         .run(pluck=True)

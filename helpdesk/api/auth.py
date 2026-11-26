@@ -29,9 +29,9 @@ from helpdesk.sales_targets import (
     hides_todays_calls,
 )
 from helpdesk.tasky.permissions import is_project_manager as tasky_is_project_manager
-from helpdesk.weekly_lead_report import report_division
 from helpdesk.utils import agent_only, get_agent_name, get_agents_team
 from helpdesk.utils import is_agent as _is_agent
+from helpdesk.weekly_lead_report import report_division
 
 
 @frappe.whitelist()

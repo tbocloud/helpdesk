@@ -181,9 +181,7 @@ class TestActiveDivision(DivisionCase):
 
     def test_a_manager_of_several_divisions_switches_between_them(self):
         self.make_india_and_ksa()
-        self.ksa.append(
-            "members", {"user": CARA, "role": divisions.DIVISION_MANAGER}
-        )
+        self.ksa.append("members", {"user": CARA, "role": divisions.DIVISION_MANAGER})
         self.ksa.save()
         uae = make_division("UAE", "UAE", members=[(CARA, divisions.EMPLOYEE)])
         info = divisions.division_info(CARA)
@@ -494,9 +492,7 @@ class TestDivisionDashboards(DivisionCase):
         result = overview_api.get_lead_status(division="IND", lead_source="Website")
         self.assertEqual(result["kpis"]["total"], 3)
         self.assertEqual([d["name"] for d in result["divisions"]], ["IND"])
-        self.assertEqual(
-            result["filters"]["lead_sources"], ["Cold Calling", "Website"]
-        )
+        self.assertEqual(result["filters"]["lead_sources"], ["Cold Calling", "Website"])
         self.assertEqual(overview_api.get_lead_status(group="Lost")["kpis"]["total"], 1)
         only = overview_api.get_lead_status(status="Lead", employee=BOB)
         self.assertEqual(only["kpis"]["total"], 1)
@@ -516,7 +512,9 @@ class TestDivisionDashboards(DivisionCase):
     def test_a_card_per_division(self):
         project = make_project("Div Card Project", members=[(ANN, "Developer")])
         project.db_set("division", "IND")
-        late = make_task(project.name, "Div card late", exp_end_date=add_days(getdate(), -2))
+        late = make_task(
+            project.name, "Div card late", exp_end_date=add_days(getdate(), -2)
+        )
         make_assignment("Task", late.name, ANN)
         frappe.set_user(DEV)
         cards = {c["name"]: c for c in overview_api.get_division_cards()["cards"]}
@@ -711,7 +709,6 @@ class TestDivisionSalesRoles(DivisionCase):
         self.assertTrue(content_team.in_sales(ANN))
         self.assertTrue(content_team.in_sales(CARA))
 
-
     def test_a_division_admin_sets_up_lead_departments_on_their_divisions_site(self):
         from helpdesk.api import lead_bank as lead_bank_api
         from helpdesk.api import leads as leads_api
@@ -731,6 +728,7 @@ class TestDivisionSalesRoles(DivisionCase):
             sent, [("save_lead_department", CARA), ("save_referral_settings", CARA)]
         )
         self.assertIn("Sales Manager", self.roles(CARA))
+
 
 class TestDivisionAgents(DivisionCase):
     """A division's admins see its agents and bring people into it (docs/divisions.md,

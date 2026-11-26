@@ -340,7 +340,7 @@ const FILTER_KEYS = [
   "follow_up",
   "quoted",
 ] as const;
-type FilterKey = (typeof FILTER_KEYS)[number];
+type FilterKey = typeof FILTER_KEYS[number];
 const filters = reactive(
   Object.fromEntries(
     FILTER_KEYS.map((key) => [key, String(route.query[key] || "")])

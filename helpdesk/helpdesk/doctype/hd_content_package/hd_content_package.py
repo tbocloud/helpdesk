@@ -56,9 +56,11 @@ class HDContentPackage(Document):
         self.set_posts_per_month()
 
     def validate_branch(self):
-        if self.branch and frappe.db.get_value(
-            "HD Customer Branch", self.branch, "customer"
-        ) != self.customer:
+        if (
+            self.branch
+            and frappe.db.get_value("HD Customer Branch", self.branch, "customer")
+            != self.customer
+        ):
             frappe.throw(
                 _("{0} isn't a branch of {1}.").format(self.branch, self.customer)
             )
