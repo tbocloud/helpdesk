@@ -5,6 +5,7 @@ import frappe
 from frappe import _
 from frappe.utils import escape_html, strip_html
 
+from helpdesk import ai_models
 from helpdesk.ai_engine import call_haiku
 from helpdesk.utils import agent_only
 
@@ -53,7 +54,9 @@ def draft_reply(ticket: str, instructions: str = "", current_draft: str = "") ->
     if not reply:
         frappe.throw(_("The AI didn't return a reply. Try again."))
     # The model is asked for plain text; normalise in case it answers in HTML anyway
-    return {"reply": text_to_html(html_to_text(reply))}
+    reply = html_to_text(reply)
+    ai_models.note_draft(ticket, result.get("model"), reply)
+    return {"reply": text_to_html(reply)}
 
 
 def build_prompt(doc, instructions: str, current_draft: str) -> str:

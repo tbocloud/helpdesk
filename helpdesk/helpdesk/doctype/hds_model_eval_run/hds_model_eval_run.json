@@ -1,0 +1,127 @@
+{
+ "actions": [],
+ "creation": "2026-11-26 14:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "model",
+  "job",
+  "ran_on",
+  "source",
+  "column_break_run",
+  "cases_total",
+  "cases_right",
+  "accuracy",
+  "avg_minutes",
+  "total_cost_usd",
+  "results_section",
+  "results"
+ ],
+ "fields": [
+  {
+   "fieldname": "model",
+   "fieldtype": "Data",
+   "label": "Model",
+   "in_list_view": 1,
+   "reqd": 1,
+   "search_index": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "job",
+   "fieldtype": "Data",
+   "label": "Job",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "ran_on",
+   "fieldtype": "Date",
+   "label": "Ran On",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "source",
+   "fieldtype": "Data",
+   "label": "Source",
+   "read_only": 1,
+   "description": "The worker, or a report a manager brought in"
+  },
+  {
+   "fieldname": "column_break_run",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "cases_total",
+   "fieldtype": "Int",
+   "label": "Cases",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cases_right",
+   "fieldtype": "Int",
+   "label": "Right",
+   "read_only": 1
+  },
+  {
+   "fieldname": "accuracy",
+   "fieldtype": "Percent",
+   "label": "Accuracy",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "avg_minutes",
+   "fieldtype": "Float",
+   "label": "Minutes per Case",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_cost_usd",
+   "fieldtype": "Float",
+   "label": "Cost (USD)",
+   "read_only": 1,
+   "precision": "2"
+  },
+  {
+   "fieldname": "results_section",
+   "fieldtype": "Section Break",
+   "label": "Cases"
+  },
+  {
+   "fieldname": "results",
+   "fieldtype": "Table",
+   "label": "Results",
+   "options": "HDS Model Eval Result",
+   "read_only": 1,
+   "description": "Case numbers and scores only: never a case's text or its expected answer"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-26 14:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Helpdesk",
+ "name": "HDS Model Eval Run",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "read": 1,
+   "report": 1,
+   "role": "System Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Agent Manager"
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "autoname": "hash",
+ "naming_rule": "Random",
+ "in_create": 1
+}

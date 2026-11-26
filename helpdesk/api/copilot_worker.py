@@ -262,3 +262,41 @@ def pr_result(pull_request: str, lease_token: str, result: dict | str) -> dict:
     from helpdesk.copilot import pulls
 
     return pulls.result(pull_request, lease_token, _parse(result, "result") or {})
+
+
+@frappe.whitelist(methods=["POST"])
+def report_eval(
+    model: str,
+    results: list | str,
+    job: str = "investigate",
+    request: str | None = None,
+) -> dict:
+    """A run of the test set, from the worker (Phase 31): scores per case number only."""
+    from helpdesk import ai_models
+
+    worker_only()
+    name = ai_models.store_eval(model, frappe.parse_json(results), job=job)
+    if request and frappe.db.exists(ai_models.EVAL_REQUEST, request):
+        frappe.db.set_value(
+            ai_models.EVAL_REQUEST, request, {"status": "Done", "eval_run": name}
+        )
+    ai_models.close_requests(str(model or "").strip(), name)
+    return {"eval_run": name}
+
+
+@frappe.whitelist(methods=["POST"])
+def claim_eval_request() -> dict | None:
+    """The oldest waiting request to run the test set on a model, marked Running; None when
+    there is none. The worker asks only when it has no ticket work."""
+    from helpdesk import ai_models
+
+    worker_only()
+    name = frappe.db.get_value(
+        ai_models.EVAL_REQUEST, {"status": "Queued"}, "name", order_by="creation asc"
+    )
+    if not name:
+        return None
+    frappe.db.set_value(ai_models.EVAL_REQUEST, name, "status", "Running")
+    return frappe.db.get_value(
+        ai_models.EVAL_REQUEST, name, ["name", "model", "job"], as_dict=True
+    )

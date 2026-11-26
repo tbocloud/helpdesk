@@ -7,12 +7,19 @@ prompt caching and token tracking (docs/ai-providers.md)."""
 import json
 import re
 from dataclasses import dataclass, field, replace
-from time import monotonic
+from time import monotonic, perf_counter
 
 import anthropic
 import frappe
 from frappe import _
-from frappe.utils import format_datetime, now_datetime
+from frappe.utils import (
+    cint,
+    flt,
+    format_datetime,
+    get_first_day,
+    now_datetime,
+    nowdate,
+)
 
 # Default model constants (can be overridden in HDS Hub Settings)
 HAIKU_MODEL = "claude-haiku-4-5-20251001"
@@ -269,6 +276,9 @@ class AIProvider:
     api_key: str = field(repr=False)
     # a job's own model (HDS AI Job): paused and reported apart from the section's model
     override: bool = False
+    # an OpenAI-compatible provider account that takes a token budget and JSON mode (Phase 31)
+    budget_param: str = ""
+    json_mode: bool = False
 
     @property
     def label(self) -> str:
@@ -364,18 +374,98 @@ def configured_providers(settings=None) -> dict[str, AIProvider | None]:
     return providers
 
 
-def provider_order(settings=None) -> list[str]:
-    """The primary section, then the other one when failover is on."""
+def provider_order(settings=None, job: str | None = None) -> list[str]:
+    """The primary section, then the other one when failover is on. A job's row in Models per
+    job may choose its own first section and switch its own fallback on or off (Phase 31)."""
     settings = settings or get_hub_settings()
     primary = settings.get("primary_ai_provider") or ANTHROPIC_SLOT
-    if not settings.get("ai_failover"):
+    failover = bool(settings.get("ai_failover"))
+    row = job_row(job, settings)
+    if row:
+        if row.get("primary_section") in SLOTS:
+            primary = row.primary_section
+        if row.get("allow_fallback") in ("On", "Off"):
+            failover = row.allow_fallback == "On"
+    if not failover:
         return [primary]
     return [primary, *(slot for slot in SLOTS if slot != primary)]
 
 
-# The AI jobs (docs/ai-providers.md, Models per job): TBO Support's own, then the Copilot worker's
-JOBS = ("triage", "draft", "summary", "task", "chat", "investigate", "fix", "review")
+def job_row(job: str | None, settings=None):
+    """The job's row in Models per job, if it has one."""
+    if not job:
+        return None
+    settings = settings or get_hub_settings()
+    return next((r for r in settings.get("ai_jobs") or [] if r.job == job), None)
+
+
+# Every application that uses AI, with its purposes (docs/ai-models.md). Each purpose gets a model
+# and a backup on the AI models page; a new application or purpose is one entry here.
+APPLICATIONS = (
+    {
+        "name": "TBO Support",
+        "note": "TBO Support's own AI: triage, drafts, summaries, tasks and chat.",
+        "purposes": ("triage", "draft", "summary", "task", "chat"),
+    },
+    {
+        "name": "Copilot worker",
+        "note": "Copilot's investigations, fixes and reviews, on the worker server.",
+        "purposes": ("investigate", "fix", "review"),
+    },
+    {
+        "name": "Desktop app",
+        "note": "The desktop assistant's levels. Each is written to the TBO AI gateway as tbo-simple … tbo-very-hard, its model first and its backup second; the desktop app shows them as TBO AI · Simple … Very hard once its update is installed.",
+        "purposes": (
+            "desktop_simple",
+            "desktop_medium",
+            "desktop_hard",
+            "desktop_very_hard",
+        ),
+        # a level has its own model or none: no sections and no fallback order
+        "own_models_only": True,
+    },
+    {
+        "name": "Inbox",
+        "note": "Facebook, Instagram, WhatsApp and email (phases 32 to 35): these purposes arrive with those phases.",
+        "purposes": ("inbox_reply", "inbox_purpose", "inbox_voice", "inbox_files"),
+        "coming": True,
+    },
+)
+# a desktop level's name on the gateway, the one the desktop app asks for
+DESKTOP_GATEWAY_NAMES = {
+    "desktop_simple": "tbo-simple",
+    "desktop_medium": "tbo-medium",
+    "desktop_hard": "tbo-hard",
+    "desktop_very_hard": "tbo-very-hard",
+}
+PURPOSE_LABELS = {
+    "desktop_simple": "Simple",
+    "desktop_medium": "Medium",
+    "desktop_hard": "Hard",
+    "desktop_very_hard": "Very hard",
+    "inbox_reply": "Auto reply",
+    "inbox_purpose": "Purpose of a message",
+    "inbox_voice": "Voice notes",
+    "inbox_files": "Pictures and files",
+}
+# every purpose (the Models per job rows); TBO Support's own, then the Copilot worker's, then the rest
+JOBS = tuple(job for app in APPLICATIONS for job in app["purposes"])
 WORKER_JOBS = ("investigate", "fix", "review")
+OWN_MODEL_JOBS = tuple(
+    job for app in APPLICATIONS if app.get("own_models_only") for job in app["purposes"]
+)
+# shown on the page before their phase builds them; no model can be chosen yet
+COMING_JOBS = tuple(
+    job for app in APPLICATIONS if app.get("coming") for job in app["purposes"]
+)
+
+
+def application_of(job: str | None) -> str:
+    return next((a["name"] for a in APPLICATIONS if job in a["purposes"]), "")
+
+
+def purpose_label(job: str) -> str:
+    return PURPOSE_LABELS.get(job, job)
 
 
 def job_models(job: str | None, settings=None) -> dict[str, str]:
@@ -398,22 +488,245 @@ def job_models(job: str | None, settings=None) -> dict[str, str]:
 
 
 def get_providers(job: str | None = None) -> list[AIProvider]:
-    """The providers call_haiku tries, in order; sections without a key are left out.
-    A job's row changes only the model of each section, never the order or the fallback."""
-    settings = get_hub_settings()
+    """The providers call_haiku tries, in order (`job_chain`), less the models past their
+    monthly token limit (`within_limits`)."""
+    return within_limits(job_chain(job))
+
+
+def job_chain(job: str | None = None, settings=None) -> list[AIProvider]:
+    """A job with its own model (Phase 31) tries it, then its backup, each through its provider
+    account; a model whose provider is off or has no key is left out. Any other job tries the
+    sections in its order (`provider_order`), each with the job's model for that section,
+    leaving out sections without a key. A purpose with its own models only (a desktop level)
+    has nothing without one, and a coming purpose has nothing yet."""
+    settings = settings or get_hub_settings()
+    if job in COMING_JOBS:
+        return []
+    from helpdesk import ai_gateway
+
+    if ai_gateway.for_all(settings):
+        return [gateway_provider(m, settings) for m in chain_models(job, settings)]
+    row = job_row(job, settings)
+    if row and row.get("model"):
+        chosen = (row.model, row.get("backup_model"))
+        return [p for p in (model_provider(m, settings) for m in chosen if m) if p]
+    if job in OWN_MODEL_JOBS:
+        return []
+    return section_chain(job, settings)
+
+
+def section_chain(job: str | None, settings=None) -> list[AIProvider]:
+    """The sections in the job's order, each with the job's model for it; sections without a
+    key are left out. Also the emergency path when the gateway can't be used (Phase 37)."""
+    settings = settings or get_hub_settings()
     providers = configured_providers(settings)
     models = job_models(job, settings)
     return [
         replace(providers[slot], model=models[slot], override=True)
         if models.get(slot) and models[slot] != providers[slot].model
         else providers[slot]
-        for slot in provider_order(settings)
+        for slot in provider_order(settings, job)
         if providers[slot]
     ]
 
 
+def chain_models(job: str | None, settings=None) -> list[str]:
+    """The models a purpose tries, in order, by name: its own model and backup (allowed ones),
+    else its sections' models in its order (sections with a key)."""
+    settings = settings or get_hub_settings()
+    if job in COMING_JOBS:
+        return []
+    row = job_row(job, settings)
+    if row and row.get("model"):
+        return [
+            m
+            for m in (row.model, row.get("backup_model"))
+            if m and frappe.db.get_value(PRICING_DOCTYPE, m, "listed")
+        ]
+    if job in OWN_MODEL_JOBS:
+        return []
+    return list(dict.fromkeys(p.model for p in section_chain(job, settings)))
+
+
+def gateway_provider(model: str, settings=None) -> AIProvider:
+    """`model` as the TBO AI gateway serves it, with TBO Support's own gateway key. The gateway
+    speaks OpenAI's chat completions for every model and passes on the providers' errors."""
+    from helpdesk import ai_gateway
+
+    return AIProvider(
+        ai_gateway.SLOT,
+        "OpenAI Compatible",
+        ai_gateway.base_url(settings) + "/v1",
+        model,
+        ai_gateway.call_key(),
+        override=True,
+        budget_param="max_tokens",
+        json_mode=True,
+    )
+
+
+def gateway_unusable(error: "AIProviderError") -> bool:
+    """Whether a failed call through the gateway means the gateway itself can't be used: it
+    doesn't answer its health check, or it refused TBO Support's own key."""
+    from helpdesk import ai_gateway
+
+    if error.provider.slot != ai_gateway.SLOT:
+        return False
+    if error.kind in ("timeout", "server"):
+        return not ai_gateway.alive(fresh=True)
+    if error.kind == "auth":
+        return not ai_gateway.key_works()
+    return False
+
+
+def within_limits(chain: list[AIProvider]) -> list[AIProvider]:
+    """A model past its monthly token limit isn't called. When it is the first model, the job
+    stops: the backup is there for outages, not for spending past a limit."""
+    if chain and over_limit(chain[0].model):
+        return []
+    return [p for p in chain if not over_limit(p.model)]
+
+
+def limit_reached(job: str | None = None) -> str:
+    """The job's first model when its monthly token limit is used up, else ''."""
+    chain = job_chain(job)
+    return chain[0].model if chain and over_limit(chain[0].model) else ""
+
+
+# --- the model list and the provider accounts (Phase 31, docs/ai-models.md) ---
+
+PRICING_DOCTYPE = "HDS Model Pricing"
+PROVIDER_DOCTYPE = "HDS AI Provider"
+# a provider account's API style, as the request it gets
+STYLE_KINDS = {
+    "OpenAI": "OpenAI",
+    "OpenAI-compatible": "OpenAI Compatible",
+    "Anthropic": "Anthropic",
+    "Anthropic-compatible": "Anthropic Compatible",
+}
+MONTH_TOKENS_KEY = "ai_engine:month_tokens:{}"
+MONTH_TOKENS_SECONDS = 5 * 60
+
+
+def model_provider(model: str, settings=None) -> AIProvider | None:
+    """A model of the list (HDS Model Pricing), ready to call through its provider account;
+    None when it isn't allowed for jobs, or its provider is off or has no key."""
+    row = frappe.db.get_value(
+        PRICING_DOCTYPE, model, ["name", "ai_provider", "listed"], as_dict=True
+    )
+    if not row or not row.listed or not row.ai_provider:
+        return None
+    return account_provider(row.ai_provider, row.name, settings)
+
+
+def account_provider(account: str, model: str, settings=None) -> AIProvider | None:
+    """`model` through a provider account: one of today's sections, or an HDS AI Provider.
+    None when the account is off or has no key."""
+    if account in SLOTS:
+        section = configured_providers(settings)[account]
+        if not section:
+            return None
+        if model == section.model:
+            return section
+        return replace(section, model=model, override=True)
+    doc = frappe.db.get_value(
+        PROVIDER_DOCTYPE,
+        account,
+        ["name", "api_style", "base_url", "enabled", "json_mode"],
+        as_dict=True,
+    )
+    if not doc or not doc.enabled:
+        return None
+    from frappe.utils.password import get_decrypted_password
+
+    key = get_decrypted_password(
+        PROVIDER_DOCTYPE, doc.name, "api_key", raise_exception=False
+    )
+    if not key:
+        return None
+    compatible = doc.api_style == "OpenAI-compatible" and bool(doc.json_mode)
+    return AIProvider(
+        doc.name,
+        STYLE_KINDS.get(doc.api_style, "OpenAI Compatible"),
+        doc.base_url or (OPENAI_BASE_URL if doc.api_style == "OpenAI" else None),
+        model,
+        key,
+        override=True,
+        budget_param="max_tokens" if compatible else "",
+        json_mode=compatible,
+    )
+
+
+def jobs_using(model: str, settings=None) -> list[str]:
+    """The jobs whose own model or backup is `model`."""
+    if not model:
+        return []
+    settings = settings or get_hub_settings()
+    return [
+        row.job
+        for row in settings.get("ai_jobs") or []
+        if model in (row.get("model"), row.get("backup_model"))
+    ]
+
+
+def in_use_message(model: str, settings=None) -> str:
+    """Why `model` must stay allowed: the jobs that use it; '' when none does."""
+    jobs = jobs_using(model, settings)
+    if not jobs:
+        return ""
+    if len(jobs) == 1:
+        return _("{0} uses {1}. Choose another model for it first.").format(
+            jobs[0], model
+        )
+    return _("{0} use {1}. Choose another model for them first.").format(
+        ", ".join(jobs), model
+    )
+
+
+def month_tokens(model: str) -> int:
+    """Input plus output tokens of `model` this calendar month, TBO Support's and the Copilot
+    worker's (the usage log), counted again at most every 5 minutes."""
+    key = MONTH_TOKENS_KEY.format(model)
+    cached = frappe.cache.get_value(key, expires=True)
+    if cached is not None:
+        return cint(cached)
+    from frappe.query_builder.functions import Coalesce, Sum
+
+    log = frappe.qb.DocType("HDS AI Usage Log")
+    total = (
+        frappe.qb.from_(log)
+        .select(Sum(Coalesce(log.input_tokens, 0) + Coalesce(log.output_tokens, 0)))
+        .where(log.model == model)
+        .where(log.creation >= get_first_day(nowdate()))
+    ).run()[0][0]
+    total = cint(total)
+    from helpdesk.ai_gateway import remember
+
+    remember(key, total, MONTH_TOKENS_SECONDS)
+    return total
+
+
+def monthly_limit(model: str) -> float:
+    """The model's monthly token limit in millions; 0 means none."""
+    if not model:
+        return 0.0
+    return flt(frappe.db.get_value(PRICING_DOCTYPE, model, "monthly_token_limit"))
+
+
+def over_limit(model: str) -> bool:
+    limit = monthly_limit(model)
+    return bool(limit) and month_tokens(model) >= limit * 1_000_000
+
+
+def forget_provider(account: str):
+    """Forget a provider account's pauses and failures, e.g. after its key changed."""
+    for key in (CIRCUIT_KEY, DOWN_KEY):
+        frappe.cache.delete_keys(key.format(f"{account}|"))
+
+
 def check_job_rows(settings):
-    """HDS Hub Settings: one row per job."""
+    """HDS Hub Settings: one row per job; a job's own model and backup are two different
+    models allowed for jobs (Phase 31)."""
     seen = set()
     for row in settings.get("ai_jobs") or []:
         if row.job in seen:
@@ -421,25 +734,38 @@ def check_job_rows(settings):
                 _("Models per job: {0} has more than one row.").format(row.job)
             )
         seen.add(row.job)
+        if row.get("backup_model") and not row.get("model"):
+            frappe.throw(
+                _("Models per job: {0} has a backup but no model.").format(row.job)
+            )
+        if row.get("model") and row.get("model") == row.get("backup_model"):
+            frappe.throw(
+                _("Models per job: the backup of {0} must be another model.").format(
+                    row.job
+                )
+            )
+        for model in (row.get("model"), row.get("backup_model")):
+            if model and not frappe.db.get_value(PRICING_DOCTYPE, model, "listed"):
+                frappe.throw(
+                    _(
+                        "Models per job: {0} isn't allowed for jobs. Tick it under AI models → Models first."
+                    ).format(model)
+                )
 
 
 def worker_models() -> dict[str, list[dict]]:
-    """For the Copilot worker's run context: each worker job's sections in order, with the
-    model and its price per million tokens. Never a key: the worker holds its own."""
-    settings = get_hub_settings()
-    providers = configured_providers(settings)
-    order = [slot for slot in provider_order(settings) if providers[slot]]
+    """For the Copilot worker's run context: each worker job's providers in order (its own
+    model and backup, or the sections), with the model and its price per million tokens.
+    Never a key: the worker holds its own and finds it by the provider's name (`section`)."""
     out = {}
     for job in WORKER_JOBS:
-        models = job_models(job, settings)
         out[job] = []
-        for slot in order:
-            model = models.get(slot) or providers[slot].model
-            cost = get_model_cost(model)
+        for provider in get_providers(job):
+            cost = get_model_cost(provider.model)
             out[job].append(
                 {
-                    "section": slot,
-                    "model": model,
+                    "section": provider.slot,
+                    "model": provider.model,
                     "price_in": cost["input"],
                     "price_out": cost["output"],
                     "price_cached": cost["cache_read"],
@@ -504,9 +830,10 @@ def _openai_chat(
     """One /chat/completions call, through requests so there is no openai SDK
     to depend on. Returns (text, _Usage, ran_out_of_tokens).
 
-    Only the OpenAI section gets a token budget and JSON mode; other
-    OpenAI-compatible endpoints may not know them. No temperature is sent:
-    newer OpenAI models refuse anything but the default.
+    Only OpenAI itself gets a token budget and JSON mode, and an OpenAI-compatible
+    provider account that says it supports them (DeepSeek, Qwen); other endpoints
+    may not know them. No temperature is sent: newer OpenAI models refuse anything
+    but the default.
     """
     import requests
 
@@ -521,6 +848,10 @@ def _openai_chat(
         # reasoning models count their thinking in this budget too
         body["max_completion_tokens"] = max_tokens
         if wants_json(system_prompt):
+            body["response_format"] = {"type": "json_object"}
+    elif provider.budget_param:
+        body[provider.budget_param] = max_tokens
+        if provider.json_mode and wants_json(system_prompt):
             body["response_format"] = {"type": "json_object"}
     try:
         response = requests.post(
@@ -671,9 +1002,25 @@ def complete(
         timeout = min(REQUEST_TIMEOUT, deadline - monotonic())
         if timeout < MIN_ATTEMPT_SECONDS:
             raise AIProviderError(provider, "timeout", "no time left for this call")
-        text, usage, ran_out = call(
-            provider, system_prompt, user_message, max_tokens, timeout, images
-        )
+        # its own clock: the deadline's monotonic() is counted by the tests
+        started = perf_counter()
+        try:
+            text, usage, ran_out = call(
+                provider, system_prompt, user_message, max_tokens, timeout, images
+            )
+        except AIProviderError as e:
+            # a failed attempt is a row too: errors and speed are counted per model (Phase 31)
+            log_usage(
+                provider.model,
+                _Usage(0, 0),
+                ticket_name=ticket_name,
+                provider=provider.slot,
+                job=job,
+                fallback=fallback,
+                duration_ms=round((perf_counter() - started) * 1000),
+                error=e,
+            )
+            raise
         log_usage(
             provider.model,
             usage,
@@ -681,6 +1028,7 @@ def complete(
             provider=provider.slot,
             job=job,
             fallback=fallback,
+            duration_ms=round((perf_counter() - started) * 1000),
         )
         if text.strip() or not ran_out:
             break
@@ -897,9 +1245,13 @@ def log_usage(
     job: str | None = None,
     copilot_run: str | None = None,
     fallback: bool = False,
+    duration_ms: int | None = None,
+    error: "AIProviderError | None" = None,
 ):
     """Log API usage to HDS AI Usage Log. Without `provider` it is an
-    investigation's call: those always run on an Anthropic-compatible provider."""
+    investigation's call: those always run on an Anthropic-compatible provider.
+    `error` makes it a Failed row with the error's kind and the provider's own words
+    (key masked, clipped): never the prompt."""
     try:
         frappe.get_doc(
             {
@@ -911,6 +1263,16 @@ def log_usage(
                 "job": job,
                 "copilot_run": copilot_run,
                 "fallback": int(bool(fallback)),
+                "duration_ms": duration_ms,
+                "status": "Failed" if error else "Success",
+                "error_class": error.kind if error else None,
+                "error_message": (
+                    f"HTTP {error.status}: " if error and error.status else ""
+                )
+                + (error.detail or "")[:MAX_ERROR_CHARS]
+                if error
+                else None,
+                "source": "TBO Support",
                 "input_tokens": usage.input_tokens,
                 "output_tokens": usage.output_tokens,
                 "cache_read_tokens": getattr(usage, "cache_read_input_tokens", 0),
@@ -952,6 +1314,8 @@ def log_worker_usage(run: str, cost: dict | None, job: str, attempt: int = 1):
                 "provider": stage.get("section") or "Copilot worker",
                 "model": str(stage.get("model") or "")[:140],
                 "fallback": int(bool(stage.get("fallback"))),
+                "source": "Copilot worker",
+                "duration_ms": int(stage.get("ms") or 0) or None,
                 "input_tokens": tokens_in - cached,
                 "cache_read_tokens": cached,
                 "output_tokens": int(stage.get("tokens_out") or 0),
@@ -1014,7 +1378,25 @@ def call_haiku(system_prompt, user_message, ticket_name=None, job=None, images=N
     """
     providers = get_providers(job)
     if not providers:
+        used_up = limit_reached(job)
+        if used_up:
+            frappe.throw(
+                _(
+                    "{0} has used its monthly token limit, so this AI job waits until next month, or until a System Manager raises the limit in AI models."
+                ).format(used_up)
+            )
         frappe.throw(_("AI isn't set up. Add an API key in Settings → AI providers."))
+    from helpdesk import ai_gateway
+
+    if providers[0].slot == ai_gateway.SLOT and not ai_gateway.alive():
+        return _emergency(system_prompt, user_message, ticket_name, job, images)
+    return _answer(providers, system_prompt, user_message, ticket_name, job, images)
+
+
+def _answer(
+    providers, system_prompt, user_message, ticket_name, job, images, emergency=False
+):
+    """The first provider that answers, in order; each failure is recorded and alerted."""
     ready = [provider for provider in providers if not circuit_open(provider)]
     if not ready:
         frappe.cache.set_value(OUTAGE_KEY, 1, expires_in_sec=STATUS_SECONDS)
@@ -1036,6 +1418,8 @@ def call_haiku(system_prompt, user_message, ticket_name=None, job=None, images=N
             )
         except AIProviderError as e:
             error = e
+            if not emergency and gateway_unusable(e):
+                return _emergency(system_prompt, user_message, ticket_name, job, images)
             record_failure(e, ready[index + 1] if index + 1 < len(ready) else None)
             if not e.fails_over:
                 raise
@@ -1050,10 +1434,29 @@ def call_haiku(system_prompt, user_message, ticket_name=None, job=None, images=N
                 "cache_write_tokens": getattr(usage, "cache_creation_input_tokens", 0),
             },
             "cost": estimate_cost(provider.model, usage),
+            "model": provider.model,
         }
 
     frappe.cache.set_value(OUTAGE_KEY, 1, expires_in_sec=STATUS_SECONDS)
     raise error
+
+
+def _emergency(system_prompt, user_message, ticket_name, job, images):
+    """The gateway can't be used: TBO Support's sections answer with its own keys (the owner's
+    decision for Phase 37), and the managers are told once in 6 hours."""
+    from helpdesk import ai_gateway
+
+    chain = within_limits(section_chain(job))
+    ai_gateway.mark_down(emergency=bool(chain))
+    if not chain:
+        frappe.throw(
+            _(
+                "The TBO AI gateway is not answering, and no emergency key is set in Settings → AI providers."
+            )
+        )
+    return _answer(
+        chain, system_prompt, user_message, ticket_name, job, images, emergency=True
+    )
 
 
 def create_investigation_session(

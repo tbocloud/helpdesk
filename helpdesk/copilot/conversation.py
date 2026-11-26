@@ -1516,7 +1516,11 @@ def chatwoot_decision(row, chat_prompt: str, articles: list[dict]) -> dict | Non
         },
         update_modified=False,
     )
+    from helpdesk import ai_models
+
+    model = result.get("model")
     if not answer or answer.get("parse_error"):
+        ai_models.record_event("Bad answer format", model, job="chat")
         return None
     for field, value in (answer.get("fields") or {}).items():
         if field in FIELDS and value:
@@ -1532,10 +1536,20 @@ def chatwoot_decision(row, chat_prompt: str, articles: list[dict]) -> dict | Non
         doc.db_set("language", reported, update_modified=False)
     doc.reload()
     step = answer.get("next") if answer.get("next") in NEXT else "question"
-    text = safe_text(str(answer.get("text") or ""), articles)
+    raw = str(answer.get("text") or "")
+    text = safe_text(raw, articles)
+    if len(text) < len(re.sub(r"\*\*|__", "", raw).strip()) - 1:
+        # a link, a price or a promise was taken out before the customer saw it
+        ai_models.record_event("Safety cut", model, job="chat")
     sources = cited(answer, articles)
     if step == "answer" and not sources:
+        # an answer with no article behind it never reaches the customer; it is counted
+        ai_models.record_event("Unsupported answer", model, job="chat")
         step, text = "question", _offer(doc)
+    elif step == "answer":
+        ai_models.record_event("Answered", model, job="chat")
+    elif step == "handover":
+        ai_models.record_event("Hand-over", model, job="chat")
     if step == "summary" and doc.title and doc.actual:
         summary = "\n".join(
             f"{_(FIELD_LABELS[f])}: {doc.get(f)}"

@@ -70,7 +70,11 @@
   "claimed_at",
   "column_break_timeline",
   "investigated_at",
-  "finished_at"
+  "finished_at",
+  "references_section",
+  "references_checked",
+  "references_missing",
+  "missing_references"
  ],
  "fields": [
   {
@@ -498,10 +502,34 @@
    "label": "Explanation edited",
    "read_only": 1,
    "description": "How much the agent changed Copilot's explanation before sending it: 0 sent as drafted, 100 rewritten."
+  },
+  {
+   "fieldname": "references_section",
+   "fieldtype": "Section Break",
+   "label": "References Checked"
+  },
+  {
+   "fieldname": "references_checked",
+   "fieldtype": "Int",
+   "label": "References Checked",
+   "read_only": 1,
+   "description": "Files, functions, doctypes and fields Copilot cited, checked by the worker against the code"
+  },
+  {
+   "fieldname": "references_missing",
+   "fieldtype": "Int",
+   "label": "References Missing",
+   "read_only": 1
+  },
+  {
+   "fieldname": "missing_references",
+   "fieldtype": "Small Text",
+   "label": "Missing References",
+   "read_only": 1
   }
  ],
  "links": [],
- "modified": "2026-11-18 12:00:00.000000",
+ "modified": "2026-11-26 14:00:00.000000",
  "modified_by": "Administrator",
  "module": "Helpdesk",
  "name": "HDS Copilot Run",

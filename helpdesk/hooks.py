@@ -95,6 +95,9 @@ scheduler_events = {
             "helpdesk.integrations.meta.publisher.publish_due",
             "helpdesk.helpdesk.doctype.hd_meeting.hd_meeting.send_reminders",
             "helpdesk.copilot.runs.expire_stale_leases",
+            # the TBO AI gateway while every AI call goes through it (Phase 37): the managers are
+            # told when it stops answering and when it answers again
+            "helpdesk.ai_gateway.watch",
         ],
         # every 10 minutes: new hub errors to the team's chat channel
         "*/10 * * * *": [
@@ -146,6 +149,13 @@ scheduler_events = {
         # docs/tbo-smart-api.md, "Offboarding")
         "40 * * * *": [
             "helpdesk.offboarding.run",
+        ],
+        # hourly at :20: the AI gateway's usage as totals per day, for AI models (Phase 31; off
+        # until a gateway address and read-only key are set)
+        "20 * * * *": [
+            "helpdesk.ai_gateway.sync",
+            # a model failing, or the fallback answering, more than the limit in the last hour
+            "helpdesk.ai_models.watch",
         ],
         # 00:30: champions of every period that ended yesterday (team dashboard)
         "30 0 * * *": [
@@ -321,6 +331,8 @@ doc_events = {
             "helpdesk.chatwoot_bridge.on_communication_insert",
             "helpdesk.copilot.customer.on_communication_insert",
             "helpdesk.copilot.conversation.on_communication_insert",
+            # an agent's reply beside the AI draft made for it (AI models, Phase 31)
+            "helpdesk.ai_models.on_communication_insert",
             # a customer's reply to a sign-off's mail (docs/project-signoff.md)
             "helpdesk.helpdesk.doctype.hd_project_signoff.hd_project_signoff.on_communication_insert",
         ],
