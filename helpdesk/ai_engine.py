@@ -687,7 +687,7 @@ def month_tokens(model: str) -> int:
     """Input plus output tokens of `model` this calendar month, TBO Support's and the Copilot
     worker's (the usage log), counted again at most every 5 minutes."""
     key = MONTH_TOKENS_KEY.format(model)
-    cached = frappe.cache.get_value(key)
+    cached = frappe.cache.get_value(key, expires=True)
     if cached is not None:
         return cint(cached)
     from frappe.query_builder.functions import Coalesce, Sum
@@ -700,7 +700,9 @@ def month_tokens(model: str) -> int:
         .where(log.creation >= get_first_day(nowdate()))
     ).run()[0][0]
     total = cint(total)
-    frappe.cache.set_value(key, total, expires_in_sec=MONTH_TOKENS_SECONDS)
+    from helpdesk.ai_gateway import remember
+
+    remember(key, total, MONTH_TOKENS_SECONDS)
     return total
 
 

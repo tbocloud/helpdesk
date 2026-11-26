@@ -908,6 +908,31 @@ class TestEverythingThroughTheGateway(ModelsCase):
         )
         again.assert_not_called()
 
+    def test_a_gateway_found_down_stays_down_for_the_rest_of_the_request(self):
+        """Frappe 15 (the CI's) keeps a request's own copy of a cached value and doesn't update it
+        when a value with an expiry is written; the next call must still see the gateway down."""
+        import pickle
+
+        import requests
+
+        cache = frappe.cache
+
+        def set_value_as_frappe_15(
+            key, val, user=None, expires_in_sec=None, shared=False
+        ):
+            key = cache.make_key(key, user, shared)
+            if not expires_in_sec:
+                frappe.local.cache[key] = val
+            cache.set(key, pickle.dumps(val), ex=expires_in_sec)
+
+        with patch.object(cache, "set_value", set_value_as_frappe_15), patch(
+            "requests.get", side_effect=requests.ConnectionError("no route")
+        ):
+            cache.set_value(self.gw.ALIVE_KEY, 1)  # the request's copy says "up"
+            self.assertTrue(self.gw.alive())
+            self.assertFalse(self.gw.alive(fresh=True))
+            self.assertFalse(self.gw.alive())
+
     def test_a_refused_tbo_support_key_uses_the_emergency_key_too(self):
         frappe.cache.delete_value(self.gw.KEY_WORKS_KEY)
         refused = openai_http_response(401, {"error": {"message": "invalid proxy key"}})

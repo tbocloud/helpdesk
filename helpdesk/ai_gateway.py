@@ -103,17 +103,25 @@ def for_all(settings=None) -> bool:
     return bool(settings.get("gateway_for_all") and base_url(settings) and call_key())
 
 
+def remember(key: str, value, seconds: int) -> None:
+    """A short-lived flag, kept in Redis only. Frappe 15 keeps a request's own copy of a cached value
+    and doesn't update it when a value with an expiry is written; that copy is dropped here, and the
+    flag is read with `expires=True`, so a call sees a change made earlier in the same request."""
+    frappe.cache.set_value(key, value, expires_in_sec=seconds)
+    frappe.local.cache.pop(frappe.cache.make_key(key), None)
+
+
 def alive(fresh: bool = False) -> bool:
     """Whether the gateway answers its health check; asked again at most once a minute."""
     if not fresh:
-        cached = frappe.cache.get_value(ALIVE_KEY)
+        cached = frappe.cache.get_value(ALIVE_KEY, expires=True)
         if cached is not None:
             return bool(cint(cached))
     try:
         ok = requests.get(base_url() + ALIVE_PATH, timeout=5).ok
     except requests.RequestException:
         ok = False
-    frappe.cache.set_value(ALIVE_KEY, 1 if ok else 0, expires_in_sec=ALIVE_SECONDS)
+    remember(ALIVE_KEY, 1 if ok else 0, ALIVE_SECONDS)
     return ok
 
 
@@ -123,7 +131,7 @@ KEY_WORKS_KEY = "ai_gateway:key_works"
 def key_works() -> bool:
     """Whether the gateway takes TBO Support's own key (its model list answers); asked again
     at most once a minute."""
-    cached = frappe.cache.get_value(KEY_WORKS_KEY)
+    cached = frappe.cache.get_value(KEY_WORKS_KEY, expires=True)
     if cached is not None:
         return bool(cint(cached))
     try:
@@ -134,7 +142,7 @@ def key_works() -> bool:
         ).ok
     except requests.RequestException:
         ok = False
-    frappe.cache.set_value(KEY_WORKS_KEY, 1 if ok else 0, expires_in_sec=ALIVE_SECONDS)
+    remember(KEY_WORKS_KEY, 1 if ok else 0, ALIVE_SECONDS)
     return ok
 
 
