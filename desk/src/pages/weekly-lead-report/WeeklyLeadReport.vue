@@ -5,10 +5,10 @@
       :subtitle="
         data
           ? __(
-              '{0} · each salesperson\'s leads created or updated in the week',
+              '{0} · the leads created or updated in the period',
               data.division_name
             )
-          : __('Each salesperson\'s leads created or updated in the week')
+          : __('The leads created or updated in the period')
       "
     >
       <template #right-header>
@@ -17,7 +17,7 @@
           variant="solid"
           :label="__('Export to Excel')"
           :disabled="!data?.rows.length"
-          @click="exportWeek"
+          @click="exportReport"
         >
           <template #prefix>
             <LucideFileSpreadsheet class="size-4" aria-hidden="true" />
@@ -29,12 +29,32 @@
     <div class="min-h-0 flex-1 overflow-y-auto">
       <div class="flex w-full flex-col gap-4 px-4 pb-8 pt-4 md:px-8">
         <div class="flex flex-wrap items-end gap-3">
-          <MonthStepper
-            v-if="weeks.length"
-            v-model="week"
-            unit="week"
-            :options="weeks"
+          <FormControl
+            v-model="period"
+            type="select"
+            size="md"
+            class="w-full sm:w-48"
+            :aria-label="__('Period')"
+            :options="PERIODS"
           />
+          <template v-if="period === 'custom'">
+            <FormControl
+              v-model="from"
+              type="date"
+              size="md"
+              class="w-40"
+              :label="__('From')"
+              :max="to || undefined"
+            />
+            <FormControl
+              v-model="to"
+              type="date"
+              size="md"
+              class="w-40"
+              :label="__('To')"
+              :min="from || undefined"
+            />
+          </template>
           <FormControl
             v-if="data?.sees_team"
             v-model="salesperson"
@@ -104,15 +124,28 @@
               id="weekly-report-title"
               class="text-base font-semibold text-ink-gray-9"
             >
-              {{ week ? weekLabel(week) : __("This week") }}
+              {{
+                range
+                  ? rangeLabel(range.from_date, range.to_date)
+                  : __("Between dates")
+              }}
             </h2>
             <p v-if="data" class="text-p-xs text-ink-gray-6">
               {{ summary }}
             </p>
           </div>
 
+          <TaskyState
+            v-if="!range"
+            class="py-12"
+            :icon="LucideCalendarRange"
+            :title="__('Pick both dates')"
+            :message="
+              __('Choose a from and a to date to see the leads of those days.')
+            "
+          />
           <div
-            v-if="!data || report.loading"
+            v-else-if="!data || report.loading"
             class="flex flex-col gap-2 p-4"
             aria-busy="true"
             :aria-label="__('Loading')"
@@ -130,7 +163,7 @@
             :icon="LucideSearchX"
             :title="__('No leads match these filters')"
             :message="
-              __('Change or clear the filters to see more of the week.')
+              __('Change or clear the filters to see more of the period.')
             "
           >
             <Button :label="__('Clear filters')" @click="clearFilters" />
@@ -139,10 +172,10 @@
             v-else-if="!data.rows.length"
             class="py-12"
             :icon="LucideCalendarCheck"
-            :title="__('No leads updated this week')"
+            :title="__('No leads updated in this period')"
             :message="
               __(
-                'A lead shows here once it is created or changed in the week: fill in its visits, chances and remarks on the lead.'
+                'A lead shows here once it is created or changed in the period: fill in its visits, chances and remarks on the lead.'
               )
             "
           />
@@ -151,13 +184,6 @@
             <table class="w-full min-w-[1150px] text-left text-p-sm">
               <thead class="bg-surface-gray-1 text-p-xs text-ink-gray-6">
                 <tr>
-                  <th
-                    v-if="showPerson"
-                    scope="col"
-                    class="px-4 py-2 font-medium"
-                  >
-                    {{ __("Salesperson") }}
-                  </th>
                   <th scope="col" class="px-4 py-2 font-medium">
                     {{ __("Name") }}
                   </th>
@@ -190,9 +216,6 @@
                   :key="row.lead"
                   class="border-t border-outline-gray-1 align-top"
                 >
-                  <td v-if="showPerson" class="px-4 py-3 text-ink-gray-8">
-                    {{ row.salesperson_name }}
-                  </td>
                   <td class="px-4 py-3">
                     <router-link
                       :to="{ name: 'Lead', params: { leadId: row.lead } }"
@@ -300,7 +323,6 @@
 import { money } from "@/components/invoicing/invoices";
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import TaskyState from "@/components/TaskyState.vue";
-import MonthStepper from "@/pages/sales-targets/MonthStepper.vue";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
 import { Button, call, createResource, FormControl, toast } from "frappe-ui";
@@ -308,6 +330,7 @@ import { useDebounceFn } from "@vueuse/core";
 import { computed, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LucideCalendarCheck from "~icons/lucide/calendar-check";
+import LucideCalendarRange from "~icons/lucide/calendar-range";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideFileSpreadsheet from "~icons/lucide/file-spreadsheet";
 import LucideSearch from "~icons/lucide/search";
@@ -320,8 +343,10 @@ import {
   optionsOf,
   REQUIREMENTS,
   WEEKLY_API,
-  weekLabel,
-  weekOptions,
+  DEFAULT_PERIOD,
+  periodRange,
+  PERIODS,
+  rangeLabel,
   type SheetFields,
   type WeekData,
   type WeekRow,
@@ -330,8 +355,11 @@ import {
 const route = useRoute();
 const router = useRouter();
 
-// the week, person and filters live in the URL, so a link opens the same report
-const week = ref(String(route.query.week || ""));
+// the period, person and filters live in the URL, so a link opens the same report
+const period = ref(String(route.query.period || DEFAULT_PERIOD));
+const from = ref(String(route.query.from || ""));
+const to = ref(String(route.query.to || ""));
+const range = computed(() => periodRange(period.value, from.value, to.value));
 const salesperson = ref(String(route.query.person || ""));
 const FILTER_KEYS = [
   "search",
@@ -394,51 +422,45 @@ function clearFilters() {
 }
 
 const report = createResource({
-  url: `${WEEKLY_API}.get_week`,
+  url: `${WEEKLY_API}.get_report`,
   makeParams: () => ({
-    week: week.value || undefined,
+    ...range.value,
     salesperson: salesperson.value || undefined,
     ...filterParams(),
   }),
-  auto: true,
-  onSuccess(data: WeekData) {
-    // any day of the week reads it; the picker holds its Sunday
-    if (week.value !== data.week_start) week.value = data.week_start;
-  },
 });
+// read again whenever what it asks for changes; nothing until a range has both dates
+function load() {
+  keepInUrl();
+  if (range.value) report.reload();
+}
 const data = computed(() => report.data as WeekData | undefined);
 
 function keepInUrl() {
   router.replace({
     query: {
-      week: week.value || undefined,
+      period: period.value === DEFAULT_PERIOD ? undefined : period.value,
+      from: period.value === "custom" ? from.value || undefined : undefined,
+      to: period.value === "custom" ? to.value || undefined : undefined,
       person: salesperson.value || undefined,
       ...filterParams(),
     },
   });
 }
 
-watch([week, salesperson], ([, person], [oldWeek, oldPerson]) => {
-  keepInUrl();
-  // the first week is the server's answer, not a change to read again
-  if (oldWeek || person !== oldPerson) report.reload();
-});
-// the selects read at once; typing in the search waits for a pause
+// the period, person and selects read at once; typing in the search waits for a pause
 watch(
-  () => FILTER_KEYS.filter((k) => k !== "search").map((k) => filters[k]),
-  () => {
-    keepInUrl();
-    report.reload();
-  }
+  () => [
+    range.value?.from_date,
+    range.value?.to_date,
+    period.value,
+    salesperson.value,
+    ...FILTER_KEYS.filter((k) => k !== "search").map((k) => filters[k]),
+  ],
+  load,
+  { immediate: true }
 );
-const searchSoon = useDebounceFn(() => {
-  keepInUrl();
-  report.reload();
-}, 400);
-
-const weeks = computed(() =>
-  data.value ? weekOptions(data.value.this_week) : []
-);
+const searchSoon = useDebounceFn(load, 400);
 const personOptions = computed(() => [
   { label: __("Everyone"), value: "" },
   ...(data.value?.people || []).map((p) => ({
@@ -446,9 +468,6 @@ const personOptions = computed(() => [
     value: p.user,
   })),
 ]);
-const showPerson = computed(
-  () => !!data.value?.sees_team && !salesperson.value
-);
 
 const summary = computed(() => {
   const rows = data.value?.rows || [];
@@ -507,10 +526,11 @@ function saveRemarks(row: WeekRow, event: Event) {
   save(row, "remarks", (event.target as HTMLTextAreaElement).value.trim());
 }
 
-function exportWeek() {
-  // the file holds what the page shows: the same filters
-  const query = new URLSearchParams({ week: week.value, ...filterParams() });
+function exportReport() {
+  if (!range.value) return;
+  // the file holds what the page shows: the same period and filters
+  const query = new URLSearchParams({ ...range.value, ...filterParams() });
   if (salesperson.value) query.set("salesperson", salesperson.value);
-  window.open(`/api/method/${WEEKLY_API}.export_week?${query}`, "_blank");
+  window.open(`/api/method/${WEEKLY_API}.export_report?${query}`, "_blank");
 }
 </script>

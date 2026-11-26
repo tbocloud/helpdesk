@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
+from frappe.utils import getdate
 
 from helpdesk import divisions
 from helpdesk.api import weekly_lead_report as api
@@ -23,7 +24,7 @@ SAM = "sam.weekly@example.com"  # KSA Division Sales User
 SARA = "sara.weekly@example.com"  # another KSA Division Sales User
 ADA = "ada.weekly@example.com"  # KSA Division Admin
 IAN = "ian.weekly@example.com"  # India employee
-WEEK = "2026-11-22"  # a Sunday
+FROM, TO = "2026-11-22", "2026-11-28"  # a week, Sunday to Saturday
 
 
 class WeeklyLeadReportCase(FrappeTestCase):
@@ -116,7 +117,7 @@ class WeeklyLeadReportCase(FrappeTestCase):
 
     def week_as(self, user: str, salesperson: str | None = None) -> dict:
         frappe.set_user(user)
-        return api.get_week(WEEK, salesperson)
+        return api.get_report(FROM, TO, salesperson)
 
     def lead(self, name: str) -> dict:
         return self.erp.leads[name]
@@ -141,7 +142,7 @@ class TestAccess(WeeklyLeadReportCase):
     def test_someone_without_the_report_is_refused(self):
         frappe.set_user(IAN)
         with self.assertRaises(frappe.PermissionError):
-            api.get_week(WEEK)
+            api.get_report(FROM, TO)
 
     def test_leads_off_closes_the_report(self):
         frappe.db.set_single_value("HD CRM Settings", "enable_leads", 0)
@@ -152,7 +153,7 @@ class TestReading(WeeklyLeadReportCase):
     def test_a_row_is_a_lead_of_theirs_updated_that_week(self):
         week = self.week_as(SAM)
         self.assertFalse(week["sees_team"])
-        self.assertEqual(week["week_end"], "2026-11-28")
+        self.assertEqual((week["from_date"], week["to_date"]), (FROM, TO))
         self.assertEqual(
             [r["company_name"] for r in week["rows"]],
             ["Oryx", "Pacific Blue"],
@@ -202,7 +203,7 @@ class TestReading(WeeklyLeadReportCase):
             ],
         )
         self.assertIn(SARA, [p["user"] for p in week["people"]])
-        only_sara = api.get_week(WEEK, salesperson=SARA)
+        only_sara = api.get_report(FROM, TO, salesperson=SARA)
         self.assertEqual([r["salesperson"] for r in only_sara["rows"]], [SARA])
 
     def test_the_erp_site_failing_is_told(self):
@@ -210,7 +211,7 @@ class TestReading(WeeklyLeadReportCase):
         frappe.set_user(SAM)
         with patch.object(frappe, "log_error"):
             with self.assertRaisesRegex(frappe.ValidationError, "Couldn't reach"):
-                api.get_week(WEEK)
+                api.get_report(FROM, TO)
 
 
 class TestEditing(WeeklyLeadReportCase):
@@ -267,13 +268,14 @@ class TestExport(WeeklyLeadReportCase):
     def test_the_week_exports_in_the_template_columns(self):
         frappe.set_user(ADA)
         with patch.object(api, "send_xlsx") as send:
-            api.export_week(WEEK)
+            api.export_report(FROM, TO)
         _, columns, rows, lines, filename = send.call_args.args
         labels = [c["label"] for c in columns]
-        self.assertEqual(labels[0], "Salesperson", "several people's rows")
-        self.assertEqual(labels[1:3], ["Name", "Contact Number"])
+        self.assertEqual(
+            labels[:2], ["Name", "Contact Number"], "no salesperson column"
+        )
         self.assertEqual(labels[-1], "Remarks")
-        pacific = next(r for r in rows if r[1] == "Pacific Blue")
+        pacific = next(r for r in rows if r[0] == "Pacific Blue")
         self.assertEqual(pacific[labels.index("Requirement")], "Digital Marketing")
         self.assertEqual(pacific[labels.index("Quoted (Yes/No)")], "Yes")
         self.assertEqual(pacific[labels.index("Quoted (Value)")], "1,500.50 SAR")
@@ -281,7 +283,7 @@ class TestExport(WeeklyLeadReportCase):
         self.assertEqual(pacific[labels.index("Number of Visits This Week")], 1)
         self.assertEqual(pacific[labels.index("Future Follow-up Plan")], "Yes")
         self.assertIn("Everyone", lines)
-        self.assertEqual(filename, f"lead-report-{WEEK}")
+        self.assertEqual(filename, f"lead-report-{FROM}-to-{TO}")
         self.assertTrue(
             frappe.db.exists(
                 "Activity Log",
@@ -292,9 +294,8 @@ class TestExport(WeeklyLeadReportCase):
     def test_a_salespersons_export_is_their_own(self):
         frappe.set_user(SAM)
         with patch.object(api, "send_xlsx") as send:
-            api.export_week(WEEK, salesperson=SARA)
+            api.export_report(FROM, TO, salesperson=SARA)
         _, columns, rows, lines, _ = send.call_args.args
-        self.assertNotEqual(columns[0]["label"], "Salesperson")
         self.assertEqual(sorted(r[0] for r in rows), ["Oryx", "Pacific Blue"])
         self.assertIn("Sam Seller", lines)
 
@@ -302,7 +303,7 @@ class TestExport(WeeklyLeadReportCase):
 class TestFilters(WeeklyLeadReportCase):
     def leads(self, **filters) -> list[str]:
         frappe.set_user(ADA)
-        return sorted(r["lead"] for r in api.get_week(WEEK, **filters)["rows"])
+        return sorted(r["lead"] for r in api.get_report(FROM, TO, **filters)["rows"])
 
     def test_each_filter_narrows_the_rows(self):
         self.assertEqual(self.leads(search="jabir"), ["CRM-LEAD-1"], "the contact")
@@ -322,15 +323,37 @@ class TestFilters(WeeklyLeadReportCase):
 
     def test_filters_add_up_and_the_people_stay_whole(self):
         frappe.set_user(ADA)
-        week = api.get_week(WEEK, conversion="Medium", quoted="No")
+        week = api.get_report(FROM, TO, conversion="Medium", quoted="No")
         self.assertEqual(week["rows"], [])
         self.assertIn(SARA, [p["user"] for p in week["people"]], "for the picker")
 
     def test_the_file_holds_the_filtered_rows_and_says_so(self):
         frappe.set_user(ADA)
         with patch.object(api, "send_xlsx") as send:
-            api.export_week(WEEK, requirement="Digital", quoted="Yes")
+            api.export_report(FROM, TO, requirement="Digital", quoted="Yes")
         _, _, rows, lines, _ = send.call_args.args
-        self.assertEqual([r[1] for r in rows], ["Pacific Blue"])
+        self.assertEqual([r[0] for r in rows], ["Pacific Blue"])
         self.assertIn("Requirement: Digital Marketing", lines)
         self.assertIn("Quoted: Yes", lines)
+
+
+class TestPeriod(WeeklyLeadReportCase):
+    def test_any_period_reads_the_leads_updated_in_it(self):
+        frappe.set_user(ADA)
+        one_day = api.get_report("2026-11-21", "2026-11-21")
+        self.assertEqual([r["lead"] for r in one_day["rows"]], ["CRM-LEAD-4"])
+        both = api.get_report("2026-11-21", "2026-11-24")
+        self.assertEqual(len(both["rows"]), 5)
+
+    def test_no_dates_is_this_week(self):
+        frappe.set_user(SAM)
+        report = api.get_report()
+        self.assertEqual(getdate(report["from_date"]), week_start())
+        self.assertEqual((getdate(report["to_date"]) - week_start()).days, 6)
+
+    def test_a_backwards_or_too_long_period_is_refused(self):
+        frappe.set_user(SAM)
+        with self.assertRaisesRegex(frappe.ValidationError, "after the to date"):
+            api.get_report("2026-11-28", "2026-11-22")
+        with self.assertRaisesRegex(frappe.ValidationError, "366 days"):
+            api.get_report("2025-01-01", "2026-11-28")

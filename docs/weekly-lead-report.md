@@ -15,15 +15,20 @@ called *Weekly lead report* until the owner renamed it (2026-11-26). The code ke
 - **Everything is on the lead, on the KSA ERP site** (erp.teambackoffice.com). The owner asked
   for the sheet's fields on the Lead, for KSA only; the KSA site is KSA's alone, so fields made
   there are KSA's only. The hub keeps nothing: the report reads and writes the leads.
-- **A row is a lead created or updated in the week, under its owner** (owner's choice,
-  2026-11-25). Filling in a lead's visits or remarks updates it, so it shows that week.
-  Changing a lead from an older week's report updates it too, so it also shows this week.
+- **A row is a lead created or updated in the period** (owner's choice, 2026-11-25; the
+  period filter replaced the week picker on 2026-11-26). Filling in a lead's visits or
+  remarks updates it, so it shows that day. Changing a lead from an older period's report
+  updates it too, so it also shows today. There is no *Tomorrow*: nothing is updated
+  tomorrow, so it would always be empty.
+- **No salesperson column**: the template has none (owner, 2026-11-26). Managers still pick
+  one salesperson's leads with the Salesperson filter.
 - **What the lead already had is reused**: Designation is `job_title`, Requirement the KSA
   site's Lead Segment, Remarks the lead's *Comment*.
 - **Switched on per division, not by name.** A Super Admin ticks *Weekly lead report* on the
   division (Settings → Divisions → the division's profile, under ERP site; labelled *Lead
   report*). Only KSA keeps it.
-- **The week runs Sunday to Saturday**: KSA works Sunday to Thursday (`week_start`).
+- **A week runs Sunday to Saturday** (This week, Last week, and the period when none is given):
+  KSA works Sunday to Thursday (`week_start`).
 
 ## On the KSA ERP site
 
@@ -55,7 +60,7 @@ keeps the report, they are its member (or a Super Admin), and its Leads are open
   `acting_user`), so only a lead the site shows them is changed. The write itself goes with
   the hub's key (the site's Administrator), since TBO Smart's `update_lead` takes only its
   own fields; the lead's *Last modified by* shows that user.
-- **Reading** goes with the hub's key: the week's leads (`modified` in the week, `lead_owner`
+- **Reading** goes with the hub's key: the period's leads (`modified` in it, `lead_owner`
   the salesperson for a salesperson) and their quotations.
 - The server enforces all of this; the page only hides what isn't theirs.
 
@@ -84,23 +89,24 @@ A division that keeps the report must have these fields on its site's Lead (KSA'
 `desk/src/pages/weekly-lead-report/WeeklyLeadReport.vue`, route `/lead-report` (`LeadReport`,
 on the sales wall's routes).
 
-- The header has **Export to Excel** (the primary action). Under it, the week stepper (the
-  sales targets' `MonthStepper` with `unit="week"`, 26 weeks back) and, for managers, the
-  Salesperson filter (Everyone first).
+- The header has **Export to Excel** (the primary action). Under it, the **period**: Today,
+  Yesterday, This week (the default), Last week, This month, or *Between dates…* with From
+  and To (`periodRange`; until both dates are picked the card asks for them), and, for
+  managers, the Salesperson filter (Everyone first). The server takes up to 366 days and
+  refuses a From after the To.
 - **Filters** under them: a search (any part of the company, contact, number or email) and
   Requirement, Conversion possibility and Follow-up plan (each a value, or *Not set* for
   leads with it empty) and Quoted (Yes / No), with *Clear filters* while any is on. The
   server applies them (`filter_rows`), so the summary and the Excel file match the table;
-  the Salesperson picker still lists the whole week's people. The selects apply at once, the
-  search after a pause. The week, person and filters are in the URL.
-- One card: the week, and *N leads · N visits · N quoted*. The table follows the template,
+  the Salesperson picker still lists the whole period's people. The selects apply at once, the
+  search after a pause. The period, person and filters are in the URL.
+- One card: the dates, and *N leads · N visits · N quoted*. The table follows the template,
   grouped for the screen: Name (with the nature of business), Contact (name · designation,
   number, email), Requirement, Quoted (Yes/No, value, number), then Conversion possibility,
   Visits this week, Follow-up plan and Remarks, which save to the lead at once (the selects
   on pick, visits and remarks when the field is left; a failure puts the old value back and
-  says so). A Salesperson column comes first when a manager sees everyone. It scrolls
-  sideways inside the card on a phone. The company links to the lead.
-- States: loading, an empty week, no lead matching the filters (with *Clear filters*), the
+  says so). It scrolls sideways inside the card on a phone. The company links to the lead.
+- States: dates still to pick, loading, an empty period, no lead matching the filters (with *Clear filters*), the
   ERP site failing (the error and Try again).
 
 ## On the hub's lead screens
@@ -119,20 +125,19 @@ For the people the report is open to (`has_weekly_lead_report`, so KSA only):
 
 ## Excel
 
-`export_week` sends the week as the page shows it (the same filters) in the template's columns
-and order (Salesperson first when the file holds several people's rows), titled *Lead
-report*, with the division, the dates, whose rows they are and the filters used above the
-table (`lead-report-<week>.xlsx`). A salesperson's file is always their own. Every export is in the audit log
+`export_report` sends the rows as the page shows them (the same period and filters) in the
+template's columns and order, titled *Lead report*, with the division, the dates, whose rows
+they are and the filters used above the table (`lead-report-<from>-to-<to>.xlsx`). A salesperson's file is always their own. Every export is in the audit log
 (Settings → Divisions → Audit log). Reuses `division_overview.send_xlsx`.
 
 ## API (`helpdesk.api.weekly_lead_report`)
 
 | Method | HTTP | Arguments | Returns |
 | --- | --- | --- | --- |
-| `get_week` | GET | `week` (any date in it; this week by default), `salesperson` (managers), `search, requirement, conversion, follow_up, quoted` (`not_set` for an empty field) | `{division, division_name, week_start, week_end, this_week, today, sees_team, people, rows}`; a row is the lead's columns (`lead_columns`) plus `salesperson_name` |
+| `get_report` | GET | `from_date, to_date` (this week when both are empty; one alone is that day), `salesperson` (managers), `search, requirement, conversion, follow_up, quoted` (`not_set` for an empty field) | `{division, division_name, from_date, to_date, sees_team, people, rows}`; a row is the lead's columns (`lead_columns`) plus `salesperson_name` |
 | `get_lead_sheet` | GET | `lead` | the lead's columns |
 | `update_lead` | POST | `lead, values` (`designation, requirement, conversion, visits, follow_up, remarks`) | `{saved}` |
-| `export_week` | GET | as `get_week` | an .xlsx file |
+| `export_report` | GET | as `get_report` | an .xlsx file |
 
 ## Data model
 
@@ -141,7 +146,7 @@ The data is the KSA site's Lead (above).
 
 ## Files
 
-- `helpdesk/weekly_lead_report.py`: the week, who may use it, reading leads from the site.
+- `helpdesk/weekly_lead_report.py`: the period, who may use it, reading leads from the site.
 - `helpdesk/api/weekly_lead_report.py`: the endpoints above.
 - `desk/src/pages/weekly-lead-report/`: the page, the Lead page's card (`LeadSheetCard.vue`),
   types and helpers; `pages/leads/LeadFormDialog.vue` and `Lead.vue` use them.
