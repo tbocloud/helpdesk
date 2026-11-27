@@ -133,6 +133,8 @@
             :money-note="moneyNote"
             :podium="podium"
             :shows-podium="!owner"
+            :won-link="wonLink"
+            :money-link="moneyLink"
             @open="openWon"
           />
 
@@ -144,6 +146,7 @@
                 accent="orange"
                 :icon="LucideHourglass"
                 :title="__('Forecasted revenue')"
+                :to="wonLink"
               >
                 <template v-if="wonTarget" #actions>
                   <span
@@ -189,6 +192,7 @@
                 accent="blue"
                 :icon="LucideFilter"
                 :title="__('Active pipeline stages')"
+                :to="metricLink('open', ownerQuery)"
                 :sub="
                   __(
                     '{0} open leads worth {1}',
@@ -207,7 +211,7 @@
                   <li v-for="row in pipeline" :key="row.stage">
                     <RouterLink
                       :to="stageLink(row.stage)"
-                      class="flex flex-col gap-1 rounded px-1 py-0.5 text-sm hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+                      class="relative z-[1] flex flex-col gap-1 rounded px-1 py-0.5 text-sm hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
                     >
                       <span class="flex items-center gap-2">
                         <span
@@ -248,6 +252,7 @@
               accent="cyan"
               :icon="LucidePhoneCall"
               :title="__('Team calls this week')"
+              :to="{ name: 'CallLogs' }"
               :sub="
                 weekLines.length < weekPeople.length
                   ? __(
@@ -283,6 +288,7 @@
                 :period-label="periodLabel"
                 :range="rangeText(data.previous)"
                 :currency="currency"
+                :link="(metric) => metricLink(metric, periodQuery)"
               />
               <PartError
                 v-else-if="errors.previous"
@@ -413,6 +419,7 @@
               :icon="LucidePhone"
               :title="__('Calls this week')"
               :sub="__('Leaderboard')"
+              :to="{ name: 'CallLogs' }"
             >
               <p
                 v-if="!leaderboard.length"
@@ -462,6 +469,7 @@
               accent="violet"
               :icon="LucideSend"
               :title="__('Leads handed out today')"
+              :to="canAssign ? { name: 'AssignLeads' } : undefined"
             >
               <template v-if="canAssign" #actions>
                 <CardLink :to="{ name: 'AssignLeads' }">
@@ -603,7 +611,12 @@ import {
   TabButtons,
 } from "frappe-ui";
 import { computed, type Component, useId, watch } from "vue";
-import { RouterLink, useRoute, useRouter } from "vue-router";
+import {
+  RouterLink,
+  useRoute,
+  useRouter,
+  type RouteLocationRaw,
+} from "vue-router";
 import LucideAlarmClock from "~icons/lucide/alarm-clock";
 import LucideBellRing from "~icons/lucide/bell-ring";
 import LucideChartColumn from "~icons/lucide/chart-column";
@@ -983,6 +996,17 @@ const podium = computed<PodiumPerson[]>(() =>
     (r) => `${r.won_value}:${r.won}`
   ).map(({ row, rank }) => ({ ...row, rank }))
 );
+const wonLink = computed(() => metricLink("won", periodQuery.value));
+// the Overview's proposals and payments, for the same period and person
+const moneyLink = computed(() => ({
+  name: "Leads",
+  query: {
+    view: "overview",
+    period: period.value,
+    owner: owner.value || undefined,
+    section: "money",
+  },
+}));
 function openWon(user: string) {
   router.push(metricLink("won", { ...periodQuery.value, owner: user }));
 }
@@ -1007,7 +1031,7 @@ const stats = computed(() => {
     icon: Component;
     accent: Accent;
     sub?: string;
-    to?: ReturnType<typeof metricLink>;
+    to?: RouteLocationRaw;
   }[] = [
     {
       label: __("Total leads"),
@@ -1070,6 +1094,7 @@ const stats = computed(() => {
         "of new leads won · win rate {0}%",
         String(Math.round(t.win_rate))
       ),
+      to: wonLink.value,
     },
   ];
   if (wonTarget.value)
@@ -1086,6 +1111,7 @@ const stats = computed(() => {
               "{0} to go",
               shortAmount(wonTarget.value - (t.won_value ?? 0), c)
             ),
+      to: { name: "TeamTargets" },
     });
   if (money)
     list.push(
@@ -1096,6 +1122,7 @@ const stats = computed(() => {
         icon: LucideIndianRupee,
         accent: "green",
         sub: __("received {0}", periodWord.value.word),
+        to: moneyLink.value,
       },
       {
         label: __("Total receivables"),
@@ -1104,6 +1131,7 @@ const stats = computed(() => {
         icon: LucideWallet,
         accent: "violet",
         sub: __("outstanding now"),
+        to: moneyLink.value,
       },
       {
         label: __("Payments overdue"),
@@ -1112,6 +1140,7 @@ const stats = computed(() => {
         icon: LucideCircleAlert,
         accent: "red",
         sub: __("past their due date, now"),
+        to: moneyLink.value,
       }
     );
   list.push({

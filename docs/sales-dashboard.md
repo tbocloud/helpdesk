@@ -66,6 +66,19 @@ cards in the same order, neon on near-black in the dark theme and the same desig
 light theme ([ui-guidelines.md](ui-guidelines.md) §8, *the command center look*: the `--cc-*`
 palette, `cc-card` with one colour each; the rest of the app now shares it).
 
+**Every card opens the data behind it** (2026-11-27). The won cards (Won revenue, the podium,
+the period's won value and deals, Forecasted revenue, Conversion ratio) open the period's won
+leads; the money cards (Collected, To collect, Revenue received, Total receivables, Payments
+overdue) open the Leads Overview at the same period and person, scrolled to *Proposals & money*
+(`?section=money`: the Leads page rewrites its query, which would drop a `#hash`), where the
+payment splits are listed; Sales target opens Team targets; each Period performance row opens
+that figure's leads for the period now; Active pipeline stages opens the open leads; the two
+calls cards open Call logs; Leads handed out opens Assign leads. A whole card is clickable
+through its heading's link stretched over it (`CcCard` `to`), so the links and buttons inside a
+card (a stage, a podium place, `CardLink`) sit above it with `relative z-[1]` and keep their own
+target. The Lead funnel, Stage pipeline and Needs a nudge stay as they are: everything in them
+is already its own link.
+
 | Card | Figure | Source |
 | --- | --- | --- |
 | Won revenue vs target (pink, `RevenueHero`) | a half gauge: the period's won value against the team's (or the person's) **won value target**, summed from the Sales targets (`measure = won_value`; month view, Sales Heads only) **of the people on this page only** (a target set for anyone else, such as a test account, would inflate it), what is still to go and the target; without a target the won value, deals won and the period before. Won leads with no amount (`won_unpriced`) aren't in the won value, so the card says how many there are | `get_overview` `totals.won_value`; `get_team` |

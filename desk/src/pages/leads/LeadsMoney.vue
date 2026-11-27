@@ -1,7 +1,8 @@
 <template>
   <!-- proposals sent, won and advances in the period; what is still to come in, now -->
   <section
-    class="min-w-0 overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
+    ref="section"
+    class="min-w-0 scroll-mt-4 overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-base"
     :aria-labelledby="ids.heading"
     :aria-busy="loading"
   >
@@ -319,8 +320,15 @@ import type { Tone } from "@/components/tone";
 import { __ } from "@/translation";
 import { errorText } from "@/utils";
 import { Button, dayjs } from "frappe-ui";
-import { computed, ref, useId, type Component } from "vue";
-import type { RouteLocationRaw } from "vue-router";
+import {
+  computed,
+  onMounted,
+  ref,
+  useId,
+  useTemplateRef,
+  type Component,
+} from "vue";
+import { useRoute, type RouteLocationRaw } from "vue-router";
 import LucideArrowDown from "~icons/lucide/arrow-down";
 import LucideArrowUp from "~icons/lucide/arrow-up";
 import LucideCalendarClock from "~icons/lucide/calendar-clock";
@@ -427,4 +435,12 @@ function documentText(row: MoneySplit) {
         .filter(Boolean)
         .join(" · ");
 }
+
+// the team dashboard's money cards open the Overview here (?section=money)
+const route = useRoute();
+const section = useTemplateRef<HTMLElement>("section");
+onMounted(() => {
+  if (route.query.section === "money")
+    section.value?.scrollIntoView({ block: "start" });
+});
 </script>
