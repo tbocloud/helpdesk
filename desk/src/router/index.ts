@@ -12,6 +12,7 @@ import {
   SALES_EMPLOYEE_ROUTES,
 } from "@/pages/content/contentTeam";
 import { createRouter, createWebHistory } from "vue-router";
+import { rememberScroll } from "./scrollMemory";
 const { isMobileView } = useScreenSize();
 
 export const LOGIN_PAGE = "/login";
@@ -654,6 +655,8 @@ export const router = createRouter({
   history: createWebHistory("/helpdesk/"),
   routes,
 });
+
+rememberScroll(router);
 
 router.beforeEach(async (to, _, next) => {
   const authStore = useAuthStore();

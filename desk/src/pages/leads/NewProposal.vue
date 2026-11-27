@@ -269,6 +269,7 @@
 
 <script setup lang="ts">
 import LayoutHeader from "@/components/LayoutHeader.vue";
+import { useOwnBackButton } from "@/composables/goBack";
 import { useScreenSize } from "@/composables/screen";
 import TaskyState from "@/components/TaskyState.vue";
 import { __ } from "@/translation";
@@ -321,6 +322,7 @@ const { isMobileView } = useScreenSize();
 const iconSlot = computed(() => (isMobileView.value ? "icon" : "prefix"));
 const router = useRouter();
 const sentOutsideOpen = ref(false);
+useOwnBackButton();
 const reqId = `new-proposal-req-${useId()}`;
 const formId = `new-proposal-form-${useId()}`;
 const profileId = `new-proposal-profile-${useId()}`;
