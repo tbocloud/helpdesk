@@ -305,6 +305,24 @@ silently drops a parameter it doesn't know, can't move a lead without one; when 
 `won_amount` the hub says `won_amount_not_kept` and the page warns that the ERP site needs the
 latest TBO Smart.
 
+### Proposal before Won (2026-11-27)
+
+A lead can be marked **Closed – Won** only once its proposal has reached the client: sent from
+the hub (sent, viewed, accepted, declined or expired since all count) or recorded as **Sent
+outside the system** with the file that went ([proposals.md](proposals.md)). A draft doesn't
+count. The ERP site enforces it on every path into Closed – Won (the hub, the mobile app, the
+MOM's lead stage, the ERPNext desk), while Proposals is on there; a move the system makes (the
+client accepted a quotation or proposal) isn't asked, nor leads won before. TBO Smart
+`lead-pipeline.md` §2.1, *Proposal before Won*.
+
+The lead carries the ERP site's reason as `won_refused` (text, or null once the proposal went).
+While it is set, picking **Closed – Won** in the Move stage dialog shows that reason in a warning
+note (icon and text, `role="status"`) in place of the Won amount, and the move button stays off.
+If the move is refused anyway (the proposal was brought back meanwhile), the ERP site's text
+shows in the dialog as any refusal does. To keep the rule whole the Proposal step can't be
+skipped (the Documents card offers *Sent outside the system…* instead). An older TBO Smart sends
+no `won_refused`, and nothing changes.
+
 ## Calls through MyOperator
 
 Telecallers' calls go through MyOperator, set up on the ERP site (TBO Smart's

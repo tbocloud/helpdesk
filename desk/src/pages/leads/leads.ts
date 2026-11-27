@@ -494,6 +494,8 @@ export interface LeadDetail {
       won_amount?: number | null;
       /** its latest quotations' total (0 without one): the won amount's starting value */
       quoted_amount?: number;
+      /** why it can't be moved to Closed – Won yet (its proposal not sent); absent from an older TBO Smart */
+      won_refused?: string | null;
     };
   timeline: LeadTimelineEntry[];
   quotations: LeadQuotation[];
