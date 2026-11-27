@@ -51,6 +51,44 @@
             {{ holdByLabel(detail) }}
           </p>
         </div>
+        <!-- hours over the estimate waiting for the project manager (docs/extra-hours.md) -->
+        <div
+          v-if="detail.extra_hours"
+          class="flex flex-col gap-1 rounded-md border border-outline-gray-2 px-3 py-2.5 text-sm"
+        >
+          <span class="flex items-center gap-2 font-medium text-ink-gray-9">
+            <LucideHourglass
+              class="size-4 shrink-0 text-warning"
+              aria-hidden="true"
+            />
+            <span class="tabular-nums">{{
+              __(
+                "{0} h over the {1} h estimate, waiting for the project manager",
+                String(detail.extra_hours),
+                String(detail.estimated_hours || 0)
+              )
+            }}</span>
+          </span>
+          <p
+            v-if="detail.extra_hours_reason"
+            class="whitespace-pre-line pl-6 text-p-sm text-ink-gray-7"
+          >
+            {{ detail.extra_hours_reason }}
+          </p>
+          <p class="pl-6 text-p-sm text-ink-gray-5">
+            {{
+              canManage
+                ? __(
+                    "Approve logs them for {0}; Decline completes the task without them.",
+                    detail.extra_hours_by_name || __("the assignee")
+                  )
+                : __(
+                    "Asked by {0}. The project's manager or lead decides them.",
+                    detail.extra_hours_by_name || __("the assignee")
+                  )
+            }}
+          </p>
+        </div>
         <div
           v-if="detail.blocked && !isClosed(detail)"
           class="flex items-start gap-2 rounded-md bg-warning-soft px-3 py-2.5 text-p-sm text-warning"
@@ -164,6 +202,7 @@
   />
   <TaskPlanDialog v-model:task="planningTask" @saved="changed" />
   <SendBackTaskDialog v-model:task="sendingBackTask" @sent="changed" />
+  <DeclineExtraHoursDialog v-model:task="decliningTask" @declined="changed" />
   <MoveTaskDialog v-model:task="movingTask" @moved="changed" />
   <RecurringTaskDialog
     v-if="recurringFrom?.project"
@@ -192,6 +231,7 @@ import LucideCheckCheck from "~icons/lucide/check-check";
 import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideFlag from "~icons/lucide/flag";
 import LucideFolderInput from "~icons/lucide/folder-input";
+import LucideHourglass from "~icons/lucide/hourglass";
 import LucideLock from "~icons/lucide/lock";
 import LucidePause from "~icons/lucide/pause";
 import LucidePencil from "~icons/lucide/pencil";
@@ -220,6 +260,7 @@ import {
 import { useApproveTask } from "../useApproveTask";
 import AiDraftedChip from "./AiDraftedChip.vue";
 import CompleteTaskDialog from "./CompleteTaskDialog.vue";
+import DeclineExtraHoursDialog from "./DeclineExtraHoursDialog.vue";
 import EditTaskDialog from "./EditTaskDialog.vue";
 import HandOverTaskDialog from "./HandOverTaskDialog.vue";
 import HoldTaskDialog from "./HoldTaskDialog.vue";
@@ -283,6 +324,10 @@ interface TaskDetail {
   custom_recurring_task?: string | null;
   content_post?: string | null;
   quality?: TaskQualityInfo;
+  /** hours over the estimate waiting for the project manager */
+  extra_hours?: number;
+  extra_hours_reason?: string | null;
+  extra_hours_by_name?: string | null;
 }
 
 const props = withDefaults(
@@ -482,6 +527,7 @@ const resumingTask = ref<TaskDetail | null>(null);
 const planningTask = ref<TaskDetail | null>(null);
 const editingTask = ref<TaskDetail | null>(null);
 const sendingBackTask = ref<TaskDetail | null>(null);
+const decliningTask = ref<TaskDetail | null>(null);
 const completingTask = ref<TaskDetail | null>(null);
 const helpingTask = ref<TaskDetail | null>(null);
 const handingOverTask = ref<TaskDetail | null>(null);
@@ -512,19 +558,33 @@ const dialogActions = computed(() => {
   }
   if (canCoordinate.value) {
     if (isPendingReview(d)) {
-      actions.push(
-        {
-          label: __("Send back"),
-          iconLeft: LucideUndo2,
-          onClick: () => handOff(sendingBackTask),
-        },
-        {
+      actions.push({
+        label: __("Send back"),
+        iconLeft: LucideUndo2,
+        onClick: () => handOff(sendingBackTask),
+      });
+      // hours over the estimate are the project manager's or lead's to decide
+      if (!d.extra_hours) {
+        actions.push({
           label: __("Approve"),
           iconLeft: LucideCheckCheck,
           variant: "subtle",
           onClick: () => approve(d, pendingRating.value),
-        }
-      );
+        });
+      } else if (canManage.value) {
+        actions.push(
+          {
+            label: __("Decline extra hours"),
+            onClick: () => handOff(decliningTask),
+          },
+          {
+            label: __("Approve with {0} h extra", String(d.extra_hours)),
+            iconLeft: LucideCheckCheck,
+            variant: "subtle",
+            onClick: () => approve(d, pendingRating.value, true),
+          }
+        );
+      }
     }
     // a task a schedule created already repeats; schedules are the managers' and lead's
     if (canManage.value && !d.custom_recurring_task) {

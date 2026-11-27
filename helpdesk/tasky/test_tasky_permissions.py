@@ -231,14 +231,15 @@ class TestTaskyPermissions(FrappeTestCase):
             DEV_A,
             api.complete_task,
             task=self.task_a,
-            hours_worked=3,
+            # within the task's 1 h estimate: more would wait for the project manager
+            hours_worked=1,
             notes="Accounts mapped",
         )
         timesheet = frappe.db.get_value(
             "Timesheet Detail", {"task": self.task_a}, "parent"
         )
         self.assertTrue(timesheet)
-        self.assertEqual(frappe.db.get_value("Timesheet", timesheet, "total_hours"), 3)
+        self.assertEqual(frappe.db.get_value("Timesheet", timesheet, "total_hours"), 1)
 
         self.assertIn(
             timesheet,

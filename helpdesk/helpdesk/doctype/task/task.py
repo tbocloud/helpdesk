@@ -5,7 +5,7 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 from frappe.query_builder.functions import Coalesce
-from frappe.utils import add_days, formatdate, getdate, now, now_datetime, nowdate
+from frappe.utils import add_days, flt, formatdate, getdate, now, now_datetime, nowdate
 
 from helpdesk.automation import acting_user
 from helpdesk.tasky.time_sessions import pause_other_timers, record_session
@@ -481,9 +481,17 @@ class Task(Document):
             [u for u in self.leads_or_managers() if u != frappe.session.user],
             "Task",
             self.name,
-            _("Ready for review ({0}): {1}").format(
-                formatdate(nowdate()), self.subject
-            ),
+            self.review_subject(),
+        )
+
+    def review_subject(self) -> str:
+        """The reviewers' notice: hours over the estimate waiting for them say so."""
+        if flt(self.get("extra_hours")):
+            return _(
+                "Ready for review, {0} h over the estimate to approve ({1}): {2}"
+            ).format(f"{flt(self.extra_hours):g}", formatdate(nowdate()), self.subject)
+        return _("Ready for review ({0}): {1}").format(
+            formatdate(nowdate()), self.subject
         )
 
     def unblock_dependents(self):

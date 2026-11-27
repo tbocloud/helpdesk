@@ -107,6 +107,38 @@
         @blur="notesTouched = true"
       />
 
+      <!-- over the estimate: the extra hours wait for the project manager (docs/extra-hours.md) -->
+      <div
+        v-if="overBy > 0"
+        class="flex flex-col gap-3 rounded-md border border-outline-gray-2 px-3 py-3"
+      >
+        <p class="flex items-start gap-2 text-p-sm text-ink-gray-7">
+          <LucideHourglass
+            class="mt-0.5 size-4 shrink-0 text-warning"
+            aria-hidden="true"
+          />
+          <span>
+            {{
+              __(
+                "{0} h over the {1} h estimate. The hours within it are logged now; the {0} h extra go to the project manager with your explanation, and the task goes to review.",
+                String(overBy),
+                String(estimate)
+              )
+            }}
+          </span>
+        </p>
+        <Textarea
+          v-model="extraReason"
+          required
+          :label="__('Why the extra hours?')"
+          :placeholder="__('e.g. The client added 300 ledgers to the import')"
+          :rows="2"
+          maxlength="1000"
+          :error="shownExtraError"
+          @blur="extraTouched = true"
+        />
+      </div>
+
       <p class="flex items-start gap-2 text-p-sm text-ink-gray-6">
         <LucideTimer
           class="mt-0.5 size-4 shrink-0 text-ink-gray-5"
@@ -165,6 +197,7 @@ import {
 import { computed, ref, useId, watch } from "vue";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleCheck from "~icons/lucide/circle-check";
+import LucideHourglass from "~icons/lucide/hourglass";
 import LucidePlus from "~icons/lucide/plus";
 import LucideTimer from "~icons/lucide/timer";
 import LucideX from "~icons/lucide/x";
@@ -190,6 +223,8 @@ interface CompleteResult {
   /** the ones that couldn't be submitted and were kept as drafts */
   draft_timesheets?: string[];
   hours_logged: number;
+  /** hours over the estimate waiting for the project manager */
+  extra_hours?: number;
 }
 
 const props = defineProps<{
@@ -263,9 +298,17 @@ async function loadDays(task: string) {
       oldest?: string;
       days: CompletionDay[];
       left: Record<string, number>;
+      estimate?: number;
+      logged?: number;
+      waiting?: number;
+      waiting_reason?: string | null;
     } = await call("helpdesk.tasky.api.get_completion_days", { task });
     if (request !== daysRequest || props.task?.name !== task) return;
     today.value = data.today || today.value;
+    estimate.value = data.estimate || 0;
+    loggedBefore.value = data.logged || 0;
+    waiting.value = data.waiting || 0;
+    extraReason.value = data.waiting_reason || "";
     // an older server sends only yesterday, the earliest day it used to allow
     oldest.value = data.oldest || data.yesterday || "";
     left.value = data.left || {};
@@ -411,7 +454,32 @@ const hoursError = computed(() => {
 const notesError = computed(() =>
   notes.value.trim() ? "" : __("Add a note on what was done.")
 );
-const isValid = computed(() => !hoursError.value && !notesError.value);
+
+// hours over the task's estimate (with any still waiting from a completion that was
+// sent back) need an explanation; the server splits and holds them (tasky.extra_hours)
+const estimate = ref(0);
+const loggedBefore = ref(0);
+const waiting = ref(0);
+const extraReason = ref("");
+const extraTouched = ref(false);
+const overBy = computed(() => {
+  if (!(estimate.value > 0)) return 0;
+  const over =
+    loggedBefore.value + totalHours.value + waiting.value - estimate.value;
+  return over > 0.01 ? Math.round(over * 100) / 100 : 0;
+});
+const extraError = computed(() =>
+  overBy.value > 0 && !extraReason.value.trim()
+    ? __("Explain the extra hours for the project manager.")
+    : ""
+);
+const shownExtraError = computed(() =>
+  extraTouched.value ? extraError.value || undefined : undefined
+);
+
+const isValid = computed(
+  () => !hoursError.value && !notesError.value && !extraError.value
+);
 
 // the days' problems show once Complete is pressed, then follow the edits; so Complete is
 // never disabled (a disabled button can't be pressed, which hid why it was greyed out), and
@@ -435,10 +503,15 @@ watch(
     if (!name || !props.task) return;
     rows.value = [];
     timerByDay.value = {};
+    estimate.value = 0;
+    loggedBefore.value = 0;
+    waiting.value = 0;
+    extraReason.value = "";
     loadDays(name);
     notes.value = "";
     hoursTouched.value = false;
     notesTouched.value = false;
+    extraTouched.value = false;
     completeTask.reset();
   },
   { immediate: true }
@@ -463,6 +536,16 @@ function roundToQuarter(value: number) {
 
 function announce(data: CompleteResult) {
   const logged = String(data.hours_logged);
+  if (data.extra_hours) {
+    toast.info(
+      __(
+        "Sent to the project manager · {0}h logged, {1}h over the estimate waiting for approval",
+        logged,
+        String(data.extra_hours)
+      )
+    );
+    return;
+  }
   const sheets = data.timesheets?.length ? data.timesheets : [data.timesheet];
   // one timesheet per day worked
   const where =
@@ -507,12 +590,14 @@ function onOpenChange(open: boolean) {
 function submit() {
   hoursTouched.value = true;
   notesTouched.value = true;
+  extraTouched.value = true;
   if (!props.task || !isValid.value || completeTask.loading) return;
   completeTask.submit({
     task: props.task.name,
     days: rows.value.map((r) => ({ date: r.date, hours: rowHours(r) })),
     notes: notes.value.trim(),
     for_review: props.forReview,
+    extra_hours_reason: overBy.value > 0 ? extraReason.value.trim() : null,
   });
 }
 </script>
