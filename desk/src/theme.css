@@ -330,6 +330,13 @@ kbd {
   background-color: var(--brand-ink);
 }
 
+/* frappe-ui menus have no height limit, so a long one (a lead's Move to… on an iPad) ran
+   off the screen with its first options out of reach; it scrolls within the room left. */
+.menu-content {
+  max-height: var(--reka-dropdown-menu-content-available-height, none);
+  overflow-y: auto;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
