@@ -120,9 +120,13 @@ do with it:
   can't ("…Make this once it is accepted, or skip that step first.").
 - **Skip…** asks "Skip BRD?" with what happens in plain words ("The next step, SRS, opens. You can
   bring BRD back later.") and a reason (required, up to 500 characters), then the card moves on.
-  A step with the client or decided has no Skip (only a revision changes it).
+  A step with the client or decided has no Skip (only a revision changes it). The **Proposal
+  step has no Skip** (2026-11-27): a lead is marked Won only once its proposal was sent
+  ([leads.md](leads.md#proposal-before-won-2026-11-27)), so the ERP site refuses skipping it or
+  marking it not used, and it is never shown as Not used.
 - **Sent outside the system…** (the Proposal step only, for the same people and with the same
-  refusals as Skip): the dialog below.
+  refusals as Skip): the dialog below. It shows when the step offers `send_outside` (TBO Smart's
+  hub proposals API v3.2), or, from an older ERP site, `skip`.
 - **Bring back** a skipped step: it is a step to do again. On a proposal sent outside it reads
   **Undo sent outside**; the file stays on the lead.
 

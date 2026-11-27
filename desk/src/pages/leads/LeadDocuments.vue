@@ -586,8 +586,12 @@ function menuFor(step: DocumentStep) {
       icon: "plus",
       onClick: () => createStep(step),
     });
-  // the same people and the same refusals as a skip (the ERP site decides)
-  if (actions.includes("skip") && step.document_type === "Proposal")
+  // the same people and the same refusals as a skip (the ERP site decides); an older TBO
+  // Smart offers it as the proposal's skip, a newer one as send_outside (never skipped)
+  if (
+    actions.includes("send_outside") ||
+    (actions.includes("skip") && step.document_type === "Proposal")
+  )
     options.push({
       label: __("Sent outside the system…"),
       icon: "send",

@@ -547,8 +547,19 @@
             }}</span>
           </label>
         </fieldset>
+        <p
+          v-if="wonRefused"
+          role="status"
+          class="flex items-start gap-2 rounded-md bg-warning-soft p-3 text-p-sm text-ink-gray-8"
+        >
+          <LucideCircleAlert
+            class="mt-0.5 size-4 shrink-0 text-warning"
+            aria-hidden="true"
+          />
+          {{ wonRefused }}
+        </p>
         <FormControl
-          v-if="needsWonAmount"
+          v-else-if="needsWonAmount"
           v-model="wonAmount"
           type="number"
           min="1"
@@ -581,7 +592,9 @@
                 ? __('Move to {0}', stageLabel(options, nextStage))
                 : __('Move stage')
             "
-            :disabled="!nextStage || (needsWonAmount && !wonAmountValid)"
+            :disabled="
+              !nextStage || !!wonRefused || (needsWonAmount && !wonAmountValid)
+            "
             :loading="setStage.loading"
           />
         </div>
@@ -946,6 +959,10 @@ const wonAmount = ref<number | string>("");
 
 const needsWonAmount = computed(() => nextStage.value === CLOSED_WON);
 const wonAmountValid = computed(() => Number(wonAmount.value) > 0);
+/** the ERP site's reason Closed – Won isn't open yet: the proposal hasn't gone to the client */
+const wonRefused = computed(
+  () => (needsWonAmount.value && lead.value?.won_refused) || ""
+);
 const quotedAmount = computed(() => Number(lead.value?.quoted_amount) || 0);
 const wonAmountHint = computed(() => {
   const counts = lead.value?.owner_name
@@ -1078,7 +1095,7 @@ const setStage = createResource({
 });
 
 function submitStage() {
-  if (setStage.loading || !nextStage.value) return;
+  if (setStage.loading || !nextStage.value || wonRefused.value) return;
   if (needsWonAmount.value && !wonAmountValid.value) {
     stageError.value = __("Enter the amount the lead was won for.");
     return;

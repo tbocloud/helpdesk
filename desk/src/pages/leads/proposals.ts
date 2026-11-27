@@ -128,7 +128,12 @@ export type StepSkipStatus = "Skipped" | "Not used";
 export const SENT_OUTSIDE = "Sent outside";
 
 /** What the signed-in person may do with a step (the ERP site decides). */
-export type StepAction = "open" | "create" | "skip" | "bring_back";
+export type StepAction =
+  | "open"
+  | "create"
+  | "send_outside"
+  | "skip"
+  | "bring_back";
 
 /** One step of the lead's chain of documents (after the plan: its project and the UAT). */
 export interface DocumentStep {
