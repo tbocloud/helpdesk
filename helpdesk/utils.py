@@ -514,8 +514,71 @@ def csv_safe(value):
 # === Report downloads ===
 
 
-def send_report_pdf(template: str, context: dict, filename: str):
-    """Answers the request with `template` as an A4 landscape PDF named `filename`.
+def report_brand() -> dict:
+    """Who a printed report or document is from: the brand name, its logo inline, and the
+    site's default Letter Head (header and footer html) when one is set."""
+    from helpdesk.api.config import get_config
+
+    config = get_config()
+    head = frappe.db.get_value(
+        "Letter Head",
+        {"is_default": 1, "disabled": 0},
+        ["content", "footer"],
+        as_dict=True,
+    )
+    return {
+        "name": config.brand_name or "TBO",
+        "logo": file_data_uri(config.brand_logo),
+        "letter_head": inline_images(head.content) if head else None,
+        "letter_head_footer": inline_images(head.footer) if head else None,
+    }
+
+
+def inline_images(html: str | None) -> str | None:
+    """`html` with its site images (/files/…) inline, so wkhtmltopdf draws them in the page
+    and in the footer without fetching them over the network."""
+    if not html:
+        return html
+    return re.sub(
+        r'src="(/(?:private/)?files/[^"]+)"',
+        lambda m: f'src="{file_data_uri(m.group(1)) or m.group(1)}"',
+        html,
+    )
+
+
+def file_data_uri(file_url: str | None) -> str | None:
+    """An image file inline, so the PDF renderer never has to fetch it over the network."""
+    import base64
+
+    if not file_url:
+        return None
+    name = frappe.db.get_value("File", {"file_url": file_url}, "name")
+    if not name:
+        return None
+    try:
+        content = frappe.get_doc("File", name).get_content()
+    except Exception:
+        return None
+    if isinstance(content, str):
+        content = content.encode()
+    ext = file_url.rsplit(".", 1)[-1].lower()
+    mime = {"svg": "image/svg+xml", "jpg": "image/jpeg", "jpeg": "image/jpeg"}.get(
+        ext, f"image/{ext}"
+    )
+    return f"data:{mime};base64,{base64.b64encode(content).decode()}"
+
+
+def send_report_pdf(
+    template: str,
+    context: dict,
+    filename: str,
+    orientation: str = "Landscape",
+    inline: bool = False,
+    pdf_options: dict | None = None,
+):
+    """Answers the request with `template` as an A4 PDF named `filename`, landscape
+    unless `orientation` says otherwise; `inline` shows it in the browser instead of
+    downloading it. `pdf_options` go to wkhtmltopdf (e.g. margins for a footer).
 
     Frappe renders PDFs with wkhtmltopdf. Where it is not installed, the same page is
     returned ready to print (the template's `auto_print` opens the print dialog), and the
@@ -540,9 +603,15 @@ def send_report_pdf(template: str, context: dict, filename: str):
 
         frappe.response.filename = f"{filename}.pdf"
         frappe.response.filecontent = get_pdf(
-            html, {"orientation": "Landscape", "page-size": "A4"}
+            html,
+            {"orientation": orientation, "page-size": "A4", **(pdf_options or {})},
         )
-        frappe.response.type = "pdf"
+        if inline:
+            frappe.response.type = "download"
+            frappe.response.content_type = "application/pdf"
+            frappe.response.display_content_as = "inline"
+        else:
+            frappe.response.type = "pdf"
         return
     frappe.response.filename = f"{filename}.html"
     frappe.response.filecontent = html

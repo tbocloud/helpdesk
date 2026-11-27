@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>{{ title|e }} · {{ period|e }}</title>
+    <style>
+      /* wkhtmltopdf's WebKit is old: tables, no flex or grid. Colours are the TBO
+         theme's brand teal and slate neutrals (desk/src/theme.css). */
+      @page {
+        size: A4;
+        margin: 12mm 12mm 18mm;
+      }
+      body {
+        font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+        color: #0f172a;
+        font-size: 10.5px;
+        line-height: 1.4;
+        margin: 0;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      thead {
+        display: table-header-group;
+      }
+      tr {
+        page-break-inside: avoid;
+      }
+      .num {
+        text-align: right;
+        white-space: nowrap;
+      }
+      .mono {
+        font-family: "SF Mono", Menlo, Consolas, monospace;
+        font-size: 9.5px;
+      }
+      .muted {
+        color: #64748b;
+      }
+
+      /* letterhead */
+      .letterhead-html {
+        margin-bottom: 6px;
+      }
+      .letterhead-html img {
+        max-width: 100%;
+      }
+      .letterhead {
+        border-bottom: 2.5px solid #17657f;
+        margin-bottom: 16px;
+      }
+      .letterhead td {
+        vertical-align: middle;
+        padding-bottom: 8px;
+      }
+      .letterhead img {
+        max-height: 38px;
+        max-width: 180px;
+        vertical-align: middle;
+      }
+      .brand {
+        font-size: 17px;
+        font-weight: 700;
+        color: #17657f;
+        vertical-align: middle;
+      }
+      .logo + .brand {
+        margin-left: 8px;
+      }
+      .doc-type {
+        text-align: right;
+        color: #64748b;
+        font-size: 9.5px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      /* title and totals */
+      h1 {
+        font-size: 21px;
+        margin: 0 0 3px;
+      }
+      .lede {
+        color: #475569;
+        margin: 0 0 14px;
+      }
+      table.stats {
+        border-collapse: separate;
+        border-spacing: 8px 0;
+        margin: 0 -8px 18px;
+        width: auto;
+        min-width: 100%;
+      }
+      table.stats td {
+        width: 25%;
+        border: 1px solid #e2e8f0;
+        border-top: 3px solid #17657f;
+        border-radius: 6px;
+        padding: 9px 12px 10px;
+        background: #f8fafc;
+      }
+      .stat-label {
+        font-size: 8.5px;
+        font-weight: 600;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      .stat-value {
+        font-size: 20px;
+        font-weight: 700;
+        margin-top: 2px;
+      }
+      .stat-value small {
+        font-size: 11px;
+        font-weight: 600;
+        color: #64748b;
+      }
+
+      h2 {
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #334155;
+        margin: 4px 0 6px;
+      }
+
+      /* lists */
+      table.list th {
+        text-align: left;
+        font-size: 8.5px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: #475569;
+        background: #f1f5f9;
+        border-bottom: 1.5px solid #cbd5e1;
+        padding: 6px 7px;
+      }
+      table.list th.num {
+        text-align: right;
+      }
+      table.list td {
+        border-bottom: 1px solid #e2e8f0;
+        padding: 6px 7px;
+        vertical-align: top;
+      }
+      table.list tr.odd td {
+        background: #fbfcfe;
+      }
+      table.list tr.total td {
+        background: #e6f0f4;
+        color: #17657f;
+        font-weight: 700;
+        border-top: 1.5px solid #17657f;
+        border-bottom: 0;
+        padding: 7px;
+      }
+      table.list tr.grand td {
+        background: #17657f;
+        color: #ffffff;
+      }
+      .task {
+        font-weight: 600;
+      }
+      .tag {
+        display: inline-block;
+        font-size: 8.5px;
+        font-weight: 600;
+        padding: 1px 6px;
+        border-radius: 8px;
+      }
+      .tag.yes {
+        background: #e7f5ee;
+        color: #166534;
+      }
+      .tag.no {
+        background: #f1f5f9;
+        color: #475569;
+      }
+
+      /* one person's section */
+      .person {
+        margin-top: 4px;
+      }
+      .person.new-page {
+        page-break-before: always;
+      }
+      /* one block each, not table cells: side-by-side fills leave a seam */
+      .band,
+      .grand-total {
+        background: #17657f;
+        color: #ffffff;
+        padding: 10px 14px;
+        overflow: hidden;
+        page-break-inside: avoid;
+      }
+      .band {
+        margin-bottom: 8px;
+      }
+      .band-name {
+        font-size: 15px;
+        font-weight: 700;
+      }
+      .band-sub {
+        font-size: 9.5px;
+        opacity: 0.85;
+      }
+      .band-hours {
+        float: right;
+        font-size: 20px;
+        font-weight: 700;
+        text-align: right;
+        white-space: nowrap;
+      }
+      .band-hours small {
+        display: block;
+        font-size: 9px;
+        font-weight: 400;
+        opacity: 0.85;
+      }
+
+      table.logs {
+        table-layout: fixed;
+      }
+      table.logs td {
+        word-wrap: break-word;
+      }
+      .keep {
+        page-break-inside: avoid;
+      }
+      .grand-total {
+        margin-top: 14px;
+        font-weight: 700;
+      }
+      .grand-total .band-hours {
+        font-size: 14px;
+      }
+      .empty {
+        border: 1px dashed #cbd5e1;
+        border-radius: 6px;
+        padding: 28px;
+        text-align: center;
+        color: #64748b;
+      }
+
+      /* the footer on every page (Frappe hands #footer-html to wkhtmltopdf, in a page
+         that pads its top by 15mm for a letterhead footer; ours sits at the top) */
+      html body {
+        padding: 0 !important;
+      }
+      #footer-html {
+        padding-top: 4mm;
+        font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+        font-size: 8.5px;
+        color: #64748b;
+      }
+      .footer-rule {
+        border-top: 1px solid #cbd5e1;
+        padding-top: 5px;
+      }
+      .footer-right {
+        text-align: right;
+        white-space: nowrap;
+      }
+      .letterhead-footer {
+        margin-top: 5px;
+      }
+      .letterhead-footer img {
+        width: 100%;
+        height: auto !important;
+      }
+    </style>
+  </head>
+  <body>
+    {%- macro log_columns() -%}
+    <colgroup>
+      <col style="width: 11%" />
+      <col style="width: 14%" />
+      <col style="width: 31%" />
+      <col style="width: 27%" />
+      <col style="width: 9%" />
+      <col style="width: 8%" />
+    </colgroup>
+    {%- endmacro -%} {%- macro log_row(log, index) -%}
+    <tr class="{{ 'odd' if index is odd else '' }}">
+      <td style="white-space: nowrap">
+        {{ frappe.utils.formatdate(log.date, "dd MMM yyyy") if log.date else ""
+        }}
+      </td>
+      <td class="mono">
+        {{ log.timesheet|e }}<br /><span class="muted">{{ log.status|e }}</span>
+      </td>
+      <td>
+        {% if log.task %}<span class="task">{{ log.task|e }}</span><br />{%
+        endif %}<span class="muted"
+          >{{ (log.project or _("No project"))|e }}</span
+        >
+      </td>
+      <td class="muted">{{ log.notes|truncate(notes_limit)|e }}</td>
+      <td>
+        <span class="tag {{ 'yes' if log.billable else 'no' }}"
+          >{{ _("Yes") if log.billable else _("No") }}</span
+        >
+      </td>
+      <td class="num"><b>{{ hours_text(log.hours) }}</b></td>
+    </tr>
+    {%- endmacro -%} {% if brand.letter_head %}
+    <!-- the site's default Letter Head, as Frappe prints it -->
+    <div class="letterhead-html">{{ brand.letter_head }}</div>
+    {% endif %}
+    <table class="letterhead">
+      <tr>
+        <td>
+          {% if not brand.letter_head %}{% if brand.logo %}<img
+            class="logo"
+            src="{{ brand.logo }}"
+            alt=""
+          />{% endif %}<span class="brand">{{ brand.name|e }}</span>{% endif %}
+        </td>
+        <td class="doc-type">{{ _("Timesheet report") }}</td>
+      </tr>
+    </table>
+
+    <h1>{{ title|e }}</h1>
+    <p class="lede">
+      {{ scope|e }} · {{ period|e }}{% if project %} · {{ _("Project") }}: {{
+      project|e }}{% endif %}
+    </p>
+
+    <table class="stats">
+      <tr>
+        <td>
+          <div class="stat-label">{{ _("Total hours") }}</div>
+          <div class="stat-value">{{ hours_text(hours) }} <small>h</small></div>
+        </td>
+        <td>
+          <div class="stat-label">{{ _("Billable") }}</div>
+          <div class="stat-value">
+            {{ hours_text(billable_hours) }} <small>h</small>
+          </div>
+        </td>
+        <td>
+          <div class="stat-label">{{ _("Non-billable") }}</div>
+          <div class="stat-value">
+            {{ hours_text(non_billable_hours) }} <small>h</small>
+          </div>
+        </td>
+        <td>
+          {% if team %}
+          <div class="stat-label">{{ _("Employees") }}</div>
+          <div class="stat-value">{{ people|length }}</div>
+          {% else %}
+          <div class="stat-label">{{ _("Time logs") }}</div>
+          <div class="stat-value">{{ log_count }}</div>
+          {% endif %}
+        </td>
+      </tr>
+    </table>
+
+    {% if not people %}
+    <div class="empty">{{ _("No time logged in these dates.") }}</div>
+    {% endif %} {% set with_summary = team and people|length > 1 %} {% if
+    with_summary %}
+    <h2>{{ _("Summary by employee") }}</h2>
+    <table class="list">
+      <thead>
+        <tr>
+          <th>{{ _("Employee") }}</th>
+          <th class="num">{{ _("Days") }}</th>
+          <th class="num">{{ _("Time logs") }}</th>
+          <th class="num">{{ _("Billable") }}</th>
+          <th class="num">{{ _("Non-billable") }}</th>
+          <th class="num">{{ _("Total hours") }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for person in people %}
+        <tr class="{{ 'odd' if loop.index is odd else '' }}">
+          <td>
+            <span class="task">{{ person.full_name|e }}</span>{% if person.user
+            != person.full_name %}<br /><span class="muted mono"
+              >{{ person.user|e }}</span
+            >{% endif %}
+          </td>
+          <td class="num">{{ person.days }}</td>
+          <td class="num">{{ person.log_count }}</td>
+          <td class="num">{{ hours_text(person.billable_hours) }}</td>
+          <td class="num">{{ hours_text(person.non_billable_hours) }}</td>
+          <td class="num"><b>{{ hours_text(person.hours) }}</b></td>
+        </tr>
+        {% endfor %}
+        <tr class="total grand">
+          <td>{{ _("Total") }}</td>
+          <td class="num"></td>
+          <td class="num">{{ log_count }}</td>
+          <td class="num">{{ hours_text(billable_hours) }}</td>
+          <td class="num">{{ hours_text(non_billable_hours) }}</td>
+          <td class="num">{{ hours_text(hours) }}</td>
+        </tr>
+      </tbody>
+    </table>
+    {% endif %} {% for person in people %}
+    <!-- each person on a page of their own after the summary, so no two mix -->
+    <div class="person{{ ' new-page' if with_summary else '' }}">
+      <div class="band">
+        <div class="band-hours">
+          {{ hours_text(person.hours) }} h
+          <small
+            >{{ _("{0} days").format(person.days) if person.days != 1 else _("1
+            day") }} · {{ hours_text(person.billable_hours) }} h {{
+            _("billable") }}</small
+          >
+        </div>
+        <div class="band-name">{{ person.full_name|e }}</div>
+        {% if person.user != person.full_name %}
+        <div class="band-sub">{{ person.user|e }}</div>
+        {% endif %}
+      </div>
+      {#- the last log and the total in a table of their own that never splits,
+      so a total never starts a page alone; fixed widths keep both tables'
+      columns in line -#} {% set rows = person.logs[:-1] %} {% set tail =
+      person.logs[-1:] %}
+      <table class="list logs">
+        {{ log_columns() }}
+        <thead>
+          <tr>
+            <th>{{ _("Date") }}</th>
+            <th>{{ _("Timesheet") }}</th>
+            <th>{{ _("Project / Task") }}</th>
+            <th>{{ _("Notes") }}</th>
+            <th>{{ _("Billable") }}</th>
+            <th class="num">{{ _("Hours") }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for log in rows %}{{ log_row(log, loop.index) }}{% endfor %}
+        </tbody>
+      </table>
+      <div class="keep">
+        <table class="list logs">
+          {{ log_columns() }}
+          <tbody>
+            {% for log in tail %}{{ log_row(log, rows|length + 1) }}{% endfor %}
+            <tr class="total">
+              <td colspan="5">
+                {{ _("Total for {0}").format(person.full_name)|e }}
+              </td>
+              <td class="num">{{ hours_text(person.hours) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endfor %} {% if people %}
+    <div class="grand-total">
+      <div class="band-hours">{{ hours_text(hours) }} h</div>
+      {{ _("Total hours, all employees") if team else _("Total hours") }}
+      <span style="font-weight: 400"
+        >· {{ hours_text(billable_hours) }} h {{ _("billable") }}, {{
+        hours_text(non_billable_hours) }} h {{ _("non-billable") }}</span
+      >
+    </div>
+    {% endif %}
+
+    <div id="footer-html">
+      <table class="footer-rule">
+        <tr>
+          <td>
+            <b>{{ brand.name|e }}</b> · {{ title|e }} · {{ period|e }}<br />{{
+            _("Generated by {0} on {1}").format(generated_by, generated_on)|e }}
+          </td>
+          <td class="footer-right">
+            {{ _("Page") }} <span class="page"></span> {{ _("of") }}
+            <span class="topage"></span>
+          </td>
+        </tr>
+      </table>
+      {% if brand.letter_head_footer %}
+      <div class="letterhead-footer">{{ brand.letter_head_footer }}</div>
+      {% endif %}
+    </div>
+    {% if auto_print %}
+    <script>
+      window.onload = () => window.print();
+    </script>
+    {% endif %}
+  </body>
+</html>

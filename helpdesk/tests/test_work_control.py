@@ -18,6 +18,7 @@ from helpdesk.patches.v16_0_2.add_waiting_on_task_status import (
     execute as add_waiting_status,
 )
 from helpdesk.tasky import api as tasky
+from helpdesk.tasky import timesheet_report
 from helpdesk.tasky.permissions import hidden_departments
 from helpdesk.test_utils import (
     call_as_user,
@@ -1622,7 +1623,7 @@ class TestTeamTimesheets(WorkControlCase):
         with self.assertRaises(frappe.PermissionError):
             self.as_user(DEV, lambda: tasky.get_my_timesheets(team=1))
 
-    def test_lead_filters_by_agent_and_date_and_downloads_csv(self):
+    def test_lead_filters_by_agent_and_date_and_exports(self):
         task = self.make_task("Opening balances", add_days(nowdate(), 3))
         self.as_user(
             DEV,
@@ -1671,17 +1672,16 @@ class TestTeamTimesheets(WorkControlCase):
         agents = self.as_user(LEAD, tasky.get_timesheet_agents)
         self.assertIn({"user": DEV[0], "full_name": DEV[1]}, agents)
 
-        frappe.response.clear()
-        self.as_user(LEAD, lambda: tasky.export_timesheets_csv(team=1, agent=DEV[0]))
-        self.assertEqual(frappe.response.type, "download")
-        self.assertTrue(frappe.response.filename.endswith(".csv"))
-        lines = frappe.response.filecontent.strip().splitlines()
-        self.assertTrue(lines[0].startswith("Date,Agent,Timesheet"))
+        report = self.as_user(
+            LEAD, lambda: timesheet_report.build(1, DEV[0], None, None, None)
+        )
+        [person] = report["people"]
+        self.assertEqual(person["full_name"], DEV[1])
         self.assertTrue(
-            any(DEV[1] in line and "Opening balances" in line for line in lines[1:])
+            any("Opening balances" in log["task"] for log in person["logs"])
         )
         with self.assertRaises(frappe.PermissionError):
-            self.as_user(DEV, lambda: tasky.export_timesheets_csv(team=1))
+            self.as_user(DEV, lambda: timesheet_report.build(1, None, None, None, None))
 
     def test_summary_adds_up_the_time_logs_by_person_and_project(self):
         def log(project, hours, days_ago=0):

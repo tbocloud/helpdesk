@@ -1171,15 +1171,15 @@ the logic is `TaskActivity` in `helpdesk/task_activity.py`.
 
 `desk/src/pages/tasky/Timesheets.vue`; APIs `helpdesk.tasky.api.get_my_timesheets` (the list,
 the 500 most recently updated), `get_timesheet_summary` (the totals),
-`get_timesheet_days` (the By day view) and `export_timesheets_csv` (Download CSV, one row per
-time log).
+`get_timesheet_days` (the By day view) and `export_timesheets` (the Export menu; built in
+`helpdesk/tasky/timesheet_report.py`).
 
 - **Scope**: Mine, or Team for leads and managers (the timesheets on projects they lead or
   manage). Filters: agent (Team), project, From and To (the day the work was done). Every
-  filter applies alike to the tiles, the breakdowns, the list, By day and the CSV
+  filter applies alike to the tiles, the breakdowns, the list, By day and the export
   (`_timesheet_filters` for the timesheets, `_time_log_filters` for their time logs).
 - **Cancelled timesheets** never count: `_time_log_filters` skips cancelled time logs, so
-  the hours, By day and the CSV leave them out. The list still shows the timesheet with its
+  the hours, By day and the export leave them out. The list still shows the timesheet with its
   Cancelled status.
 - **URL**: `scope=team`, `view=day`, `agent`, `project`, `from`, `to`.
 - **Summary tiles**: Hours logged in the period, Timesheets (500+ when the list is capped) and
@@ -1189,8 +1189,37 @@ time log).
   viewer may see; it doesn't use each timesheet's total, so a timesheet across several
   projects or days splits correctly. Six rows each, then "N more · Xh". The bars are neutral
   and show each row's share of the period.
-- **Download CSV** has a Billable column. Notes are plain text (`_plain_note`: tags dropped,
-  entities decoded).
+- **Export** (header menu): View PDF, Download PDF, Download Excel.
+  `export_timesheets(file_format=xlsx|pdf, view, team, agent, project, from_date, to_date)`
+  uses the same filters and permission path as the list. Other formats are refused.
+  - The report (`timesheet_report.build`) groups the time logs by person in name order, so
+    people are never mixed. Each person's logs come in date order (date, timesheet and its
+    status, project, task, plain-text notes, billable, hours), followed by that person's
+    total, days, time logs and billable/non-billable split. The total hours come at the end.
+  - **PDF** (`helpdesk/templates/timesheet_report_pdf.html`, A4 portrait): the site's default
+    Letter Head when there is one, otherwise the brand logo and name (`report_brand()` in
+    `helpdesk/utils.py`, shared with the sign-off documents). Then the title, scope, period
+    and project, stat boxes (total, billable, non-billable, employees or time logs) and, for
+    the team with more than one person, a summary by employee with a Total row. Each person
+    then gets a teal band with their hours, a log table and a "Total for …" row. After the
+    summary every person starts on a new page. A person's last log and their total sit in a
+    block that never splits, so a total never starts a page alone. The grand total comes
+    last. A footer on every page (`#footer-html`, which Frappe hands to wkhtmltopdf) shows
+    the brand, title, period, who generated it and when, and "Page X of Y", with the Letter
+    Head's footer under it when one is set. The bottom margin is 48mm with a Letter Head
+    footer (a page-wide image band) and 22mm without. The Letter Head's `/files/` images are
+    embedded (`inline_images` in `helpdesk/utils.py`), so wkhtmltopdf never fetches them over
+    the network. Notes are cut at 500 characters in the PDF (`PDF_NOTES_LIMIT`) because a
+    row taller than a page runs over the repeated column headings in wkhtmltopdf. The
+    Excel export keeps the full notes. The bands are single blocks, not table cells, because
+    side-by-side filled cells leave a seam in PDF viewers.
+  - **View PDF** returns the same PDF inline (`send_report_pdf(..., inline=True)`: type
+    `download`, `application/pdf`, `display_content_as=inline`), so it opens in a browser tab.
+    Without wkhtmltopdf the page prints itself instead.
+  - **Excel** (openpyxl): a Summary sheet (employee, email, days, time logs, billable,
+    non-billable, total hours, then a Total row) and a Time logs sheet with each person's
+    band, column headings, logs (real dates and numbers) and "Total for …", and the grand
+    total at the end. Text that starts like a formula is written as text.
 - **List | By day** (segmented control above the list). **By day** is the employee's daily
   log of the work, for them and their manager: one card per person (name order; Mine shows
   just you) with their hours and the number of days, then each day with time logged
@@ -1205,19 +1234,21 @@ time log).
     project, task and people names in one query each.
   - Bounded: at most 62 days (`TIMESHEET_DAYS_MAX_RANGE`; the page says "Pick up to 62 days
     at a time." and doesn't ask); more than 2000 time logs (`TIMESHEET_DAYS_MAX_LOGS`)
-    returns `too_many`, shown as "Too many time logs to show day by day" with Download CSV,
+    returns `too_many`, shown as "Too many time logs to show day by day" with Download Excel,
     rather than a partial picture.
   - The period defaults to this week (Monday to Sunday) when no dates are picked; one date
     alone gets the week from or up to it. In By day this week isn't counted as a filter.
   - States: loading skeleton, error with Retry, too many, and empty ("No time logged in
     these dates": Clear filters when filtered, otherwise Log time).
-  - No print view: Download CSV is the export.
+  - No print view of its own: the Export menu's PDF is the printable report.
 - **Leads opening a timesheet**: `timesheet_has_permission` lets a lead read a timesheet with
   time on a project they lead, matching `timesheet_query` (before, the list showed it and
   opening it was refused).
 - **Tests**: `helpdesk/tests/test_timesheet_days.py` (grouping and sums, own vs team, the
-  project filter across days, summary, list and CSV, Sales Employee, cancelled, date bounds,
-  plain notes, a lead opening a timesheet); the list, summary and CSV in
+  project filter across days, summary, list and report, Sales Employee, cancelled, date bounds,
+  plain notes, a lead opening a timesheet) and `TestTimesheetReport` (grouping and totals,
+  the Excel sheets, PDF download and view, team refused for a developer, other formats
+  refused); the list, summary and report in
   `helpdesk/tests/test_work_control.py` (`TestTeamTimesheets`).
 - **List**: a titled card; Timesheet, Person (Team), Status, Hours (right-aligned, tabular)
   and Updated columns from `md`; below that a two-line row with person, status and date in
