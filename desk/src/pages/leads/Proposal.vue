@@ -640,6 +640,7 @@
 <script setup lang="ts">
 import { shortDate } from "@/pages/tasky/taskMeta";
 import LayoutHeader from "@/components/LayoutHeader.vue";
+import { useOwnBackButton } from "@/composables/goBack";
 import { useScreenSize } from "@/composables/screen";
 import TaskyBadge from "@/components/TaskyBadge.vue";
 import TaskyState from "@/components/TaskyState.vue";
@@ -699,6 +700,7 @@ import {
 
 const props = defineProps<{ leadId: string; proposalId: string }>();
 const router = useRouter();
+useOwnBackButton();
 const { isMobileView } = useScreenSize();
 const sendFormId = `proposal-send-${useId()}`;
 const priceTitleId = `proposal-price-${useId()}`;

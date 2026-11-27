@@ -356,6 +356,20 @@ Reuse when repetition is real; abstract only when it improves clarity.
 - On mobile, primary destinations must stay reachable.
 - The command palette must never be the only way to get somewhere.
 - Keep meaningful state in the URL: tab, filters, search and page.
+- **Back on every page** (owner's request, 2026-11-27): the app header starts with a Back
+  arrow (`components/layouts/HeaderBack.vue`, in `AppHeader` and `MobileAppHeader`)
+  whenever there is a previous page in the app (`history.state.back`; none when the page
+  was opened directly or in a new tab). It is `router.back()`, so the page comes back as
+  it was left: its filters from the URL, and its scroll. Pages scroll inside their own
+  panel, which the router's scroll restore doesn't cover, so `router/scrollMemory.ts`
+  keeps, per history entry (`history.state.position`), which tall box was scrolled (its
+  path from `#app`) and how far, and on Back/Forward scrolls it there again, retrying for
+  up to 4s while the page's data loads, until the person scrolls, clicks or types. A new
+  page starts at the top. In memory only: after a reload, Back opens the page at the top.
+  A page that draws its own Back (with a fallback for direct opens: `useGoBack`, or
+  `useOwnBackButton` where its Back has its own logic, as on the proposal pages) hides the
+  header's, so there is never two. Projects keeps `useScrollRestore` too, to put the
+  place back again after its kept-alive refresh.
 
 ## 14. Tables and dense data
 
