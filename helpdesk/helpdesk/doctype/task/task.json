@@ -35,6 +35,11 @@
 		"completed_on",
 		"ai_estimated",
 		"estimate_note",
+		"extra_hours_section",
+		"extra_hours",
+		"extra_hours_by",
+		"extra_hours_reason",
+		"extra_hours_days",
 		"quality_section",
 		"quality_rating",
 		"rated_by",
@@ -245,6 +250,40 @@
 			"depends_on": "ai_estimated"
 		},
 		{
+			"fieldname": "extra_hours_section",
+			"fieldtype": "Section Break",
+			"label": "Extra Hours",
+			"collapsible": 1,
+			"depends_on": "extra_hours"
+		},
+		{
+			"fieldname": "extra_hours",
+			"fieldtype": "Float",
+			"label": "Extra Hours Waiting",
+			"read_only": 1,
+			"description": "Hours over the estimate a completion asked for, waiting for the project manager. Not on a timesheet until approved."
+		},
+		{
+			"fieldname": "extra_hours_by",
+			"fieldtype": "Link",
+			"label": "Asked By",
+			"options": "User",
+			"read_only": 1
+		},
+		{
+			"fieldname": "extra_hours_reason",
+			"fieldtype": "Small Text",
+			"label": "Why the Extra Hours",
+			"read_only": 1
+		},
+		{
+			"fieldname": "extra_hours_days",
+			"fieldtype": "JSON",
+			"label": "Extra Hours by Day",
+			"hidden": 1,
+			"read_only": 1
+		},
+		{
 			"fieldname": "quality_section",
 			"fieldtype": "Section Break",
 			"label": "Quality",
@@ -308,7 +347,7 @@
 	],
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-10-12 12:00:00.000000",
+	"modified": "2026-11-27 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "Task",

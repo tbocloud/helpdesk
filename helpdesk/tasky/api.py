@@ -12,6 +12,7 @@ from helpdesk.api.content_board import user_full_names
 from helpdesk.api.project_files import file_counts
 from helpdesk.api.task_attachments import attachment_counts
 from helpdesk.github_sync import get_pull_requests
+from helpdesk.tasky import extra_hours
 from helpdesk.tasky.new_assignments import (
     assignment_states,
     notify_given_tasks,
@@ -181,6 +182,13 @@ def _format_task(task, hold_names: dict[str, str] | None = None):
         "is_milestone": bool(task.get("is_milestone")),
         "ai_estimated": bool(task.get("ai_estimated")),
         "estimate_note": task.get("estimate_note"),
+        # hours over the estimate waiting for the project manager (tasky.extra_hours)
+        "extra_hours": task.get("extra_hours") or 0,
+        "extra_hours_reason": task.get("extra_hours_reason"),
+        "extra_hours_by": task.get("extra_hours_by"),
+        "extra_hours_by_name": frappe.utils.get_fullname(task.get("extra_hours_by"))
+        if task.get("extra_hours_by")
+        else None,
         "ai_description": bool(task.get("custom_ai_description")),
         "slip_count": task.get("slip_count") or 0,
         "escalation_level": task.get("escalation_level") or 0,
@@ -242,6 +250,7 @@ def complete_task(
     for_review: bool | str | None = False,
     days: str | list | None = None,
     backdate_reason: str | None = None,
+    extra_hours_reason: str | None = None,
 ) -> dict:
     """Complete a task and log the time spent on it to the user's timesheet.
 
@@ -254,23 +263,51 @@ def complete_task(
     already has on it; hours entered by hand are for today and the last working days
     (HD Work Settings' `hand_entry_days`, 7 by default) only, or an older
     day with a `backdate_reason` from a System Manager (`check_hand_entered`).
+
+    Hours over the task's estimate need `extra_hours_reason`: only those within it are
+    logged now, the rest wait for the project manager and the task goes to review
+    (helpdesk.tasky.extra_hours). `extra_hours` in the answer is what waits.
     """
     doc = frappe.get_doc("Task", str(task))
     doc.check_permission("write")
+    user = frappe.session.user
     if doc.status == "Completed":
         frappe.throw(_("This task is already completed."))
     if days:
         worked = _completion_days(doc, days)
     else:
         worked = [(frappe.utils.getdate(), _completion_hours(hours_worked))]
-    check_hand_entered(doc, frappe.session.user, worked, backdate_reason)
-    hours = round(sum(h for _day, h in worked), 2)
+    check_hand_entered(doc, user, worked, backdate_reason)
     notes = _completion_notes(notes)
+    worked = extra_hours.carry(doc, worked, user)
+    now, waiting = extra_hours.split(doc, worked)
+    if waiting:
+        reason = extra_hours.require_reason(
+            extra_hours_reason,
+            round(sum(h for _day, h in waiting), 2),
+            frappe.utils.flt(doc.custom_estimated_hours),
+        )
+    hours = round(sum(h for _day, h in now), 2)
+    today = frappe.utils.getdate()
+    within = dict(now)
 
     frappe.db.savepoint("complete_task")
     try:
-        _mark_completed(doc, hours, frappe.utils.sbool(for_review))
-        timesheets = _log_completion_time(doc, worked, notes)
+        # the stretch still running is a session of its own, which the days start from
+        if doc.custom_timer_start:
+            record_session(doc.name, doc.custom_timer_start)
+        # each day is one stretch: its hours within the estimate first, the held ones after
+        starts = {day: _day_start(doc.name, day, h, today) for day, h in worked}
+        if waiting:
+            held_starts = {
+                day: frappe.utils.add_to_date(starts[day], hours=within.get(day, 0))
+                for day, _h in waiting
+            }
+            extra_hours.hold(doc, waiting, held_starts, reason, notes, user)
+        else:
+            extra_hours.clear(doc)
+        _mark_completed(doc, hours, frappe.utils.sbool(for_review) or bool(waiting))
+        timesheets = _log_completion_time(doc, now, notes, starts)
     except Exception:
         # undo the status change too, so the task never completes without its time
         frappe.db.rollback(save_point="complete_task")
@@ -278,14 +315,16 @@ def complete_task(
     return {
         **_format_task(_task_dict(doc)),
         # one per day worked; the first (and the status: Draft if any couldn't be
-        # submitted) also as before, for the mobile app
+        # submitted) also as before, for the mobile app. None when every hour is over
+        # the estimate and waits.
         "timesheets": [ts.name for ts in timesheets],
-        "timesheet": timesheets[0].name,
+        "timesheet": timesheets[0].name if timesheets else None,
         "timesheet_status": (
             "Draft" if any(ts.status == "Draft" for ts in timesheets) else "Submitted"
         ),
         "draft_timesheets": [ts.name for ts in timesheets if ts.status == "Draft"],
         "hours_logged": hours,
+        "extra_hours": frappe.utils.flt(doc.get("extra_hours")),
     }
 
 
@@ -310,10 +349,19 @@ def _completion_hours(value: float | str | None) -> float:
 def get_completion_days(task: str) -> dict:
     """The hours to offer when completing the task: {today, yesterday, days: [{date, hours,
     from_time}], left: {date: hours still free that day}}, one entry in `days` per day its
-    timer ran (helpdesk.tasky.time_sessions.completion_days)."""
+    timer ran (helpdesk.tasky.time_sessions.completion_days); with `estimate`, the hours
+    already `logged` and the person's hours still waiting from a completion sent back
+    (`waiting`, `waiting_reason`), so the dialog can ask why before going over it."""
     doc = frappe.get_doc("Task", str(task))
     doc.check_permission("read")
-    return completion_days(doc)
+    mine = doc.get("extra_hours_by") == frappe.session.user
+    return {
+        **completion_days(doc),
+        "estimate": frappe.utils.flt(doc.get("custom_estimated_hours")),
+        "logged": extra_hours.logged_before(doc),
+        "waiting": frappe.utils.flt(doc.get("extra_hours")) if mine else 0,
+        "waiting_reason": doc.get("extra_hours_reason") if mine else None,
+    }
 
 
 def _completion_days(task_doc, value: str | list) -> list[tuple]:
@@ -375,14 +423,12 @@ def _completion_notes(value: str | None) -> str:
 
 def _mark_completed(doc, hours: float, for_review: bool = False):
     """Set Completed (the controller may route it to review), or Pending Review
-    when asked, and stop the timer.
+    when asked, and stop the timer (the caller recorded its running stretch).
 
     Pausing the timer already added its time to actual hours, and the hours
     logged now cover that time, so it is swapped out rather than counted twice.
     """
     counted = frappe.utils.flt(doc.custom_timer_elapsed)
-    if doc.custom_timer_start:
-        record_session(doc.name, doc.custom_timer_start)
     if for_review:
         doc.status = PENDING_REVIEW_STATUS
         doc.flags.review_requested = True
@@ -397,17 +443,20 @@ def _mark_completed(doc, hours: float, for_review: bool = False):
     doc.save()
 
 
-def _log_completion_time(task_doc, worked: list[tuple], notes: str) -> list:
+def _log_completion_time(
+    task_doc, worked: list[tuple], notes: str, starts: dict
+) -> list:
     """Insert and submit the user's timesheets for the completed task: one timesheet per day
-    worked ([(date, hours)]), so each shows only that day's hours.
+    worked ([(date, hours)]), so each shows only that day's hours, starting at `starts`.
 
     A day starts when its timer first ran; today without a timer ends now (as before), and
-    another day without one starts at 09:00. An insert failure propagates. A submit
-    failure leaves that timesheet as a Draft (logged, and reported through its status)
-    rather than losing the time.
+    another day without one starts at 09:00 (`_day_start`). An insert failure propagates.
+    A submit failure leaves that timesheet as a Draft (logged, and reported through its
+    status) rather than losing the time.
     """
+    today = frappe.utils.getdate()
     timesheets = [
-        _log_day(task_doc, day, hours, notes, frappe.utils.getdate())
+        _log_day(task_doc, day, hours, notes, today, from_time=starts.get(day))
         for day, hours in worked
     ]
     # a timer day taken out in the dialog is settled too, so it isn't offered again
@@ -431,9 +480,11 @@ def _day_start(task: str, day, hours: float, today):
     return max(min(start, latest), day_begins)
 
 
-def _log_day(task_doc, day, hours: float, notes: str, today):
-    user = frappe.session.user
-    from_time = _day_start(task_doc.name, day, hours, today)
+def _log_day(task_doc, day, hours: float, notes: str, today, user=None, from_time=None):
+    """One day's timesheet for `user` (the signed-in person; for approved extra hours,
+    whoever worked them), starting at `from_time` or the day's start (`_day_start`)."""
+    user = user or frappe.session.user
+    from_time = from_time or _day_start(task_doc.name, day, hours, today)
     ts = frappe.get_doc(
         {
             "doctype": "Timesheet",
@@ -456,6 +507,10 @@ def _log_day(task_doc, day, hours: float, notes: str, today):
     # that check is the permission decision, whatever their Timesheet role says.
     ts.flags.ignore_permissions = True
     ts.insert()
+    if user != frappe.session.user:
+        # reports and permissions take a timesheet's owner as whose time it is, and
+        # insert makes the approver the owner of the hours they approved
+        ts.db_set("owner", user, update_modified=False)
     mark_logged(task_doc.name, ts.name, day)
 
     frappe.db.savepoint("complete_task_timesheet_submit")
@@ -1448,21 +1503,117 @@ def _reassign(
 
 
 @frappe.whitelist()
-def approve_task(task: str, rating: str | None = None) -> dict:
+def approve_task(
+    task: str,
+    rating: str | None = None,
+    approve_extra_hours: bool | str | None = False,
+) -> dict:
     """The lead, a manager or a coordinator signs off a reviewed task, optionally
     with its quality rating (Needs rework, Good, Excellent). `quality` in the
     answer says whether the approver may still rate it, so a one-click Approve
-    can offer the rating afterwards."""
+    can offer the rating afterwards.
+
+    A task with hours over its estimate waiting is approved only by the project's
+    manager or lead, and only with `approve_extra_hours` (from the task's dialog, where
+    the explanation shows): the hours are logged for whoever worked them."""
     doc = _get_managed_task(task)
     if doc.status != "Pending Review":
         frappe.throw(_("Only tasks waiting for review can be approved."))
-    doc.status = "Completed"
-    if rating:
-        _check_can_rate(doc)
-        doc.set_quality_rating(rating)
-    doc.save()
+    frappe.db.savepoint("approve_task")
+    try:
+        if frappe.utils.flt(doc.get("extra_hours")):
+            _approve_extra_hours(doc, frappe.utils.sbool(approve_extra_hours))
+        doc.status = "Completed"
+        if rating:
+            _check_can_rate(doc)
+            doc.set_quality_rating(rating)
+        doc.save()
+    except Exception:
+        # the extra hours' timesheets go with the approval, or not at all
+        frappe.db.rollback(save_point="approve_task")
+        raise
     doc.add_comment("Info", _("Approved."))
     return {**_format_task(_task_dict(doc)), "quality": task_quality_info(doc)}
+
+
+def _approve_extra_hours(doc, confirmed: bool) -> None:
+    """Log the hours over the estimate on their own days for whoever worked them and
+    count them on the task (in memory: the caller saves)."""
+    from helpdesk.work_reminders import notify_users
+
+    extra_hours.require_manager(doc)
+    extra = frappe.utils.flt(doc.extra_hours)
+    if not confirmed:
+        frappe.throw(
+            _(
+                "This task asks for {0} h over its estimate. Open it to read why, then approve or decline them."
+            ).format(f"{extra:g}")
+        )
+    worker = doc.extra_hours_by
+    notes = extra_hours.notes(doc)
+    today = frappe.utils.getdate()
+    starts = extra_hours.held_starts(doc)
+    for day, hours in extra_hours.held(doc):
+        _log_day(doc, day, hours, notes, today, user=worker, from_time=starts.get(day))
+    doc.custom_actual_hours = frappe.utils.flt(doc.custom_actual_hours) + extra
+    doc.add_comment(
+        "Info",
+        frappe.utils.escape_html(
+            _("{0} h over the estimate approved by {1}.").format(
+                f"{extra:g}", _full_name(frappe.session.user)
+            )
+        ),
+    )
+    if worker and worker != frappe.session.user:
+        notify_users(
+            [worker],
+            "Task",
+            doc.name,
+            _("Your {0} h over the estimate were approved: {1}").format(
+                f"{extra:g}", doc.subject
+            ),
+        )
+    extra_hours.clear(doc)
+
+
+@frappe.whitelist(methods=["POST"])
+def decline_extra_hours(task: str, note: str) -> dict:
+    """The project's manager or lead declines the hours over a reviewed task's estimate,
+    saying why: they are never logged, and the task completes with the hours within
+    it. Whoever asked is told."""
+    from helpdesk.work_reminders import notify_users
+
+    doc = _get_managed_task(task)
+    if doc.status != PENDING_REVIEW_STATUS:
+        frappe.throw(_("Only tasks waiting for review can be decided."))
+    extra_hours.require_waiting(doc)
+    extra_hours.require_manager(doc)
+    note = (note or "").strip()
+    if not note:
+        frappe.throw(_("Say why the extra hours aren't approved."))
+    extra = frappe.utils.flt(doc.extra_hours)
+    worker = doc.extra_hours_by
+    extra_hours.clear(doc)
+    doc.status = "Completed"
+    doc.save()
+    doc.add_comment(
+        "Info",
+        frappe.utils.escape_html(
+            _("{0} h over the estimate declined by {1}: {2}").format(
+                f"{extra:g}", _full_name(frappe.session.user), note
+            )
+        ),
+    )
+    if worker and worker != frappe.session.user:
+        notify_users(
+            [worker],
+            "Task",
+            doc.name,
+            _("Your {0} h over the estimate were not approved ({1}): {2}").format(
+                f"{extra:g}", note, doc.subject
+            ),
+        )
+    return _format_task(_task_dict(doc))
 
 
 @frappe.whitelist(methods=["POST"])

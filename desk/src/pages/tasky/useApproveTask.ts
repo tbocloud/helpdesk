@@ -50,9 +50,19 @@ export function useApproveTask(
     },
   });
 
-  function approve(task: { name: string }, rating?: string) {
+  /** `extraHours`: also approve the hours over the estimate the task asks for (only
+   * where the explanation was shown; the server refuses them otherwise). */
+  function approve(
+    task: { name: string },
+    rating?: string,
+    extraHours = false
+  ) {
     if (resource.loading) return;
-    return resource.submit({ task: task.name, rating: rating || null });
+    return resource.submit({
+      task: task.name,
+      rating: rating || null,
+      approve_extra_hours: extraHours ? 1 : 0,
+    });
   }
 
   return { approve, resource };

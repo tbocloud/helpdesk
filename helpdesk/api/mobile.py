@@ -380,10 +380,21 @@ def pause_task(task: str) -> dict:
 
 @frappe.whitelist(methods=["POST"])
 @agent_only
-def complete_task(task: str, hours_worked: float | str, notes: str) -> dict:
-    """Complete with the hours and a note, logged to the user's timesheet."""
+def complete_task(
+    task: str,
+    hours_worked: float | str,
+    notes: str,
+    extra_hours_reason: str | None = None,
+) -> dict:
+    """Complete with the hours and a note, logged to the user's timesheet. Hours over the
+    task's estimate need `extra_hours_reason` and wait for the project manager."""
     frappe.has_permission("Task", "write", str(task), throw=True)
-    tasky.complete_task(task, hours_worked=hours_worked, notes=notes)
+    tasky.complete_task(
+        task,
+        hours_worked=hours_worked,
+        notes=notes,
+        extra_hours_reason=extra_hours_reason,
+    )
     return _one(_task_detail(task))
 
 
