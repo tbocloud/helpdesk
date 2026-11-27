@@ -122,6 +122,11 @@
               class="size-4 shrink-0 text-success"
               :aria-label="__('Done')"
             />
+            <LucideSend
+              v-else-if="sentOutside(step)"
+              class="size-4 shrink-0 text-ink-gray-6"
+              :aria-label="step.status_label || __('Sent outside')"
+            />
             <LucideCircleMinus
               v-else-if="step.skipped || step.implicit"
               class="size-4 shrink-0 text-ink-gray-5"
@@ -165,14 +170,14 @@
               {{ __("Signed PDF") }}
             </a>
           </span>
-          <!-- skipped or not used: gray, with who, when and why -->
+          <!-- skipped or not used: gray, with who, when and why; sent outside also the file -->
           <span
             v-else-if="step.skipped || step.implicit"
             class="flex min-w-0 flex-col gap-1"
           >
             <TaskyBadge
               :label="step.status_label || __('Skipped')"
-              tone="neutral"
+              :tone="sentOutside(step) ? proposalTone('Sent') : 'neutral'"
               class="self-start"
             />
             <span
@@ -189,6 +194,18 @@
                 )
               }}
             </span>
+            <a
+              v-if="step.skipped?.file && step.skipped.file_name"
+              :href="
+                leadFileUrl(leadId, step.skipped.file, step.skipped.file_name)
+              "
+              target="_blank"
+              rel="noopener"
+              class="inline-flex min-h-[24px] min-w-0 items-center gap-1 self-start rounded text-xs font-medium text-ink-gray-8 underline decoration-outline-gray-3 underline-offset-2 hover:text-ink-gray-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+            >
+              <LucidePaperclip class="size-3.5 shrink-0" aria-hidden="true" />
+              <span class="truncate">{{ step.skipped.file_name }}</span>
+            </a>
           </span>
           <span v-else class="flex min-w-0 flex-wrap items-center gap-1.5">
             <TaskyBadge
@@ -281,6 +298,11 @@
         </div>
       </form>
     </Dialog>
+    <ProposalSentOutsideDialog
+      v-model:open="sentOutsideOpen"
+      :lead-id="leadId"
+      @saved="emit('changed')"
+    />
     <!-- inside the one root, so the page's grid class (col-span) reaches the section -->
     <SignoffFormDialog
       v-if="uat.data?.project && uat.data.can_send"
@@ -319,10 +341,14 @@ import LucideCircleMinus from "~icons/lucide/circle-minus";
 import LucideEllipsis from "~icons/lucide/ellipsis";
 import LucideLock from "~icons/lucide/lock";
 import LucideDownload from "~icons/lucide/download";
+import LucidePaperclip from "~icons/lucide/paperclip";
 import LucidePlus from "~icons/lucide/plus";
 import LucideSend from "~icons/lucide/send";
+import { leadFileUrl } from "./leadFiles";
+import ProposalSentOutsideDialog from "./ProposalSentOutsideDialog.vue";
 import {
   proposalTone,
+  SENT_OUTSIDE,
   type DocumentChain,
   type DocumentStep,
   type Proposal,
@@ -352,10 +378,17 @@ function deliveryStep(action?: string) {
   return authStore.isSalesEmployee && DELIVERY_ACTIONS.has(action || "");
 }
 
+function sentOutside(step: DocumentStep) {
+  return step.skipped?.status === SENT_OUTSIDE;
+}
+
 function opens(step: DocumentStep) {
   // the UAT step holds its own Signed PDF link once the hub has its sign-off, and the
   // header's Open sign-off opens it
   if (step.document_type === "UAT" && uat.data?.signoff) return false;
+  // a proposal sent outside holds the link to the file that went (a draft left on it
+  // stays on the lead's Proposals)
+  if (sentOutside(step)) return false;
   return (
     !!step.name &&
     !(authStore.isSalesEmployee && DELIVERY_TYPES.has(step.document_type))
@@ -553,6 +586,13 @@ function menuFor(step: DocumentStep) {
       icon: "plus",
       onClick: () => createStep(step),
     });
+  // the same people and the same refusals as a skip (the ERP site decides)
+  if (actions.includes("skip") && step.document_type === "Proposal")
+    options.push({
+      label: __("Sent outside the system…"),
+      icon: "send",
+      onClick: () => (sentOutsideOpen.value = true),
+    });
   if (actions.includes("skip"))
     options.push({
       label: __("Skip…"),
@@ -561,7 +601,7 @@ function menuFor(step: DocumentStep) {
     });
   if (actions.includes("bring_back"))
     options.push({
-      label: __("Bring back"),
+      label: sentOutside(step) ? __("Undo sent outside") : __("Bring back"),
       icon: "rotate-ccw",
       onClick: () =>
         bringBack.submit({
@@ -580,6 +620,8 @@ function stepAfter(skipped: DocumentStep[]) {
     .slice(last + 1)
     .find((s) => !s.done && !s.skipped && !s.implicit);
 }
+
+const sentOutsideOpen = ref(false);
 
 const skipping = reactive({
   open: false,

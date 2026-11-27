@@ -73,6 +73,7 @@ sending `acting_user`; each maps 1:1 to `tbo_smart.api.hub_proposals.<same name>
 | `create_project_from_proposal(proposal)` | The hub project from an accepted strategy proposal (Content / Digital Marketing leads), once; see [leads.md](leads.md#content-and-digital-marketing-leads) |
 | `create_document(source, document_type, lead)`, `get_document_chain(lead)` | A step's document (`Quotation`, `Work Order`, `BRD`, `SRS`, `Implementation Plan`; anything else refused here) from the accepted `source`, or from the `lead` when no document before it is accepted (one of the two is required here); the lead's chain. `get_lead` carries the chain too (`documents`) |
 | `skip_steps(lead, document_types, reason, status)`, `bring_back_step(lead, document_type)` | Skip steps (`Skipped`) or mark earlier ones `Not used`, with a reason; bring one back. Refused here before sending: no step, steps not sent as a list, a blank reason or one over 500 characters, another status. The ERP site decides who may and what may be skipped |
+| `mark_sent_outside(lead, filename, content, note)` | A proposal sent outside the system, with the file that went (below, Sent outside the system). Refused here before sending: no file, one over 10 MB, a note over 500 characters. Needs TBO Smart's hub proposals API v3.1 on the ERP site; an older one answers that TBO Smart needs updating |
 | `create_project_from_lead(lead)` | The hub project straight from the lead, once, when no plan makes it (below) |
 | `upload_proposal_image(name, filename, content)`, `use_library_image(name, image)` | Images over 5 MB or not base64 are refused here before anything is sent |
 | `save_template(data)`, `set_default_letter_head(letter_head)` | |
@@ -120,7 +121,14 @@ do with it:
 - **Skip…** asks "Skip BRD?" with what happens in plain words ("The next step, SRS, opens. You can
   bring BRD back later.") and a reason (required, up to 500 characters), then the card moves on.
   A step with the client or decided has no Skip (only a revision changes it).
-- **Bring back** a skipped step: it is a step to do again.
+- **Sent outside the system…** (the Proposal step only, for the same people and with the same
+  refusals as Skip): the dialog below.
+- **Bring back** a skipped step: it is a step to do again. On a proposal sent outside it reads
+  **Undo sent outside**; the file stays on the lead.
+
+A proposal **sent outside** shows a send icon, a *Sent outside* badge in the Sent colour, who,
+when and the note, and a link to the file that went (it opens from the ERP site, like the lead's
+Attachments); the card itself doesn't open (a draft left on it stays on the Proposals card).
 
 A chain started further on (a repeat client straight at the plan) shows the steps before it as
 **Not used**, with "…weren't used: the documents started further on." and **Mark them not used**:
@@ -138,6 +146,22 @@ people who can't send it see its status in words ([project-signoff.md](project-s
 the lead). A UAT with no project (the project skipped) waits with the ERP site's note. A Sales
 Employee's card stops at the client documents (no menu on the Project and UAT). One column on a
 phone; the cards and the ⋯ buttons are 44px targets there.
+
+### Sent outside the system (`ProposalSentOutsideDialog.vue`)
+
+The owner's request of 2026-11-27: a proposal made and sent by hand (Word, email) still counts.
+**Proposal sent** in the new-proposal page's header (a secondary button beside *Generate
+proposal*; its icon only on a phone, the label its accessible name) and **Sent outside the
+system…** on the lead's Proposal step open one dialog: **the proposal that was sent (required)**,
+picked from the lead files' types (PDF, Word, Excel, PowerPoint, CSV, text, pictures or ZIP) up
+to 10 MB and checked before anything is read (`leadFiles.ts`, shared with the Attachments card),
+and an optional **note** (up to 500 characters). **Mark as sent** stays off until a file is
+picked. The ERP site (TBO Smart's `client-documents.md` §9.1) attaches the file to the lead (it
+shows in Attachments), marks the Proposal step **Sent outside**, moves the chain on, moves the
+lead to **Proposal Sent** (so the sales targets and the reports count it as a send) and tells the
+owner. From the new-proposal page the lead opens afterwards; on the lead the chain is read again.
+A refusal (not the owner, a head or a manager; the proposal already with the client; a lost lead)
+shows in the dialog in the ERP site's words.
 
 ### Lead page: Proposals (`LeadProposals.vue`)
 
@@ -532,6 +556,8 @@ list, a non-list refused here, blank recipients dropped); a step made from the l
 (`create_document` with `lead`, one of `source` or `lead` required); skipping and bringing back
 posted with their arguments (the reason trimmed, the steps as compact JSON) and refused here
 without a step, with steps that aren't a list, a blank or over-long reason, or another status; the
-ERP site's reason for a refused skip reaching the page; the project straight from the lead (named
+ERP site's reason for a refused skip reaching the page; a proposal sent outside posted with its
+file and note (the name and the note trimmed, a blank note sent as none) and refused here without
+a file, with one over 10 MB or a note over 500 characters; the project straight from the lead (named
 from the client and the lead type, linked with no plan, made once) and not left behind when the
 ERP site refuses it.

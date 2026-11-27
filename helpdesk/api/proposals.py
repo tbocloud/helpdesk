@@ -12,7 +12,7 @@ from frappe import _
 from frappe.utils import cint, cstr, escape_html
 from frappe.utils.html_utils import sanitize_html
 
-from helpdesk.api.leads import clear_cached_reads
+from helpdesk.api.leads import MAX_PHOTO_BASE64, clear_cached_reads
 from helpdesk.integrations.crm.leads import call, call_if_deployed, require_leads
 
 PROPOSALS = "tbo_smart.api.hub_proposals"
@@ -168,8 +168,37 @@ def skip_steps(
 
 
 @frappe.whitelist(methods=["POST"])
+def mark_sent_outside(
+    lead: str, filename: str, content: str, note: str | None = None
+) -> dict:
+    """The proposal went to the client outside the system (made in Word, sent by email):
+    the file that went (`content` base64) is required. The ERP site attaches it to the
+    lead, shows the Proposal step Sent outside, moves the lead to Proposal Sent and decides
+    who may (as for a skip). Returns the chain."""
+    require_leads()
+    note = cstr(note).strip()
+    if not content:
+        frappe.throw(_("Attach the proposal that was sent."))
+    # the ERP site checks it too; refusing here spares sending a big file there
+    if len(content) > MAX_PHOTO_BASE64:
+        frappe.throw(_("Choose a file of at most 10 MB."))
+    if len(note) > MAX_SKIP_REASON:
+        frappe.throw(_("Keep the note under {0} characters.").format(MAX_SKIP_REASON))
+    chain = proposals(
+        "mark_sent_outside",
+        post=True,
+        lead=lead,
+        filename=cstr(filename).strip()[:140],
+        content=content,
+        note=note or None,
+    )
+    clear_cached_reads()
+    return chain
+
+
+@frappe.whitelist(methods=["POST"])
 def bring_back_step(lead: str, document_type: str) -> dict:
-    """A skipped or not-used step wanted again. Returns the chain."""
+    """A skipped, not-used or sent-outside step wanted again. Returns the chain."""
     require_leads()
     chain = proposals(
         "bring_back_step", post=True, lead=lead, document_type=document_type

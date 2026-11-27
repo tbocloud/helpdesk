@@ -38,6 +38,18 @@
           :label="__('Back to the assistant')"
           @click="chatOpen = true"
         />
+        <!-- made and sent by hand instead (Word, email): record it with the file that went -->
+        <Button
+          v-if="!proposalId && options?.enabled"
+          size="md"
+          :label="__('Proposal sent')"
+          :tooltip="__('Sent outside the system? Attach the file that went')"
+          @click="sentOutsideOpen = true"
+        >
+          <template #[iconSlot]>
+            <LucideSend class="size-4" aria-hidden="true" />
+          </template>
+        </Button>
         <!-- Generate stays a normal button; while something required is empty this says what,
              and the button (or the hint) takes presales to the first missing field -->
         <button
@@ -246,6 +258,12 @@
         />
       </div>
     </div>
+    <ProposalSentOutsideDialog
+      v-if="!proposalId"
+      v-model:open="sentOutsideOpen"
+      :lead-id="leadId"
+      @saved="router.push({ name: 'Lead', params: { leadId } })"
+    />
   </div>
 </template>
 
@@ -262,6 +280,7 @@ import LucideArrowLeft from "~icons/lucide/arrow-left";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideFileText from "~icons/lucide/file-text";
+import LucideSend from "~icons/lucide/send";
 import ClientProfileForm from "./ClientProfileForm.vue";
 import ProposalChat, {
   type ChatLine,
@@ -271,6 +290,7 @@ import ProposalImplementation from "./ProposalImplementation.vue";
 import ProposalPaymentTermsField from "./ProposalPaymentTermsField.vue";
 import ProposalPriceEstimate from "./ProposalPriceEstimate.vue";
 import ProposalScopingForm from "./ProposalScopingForm.vue";
+import ProposalSentOutsideDialog from "./ProposalSentOutsideDialog.vue";
 import ProposalTimelineField from "./ProposalTimelineField.vue";
 import {
   emptyProfile,
@@ -300,6 +320,7 @@ const MAIN_TEMPLATE = "ERPNext Implementation";
 const { isMobileView } = useScreenSize();
 const iconSlot = computed(() => (isMobileView.value ? "icon" : "prefix"));
 const router = useRouter();
+const sentOutsideOpen = ref(false);
 const reqId = `new-proposal-req-${useId()}`;
 const formId = `new-proposal-form-${useId()}`;
 const profileId = `new-proposal-profile-${useId()}`;
