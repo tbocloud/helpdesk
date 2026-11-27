@@ -124,6 +124,8 @@ export interface Questionnaire {
 
 /** Skipped: this client doesn't need the step. Not used: the chain started after it. */
 export type StepSkipStatus = "Skipped" | "Not used";
+/** a proposal made and sent by hand, recorded with the file that went */
+export const SENT_OUTSIDE = "Sent outside";
 
 /** What the signed-in person may do with a step (the ERP site decides). */
 export type StepAction = "open" | "create" | "skip" | "bring_back";
@@ -134,8 +136,13 @@ export interface DocumentStep {
   label: string;
   name: string | null;
   title: string | null;
-  /** the step's status: its document's, or Skipped / Not used */
-  status: ProposalStatus | StepSkipStatus | "Created" | null;
+  /** the step's status: its document's, or Skipped / Not used / Sent outside */
+  status:
+    | ProposalStatus
+    | StepSkipStatus
+    | typeof SENT_OUTSIDE
+    | "Created"
+    | null;
   status_label: string | null;
   /** the document's own status, whatever the step shows */
   document_status?: ProposalStatus | null;
@@ -145,13 +152,16 @@ export interface DocumentStep {
   quotation_status: string | null;
   /** the project's link (the Project step) */
   url?: string | null;
-  /** skipped or marked not used: who, when and why */
+  /** skipped, marked not used or sent outside: who, when and why */
   skipped?: null | {
-    status: StepSkipStatus;
+    status: StepSkipStatus | typeof SENT_OUTSIDE;
     reason: string;
     by: string;
     by_name: string | null;
     on: string;
+    /** sent outside: the lead's file that went, while it is still on the lead */
+    file?: string | null;
+    file_name?: string | null;
   };
   /** shown Not used because a later step started; nothing is recorded yet */
   implicit?: boolean;

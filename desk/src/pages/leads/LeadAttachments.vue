@@ -24,7 +24,7 @@
         <input
           ref="picker"
           type="file"
-          :accept="ACCEPT"
+          :accept="LEAD_FILE_ACCEPT"
           multiple
           class="hidden"
           tabindex="-1"
@@ -214,6 +214,12 @@ import LucidePaperclip from "~icons/lucide/paperclip";
 import LucideTrash2 from "~icons/lucide/trash-2";
 import LucideX from "~icons/lucide/x";
 import { fileIcon, formatBytes } from "../tasky/projectFiles";
+import {
+  attachable,
+  LEAD_FILE_ACCEPT,
+  LEAD_FILE_LIMIT,
+  leadFileUrl,
+} from "./leadFiles";
 import { readBase64 } from "./place";
 
 /** One file of a lead as get_lead_files lists it. */
@@ -233,29 +239,6 @@ interface QueuedUpload {
   waiting: boolean;
   error?: string;
 }
-
-// the ERP site's limits (hub-leads-api.md §2.34); it checks them again
-const LEAD_FILE_LIMIT = 50;
-const MAX_BYTES = 10 * 1024 * 1024;
-const EXTENSIONS = [
-  ".pdf",
-  ".doc",
-  ".docx",
-  ".xls",
-  ".xlsx",
-  ".ppt",
-  ".pptx",
-  ".odt",
-  ".ods",
-  ".csv",
-  ".txt",
-  ".png",
-  ".jpg",
-  ".jpeg",
-  ".webp",
-  ".zip",
-];
-const ACCEPT = EXTENSIONS.join(",");
 
 const props = defineProps<{ leadId: string; canWrite: boolean }>();
 
@@ -292,16 +275,8 @@ watch(
 );
 
 function fileUrl(lead: string, file: LeadFile) {
-  const params = new URLSearchParams({
-    lead,
-    file: file.name,
-    filename: file.file_name,
-  });
-  return `/api/method/helpdesk.api.leads.lead_file?${params}`;
+  return leadFileUrl(lead, file.name, file.file_name);
 }
-
-const extension = (name: string) =>
-  (name.match(/\.[^.]+$/)?.[0] || "").toLowerCase();
 
 function onPick(event: Event) {
   const input = event.target as HTMLInputElement;
@@ -310,7 +285,7 @@ function onPick(event: Event) {
   const refused: string[] = [];
   const room = LEAD_FILE_LIMIT - files.value.length - queue.value.length;
   const accepted = chosen.filter((f) => {
-    const ok = EXTENSIONS.includes(extension(f.name)) && f.size <= MAX_BYTES;
+    const ok = attachable(f);
     if (!ok) refused.push(f.name);
     return ok;
   });

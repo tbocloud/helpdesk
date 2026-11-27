@@ -378,6 +378,57 @@ class TestProposals(FrappeTestCase):
             ],
         )
 
+    def test_a_proposal_sent_outside_goes_to_the_erp_site_with_its_file(self):
+        chain = {"steps": [], "next": None}
+        self.crm.lead_answers["mark_sent_outside"] = chain
+        self.assertEqual(
+            proposals_api.mark_sent_outside(
+                "CRM-LEAD-1", "  Malabar proposal.pdf ", "JVBERi0=", "  By email  "
+            ),
+            chain,
+        )
+        proposals_api.mark_sent_outside("CRM-LEAD-1", "Malabar.pdf", "JVBERi0=")
+        # refused here before anything is sent: no file, one too big, a note too long
+        for bad in (
+            lambda: proposals_api.mark_sent_outside("CRM-LEAD-1", "a.pdf", ""),
+            lambda: proposals_api.mark_sent_outside(
+                "CRM-LEAD-1", "a.pdf", "x" * (14 * 1024 * 1024 + 1)
+            ),
+            lambda: proposals_api.mark_sent_outside(
+                "CRM-LEAD-1", "a.pdf", "JVBERi0=", "x" * 501
+            ),
+        ):
+            with self.assertRaises(frappe.ValidationError):
+                bad()
+        calls = [c for c in self.crm.lead_calls if c[0] != "get_proposal_options"]
+        self.assertEqual(
+            calls,
+            [
+                (
+                    "mark_sent_outside",
+                    True,
+                    {
+                        "lead": "CRM-LEAD-1",
+                        "filename": "Malabar proposal.pdf",
+                        "content": "JVBERi0=",
+                        "note": "By email",
+                        "acting_user": BDE,
+                    },
+                ),
+                (
+                    "mark_sent_outside",
+                    True,
+                    {
+                        "lead": "CRM-LEAD-1",
+                        "filename": "Malabar.pdf",
+                        "content": "JVBERi0=",
+                        "note": None,
+                        "acting_user": BDE,
+                    },
+                ),
+            ],
+        )
+
     def test_the_erp_sites_reason_for_a_refused_skip_reaches_the_page(self):
         self.crm.lead_answers["skip_steps"] = LeadsError(
             "BRD is Sent. It can't be skipped, only revised."
