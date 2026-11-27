@@ -7,6 +7,7 @@
       class="lg:col-span-3"
       accent="pink"
       :icon="LucideTarget"
+      :to="wonLink"
       :title="target ? __('Won revenue vs target') : __('Won revenue')"
     >
       <template v-if="target" #actions>
@@ -118,6 +119,7 @@
       accent="amber"
       :icon="LucideTrophy"
       :title="__('Top revenue by salesperson')"
+      :to="wonLink"
     >
       <template #actions>
         <span class="cc-pill rounded-md px-2 py-0.5 text-xs font-semibold">{{
@@ -148,7 +150,7 @@
           <button
             v-if="spot.entry"
             type="button"
-            class="flex w-full min-w-0 flex-col items-center gap-1 rounded-xl px-1 py-2 hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
+            class="relative z-[1] flex w-full min-w-0 flex-col items-center gap-1 rounded-xl px-1 py-2 hover:bg-surface-gray-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
             :class="spot.place === 1 ? '' : 'mt-6'"
             :aria-label="
               __(
@@ -217,10 +219,12 @@
 
     <!-- the period's money in four small cards -->
     <div class="grid grid-cols-2 content-start gap-4 lg:col-span-3">
-      <div
+      <component
+        :is="mini.to ? RouterLink : 'div'"
         v-for="mini in minis"
         :key="mini.label"
-        class="cc-card flex min-w-0 flex-col gap-1 p-3"
+        v-bind="mini.to ? { to: mini.to } : {}"
+        class="cc-card flex min-w-0 flex-col gap-1 p-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-highlight"
         :style="accentStyle(mini.accent)"
       >
         <span
@@ -253,7 +257,7 @@
         <span v-else-if="mini.sub" class="text-[11px] text-ink-gray-6">{{
           mini.sub
         }}</span>
-      </div>
+      </component>
       <p v-if="moneyNote" class="col-span-2 text-xs text-ink-gray-6">
         {{ moneyNote }}
       </p>
@@ -266,6 +270,7 @@ import PersonAvatar from "@/components/PersonAvatar.vue";
 import { fullAmount, shortAmount } from "@/pages/leads/business/businessFormat";
 import { __ } from "@/translation";
 import { computed, type Component } from "vue";
+import { RouterLink, type RouteLocationRaw } from "vue-router";
 import LucideArrowDown from "~icons/lucide/arrow-down";
 import LucideArrowUp from "~icons/lucide/arrow-up";
 import LucideCalendar from "~icons/lucide/calendar";
@@ -307,6 +312,10 @@ const props = defineProps<{
   podium: PodiumPerson[];
   /** false with one person picked: there is no podium to show */
   showsPodium: boolean;
+  /** the won leads behind the revenue */
+  wonLink: RouteLocationRaw;
+  /** the payments behind collected and still to collect */
+  moneyLink: RouteLocationRaw;
 }>();
 const emit = defineEmits<{ open: [user: string] }>();
 
@@ -358,6 +367,7 @@ const minis = computed(() => {
     accent: Accent;
     icon: Component;
     change?: { up: boolean; text: string } | null;
+    to?: RouteLocationRaw;
   }[] = [
     {
       label: props.periodLabel,
@@ -367,6 +377,7 @@ const minis = computed(() => {
       icon: LucideCalendar,
       change: changeOf(props.wonValue, before?.value, true),
       sub: before ? __("same as before") : __("won"),
+      to: props.wonLink,
     },
     {
       label: __("Total won"),
@@ -375,6 +386,7 @@ const minis = computed(() => {
       icon: LucideTrophy,
       change: changeOf(props.wonCount, before?.won, false),
       sub: before ? __("same as before") : undefined,
+      to: props.wonLink,
     },
   ];
   if (props.money)
@@ -386,6 +398,7 @@ const minis = computed(() => {
         accent: "cyan",
         icon: LucideCircleCheck,
         sub: __("received in the period"),
+        to: props.moneyLink,
       },
       {
         label: __("To collect"),
@@ -394,6 +407,7 @@ const minis = computed(() => {
         accent: "red",
         icon: LucideWallet,
         sub: __("outstanding now"),
+        to: props.moneyLink,
       }
     );
   return list;

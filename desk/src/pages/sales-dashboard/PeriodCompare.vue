@@ -24,13 +24,18 @@
         </tr>
       </thead>
       <tbody>
+        <!-- the row's link covers it: a click anywhere opens this period's leads -->
         <tr
           v-for="row in rows"
           :key="row.label"
-          class="border-t border-outline-gray-1"
+          class="relative border-t border-outline-gray-1 hover:bg-surface-gray-1"
         >
           <th scope="row" class="py-2.5 text-left font-normal text-ink-gray-7">
-            {{ row.label }}
+            <RouterLink
+              :to="link(row.metric)"
+              class="after:absolute after:inset-0 after:rounded focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-highlight"
+              >{{ row.label }}</RouterLink
+            >
           </th>
           <td
             class="py-2.5 text-right font-mono font-semibold tabular-nums text-ink-gray-9"
@@ -64,6 +69,7 @@
 import { fullAmount, shortAmount } from "@/pages/leads/business/businessFormat";
 import { __ } from "@/translation";
 import { computed } from "vue";
+import { RouterLink, type RouteLocationRaw } from "vue-router";
 import LucideArrowDownRight from "~icons/lucide/arrow-down-right";
 import LucideArrowUpRight from "~icons/lucide/arrow-up-right";
 import LucideChartLine from "~icons/lucide/chart-line";
@@ -88,6 +94,8 @@ const props = defineProps<{
   /** the days before, in words */
   range: string;
   currency: string;
+  /** the Leads list behind a figure, for the period now */
+  link: (metric: string) => RouteLocationRaw;
 }>();
 
 // more is better for every figure here: up green, down red, each with its arrow
@@ -97,13 +105,18 @@ const CHANGE_LOOK: Record<string, { accent?: Accent; icon: unknown }> = {
   same: { icon: LucideMinus },
 };
 
-const FIGURES: { key: keyof Figures; label: string; money?: boolean }[] = [
-  { key: "new", label: __("New leads") },
-  { key: "contacted", label: __("Contacted") },
-  { key: "meetings", label: __("Meetings held") },
-  { key: "quotations_sent", label: __("Proposals sent") },
-  { key: "won", label: __("Won") },
-  { key: "won_value", label: __("Won value"), money: true },
+const FIGURES: {
+  key: keyof Figures;
+  label: string;
+  metric: string;
+  money?: boolean;
+}[] = [
+  { key: "new", label: __("New leads"), metric: "new" },
+  { key: "contacted", label: __("Contacted"), metric: "contacted" },
+  { key: "meetings", label: __("Meetings held"), metric: "meetings" },
+  { key: "quotations_sent", label: __("Proposals sent"), metric: "quotations" },
+  { key: "won", label: __("Won"), metric: "won" },
+  { key: "won_value", label: __("Won value"), metric: "won", money: true },
 ];
 
 function changeOf(now: number, before: number) {
@@ -124,6 +137,7 @@ const rows = computed(() =>
         : value.toLocaleString();
     return {
       label: figure.label,
+      metric: figure.metric,
       now: show(now),
       before: show(before),
       title: figure.money ? fullAmount(now, props.currency) : undefined,
