@@ -708,6 +708,30 @@ class TestDelegates(FollowUpCase):
             frappe.db.exists("HD Follow Up Handoff", {"reference_name": task})
         )
 
+    def test_the_settings_screen_saves_and_shows_the_delegate(self):
+        saved = call_as_user(
+            MANAGER[0],
+            "helpdesk.api.follow_ups.save_settings",
+            values={
+                "delegates": [{"user": MANAGER[0], "delegate": COORD[0]}],
+                "delegate_grace_days": 0,
+            },
+        )
+        self.assertEqual(
+            [(r["user"], r["delegate"]) for r in saved["delegates"]],
+            [(MANAGER[0], COORD[0])],
+        )
+        loaded = call_as_user(MANAGER[0], "helpdesk.api.follow_ups.get_settings")
+        self.assertEqual(loaded["settings"]["delegates"][0]["delegate"], COORD[0])
+        # 0 would hand everything straight back, so 2 working days are used
+        self.assertEqual(follow_ups.grace_days(follow_ups.get_settings()), 2)
+        mine = call_as_user(MANAGER[0], "helpdesk.api.follow_ups.get_my_follow_ups")
+        self.assertEqual(
+            (mine["delegate"]["user"], mine["delegate"]["days"]), (COORD[0], 2)
+        )
+        theirs = call_as_user(COORD[0], "helpdesk.api.follow_ups.get_my_follow_ups")
+        self.assertIsNone(theirs["delegate"])
+
     def test_nobody_is_their_own_delegate(self):
         with self.assertRaises(frappe.ValidationError):
             set_follow_up_settings(

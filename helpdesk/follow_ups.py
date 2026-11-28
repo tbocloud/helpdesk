@@ -347,6 +347,13 @@ def evaluate(ctx: Context | None = None) -> list[FollowUp]:
 # --- delegates ---------------------------------------------------------------
 
 HANDOFF = "HD Follow Up Handoff"
+# used when the setting is empty or 0 (0 would hand everything straight back)
+DEFAULT_GRACE_DAYS = 2
+
+
+def grace_days(settings) -> int:
+    """Working days a delegate has before the person hears about it too."""
+    return cint(settings.get("delegate_grace_days")) or DEFAULT_GRACE_DAYS
 
 
 def delegates(settings) -> dict[str, str]:
@@ -383,7 +390,7 @@ def route_to_delegates(follow_ups: list[FollowUp], ctx: Context) -> list[FollowU
     pairs = delegates(ctx.settings)
     if not pairs:
         return follow_ups
-    grace = cint(ctx.settings.get("delegate_grace_days"))
+    grace = grace_days(ctx.settings)
     since = handoffs(pairs)
     for f in follow_ups:
         recipients = []
