@@ -5579,6 +5579,22 @@ def make_credentials(
     )
 
 
+def make_access_entry(
+    project: str,
+    label: str = "Backend repository",
+    kind: str = "Git repository",
+    password: str | None = None,
+    user: str = "Administrator",
+    **values,
+) -> dict:
+    """Adds one access entry (repository, URL, login...) to `project` through the
+    project access API as `user`, and returns it as the page sees it (no password)."""
+    from helpdesk.api.project_access import save_access_entry
+
+    entry = {"label": label, "kind": kind, "password": password, **values}
+    return run_as_user(user, lambda: save_access_entry(project, entry))
+
+
 def make_accepted_proposal(**values) -> dict:
     """What the ERP site's accepted strategy proposal endpoint answers (the contract
     helpdesk.api.proposals.accepted_proposal reads), with `values` overriding."""

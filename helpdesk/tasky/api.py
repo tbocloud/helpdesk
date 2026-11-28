@@ -26,6 +26,7 @@ from helpdesk.tasky.permissions import (
     can_manage_project,
     can_move_task,
     can_rate_task,
+    can_see_project_access,
     check_can_take_content_task,
     get_assigners,
     get_creators,
@@ -2234,6 +2235,8 @@ def get_project_detail(project: str):
         "can_change_lead": is_project_owner(doc.name),
         # shows the Credentials tab (docs/client-credentials.md)
         "can_handle_credentials": can_handle_credentials(doc.name),
+        # shows the Access tab; passwords there need can_handle_project_access
+        "can_see_project_access": can_see_project_access(doc.name),
         "project_lead": doc.project_lead,
         "project_lead_name": (
             frappe.db.get_value("User", doc.project_lead, "full_name")

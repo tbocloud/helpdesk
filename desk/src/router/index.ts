@@ -389,6 +389,12 @@ const portalRoutes = [
     props: true,
   },
   {
+    path: "/projects/:projectId/access",
+    name: "TaskyAccess",
+    component: () => import("@/pages/tasky/ProjectAccess.vue"),
+    props: true,
+  },
+  {
     path: "/projects/:projectId/meta",
     name: "TaskyMeta",
     component: () => import("@/pages/tasky/ProjectMeta.vue"),
@@ -495,6 +501,12 @@ const portalRoutes = [
     name: "TeamWorkload",
     component: () => import("@/pages/work/Team.vue"),
     beforeEnter: () => useAuthStore().canSeeOverview || { name: "Home" },
+  },
+  {
+    path: "/handover",
+    name: "EmployeeHandover",
+    component: () => import("@/pages/work/EmployeeHandover.vue"),
+    beforeEnter: () => useAuthStore().canHandOver || { name: "Home" },
   },
   {
     path: "/adoption",

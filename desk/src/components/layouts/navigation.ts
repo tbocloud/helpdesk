@@ -42,6 +42,7 @@ import LucideFileChartColumn from "~icons/lucide/file-chart-column";
 import LucideBuilding2 from "~icons/lucide/building-2";
 import LucideChartPie from "~icons/lucide/chart-pie";
 import LucideGlobe from "~icons/lucide/globe";
+import LucideUserMinus from "~icons/lucide/user-minus";
 
 /** A page in the sidebar. The flags are the role rules; see `isNavItemVisible`. */
 export interface NavItem {
@@ -69,6 +70,8 @@ export interface NavItem {
   projectManagerOnly?: boolean;
   overviewOnly?: boolean;
   adoptionOnly?: boolean;
+  /** Handover: admins, Project Managers and department heads */
+  handOverOnly?: boolean;
   customerReportOnly?: boolean;
   /** Business overview and Division reports: Super Admins and division managers */
   divisionOverviewOnly?: boolean;
@@ -252,6 +255,13 @@ export const agentNavAreas: NavArea[] = [
             icon: LucideActivity,
             to: "Adoption",
             adoptionOnly: true,
+          },
+          {
+            id: "handover",
+            label: __("Handover"),
+            icon: LucideUserMinus,
+            to: "EmployeeHandover",
+            handOverOnly: true,
           },
         ],
       },

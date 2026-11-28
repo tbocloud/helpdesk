@@ -29,6 +29,7 @@ from helpdesk.sales_targets import (
     has_own_targets,
     hides_todays_calls,
 )
+from helpdesk.tasky.permissions import can_hand_over
 from helpdesk.tasky.permissions import is_project_manager as tasky_is_project_manager
 from helpdesk.utils import agent_only, get_agent_name, get_agents_team
 from helpdesk.utils import is_agent as _is_agent
@@ -102,6 +103,8 @@ def get_user():
         "can_see_overview": can_see_overview(current_user)
         and not is_content_only(current_user),
         "can_see_adoption": can_see_adoption(current_user),
+        # the Handover page (helpdesk.api.employee_handover)
+        "can_hand_over": can_hand_over(current_user),
         "is_content_team": is_content_only(current_user),
         "is_dm_head": is_dm_head(current_user),
         "can_edit_content": can_edit_content(current_user),

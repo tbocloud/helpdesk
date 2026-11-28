@@ -1,0 +1,63 @@
+{
+	"actions": [],
+	"creation": "2026-11-28 12:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-11-28 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"owner": "Administrator",
+	"sort_field": "creation",
+	"sort_order": "DESC",
+	"states": [],
+	"name": "HD Employee Handover Project",
+	"istable": 1,
+	"editable_grid": 1,
+	"permissions": [],
+	"fields": [
+		{
+			"fieldname": "project",
+			"fieldtype": "Link",
+			"label": "Project",
+			"options": "Project",
+			"reqd": 1,
+			"in_list_view": 1
+		},
+		{
+			"fieldname": "project_role",
+			"fieldtype": "Data",
+			"label": "Their Role",
+			"read_only": 1,
+			"in_list_view": 1
+		},
+		{
+			"fieldname": "new_owner",
+			"fieldtype": "Link",
+			"label": "Taken Over By",
+			"options": "User",
+			"reqd": 1,
+			"in_list_view": 1
+		},
+		{
+			"fieldname": "note",
+			"fieldtype": "Small Text",
+			"label": "Handover Note",
+			"in_list_view": 1
+		},
+		{
+			"fieldname": "tasks_moved",
+			"fieldtype": "Int",
+			"label": "Tasks Moved",
+			"read_only": 1
+		}
+	],
+	"field_order": [
+		"project",
+		"project_role",
+		"new_owner",
+		"note",
+		"tasks_moved"
+	]
+}
