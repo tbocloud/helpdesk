@@ -24,7 +24,15 @@ from helpdesk.test_utils import (
     saved_due,
     set_content_settings,
 )
-from helpdesk.work_calendar import previous_working_day
+from helpdesk.work_calendar import due_on_working_day, previous_working_day
+
+
+def content_due(day):
+    """Where a content task due on `day` lands: on a day off, the working day before it,
+    unless that has passed already (work_calendar.due_on_working_day)."""
+    moved = due_on_working_day(day, content=True)
+    return moved["due"] if moved else getdate(day)
+
 
 CUSTOMER = "Content Tasks Traders"
 WRITER = ("writer.ct@content-tasks.example", "Faris Writer")
@@ -214,7 +222,9 @@ class TestTasksFromPosts(ContentTaskCase):
         today = getdate()
         self.assertEqual(getdate(tasks["Writer"].exp_end_date), today)
         self.assertEqual(getdate(tasks["Designer"].exp_end_date), today)
-        self.assertEqual(getdate(tasks["Marketer"].exp_end_date), add_days(today, 1))
+        self.assertEqual(
+            getdate(tasks["Marketer"].exp_end_date), content_due(add_days(today, 1))
+        )
 
     def test_a_missed_post_keeps_its_publish_date(self):
         post = self.post(publish_on=self.at(-1))
@@ -247,7 +257,7 @@ class TestTasksFromPosts(ContentTaskCase):
         tasks = self.tasks(post)
         self.assertEqual(getdate(tasks["Writer"].exp_end_date), getdate())
         self.assertEqual(
-            getdate(tasks["Marketer"].exp_end_date), add_days(getdate(), 1)
+            getdate(tasks["Marketer"].exp_end_date), content_due(add_days(getdate(), 1))
         )
 
     def late_writer(self, post):
@@ -570,7 +580,7 @@ class TestSeveralPeopleAndVideoEditor(ContentTaskCase):
         self.assertEqual(set(tasks), {"Writer", "Designer", "Video Editor", "Marketer"})
         self.assertEqual(
             getdate(tasks["Video Editor"].exp_end_date),
-            add_days(getdate(self.publish), -2),
+            content_due(add_days(getdate(self.publish), -2)),
         )
         self.assertEqual(self.assignees(tasks["Video Editor"]), [EDITOR[0]])
 

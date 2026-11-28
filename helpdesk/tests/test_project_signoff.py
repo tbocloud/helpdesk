@@ -45,6 +45,7 @@ from helpdesk.test_utils import (
     run_as_user,
     signoff_session,
 )
+from helpdesk.work_calendar import next_working_day
 
 CUSTOMER = "Malabar Spices Trading"
 SIGNATORY = "accounts.head@malabar-spices.example"
@@ -399,7 +400,8 @@ class TestProjectSignoff(FrappeTestCase):
         self.assertEqual(doc.items[0].clarification_task, task)
         self.assertEqual(
             frappe.db.get_value("Task", task, ["priority", "exp_end_date"]),
-            ("Urgent", getdate(add_days(nowdate(), 1))),
+            # tomorrow, or the first working day after it (a task is never due on a day off)
+            ("Urgent", next_working_day(add_days(nowdate(), 1))),
         )
 
     def test_without_questions_it_is_accepted_by_reply_alone(self):

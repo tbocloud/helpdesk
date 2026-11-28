@@ -27,7 +27,7 @@ from helpdesk.test_utils import (
     use_date_format,
 )
 from helpdesk.utils import add_assignment, remove_assignment
-from helpdesk.work_calendar import previous_working_day
+from helpdesk.work_calendar import next_working_day, previous_working_day
 
 CUSTOMER = "Bayt Al Khaleej Foods"
 PM = ("leena.varghese@task-activity.example", "Leena Varghese")
@@ -132,7 +132,14 @@ class TestTaskActivity(TaskActivityCase):
 
     def test_a_due_date_moved_later_shows_once_with_its_reason(self):
         old_due = str(frappe.db.get_value("Task", self.task, "exp_end_date"))
-        new_due = add_days(old_due, 3)
+        # a working day: a due date on a day off would be moved again, a second history item
+        new_due = str(next_working_day(add_days(old_due, 3)))
+        # a task made due on a day off already has a note on its move; only new ones count
+        earlier = {
+            i["text"]
+            for i in get_task_activity_as(DEV[0], self.task)
+            if i["kind"] == "note"
+        }
         call_as_user(
             LEAD[0],
             "helpdesk.tasky.api.update_task_plan",
@@ -154,7 +161,7 @@ class TestTaskActivity(TaskActivityCase):
 
         items = get_task_activity_as(DEV[0], self.task)
         self.assertEqual([i for i in items if i["kind"] == "due"], [])
-        notes = [i for i in items if i["kind"] == "note"]
+        notes = [i for i in items if i["kind"] == "note" and i["text"] not in earlier]
         self.assertEqual(len(notes), 1)
         self.assertTrue(notes[0]["text"].startswith("Due date moved"))
         self.assertIn("Client sent the trial balance late", notes[0]["text"])
