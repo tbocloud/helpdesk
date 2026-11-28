@@ -691,6 +691,8 @@ class TestDelegates(FollowUpCase):
             delegate_grace_days=2,
         )
         ctx = self.context()
+        # left from a delegate that was set the other way round, then corrected
+        make_follow_up_handoff(COORD[0], "Task", task, WEDNESDAY)
         for _run in range(2):
             follow_ups.record_handoffs(follow_ups.evaluate(ctx), ctx)
         handoffs = frappe.get_all(
@@ -702,6 +704,7 @@ class TestDelegates(FollowUpCase):
             [(h.user, str(h.handed_on)) for h in handoffs],
             [(MANAGER[0], str(ctx.today))],
         )
+        self.assertFalse(frappe.db.exists("HD Follow Up Handoff", {"user": COORD[0]}))
         frappe.db.set_value("Task", task, "status", "Completed")
         follow_ups.record_handoffs(follow_ups.evaluate(ctx), ctx)
         self.assertFalse(
