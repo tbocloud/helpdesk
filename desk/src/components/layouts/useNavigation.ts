@@ -111,6 +111,7 @@ export function useNavigation() {
       (!item.projectManagerOnly || authStore.isProjectManager) &&
       (!item.overviewOnly || authStore.canSeeOverview) &&
       (!item.adoptionOnly || authStore.canSeeAdoption) &&
+      (!item.handOverOnly || authStore.canHandOver) &&
       (!item.customerReportOnly || authStore.canSeeCustomerReport) &&
       (!item.divisionOverviewOnly || authStore.canViewDivisionOverview) &&
       (!item.salesHeadOnly || authStore.canAssignSalesTargets) &&

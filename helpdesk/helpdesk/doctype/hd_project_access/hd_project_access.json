@@ -1,0 +1,116 @@
+{
+	"actions": [],
+	"creation": "2026-11-28 12:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-11-28 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"owner": "Administrator",
+	"sort_field": "creation",
+	"sort_order": "DESC",
+	"states": [],
+	"name": "HD Project Access",
+	"autoname": "hash",
+	"track_changes": 1,
+	"title_field": "label",
+	"description": "One thing a project runs on and how to get into it: a Git repository, a backend or frontend URL, an app, a server, or a login, with its notes. Shown on the project's Access tab; the password is encrypted and every view of it is logged (docs/project-access.md).",
+	"permissions": [
+		{
+			"role": "System Manager",
+			"read": 1,
+			"write": 1,
+			"create": 1,
+			"delete": 1,
+			"report": 1,
+			"export": 1,
+			"share": 1
+		}
+	],
+	"fields": [
+		{
+			"fieldname": "project",
+			"fieldtype": "Link",
+			"label": "Project",
+			"options": "Project",
+			"reqd": 1,
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"search_index": 1
+		},
+		{
+			"fieldname": "kind",
+			"fieldtype": "Select",
+			"label": "Kind",
+			"reqd": 1,
+			"in_list_view": 1,
+			"default": "Git repository",
+			"options": "Git repository\nBackend / ERP site\nFrontend / website\nMobile app\nServer / hosting\nDatabase\nAPI / integration\nLogin\nOther"
+		},
+		{
+			"fieldname": "environment",
+			"fieldtype": "Select",
+			"label": "Environment",
+			"default": "Live",
+			"options": "Live\nStaging\nDemo\nDevelopment"
+		},
+		{
+			"fieldname": "label",
+			"fieldtype": "Data",
+			"label": "Name",
+			"reqd": 1,
+			"in_list_view": 1
+		},
+		{
+			"fieldname": "column_break_1",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "url",
+			"fieldtype": "Data",
+			"label": "URL"
+		},
+		{
+			"fieldname": "username",
+			"fieldtype": "Data",
+			"label": "Username"
+		},
+		{
+			"fieldname": "password",
+			"fieldtype": "Password",
+			"label": "Password",
+			"length": 1000
+		},
+		{
+			"fieldname": "notes_section",
+			"fieldtype": "Section Break"
+		},
+		{
+			"fieldname": "notes",
+			"fieldtype": "Small Text",
+			"label": "Notes"
+		},
+		{
+			"fieldname": "added_by",
+			"fieldtype": "Link",
+			"label": "Added By",
+			"options": "User",
+			"read_only": 1
+		}
+	],
+	"field_order": [
+		"project",
+		"kind",
+		"environment",
+		"label",
+		"column_break_1",
+		"url",
+		"username",
+		"password",
+		"notes_section",
+		"notes",
+		"added_by"
+	]
+}

@@ -44,6 +44,10 @@ export const useAuthStore = defineStore("auth", () => {
     () => !!user__.value.can_see_overview
   );
   // the Adoption page: managers and project coordinators (helpdesk.adoption)
+  // hands a leaving person's work over (helpdesk.api.employee_handover)
+  const canHandOver: ComputedRef<boolean> = computed(
+    () => !!user__.value.can_hand_over
+  );
   const canSeeAdoption: ComputedRef<boolean> = computed(
     () => !!user__.value.can_see_adoption
   );
@@ -251,6 +255,7 @@ export const useAuthStore = defineStore("auth", () => {
     isProjectManager,
     canSeeOverview,
     canSeeAdoption,
+    canHandOver,
     canSeeCustomerReport,
     canSetTicketOwner,
     isContentTeam,

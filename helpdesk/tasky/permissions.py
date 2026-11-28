@@ -59,6 +59,8 @@ PROJECT_MANAGER_ROLE = "Project Manager"
 MANAGER_PROJECT_ROLE = "Project Manager"
 # Value of Project User.custom_role that lets a member run that project's tasks
 COORDINATOR_PROJECT_ROLE = "Project Coordinator"
+# members with these project roles see and change the project's access entries
+DEVELOPER_PROJECT_ROLES = ("Developer", "DevOps Engineer")
 # see every task of the content calendar projects and of CONTENT_DEPARTMENT's projects
 CONTENT_LEAD_ROLES = (DM_HEAD_ROLE, DM_COORDINATOR_ROLE)
 
@@ -266,6 +268,44 @@ def can_handle_credentials(project: str | None, user: str | None = None) -> bool
         "Project", project, ["project_lead", "custom_department"]
     ) or (None, None)
     return lead == user or (bool(department) and user in department_heads(department))
+
+
+def can_see_project_access(project: str | None, user: str | None = None) -> bool:
+    """Who sees a project's Access tab (docs/project-access.md): anyone who may read the
+    project. They see links, usernames and notes; passwords need
+    `can_handle_project_access`. Never a Sales Employee."""
+    user = user or frappe.session.user
+    if not project or is_sales_employee(user):
+        return False
+    doc = frappe.get_doc("Project", project)
+    return project_has_permission(doc, "read", user)
+
+
+def can_handle_project_access(project: str | None, user: str | None = None) -> bool:
+    """Who adds, changes and removes a project's access entries and sees their passwords:
+    the people who handle its client credentials, plus its developers (members with a
+    role in DEVELOPER_PROJECT_ROLES)."""
+    user = user or frappe.session.user
+    if can_handle_credentials(project, user):
+        return True
+    return bool(project) and bool(
+        frappe.db.exists(
+            "Project User",
+            {
+                "parenttype": "Project",
+                "parent": project,
+                "user": user,
+                "custom_role": ("in", DEVELOPER_PROJECT_ROLES),
+            },
+        )
+    )
+
+
+def can_hand_over(user: str | None = None) -> bool:
+    """Who hands a leaving person's work over: admins, Project Managers and department
+    heads."""
+    user = user or frappe.session.user
+    return is_project_manager(user) or can_manage_team(user)
 
 
 def is_project_coordinator(project: str | None, user: str | None = None) -> bool:

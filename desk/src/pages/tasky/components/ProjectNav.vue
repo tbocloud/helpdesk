@@ -185,6 +185,7 @@ import LucideCoins from "~icons/lucide/coins";
 import LucideEyeOff from "~icons/lucide/eye-off";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideRepeat from "~icons/lucide/repeat";
+import LucideServer from "~icons/lucide/server";
 import LucideMegaphone from "~icons/lucide/megaphone";
 import LucideShare2 from "~icons/lucide/share-2";
 import LucideUserStar from "~icons/lucide/user-star";
@@ -221,6 +222,13 @@ const tabs = [
   { label: "Overdue", to: "TaskyOverdue", icon: LucideAlarmClock },
   { label: "Recurring", to: "TaskyRecurring", icon: LucideRepeat },
   { label: "Files", to: "TaskyFiles", icon: LucidePaperclip },
+  {
+    label: "Access",
+    to: "TaskyAccess",
+    icon: LucideServer,
+    // repositories, URLs and logins; anyone on the project, passwords for a few
+    needs: "can_see_project_access",
+  },
   {
     label: "Credentials",
     to: "TaskyCredentials",
