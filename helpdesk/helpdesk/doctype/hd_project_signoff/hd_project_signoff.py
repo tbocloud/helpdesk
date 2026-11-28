@@ -18,7 +18,6 @@ sign-off of a project is signed off, a project completion letter is generated. S
 docs/project-signoff.md.
 """
 
-import base64
 import hashlib
 import re
 import secrets
@@ -53,6 +52,7 @@ from helpdesk.helpdesk.doctype.hd_signoff_template.hd_signoff_template import (
     STAGES,
     TRAINING_STAGE,
 )
+from helpdesk.utils import report_brand
 
 DRAFT = "Draft"
 SENT = "Sent"
@@ -1554,37 +1554,8 @@ class HDProjectSignoff(Document):
     # --- documents ---
 
     def brand(self) -> dict:
-        from helpdesk.api.config import get_config
-
-        config = get_config()
-        return {
-            "name": config.brand_name or "TBO",
-            "logo": self.logo_data_uri(config.brand_logo),
-            # the site's default Letter Head (the requirements: our letterhead), when set
-            "letter_head": frappe.db.get_value(
-                "Letter Head", {"is_default": 1, "disabled": 0}, "content"
-            ),
-        }
-
-    @staticmethod
-    def logo_data_uri(file_url: str | None) -> str | None:
-        """The logo inline, so the PDF renderer never has to fetch it over the network."""
-        if not file_url:
-            return None
-        name = frappe.db.get_value("File", {"file_url": file_url}, "name")
-        if not name:
-            return None
-        try:
-            content = frappe.get_doc("File", name).get_content()
-        except Exception:
-            return None
-        if isinstance(content, str):
-            content = content.encode()
-        ext = file_url.rsplit(".", 1)[-1].lower()
-        mime = {"svg": "image/svg+xml", "jpg": "image/jpeg", "jpeg": "image/jpeg"}.get(
-            ext, f"image/{ext}"
-        )
-        return f"data:{mime};base64,{base64.b64encode(content).decode()}"
+        # the site's default Letter Head (the requirements: our letterhead), when set
+        return report_brand()
 
     def save_project_file(self, file_name: str, content: bytes):
         """A private File on the project, so it shows in the project's Files tab."""

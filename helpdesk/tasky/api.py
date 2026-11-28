@@ -48,7 +48,6 @@ from helpdesk.utils import (
     add_assignment,
     aggregate,
     assigned_to_filter,
-    csv_safe,
     remove_assignment,
 )
 
@@ -2703,76 +2702,29 @@ def get_timesheet_agents() -> list[dict]:
 
 
 @frappe.whitelist()
-def export_timesheets_csv(
+def export_timesheets(
+    file_format: str = "xlsx",
+    view: bool = False,
     team: bool = False,
     agent: str | None = None,
     from_date: str | None = None,
     to_date: str | None = None,
     project: str | None = None,
 ):
-    """Download the timesheets on screen as CSV, one row per time log."""
-    import csv
-    import io
+    """The time logs on screen as a report, person by person with their totals and the
+    total hours: an Excel workbook (`xlsx`) or a PDF (`pdf`), shown in the browser when
+    `view` is set. Same filters and permission rules as the list."""
+    from helpdesk.tasky import timesheet_report
 
-    sheets = _visible_timesheets(
-        team, agent, from_date, to_date, ["name", "title", "status", "owner"], project
+    timesheet_report.send(
+        file_format,
+        frappe.utils.cint(view),
+        team,
+        agent,
+        from_date,
+        to_date,
+        project,
     )
-    logs = (
-        frappe.get_all(
-            "Timesheet Detail",
-            filters=_time_log_filters(sheets, from_date, to_date, project),
-            fields=[
-                "parent",
-                "from_time",
-                "hours",
-                "project",
-                "task",
-                "description",
-                "custom_billable",
-            ],
-            order_by="from_time asc",
-        )
-        if sheets
-        else []
-    )
-    projects = _names_of("Project", "project_name", {log.project for log in logs})
-    tasks = _names_of("Task", "subject", {log.task for log in logs})
-
-    out = io.StringIO()
-    writer = csv.writer(out)
-    writer.writerow(
-        [
-            _("Date"),
-            _("Agent"),
-            _("Timesheet"),
-            _("Title"),
-            _("Status"),
-            _("Project"),
-            _("Task"),
-            _("Hours"),
-            _("Notes"),
-            _("Billable"),
-        ]
-    )
-    for log in logs:
-        ts = sheets[log.parent]
-        cells = [
-            frappe.utils.getdate(log.from_time) if log.from_time else "",
-            _full_name(ts.owner),
-            ts.name,
-            ts.title,
-            _(ts.status),
-            projects.get(log.project, log.project or ""),
-            tasks.get(log.task, log.task or ""),
-            log.hours,
-            _plain_note(log.description),
-            _("Yes") if log.custom_billable else _("No"),
-        ]
-        writer.writerow([csv_safe(cell) for cell in cells])
-    period = "-".join(d for d in (from_date, to_date) if d) or "all"
-    frappe.response.filename = f"timesheets-{period}.csv"
-    frappe.response.filecontent = out.getvalue()
-    frappe.response.type = "download"
 
 
 @frappe.whitelist()

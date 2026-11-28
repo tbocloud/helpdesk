@@ -23,16 +23,24 @@
             <LucideRefreshCw class="size-[18px]" aria-hidden="true" />
           </template>
         </Button>
-        <Button
-          size="md"
-          :label="__('Download CSV')"
-          :tooltip="__('One row per time log, with the filters below')"
-          @click="downloadCsv"
-        >
-          <template #prefix>
-            <LucideDownload class="size-[18px]" aria-hidden="true" />
-          </template>
-        </Button>
+        <Dropdown :options="exportOptions" align="end">
+          <Button
+            size="md"
+            :label="__('Export')"
+            :tooltip="
+              __(
+                'A report with the filters below, person by person with totals'
+              )
+            "
+          >
+            <template #prefix>
+              <LucideDownload class="size-[18px]" aria-hidden="true" />
+            </template>
+            <template #suffix>
+              <LucideChevronDown class="size-4" aria-hidden="true" />
+            </template>
+          </Button>
+        </Dropdown>
         <Button
           variant="solid"
           size="md"
@@ -301,13 +309,16 @@
               :title="__('Too many time logs to show day by day')"
               :message="
                 __(
-                  'Pick fewer days or one person, or download the CSV for all of them.'
+                  'Pick fewer days or one person, or download the Excel report for all of them.'
                 )
               "
             >
-              <Button :label="__('Download CSV')" @click="downloadCsv">
+              <Button
+                :label="__('Download Excel')"
+                @click="exportReport('xlsx')"
+              >
                 <template #prefix>
-                  <LucideDownload class="size-4" aria-hidden="true" />
+                  <LucideFileSpreadsheet class="size-4" aria-hidden="true" />
                 </template>
               </Button>
             </TaskyState>
@@ -407,7 +418,7 @@
             :description="
               sheets.length >= LIST_LIMIT
                 ? __(
-                    'Showing the {0} most recently updated. Narrow the dates, or download the CSV for all of them.',
+                    'Showing the {0} most recently updated. Narrow the dates, or export the report for all of them.',
                     String(LIST_LIMIT)
                   )
                 : undefined
@@ -638,6 +649,7 @@ import { errorText } from "@/utils";
 import {
   Button,
   Dialog,
+  Dropdown,
   FormControl,
   TabButtons,
   TextInput,
@@ -648,11 +660,15 @@ import {
 import { computed, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import LucideCalendarRange from "~icons/lucide/calendar-range";
+import LucideChevronDown from "~icons/lucide/chevron-down";
 import LucideCircleAlert from "~icons/lucide/circle-alert";
 import LucideCircleCheck from "~icons/lucide/circle-check";
 import LucideCircleDashed from "~icons/lucide/circle-dashed";
 import LucideClock from "~icons/lucide/clock";
 import LucideDownload from "~icons/lucide/download";
+import LucideEye from "~icons/lucide/eye";
+import LucideFileDown from "~icons/lucide/file-down";
+import LucideFileSpreadsheet from "~icons/lucide/file-spreadsheet";
 import LucideFileClock from "~icons/lucide/file-clock";
 import LucidePlus from "~icons/lucide/plus";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
@@ -990,15 +1006,38 @@ function clearFilters() {
   });
 }
 
-function downloadCsv() {
-  const params = new URLSearchParams(
-    Object.entries(filterParams()).map(([k, v]) => [k, String(v)])
-  );
+// the report of the time logs under the filters: Excel, or a PDF to download or view
+function exportReport(fileFormat: "xlsx" | "pdf", view = false) {
+  const params = new URLSearchParams({
+    ...Object.fromEntries(
+      Object.entries(filterParams()).map(([k, v]) => [k, String(v)])
+    ),
+    file_format: fileFormat,
+    ...(view ? { view: "1" } : {}),
+  });
   window.open(
-    `/api/method/helpdesk.tasky.api.export_timesheets_csv?${params}`,
+    `/api/method/helpdesk.tasky.api.export_timesheets?${params}`,
     "_blank"
   );
 }
+
+const exportOptions = [
+  {
+    label: __("View PDF"),
+    icon: LucideEye,
+    onClick: () => exportReport("pdf", true),
+  },
+  {
+    label: __("Download PDF"),
+    icon: LucideFileDown,
+    onClick: () => exportReport("pdf"),
+  },
+  {
+    label: __("Download Excel"),
+    icon: LucideFileSpreadsheet,
+    onClick: () => exportReport("xlsx"),
+  },
+];
 
 // --- log time ---
 

@@ -1,7 +1,10 @@
+import io
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from helpdesk.tasky import api as tasky
+from helpdesk.tasky import timesheet_report
 from helpdesk.test_utils import (
     call_as_user,
     hold_commits,
@@ -125,16 +128,16 @@ class TestTimesheetDays(FrappeTestCase):
         )
         self.assertEqual([s["name"] for s in sheets], [on_project])
 
-        frappe.response.clear()
-        run_as_user(
+        report = run_as_user(
             DEV[0],
-            lambda: tasky.export_timesheets_csv(
-                from_date=MONDAY, to_date=TUESDAY, project=self.project
-            ),
+            lambda: timesheet_report.build(0, None, MONDAY, TUESDAY, self.project),
         )
-        rows = frappe.response.filecontent.strip().splitlines()[1:]
-        self.assertEqual(len(rows), 1)
-        self.assertIn("Payroll rollout", rows[0])
+        [person] = report["people"]
+        self.assertEqual(len(person["logs"]), 1)
+        self.assertEqual(
+            person["logs"][0]["project"], "Timesheet Days - Payroll rollout"
+        )
+        self.assertEqual(report["project"], "Timesheet Days - Payroll rollout")
 
     def test_sales_employee_sees_only_their_own(self):
         log_hours(SALES[0], None, 1, MONDAY, notes="Client visit")
@@ -187,3 +190,105 @@ class TestTimesheetDays(FrappeTestCase):
         result = self.days(DEV)
         self.assertTrue(result["too_many"])
         self.assertEqual(result["people"], [])
+
+
+class TestTimesheetReport(FrappeTestCase):
+    """The Timesheets export: person by person with their totals, as Excel or PDF."""
+
+    def setUp(self):
+        hold_commits(self)
+        self.addCleanup(frappe.set_user, "Administrator")
+        self.addCleanup(frappe.response.clear)
+        for user in (LEAD, DEV):
+            make_tasky_user(*user)
+        self.project = make_project(
+            "Timesheet Report - Payroll rollout",
+            members=[(LEAD[0], "Developer"), (DEV[0], "Developer")],
+        ).name
+        frappe.db.set_value("Project", self.project, "project_lead", LEAD[0])
+        log_hours(DEV[0], self.project, 2, TUESDAY, notes="=1+1")
+        log_hours(DEV[0], self.project, 1.5, MONDAY, billable=0)
+        log_hours(LEAD[0], self.project, 4, MONDAY)
+
+    def export(self, file_format, **kwargs):
+        frappe.response.clear()
+        run_as_user(
+            LEAD[0],
+            lambda: tasky.export_timesheets(
+                file_format=file_format,
+                team=1,
+                from_date=MONDAY,
+                to_date=TUESDAY,
+                **kwargs,
+            ),
+        )
+        return frappe.response
+
+    def test_groups_people_each_with_their_logs_and_totals(self):
+        report = run_as_user(
+            LEAD[0], lambda: timesheet_report.build(1, None, MONDAY, TUESDAY, None)
+        )
+        dev, lead = report["people"]  # name order: Arjun, then Meera
+        self.assertEqual((dev["user"], lead["user"]), (DEV[0], LEAD[0]))
+        self.assertEqual([str(log["date"]) for log in dev["logs"]], [MONDAY, TUESDAY])
+        self.assertEqual(
+            (dev["hours"], dev["billable_hours"], dev["non_billable_hours"]),
+            (3.5, 2, 1.5),
+        )
+        self.assertEqual((dev["days"], dev["log_count"]), (2, 2))
+        self.assertEqual((report["hours"], report["billable_hours"]), (7.5, 6))
+        self.assertEqual(report["filename"], f"timesheets-{MONDAY}-to-{TUESDAY}")
+
+    def test_excel_has_a_summary_and_each_persons_logs_with_totals(self):
+        from openpyxl import load_workbook
+
+        response = self.export("xlsx")
+        self.assertEqual(response.type, "binary")
+        self.assertEqual(response.filename, f"timesheets-{MONDAY}-to-{TUESDAY}.xlsx")
+        book = load_workbook(io.BytesIO(response.filecontent))
+        self.assertEqual(book.sheetnames, ["Summary", "Time logs"])
+
+        summary = [
+            [c for c in row if c is not None]
+            for row in book["Summary"].iter_rows(values_only=True)
+        ]
+        self.assertIn([DEV[1], DEV[0], 2, 2, 2, 1.5, 3.5], summary)
+        self.assertIn(["Total", 3, 6, 1.5, 7.5], summary)
+
+        logs = [
+            [c for c in row if c is not None]
+            for row in book["Time logs"].iter_rows(values_only=True)
+        ]
+        labels = [row[0] for row in logs if row and isinstance(row[0], str)]
+        # each person's band, their logs, then their total, before the next person
+        self.assertLess(
+            labels.index(f"Total for {DEV[1]}"),
+            labels.index(f"{LEAD[1]}  ·  {LEAD[0]}"),
+        )
+        self.assertEqual(logs[-1][-1], 7.5)
+        # a note that looks like a formula stays text
+        self.assertTrue(any("=1+1" in row for row in logs))
+
+    def test_pdf_downloads_or_shows_in_the_browser(self):
+        response = self.export("pdf")
+        self.assertTrue(response.filename.startswith(f"timesheets-{MONDAY}"))
+        if response.filename.endswith(".pdf"):
+            self.assertTrue(response.filecontent.startswith(b"%PDF"))
+            self.assertEqual(response.type, "pdf")
+            response = self.export("pdf", view=1)
+            self.assertEqual(response.display_content_as, "inline")
+            self.assertEqual(response.content_type, "application/pdf")
+        else:
+            # no wkhtmltopdf: the page prints itself
+            self.assertIn(f"Total for {DEV[1]}", response.filecontent)
+
+    def test_only_leads_and_managers_export_the_team(self):
+        frappe.response.clear()
+        with self.assertRaises(frappe.PermissionError):
+            run_as_user(
+                DEV[0], lambda: tasky.export_timesheets(file_format="xlsx", team=1)
+            )
+
+    def test_refuses_other_formats(self):
+        with self.assertRaises(frappe.ValidationError):
+            self.export("csv")

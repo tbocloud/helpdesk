@@ -81,7 +81,7 @@ column fills existing time logs with 1, so all time logged before this counts as
 
 - **Log time** (`create_timesheet(…, billable)`) has a Billable checkbox, on by default.
 - Completing a task (`complete_task`) logs billable time.
-- The timesheets CSV export has a Billable column.
+- The timesheets export (Excel and PDF) shows Billable per log and billable / non-billable totals.
 
 ## Alerts (daily job)
 
