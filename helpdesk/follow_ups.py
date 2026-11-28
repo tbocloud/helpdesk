@@ -420,6 +420,8 @@ def record_handoffs(follow_ups: list[FollowUp], ctx: Context) -> None:
         if frappe.db.count(HANDOFF):
             frappe.db.delete(HANDOFF)
         return
+    # someone who no longer has a delegate (or never should have) keeps no handoffs
+    frappe.db.delete(HANDOFF, {"user": ("not in", list(pairs))})
     known = handoffs(pairs)
     live = set()
     for f in follow_ups:
