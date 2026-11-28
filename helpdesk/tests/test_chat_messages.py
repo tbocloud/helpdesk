@@ -811,3 +811,97 @@ class TestFilesAndTemplates(TicketsCase):
             chat, {"id": self.mid + 5}, author="Administrator", sender_type="Staff"
         )
         self.assertEqual(kept(self.mid + 5).author, "Administrator")
+
+
+class TestAfterTheWindow(TicketsCase):
+    """Step 5b: replies and Copilot's lines on a chat ticket after the 24-hour window."""
+
+    TEMPLATE = {
+        "template_name": "tbo_ticket_update",
+        "language": "en",
+        "enabled": 1,
+        "body": "Hi {{1}}, an update on your request: {{2}}",
+    }
+
+    def setUp(self):
+        super().setUp()
+        self.customer_says("The invoice print is wrong")
+        self.ticket_name = str(self.row().hd_ticket)
+        chat_messages.move_to_support(self.ticket_name)
+        self.close_window()
+
+    def close_window(self, hours=-1):
+        frappe.db.set_value(
+            "HD Chat Conversation",
+            self.row().name,
+            "window_closes_at",
+            frappe.utils.add_to_date(frappe.utils.now_datetime(), hours=hours),
+        )
+
+    def chat(self):
+        return chatwoot_bridge.ChatConversation.for_ticket(self.ticket_name)
+
+    def with_template(self):
+        enable_chatwoot_bridge(
+            messages_section=1,
+            ticket_every_conversation=1,
+            messages_team=self.team,
+            whatsapp_templates=[self.TEMPLATE],
+            ticket_update_template="tbo_ticket_update",
+        )
+
+    def notes(self):
+        return frappe.get_all(
+            "HD Ticket Comment",
+            filters={"reference_ticket": self.ticket_name},
+            pluck="content",
+        )
+
+    def test_on_whatsapp_the_update_goes_as_the_template(self):
+        self.with_template()
+        self.assertTrue(
+            self.chat().post_agent_reply(
+                "<p>We fixed the invoice print.</p>", author="Administrator"
+            )
+        )
+        call = self.api.calls_to("/messages")[-1]
+        self.assertEqual(
+            call["body"]["template_params"]["processed_params"],
+            {"1": "Anita", "2": "We fixed the invoice print."},
+        )
+        latest = frappe.get_all(
+            MESSAGE,
+            filters={"conversation": self.row().name, "kind": "Template"},
+            fields=["author", "content"],
+        )
+        self.assertEqual(
+            latest,
+            [
+                {
+                    "author": "Administrator",
+                    "content": "Hi Anita, an update on your request: We fixed the invoice print.",
+                }
+            ],
+        )
+
+    def test_without_the_template_the_ticket_says_it_was_not_delivered(self):
+        before = len(self.api.calls_to("/messages"))
+        self.assertFalse(self.chat().post_agent_reply("<p>We fixed it.</p>"))
+        self.assertEqual(len(self.api.calls_to("/messages")), before)
+        self.assertTrue(any("Not delivered on WhatsApp" in n for n in self.notes()))
+
+    def test_instagram_and_facebook_never_send_after_the_window(self):
+        self.with_template()
+        frappe.db.set_value(
+            "HD Chat Conversation", self.row().name, "channel", "Channel::Instagram"
+        )
+        before = len(self.api.calls_to("/messages"))
+        self.assertFalse(self.chat().post_agent_reply("<p>We fixed it.</p>"))
+        self.assertEqual(len(self.api.calls_to("/messages")), before)
+        self.assertTrue(any("Not delivered on Instagram" in n for n in self.notes()))
+
+    def test_an_open_window_takes_the_text_itself(self):
+        self.with_template()
+        self.close_window(hours=5)
+        self.assertTrue(self.chat().post_agent_reply("<p>We fixed it.</p>"))
+        self.assertEqual(self.api.posted()[-1], "We fixed it.")

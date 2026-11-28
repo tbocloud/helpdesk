@@ -986,6 +986,8 @@ class ChatConversation:
         text = html_to_chat_text(content)
         if not text:
             return False
+        if self.window_closed():
+            return self.deliver_after_window(text, author, sender_type)
         posted = self.client.post_message(self.conversation_id, text)
         if posted is None:
             return False
@@ -995,10 +997,96 @@ class ChatConversation:
     def announce_resolution(self):
         # a Messages ticket (a sale, a job, a question) closes without "This has been resolved"
         if not chat_messages.in_messages(self.row.hd_ticket):
-            posted = self.client.post_message(self.conversation_id, resolved_text())
-            self.keep_posted(posted, None, "System")
+            self.post_agent_reply(resolved_text(), sender_type="System")
         self.client.toggle_status(self.conversation_id, "resolved")
         self.set_values({"status": "Resolved"})
+
+    # --- after the 24-hour window (WhatsApp, Instagram, Facebook; docs/messages.md) ---
+
+    def window_closed(self) -> bool:
+        """Known only with the Messages section on, which tracks the customer's last message."""
+        closes = self.row.get("window_closes_at")
+        return (
+            chat_messages.enabled(self.settings)
+            and (self.row.channel or "") in chat_messages.WINDOW_CHANNELS
+            and bool(closes)
+            and get_datetime(closes) <= now_datetime()
+        )
+
+    def deliver_after_window(self, text: str, author: str | None, sender_type: str):
+        """Free text can't go any more: on WhatsApp the ticket update template carries it; else the
+        ticket says it was not delivered, so a person can reply another way."""
+        template = self.update_template()
+        if template:
+            values = [
+                whatsapp_outreach.clean_value(
+                    (self.row.contact_name or "").split(" ")[0]
+                )
+                or _("there"),
+                whatsapp_outreach.clean_value(text),
+            ]
+            content = whatsapp_outreach.render(template, values)
+            posted = self.client.post_template(
+                self.conversation_id,
+                content,
+                {
+                    "name": template.template_name,
+                    "category": "UTILITY",
+                    "language": template.language,
+                    "processed_params": {"1": values[0], "2": values[1]},
+                },
+            )
+            if posted:
+                if isinstance(posted, dict) and chat_messages.enabled(self.settings):
+                    chat_messages.keep(
+                        self,
+                        {"content": content, "message_type": "outgoing", **posted},
+                        author=author,
+                        sender_type=sender_type,
+                        kind="Template",
+                    )
+                return True
+        self.note_undelivered(text)
+        return False
+
+    def update_template(self):
+        """The ticket update template, on WhatsApp only: in use and with its two blanks."""
+        name = self.settings.get("ticket_update_template")
+        if not name or self.row.channel != "Channel::Whatsapp":
+            return None
+        template = whatsapp_outreach.find_template(name, self.settings)
+        return (
+            template
+            if template and whatsapp_outreach.blanks_of(template) == 2
+            else None
+        )
+
+    def note_undelivered(self, text: str):
+        """A note on the ticket: what could not reach the customer, and why."""
+        if not self.row.hd_ticket:
+            return
+        channel = CHANNEL_LABELS.get(self.row.channel or "", self.row.channel or "")
+        why = (
+            _(
+                "the 24-hour window closed and no ticket update template is set (Settings → TBO Chat)"
+            )
+            if self.row.channel == "Channel::Whatsapp"
+            else _(
+                "the 24-hour window closed; reply by email, or from TBO Chat within 7 days"
+            )
+        )
+        frappe.get_doc(
+            {
+                "doctype": "HD Ticket Comment",
+                "reference_ticket": self.row.hd_ticket,
+                "content": "<p><strong>{}</strong> {}</p>{}".format(
+                    escape_html(_("Not delivered on {0}:").format(channel)),
+                    escape_html(why),
+                    text_to_html(text),
+                ),
+                "commented_by": "Administrator",
+            }
+        ).insert(ignore_permissions=True)
 
     def keep_posted(self, posted, author: str | None, sender_type: str):
         """The Messages section: what TBO Support just posted, with who sent it; the webhook's

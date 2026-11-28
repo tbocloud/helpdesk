@@ -27,6 +27,7 @@
 		"reopen_hours",
 		"column_break_messages_settings",
 		"max_file_mb",
+		"ticket_update_template",
 		"sso_section",
 		"sso_enabled",
 		"platform_api_token",
@@ -193,6 +194,13 @@
 			"description": "A bigger file is not copied; the message keeps a note and Chatwoot's link."
 		},
 		{
+			"fieldname": "ticket_update_template",
+			"fieldtype": "Data",
+			"label": "Ticket update template (WhatsApp)",
+			"depends_on": "messages_section",
+			"description": "An approved WhatsApp template with two blanks: {{1}} the customer's first name, {{2}} the update. After the 24-hour window, a person's reply or Copilot's line on a chat ticket goes as this template; without it, the ticket gets a note that it was not delivered."
+		},
+		{
 			"fieldname": "sso_section",
 			"fieldtype": "Section Break",
 			"label": "Sign-in with Microsoft",
@@ -274,7 +282,7 @@
 	"index_web_pages_for_search": 0,
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-11-28 10:00:00.000000",
+	"modified": "2026-11-28 14:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Chatwoot Settings",

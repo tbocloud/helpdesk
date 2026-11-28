@@ -197,9 +197,25 @@ copy, also when that copy arrived first.
 message in a chat the person isn't looking at shows "New message — A customer wrote in Messages", without the text.
 Clicking it opens the chat.
 
+## Step 5b: chat tickets after the 24-hour window (built)
+
+**When it applies:** a person's reply on a chat ticket, a Copilot stage line, or the "resolved" message, for a ticket
+moved to Support or raised by the AI. With the Messages section on, the bridge knows when the 24-hour window closed
+(`ChatConversation.window_closed`).
+
+**What happens after the window:**
+- **WhatsApp, with a ticket update template:** the text goes as the template, filled with the customer's first name
+  and the update (shortened to 200 characters, in one line). It is kept as a *Template* by its sender.
+- **Without the template, or on Instagram and Facebook:** nothing is sent. The ticket gets a comment, *Not delivered
+  on …*, with the reason and the text, so a person can reply by email or from TBO Chat within 7 days. Before this
+  step, Meta refused such messages and nobody heard.
+
+**Setup:**
+1. In Meta WhatsApp Manager, create a Utility template with two blanks, for example *"Hi {{1}}, an update on your
+   request: {{2}}"*, and wait for *Approved*.
+2. Add it under Settings → TBO Chat → WhatsApp outreach (sync the templates).
+3. Name it in **Ticket update template (WhatsApp)**.
+
 ## Next steps
 
-1. Replies and Copilot's lines on a ticket moved to Support, after the 24 hours: a "ticket update" template on
-   WhatsApp, and a note on the ticket for Instagram and Facebook.
-3. Sending files and templates, the reply window, and live updates.
-4. Customers' ERP chats in Support → Customer chats.
+1. Customers' ERP chats in Support → Customer chats (live while the AI talks, *I'll answer*, files to the site).
