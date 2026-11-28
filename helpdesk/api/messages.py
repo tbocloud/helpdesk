@@ -424,18 +424,25 @@ def _uploads(files) -> list[tuple]:
         frappe.throw(_("At most {0} files in one message.").format(MAX_FILES))
     limit = max(cint(_settings().get("max_file_mb")) or 25, 1) * chat_messages.MB
     found = []
+    table = frappe.qb.DocType("File")
     for url in urls:
-        name = frappe.db.get_value(
-            "File",
-            {
-                "file_url": str(url),
-                "owner": frappe.session.user,
-                "attached_to_doctype": ["in", ["", None]],
-            },
+        # not attached to anything yet; NULL spelled out, since Frappe 15 turns
+        # ["in", ["", None]] into IN ('', NULL), which never matches NULL
+        names = (
+            frappe.qb.from_(table)
+            .select(table.name)
+            .where(table.file_url == str(url))
+            .where(table.owner == frappe.session.user)
+            .where(
+                table.attached_to_doctype.isnull() | (table.attached_to_doctype == "")
+            )
+            .orderby(table.creation, order=frappe.qb.desc)
+            .limit(1)
+            .run(pluck=True)
         )
-        if not name:
+        if not names:
             frappe.throw(_("A file to send was not found among your uploads."))
-        file = frappe.get_doc("File", name)
+        file = frappe.get_doc("File", names[0])
         content = file.get_content()
         if isinstance(content, str):
             content = content.encode()
