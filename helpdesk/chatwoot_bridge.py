@@ -36,7 +36,7 @@ from frappe import _
 from frappe.utils import cint, escape_html, get_url, strip_html, validate_email_address
 from pypika.functions import Replace
 
-from helpdesk import whatsapp_outreach
+from helpdesk import chat_messages, whatsapp_outreach
 from helpdesk.ai_engine import call_haiku
 from helpdesk.ai_suggestion import find_related_articles, is_ai_configured
 from helpdesk.api.ticket_ai import html_to_text, text_to_html, truncate
@@ -196,18 +196,27 @@ def ignore_reason(settings, event: str, payload: dict) -> str | None:
         return _("Account {0} isn't the configured account.").format(account_id)
     if not conversation_id_of(event, payload):
         return _("The delivery names no conversation.")
+    # the Messages section keeps every message and its delivery: people's, the AI's, notes
+    keeps_all = chat_messages.enabled(settings)
     if event == "message_updated":
-        if whatsapp_outreach.is_receipt(settings, payload):
+        if keeps_all or whatsapp_outreach.is_receipt(settings, payload):
             return None
         return _("Only WhatsApp delivery receipts are used.")
-    if event != "message_created":
+    if event != "message_created" or keeps_all:
         return None
     # our own replies, agents' replies and notes come back as outgoing or private messages
-    if message_type_of(payload) != "incoming" or payload.get("private"):
-        return _("Only customer messages are used.")
-    if sender_type_of(payload) not in ("contact", ""):
+    if not is_customer_message(payload):
         return _("Only customer messages are used.")
     return None
+
+
+def is_customer_message(payload: dict) -> bool:
+    """A message the customer wrote (not our replies, agents' replies or private notes)."""
+    return (
+        message_type_of(payload) == "incoming"
+        and not payload.get("private")
+        and sender_type_of(payload) in ("contact", "")
+    )
 
 
 def event_key(event: str, payload: dict, raw: bytes) -> str:
@@ -319,9 +328,13 @@ class ChatwootEvent:
     def handle(self) -> bool:
         """Returns whether the event changed anything we track."""
         if self.event == "message_created":
-            return self.on_message()
+            kept = self.keep_message()
+            if not is_customer_message(self.payload):
+                return kept
+            return self.on_message() or kept
         if self.event == "message_updated":
-            return whatsapp_outreach.on_receipt(self.settings, self.payload)
+            kept = self.keep_message()
+            return whatsapp_outreach.on_receipt(self.settings, self.payload) or kept
         conversation = ChatConversation.sync(
             self.settings, self.payload, (self.payload.get("meta") or {}).get("sender")
         )
@@ -330,6 +343,19 @@ class ChatwootEvent:
         if self.event == "conversation_status_changed":
             return conversation.on_status_changed()
         return True
+
+    def keep_message(self) -> bool:
+        """The Messages section: the message (or its new delivery status) kept in TBO Support."""
+        if not chat_messages.enabled(self.settings):
+            return False
+        # only a customer's message says who the contact is; an agent's names the agent
+        sender = (
+            self.payload.get("sender") if is_customer_message(self.payload) else None
+        )
+        conversation = ChatConversation.sync(
+            self.settings, self.payload.get("conversation") or {}, sender
+        )
+        return bool(chat_messages.keep(conversation, self.payload))
 
     def on_message(self) -> bool:
         # a lead answering our WhatsApp outreach is for sales, never for the support AI
@@ -831,16 +857,29 @@ class ChatConversation:
 
     # --- messages from TBO Support ---
 
-    def post_agent_reply(self, content: str) -> bool:
+    def post_agent_reply(
+        self, content: str, author: str | None = None, sender_type: str = "Staff"
+    ) -> bool:
         text = html_to_chat_text(content)
         if not text:
             return False
-        return self.client.post_message(self.conversation_id, text) is not None
+        posted = self.client.post_message(self.conversation_id, text)
+        if posted is None:
+            return False
+        self.keep_posted(posted, author, sender_type)
+        return True
 
     def announce_resolution(self):
-        self.client.post_message(self.conversation_id, resolved_text())
+        posted = self.client.post_message(self.conversation_id, resolved_text())
+        self.keep_posted(posted, None, "System")
         self.client.toggle_status(self.conversation_id, "resolved")
         self.set_values({"status": "Resolved"})
+
+    def keep_posted(self, posted, author: str | None, sender_type: str):
+        """The Messages section: what TBO Support just posted, with who sent it; the webhook's
+        copy of the same message arrives later and keeps this sender."""
+        if posted and isinstance(posted, dict) and chat_messages.enabled(self.settings):
+            chat_messages.keep(self, posted, author=author, sender_type=sender_type)
 
     def fetch_messages(self) -> list[dict]:
         """The latest messages, oldest first; empty when Chatwoot can't be reached."""
@@ -1180,13 +1219,17 @@ def on_ticket_update(doc, method=None):
 def post_agent_reply(communication: str):
     """Background job: post an agent's ticket reply into the linked chat."""
     row = frappe.db.get_value(
-        "Communication", communication, ["reference_name", "content"], as_dict=True
+        "Communication",
+        communication,
+        ["reference_name", "content", "sender"],
+        as_dict=True,
     )
     if not row:
         return
     conversation = ChatConversation.for_ticket(row.reference_name)
     if conversation:
-        conversation.post_agent_reply(row.content)
+        author = frappe.db.get_value("User", {"name": row.sender, "enabled": 1})
+        conversation.post_agent_reply(row.content, author=author or None)
 
 
 def announce_resolution(conversation: str):

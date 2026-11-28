@@ -23,7 +23,15 @@
 		"sync_section",
 		"ai_reply_count",
 		"column_break_sync",
-		"last_synced_message_id"
+		"last_synced_message_id",
+		"messages_section",
+		"last_message_at",
+		"last_message",
+		"waiting_on",
+		"unread",
+		"column_break_messages",
+		"customer_last_message_at",
+		"window_closes_at"
 	],
 	"fields": [
 		{
@@ -150,12 +158,65 @@
 			"label": "Last Synced Message ID",
 			"read_only": 1,
 			"description": "Customer messages up to this one are already on the ticket."
+		},
+		{
+			"fieldname": "messages_section",
+			"fieldtype": "Section Break",
+			"label": "Messages"
+		},
+		{
+			"fieldname": "last_message_at",
+			"fieldtype": "Datetime",
+			"in_list_view": 1,
+			"label": "Last Message At",
+			"read_only": 1,
+			"search_index": 1
+		},
+		{
+			"fieldname": "last_message",
+			"fieldtype": "Small Text",
+			"label": "Last Message",
+			"read_only": 1
+		},
+		{
+			"fieldname": "waiting_on",
+			"fieldtype": "Select",
+			"in_standard_filter": 1,
+			"label": "Waiting On",
+			"options": "\nUs\nCustomer",
+			"read_only": 1,
+			"description": "Us: the customer wrote last. Customer: we answered last."
+		},
+		{
+			"default": "0",
+			"fieldname": "unread",
+			"fieldtype": "Check",
+			"label": "Unread",
+			"read_only": 1,
+			"description": "A customer message nobody has opened yet."
+		},
+		{
+			"fieldname": "column_break_messages",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "customer_last_message_at",
+			"fieldtype": "Datetime",
+			"label": "Customer's Last Message At",
+			"read_only": 1
+		},
+		{
+			"fieldname": "window_closes_at",
+			"fieldtype": "Datetime",
+			"label": "Reply Window Closes At",
+			"read_only": 1,
+			"description": "WhatsApp, Instagram and Facebook: free-form replies only within 24 hours of the customer's last message. Empty for channels without a window."
 		}
 	],
 	"in_create": 1,
 	"index_web_pages_for_search": 0,
 	"links": [],
-	"modified": "2026-09-30 18:00:00.000000",
+	"modified": "2026-11-28 10:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Chat Conversation",

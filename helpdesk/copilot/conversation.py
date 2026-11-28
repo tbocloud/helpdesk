@@ -1384,7 +1384,8 @@ def _deliver_to_tbo_chat(doc, message) -> bool:
     if not chat or message.kind != "Stage":
         return False
     try:
-        chat.post_agent_reply(escape_html(message.text or ""))
+        # Copilot's stage line: the Messages section shows it as the system's, not a person's
+        chat.post_agent_reply(escape_html(message.text or ""), sender_type="System")
     except Exception:
         frappe.log_error(title=f"Copilot stage not posted to TBO Chat {doc.chat}")
         return False

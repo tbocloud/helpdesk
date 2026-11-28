@@ -1,0 +1,188 @@
+{
+	"actions": [],
+	"autoname": "hash",
+	"creation": "2026-11-28 10:00:00.000000",
+	"description": "One message of a TBO Chat conversation (WhatsApp, Instagram, Facebook, website), kept in TBO Support for the Messages section.",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"conversation",
+		"hd_ticket",
+		"chatwoot_message_id",
+		"column_break_message",
+		"direction",
+		"sender_type",
+		"author",
+		"kind",
+		"content_section",
+		"content",
+		"reply_to",
+		"files",
+		"delivery_section",
+		"sent_at",
+		"status",
+		"column_break_delivery",
+		"error"
+	],
+	"fields": [
+		{
+			"fieldname": "conversation",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"label": "Conversation",
+			"options": "HD Chat Conversation",
+			"read_only": 1,
+			"reqd": 1,
+			"search_index": 1
+		},
+		{
+			"description": "The conversation's ticket when the message came in or went out.",
+			"fieldname": "hd_ticket",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"label": "Ticket",
+			"options": "HD Ticket",
+			"read_only": 1,
+			"search_index": 1
+		},
+		{
+			"description": "The same message delivered twice (both webhooks, or a retry) stays one row.",
+			"fieldname": "chatwoot_message_id",
+			"fieldtype": "Int",
+			"label": "Chatwoot Message ID",
+			"read_only": 1,
+			"unique": 1
+		},
+		{
+			"fieldname": "column_break_message",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "direction",
+			"fieldtype": "Select",
+			"in_list_view": 1,
+			"label": "Direction",
+			"options": "In\nOut",
+			"read_only": 1,
+			"reqd": 1
+		},
+		{
+			"fieldname": "sender_type",
+			"fieldtype": "Select",
+			"in_standard_filter": 1,
+			"label": "From",
+			"options": "Customer\nAI\nStaff\nSystem",
+			"read_only": 1,
+			"reqd": 1
+		},
+		{
+			"description": "Who sent it, when a person did.",
+			"fieldname": "author",
+			"fieldtype": "Link",
+			"label": "Staff Member",
+			"options": "User",
+			"read_only": 1
+		},
+		{
+			"default": "Text",
+			"description": "Note: private, for staff only. Activity: Chatwoot's own lines (assigned, resolved).",
+			"fieldname": "kind",
+			"fieldtype": "Select",
+			"label": "Kind",
+			"options": "Text\nTemplate\nNote\nActivity",
+			"read_only": 1
+		},
+		{
+			"fieldname": "content_section",
+			"fieldtype": "Section Break",
+			"label": "Content"
+		},
+		{
+			"fieldname": "content",
+			"fieldtype": "Long Text",
+			"label": "Text",
+			"read_only": 1
+		},
+		{
+			"fieldname": "reply_to",
+			"fieldtype": "Int",
+			"label": "Reply To (Chatwoot Message ID)",
+			"read_only": 1
+		},
+		{
+			"fieldname": "files",
+			"fieldtype": "Table",
+			"label": "Files",
+			"options": "HD Chat Message File",
+			"read_only": 1
+		},
+		{
+			"fieldname": "delivery_section",
+			"fieldtype": "Section Break",
+			"label": "Delivery"
+		},
+		{
+			"fieldname": "sent_at",
+			"fieldtype": "Datetime",
+			"in_list_view": 1,
+			"label": "Sent At",
+			"read_only": 1,
+			"search_index": 1
+		},
+		{
+			"fieldname": "status",
+			"fieldtype": "Select",
+			"label": "Status",
+			"options": "\nSent\nDelivered\nRead\nFailed",
+			"read_only": 1
+		},
+		{
+			"fieldname": "column_break_delivery",
+			"fieldtype": "Column Break"
+		},
+		{
+			"fieldname": "error",
+			"fieldtype": "Small Text",
+			"label": "Why It Failed",
+			"read_only": 1
+		}
+	],
+	"in_create": 1,
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-11-28 10:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"name": "HD Chat Message",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "System Manager",
+			"share": 1,
+			"write": 1
+		},
+		{
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent Manager"
+		},
+		{
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Agent"
+		}
+	],
+	"sort_field": "creation",
+	"sort_order": "DESC",
+	"states": []
+}

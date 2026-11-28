@@ -20,6 +20,10 @@
 		"column_break_behaviour",
 		"handoff_team_id",
 		"default_customer",
+		"messages_settings_section",
+		"messages_section",
+		"column_break_messages_settings",
+		"max_file_mb",
 		"sso_section",
 		"sso_enabled",
 		"platform_api_token",
@@ -136,6 +140,31 @@
 			"description": "Optional. New chat contacts that match no existing contact or customer are added to this customer."
 		},
 		{
+			"fieldname": "messages_settings_section",
+			"fieldtype": "Section Break",
+			"label": "Messages section",
+			"description": "TBO Support keeps every message and file of TBO Chat (WhatsApp, Instagram, Facebook, website) and shows them in Messages (docs/messages.md)."
+		},
+		{
+			"default": "0",
+			"fieldname": "messages_section",
+			"fieldtype": "Check",
+			"label": "Keep messages in TBO Support",
+			"description": "Every message, file and delivery status from TBO Chat is kept here. Needs Message Updated (and outgoing messages) in the account webhook."
+		},
+		{
+			"fieldname": "column_break_messages_settings",
+			"fieldtype": "Column Break"
+		},
+		{
+			"default": "25",
+			"fieldname": "max_file_mb",
+			"fieldtype": "Int",
+			"label": "Largest file to keep (MB)",
+			"non_negative": 1,
+			"description": "A bigger file is not copied; the message keeps a note and Chatwoot's link."
+		},
+		{
 			"fieldname": "sso_section",
 			"fieldtype": "Section Break",
 			"label": "Sign-in with Microsoft",
@@ -217,7 +246,7 @@
 	"index_web_pages_for_search": 0,
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-11-02 10:00:00.000000",
+	"modified": "2026-11-28 10:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Chatwoot Settings",
