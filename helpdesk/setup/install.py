@@ -638,6 +638,28 @@ def get_custom_fields():
             },
         ],
         "HD Ticket": [
+            # the Messages section (phase 32, docs/messages.md): Meta's chats are tickets too, kept
+            # apart from Support's; a known customer's ERP problem moves to Support
+            {
+                "fieldname": "custom_section",
+                "fieldtype": "Select",
+                "options": "Support\nMessages",
+                "default": "Support",
+                "label": "Section",
+                "insert_after": "agent_group",
+                "read_only": 1,
+                "in_standard_filter": 1,
+                "description": "Messages: a WhatsApp, Instagram, Facebook or website chat, handled in Messages. Support: everything else",
+            },
+            {
+                "fieldname": "custom_came_in_by",
+                "fieldtype": "Select",
+                "options": "\nEmail\nPortal\nCustomer's ERP\nWhatsApp\nInstagram\nFacebook\nWebsite chat\nTelegram\nSMS\nOther chat",
+                "label": "Came In By",
+                "insert_after": "custom_section",
+                "read_only": 1,
+                "in_standard_filter": 1,
+            },
             {
                 "fieldname": "custom_qcs_connection",
                 "fieldtype": "Link",

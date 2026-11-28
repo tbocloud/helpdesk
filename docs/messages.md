@@ -57,10 +57,61 @@ and **Message Updated**. The owner sets this in Chatwoot. TBO Support never chan
 
 **Tests:** `helpdesk/tests/test_chat_messages.py`.
 
+## Step 2: a ticket for every conversation (built)
+
+**Switch:** *A ticket for every conversation*, under the Messages section's switch (off by default). With it, two
+more settings: **Front-desk team** and **Reopen within (hours)** (24).
+
+**HD Ticket has two new fields** (`setup/install.get_custom_fields`, made by every migrate):
+- **Section:** Support, or Messages;
+- **Came In By:** WhatsApp, Instagram, Facebook, Website chat, Telegram, SMS and so on.
+
+**A customer's message** (`ChatwootEvent.on_message`, `ChatConversation.open_messages_ticket`):
+1. **The conversation's ticket is found or made.**
+   - **The first message** makes a ticket. It is in the Messages section, on the front-desk team (whose assignment rule
+     picks the person), with the first line of the message as its subject.
+   - **The ticket is still open:** the message joins it. A ticket in *Replied* goes back to *Open*.
+   - **The ticket was resolved within the reopen window:** it reopens.
+   - **Later than that, or the ticket was Closed:** a new ticket starts on the same conversation. A new topic, a new
+     ticket.
+2. **The message is linked to that ticket** (HD Chat Message's ticket).
+3. **The AI answers as before** while the chat is with the bot. When it decides a person is needed, it writes its
+   subject and summary on the ticket (a comment) and hands over; no second ticket is made.
+4. **A person's chat:** the message is kept, and nothing more happens. The chat is read in Messages, not as replies
+   on the ticket.
+
+**A Messages ticket never sets off the support machinery:**
+- no acknowledgement email: the reply goes in the chat;
+- no customer's ticket owner: it goes to the front-desk team;
+- no triage;
+- no Copilot run;
+- no coordinators' or Leaders' notice.
+
+Each hook checks the section: `HDTicket.assign_customer_owner`, `triage.auto_triage_ticket`,
+`copilot.runs.on_ticket_insert` and `copilot.people.on_ticket_insert`.
+
+**When the ticket is resolved,** the Chatwoot conversation is resolved too, without the "This has been resolved"
+message: that line suits support, not a sale or a job.
+
+**Move to Support** (`chat_messages.move_to_support`; API `helpdesk.api.messages.move_to_support` for agents who
+may change the ticket) is for a Messages chat that is really a customer's ERP problem. What a Support ticket gets on
+arrival runs then:
+- the customer's own people;
+- triage;
+- Copilot;
+- the coordinators' notice.
+
+From then on the chat is the ticket's channel, as for any chat ticket:
+- the customer's next messages become replies on the ticket, but not the earlier ones, which stay in Messages;
+- the AI stays out;
+- Copilot's stage lines reach the chat.
+
+**Not changed:** WhatsApp outreach replies from leads still go to the ERP lead, with no ticket. With the switch off,
+chats behave as before: a ticket only when the AI raises one or an agent adds the label `ticket`.
+
 ## Next steps
 
-1. A ticket for every Meta conversation, in the Messages section, with the guards: no Copilot, triage, coordinator
-   notice or emails for Messages tickets.
-2. The Messages screen: list, chat, context and reply box.
+1. Support's lists, SLA and reports leaving out Messages tickets.
+2. The Messages screen: list, chat, context and reply box, with Move to Support.
 3. Sending files and templates, the reply window, and live updates.
 4. Customers' ERP chats in Support → Customer chats.

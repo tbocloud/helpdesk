@@ -3,15 +3,19 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import frappe
+from frappe.cache_manager import clear_doctype_map
 from frappe.utils import get_datetime
 
 from helpdesk import chat_messages, chatwoot_bridge
 from helpdesk.test_utils import (
     CHATWOOT_TEST_URL,
+    ai_chat_answer,
+    create_customer,
     create_user,
     enable_chatwoot_bridge,
     make_chat_conversation,
     make_chatwoot_payload,
+    make_team,
     make_ticket,
     send_chatwoot_webhook,
 )
@@ -54,6 +58,11 @@ class FakeDownload:
 
 class MessagesCase(ChatwootCase):
     def setUp(self):
+        # registered first, so they run after the rollback: the cached settings must not keep this
+        # test's switches for the next test
+        self.addCleanup(
+            frappe.clear_document_cache, "HD Chatwoot Settings", "HD Chatwoot Settings"
+        )
         super().setUp()
         enable_chatwoot_bridge(messages_section=1, max_file_mb=1)
 
@@ -298,3 +307,196 @@ class TestReading(MessagesCase):
         from_iso = chat_messages.sent_at({"created_at": "2026-11-28T06:30:00.000Z"})
         self.assertEqual(from_epoch, from_iso)
         self.assertIsNone(from_epoch.tzinfo)
+
+
+class TicketsCase(MessagesCase):
+    """Step 2: every Meta conversation has a ticket in the Messages section."""
+
+    def setUp(self):
+        # after the rollback: the team's assignment rule must leave Frappe's cached rule list too
+        self.addCleanup(clear_doctype_map, "Assignment Rule", "HD Ticket")
+        super().setUp()
+        self.team = make_team(f"Front desk {self.cid}").name
+        enable_chatwoot_bridge(
+            messages_section=1,
+            ticket_every_conversation=1,
+            messages_team=self.team,
+            reopen_hours=24,
+        )
+
+    def customer_says(self, text, answer=None, **overrides):
+        overrides.setdefault("channel", "Channel::Whatsapp")
+        return self.ask_ai(
+            answer or ai_chat_answer("We do! What do you need?"),
+            content=text,
+            **overrides,
+        )
+
+    def ticket(self):
+        return frappe.get_doc("HD Ticket", self.row().hd_ticket)
+
+
+class TestMessagesTickets(TicketsCase):
+    def test_the_first_message_opens_a_messages_ticket_and_the_ai_still_answers(self):
+        self.customer_says("Hi, do you do ERPNext?")
+        ticket = self.ticket()
+        self.assertEqual(
+            (ticket.custom_section, ticket.custom_came_in_by, ticket.agent_group),
+            ("Messages", "WhatsApp", self.team),
+        )
+        self.assertEqual(ticket.subject, "Hi, do you do ERPNext?")
+        self.assertEqual(kept(self.mid).hd_ticket, ticket.name)
+        self.assertIn("We do! What do you need?", self.api.posted())
+        self.assertEqual(self.row().ai_reply_count, 1)
+
+    def test_more_messages_stay_on_the_same_ticket_with_the_ai(self):
+        self.customer_says("Hi")
+        first = self.row().hd_ticket
+        self.customer_says("We need payroll", message_id=self.mid + 1)
+        self.assertEqual(self.row().hd_ticket, first)
+        self.assertEqual(self.row().ai_reply_count, 2)
+        self.assertEqual(kept(self.mid + 1).hd_ticket, first)
+
+    def test_the_ais_ticket_decision_notes_the_ticket_and_hands_over(self):
+        self.customer_says("Hi")
+        first = self.row().hd_ticket
+        self.customer_says(
+            "I want a quote for 20 users",
+            message_id=self.mid + 1,
+            answer=ai_chat_answer(
+                "Thanks, a colleague will send it.",
+                "ticket",
+                ticket_subject="Quote for 20 ERPNext users",
+                ticket_summary="Wants a quote for 20 users.",
+            ),
+        )
+        ticket = self.ticket()
+        self.assertEqual(ticket.name, first)
+        self.assertEqual(ticket.subject, "Quote for 20 ERPNext users")
+        self.assertTrue(
+            frappe.db.exists("HD Ticket Comment", {"reference_ticket": first})
+        )
+        self.assertEqual(self.row().status, "Open")
+        self.assertEqual(frappe.db.count("HD Ticket", {"name": first}), 1)
+
+
+class TestNoSupportMachinery(TicketsCase):
+    def setUp(self):
+        super().setUp()
+        # a known customer with Copilot on: a Support ticket would get its owner, a run, notices
+        self.customer = create_customer(f"Buyer {self.cid}").name
+        frappe.db.set_value("HD Customer", self.customer, "custom_copilot_enabled", 1)
+        enable_chatwoot_bridge(
+            messages_section=1,
+            ticket_every_conversation=1,
+            messages_team=self.team,
+            default_customer=self.customer,
+        )
+
+    def test_no_email_customer_owner_copilot_or_notices(self):
+        frappe.db.set_single_value("HD Settings", "send_acknowledgement_email", 1)
+        with patch(
+            "helpdesk.helpdesk.doctype.hd_ticket.hd_ticket.HDTicket.send_acknowledgement_email"
+        ) as email, patch("helpdesk.ticket_assignment.pick") as owner, patch(
+            "helpdesk.copilot.runs.copilot_settings.is_enabled", return_value=True
+        ), patch(
+            "helpdesk.copilot.runs.start_run"
+        ) as copilot, patch(
+            "helpdesk.copilot.people.tell_leaders_of_ticket"
+        ) as leaders, patch(
+            "helpdesk.copilot.people.tell_coordinators"
+        ) as coordinators:
+            self.customer_says("Hi", email=f"buyer-{self.cid}@example.com")
+        self.assertEqual(self.ticket().customer, self.customer)
+        email.assert_not_called()
+        owner.assert_not_called()
+        copilot.assert_not_called()
+        leaders.assert_not_called()
+        coordinators.assert_not_called()
+
+    def test_no_triage(self):
+        self.customer_says("Hi")
+        ticket = self.ticket()
+        before = ticket.custom_triage_status
+        from helpdesk import triage
+
+        with patch(
+            "helpdesk.ai_engine.get_hub_settings",
+            return_value=frappe._dict(auto_triage_enabled=1),
+        ), patch("helpdesk.triage.frappe.enqueue") as queued:
+            triage.auto_triage_ticket(ticket, None)
+        queued.assert_not_called()
+        self.assertEqual(
+            frappe.db.get_value("HD Ticket", ticket.name, "custom_triage_status"),
+            before,
+        )
+
+
+class TestReopening(TicketsCase):
+    def resolve(self, hours_ago=0):
+        ticket = self.ticket()
+        ticket.status = "Resolved"
+        ticket.save(ignore_permissions=True)
+        if hours_ago:
+            ticket.db_set(
+                "resolution_date",
+                frappe.utils.add_to_date(frappe.utils.now_datetime(), hours=-hours_ago),
+            )
+        return ticket.name
+
+    def test_resolving_says_nothing_to_the_customer(self):
+        self.customer_says("Hi")
+        before = len(self.api.posted())
+        self.resolve()
+        self.assertEqual(len(self.api.posted()), before)
+        self.assertIn("resolved", self.api.statuses())
+
+    def test_writing_again_soon_reopens_the_ticket(self):
+        self.customer_says("Hi")
+        first = self.resolve(hours_ago=2)
+        self.customer_says("One more thing", message_id=self.mid + 1)
+        self.assertEqual(self.row().hd_ticket, first)
+        self.assertEqual(self.ticket().status, "Open")
+
+    def test_writing_again_later_starts_a_new_ticket(self):
+        self.customer_says("Hi")
+        first = self.resolve(hours_ago=30)
+        self.customer_says("New question", message_id=self.mid + 1)
+        self.assertNotEqual(self.row().hd_ticket, first)
+        self.assertEqual(frappe.db.get_value("HD Ticket", first, "status"), "Resolved")
+        self.assertEqual(self.ticket().custom_section, "Messages")
+
+
+class TestMoveToSupport(TicketsCase):
+    def test_a_moved_ticket_is_supports_and_the_chat_becomes_its_channel(self):
+        self.customer_says("Hi")
+        ticket = self.row().hd_ticket
+        chat_messages.move_to_support(ticket)
+        self.assertEqual(
+            frappe.db.get_value("HD Ticket", ticket, "custom_section"), "Support"
+        )
+        ai = self.customer_says("The invoice print is wrong", message_id=self.mid + 1)
+        # a person handles Support: the AI stays out, the message is a reply on the ticket
+        ai.assert_not_called()
+        self.assertTrue(
+            frappe.db.exists(
+                "Communication",
+                {
+                    "reference_doctype": "HD Ticket",
+                    "reference_name": ticket,
+                    "content": ["like", "%invoice print is wrong%"],
+                },
+            )
+        )
+        # the earlier chat stays in Messages; only new messages become replies
+        self.assertFalse(
+            frappe.db.exists(
+                "Communication",
+                {"reference_name": ticket, "content": ["like", "%We do! What%"]},
+            )
+        )
+
+    def test_only_a_messages_ticket_moves(self):
+        ticket = make_ticket(subject="Email ticket")
+        with self.assertRaises(frappe.ValidationError):
+            chat_messages.move_to_support(ticket.name)

@@ -105,6 +105,11 @@ def auto_triage_ticket(doc, method):
     if doc.ticket_type == ALERT_TICKET_TYPE:
         return
 
+    # Guard: a Messages chat (sales, a job, a question) is no support ticket; Move to
+    # Support triages it then (docs/messages.md)
+    if doc.get("custom_section") == "Messages":
+        return
+
     # Guard: skip if already triaged
     if doc.get("custom_triage_status") and doc.custom_triage_status not in (
         "",

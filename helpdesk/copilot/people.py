@@ -801,6 +801,9 @@ def on_ticket_insert(doc, method=None):
     """Hook: a new ticket's project coordinators hear of it, or choose who takes it, and the
     Leaders see it in TBO Support's panel (Phase 24). The error watch's own tickets are left to the
     infrastructure people."""
+    # a Messages chat is the front desk's, not a project's; Move to Support tells them then
+    if doc.get("custom_section") == "Messages":
+        return
     try:
         if not doc.get("custom_copilot_source"):
             frappe.enqueue(

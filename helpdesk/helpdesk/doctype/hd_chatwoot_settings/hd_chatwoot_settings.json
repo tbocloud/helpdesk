@@ -22,6 +22,9 @@
 		"default_customer",
 		"messages_settings_section",
 		"messages_section",
+		"ticket_every_conversation",
+		"messages_team",
+		"reopen_hours",
 		"column_break_messages_settings",
 		"max_file_mb",
 		"sso_section",
@@ -151,6 +154,31 @@
 			"fieldtype": "Check",
 			"label": "Keep messages in TBO Support",
 			"description": "Every message, file and delivery status from TBO Chat is kept here. Needs Message Updated (and outgoing messages) in the account webhook."
+		},
+		{
+			"default": "0",
+			"fieldname": "ticket_every_conversation",
+			"fieldtype": "Check",
+			"label": "A ticket for every conversation",
+			"depends_on": "messages_section",
+			"description": "Each conversation gets a ticket in the Messages section at its first message, while the AI still answers first. No Copilot, triage, coordinators' notice or emails for these tickets; Move to Support hands a customer's ERP problem to Support."
+		},
+		{
+			"fieldname": "messages_team",
+			"fieldtype": "Link",
+			"label": "Front-desk team",
+			"options": "HD Team",
+			"depends_on": "ticket_every_conversation",
+			"description": "New Messages tickets go to this team, whose assignment rule picks the person."
+		},
+		{
+			"default": "24",
+			"fieldname": "reopen_hours",
+			"fieldtype": "Int",
+			"label": "Reopen within (hours)",
+			"non_negative": 1,
+			"depends_on": "ticket_every_conversation",
+			"description": "A customer who writes again within this time after the ticket was resolved reopens it; later, a new ticket starts (a new topic)."
 		},
 		{
 			"fieldname": "column_break_messages_settings",

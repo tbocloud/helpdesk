@@ -33,7 +33,16 @@ import frappe
 import phonenumbers
 import requests
 from frappe import _
-from frappe.utils import cint, escape_html, get_url, strip_html, validate_email_address
+from frappe.utils import (
+    add_to_date,
+    cint,
+    escape_html,
+    get_datetime,
+    get_url,
+    now_datetime,
+    strip_html,
+    validate_email_address,
+)
 from pypika.functions import Replace
 
 from helpdesk import chat_messages, whatsapp_outreach
@@ -365,6 +374,15 @@ class ChatwootEvent:
         conversation = ChatConversation.sync(
             self.settings, details, self.payload.get("sender")
         )
+        if (
+            chat_messages.tickets_for_all(self.settings)
+            and not conversation.in_support()
+        ):
+            # the Messages section: every conversation has a ticket, and the AI still answers first
+            conversation.open_messages_ticket(self.payload)
+            if conversation.row.status == "Pending":
+                return conversation.first_reply(self.payload)
+            return True
         if conversation.row.hd_ticket and conversation.ticket_status() == CLOSED:
             conversation.release_closed_ticket(details.get("labels") or [])
         if conversation.row.hd_ticket:
@@ -637,9 +655,13 @@ class ChatConversation:
 
     def act_on(self, decision: dict, messages: list[dict]) -> bool:
         self.lock()
-        if self.row.status != "Pending" or self.row.hd_ticket:
+        if self.row.status != "Pending" or self.in_support():
             # a person or another job took the chat over while the AI was thinking
             return False
+        if decision["action"] == "ticket" and self.row.hd_ticket:
+            # a Messages chat has its ticket already: the AI's summary goes on it for the person
+            self.note_on_ticket(decision["ticket_subject"], decision["ticket_summary"])
+            return self.hand_off(decision["reply"] or handoff_text())
         if decision["action"] == "ticket":
             ticket = self.create_ticket(
                 decision["ticket_subject"] or self.fallback_subject(messages),
@@ -807,6 +829,105 @@ class ChatConversation:
         )
         return ticket.name
 
+    # --- the Messages section: a ticket for every conversation (docs/messages.md) ---
+
+    def in_support(self) -> bool:
+        """The chat's ticket is a Support one: raised from the chat or moved to Support."""
+        return bool(self.row.hd_ticket) and not chat_messages.in_messages(
+            self.row.hd_ticket
+        )
+
+    def open_messages_ticket(self, message: dict) -> str:
+        """The Messages ticket for this customer message: the open one; a resolved one reopened
+        within the reopen window; or else a new one (a new topic, a new ticket)."""
+        self.lock()
+        name = self.row.hd_ticket
+        ticket = frappe.get_doc("HD Ticket", name) if name else None
+        if ticket and ticket.status_category != "Resolved":
+            if ticket.status == "Replied":
+                # the customer answered us: the ticket waits on us again
+                ticket.status = "Open"
+                ticket.save(ignore_permissions=True)
+        elif ticket and self.may_reopen(ticket):
+            ticket.status = "Open"
+            ticket.save(ignore_permissions=True)
+        else:
+            name = self.create_messages_ticket(message)
+        frappe.db.set_value(
+            chat_messages.MESSAGE,
+            {"chatwoot_message_id": cint(message.get("id"))},
+            "hd_ticket",
+            str(name),
+            update_modified=False,
+        )
+        return str(name)
+
+    def may_reopen(self, ticket) -> bool:
+        """A Resolved ticket within the reopen window; a Closed one never reopens."""
+        if ticket.status == CLOSED:
+            return False
+        hours = cint(self.settings.get("reopen_hours") or 24)
+        resolved = get_datetime(ticket.resolution_date or ticket.modified)
+        return now_datetime() <= add_to_date(resolved, hours=hours)
+
+    def create_messages_ticket(self, message: dict) -> str:
+        """A ticket in the Messages section for this conversation, on its front-desk team. It sends
+        no email and starts no Copilot run, triage or coordinators' notice (their hooks skip the
+        Messages section)."""
+        text = message_text(message)
+        first_line = next(
+            (line.strip() for line in text.splitlines() if line.strip()), ""
+        )
+        channel = CHANNEL_LABELS.get(self.row.channel or "", _("Chat"))
+        subject = first_line or _("{0} chat with {1}").format(
+            channel, self.row.contact_name or _("a customer")
+        )
+        ticket = frappe.get_doc(
+            {
+                "doctype": "HD Ticket",
+                "subject": truncate(one_line(subject), MAX_SUBJECT_CHARS - 2),
+                "description": text_to_html(text) if text else "<p></p>",
+                "raised_by": self.sender_address(),
+                "contact": self.row.contact or None,
+                "customer": self.row.hd_customer or None,
+                "agent_group": self.settings.get("messages_team") or None,
+                "custom_section": chat_messages.MESSAGES,
+                "custom_came_in_by": chat_messages.came_in_by(self.row.channel),
+            }
+        )
+        # the reply goes in the chat, never by email
+        ticket.flags.skip_acknowledgement = True
+        ticket.flags.no_copilot_run = True
+        ticket.insert(ignore_permissions=True)
+        self.attribute_opening_message(ticket.name)
+        self.set_values(
+            {
+                "hd_ticket": str(ticket.name),
+                "last_synced_message_id": cint(message.get("id")),
+            }
+        )
+        return str(ticket.name)
+
+    def note_on_ticket(self, subject: str | None, summary: str | None):
+        """The AI's subject and summary on the Messages ticket, for the person who takes over."""
+        name = self.row.hd_ticket
+        if subject:
+            frappe.db.set_value(
+                "HD Ticket",
+                name,
+                "subject",
+                truncate(one_line(subject), MAX_SUBJECT_CHARS - 2),
+            )
+        if summary:
+            frappe.get_doc(
+                {
+                    "doctype": "HD Ticket Comment",
+                    "reference_ticket": name,
+                    "content": text_to_html(summary),
+                    "commented_by": "Administrator",
+                }
+            ).insert(ignore_permissions=True)
+
     def ticket_description(self, summary: str, messages: list[dict]) -> str:
         parts = []
         if summary:
@@ -870,8 +991,10 @@ class ChatConversation:
         return True
 
     def announce_resolution(self):
-        posted = self.client.post_message(self.conversation_id, resolved_text())
-        self.keep_posted(posted, None, "System")
+        # a Messages ticket (a sale, a job, a question) closes without "This has been resolved"
+        if not chat_messages.in_messages(self.row.hd_ticket):
+            posted = self.client.post_message(self.conversation_id, resolved_text())
+            self.keep_posted(posted, None, "System")
         self.client.toggle_status(self.conversation_id, "resolved")
         self.set_values({"status": "Resolved"})
 

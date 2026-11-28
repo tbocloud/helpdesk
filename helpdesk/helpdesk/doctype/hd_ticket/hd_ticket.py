@@ -744,7 +744,8 @@ class HDTicket(Document):
         the team round robin without a second ToDo. A rule's assignment that got in first
         is withdrawn; a person's is kept.
         """
-        if not self.customer:
+        # a Messages chat goes to its front-desk team; Move to Support calls this then
+        if not self.customer or self.get("custom_section") == "Messages":
             return
         from helpdesk import ticket_assignment
 

@@ -237,6 +237,8 @@ def on_ticket_insert(doc, method=None):
         not doc.customer
         or not copilot_settings.is_enabled()
         or doc.flags.get("no_copilot_run")
+        # a Messages chat is no ERP problem until it is moved to Support (docs/messages.md)
+        or doc.get("custom_section") == "Messages"
     ):
         return
     if not frappe.db.get_value("HD Customer", doc.customer, "custom_copilot_enabled"):

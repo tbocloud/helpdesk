@@ -22,6 +22,7 @@ from urllib.parse import unquote, urlparse
 import frappe
 import requests
 from frappe import _
+from frappe.query_builder.functions import Max
 from frappe.utils import (
     add_to_date,
     cint,
@@ -65,6 +66,19 @@ PREVIEW_CHARS = 140
 DOWNLOAD_TIMEOUT = 60
 CHUNK = 64 * 1024
 MB = 1024 * 1024
+TICKET = "HD Ticket"
+MESSAGES, SUPPORT = "Messages", "Support"
+# HD Ticket's "Came In By" for each Chatwoot channel
+CAME_IN_BY = {
+    "Channel::Whatsapp": "WhatsApp",
+    "Channel::Instagram": "Instagram",
+    "Channel::FacebookPage": "Facebook",
+    "Channel::WebWidget": "Website chat",
+    "Channel::Telegram": "Telegram",
+    "Channel::Sms": "SMS",
+    "Channel::TwilioSms": "SMS",
+    "Channel::Email": "Email",
+}
 
 
 def enabled(settings=None) -> bool:
@@ -72,6 +86,26 @@ def enabled(settings=None) -> bool:
     return bool(
         cint(settings.get("enabled")) and cint(settings.get("messages_section"))
     )
+
+
+def tickets_for_all(settings=None) -> bool:
+    """Every conversation gets a ticket in the Messages section (docs/messages.md, step 2)."""
+    settings = settings or frappe.get_cached_doc(SETTINGS)
+    return enabled(settings) and bool(cint(settings.get("ticket_every_conversation")))
+
+
+def in_messages(ticket) -> bool:
+    """Whether a ticket is a Messages ticket (its section), not a Support one."""
+    if not ticket:
+        return False
+    section = ticket.get("custom_section") if hasattr(ticket, "get") else None
+    if section is None:
+        section = frappe.db.get_value(TICKET, str(ticket), "custom_section")
+    return section == MESSAGES
+
+
+def came_in_by(channel: str | None) -> str:
+    return CAME_IN_BY.get(channel or "", "Other chat")
 
 
 # --- reading a Chatwoot message -------------------------------------------------------------------
@@ -384,3 +418,45 @@ def file_name(url: str, file_type: str, message_id) -> str:
     name = unquote(urlparse(url).path.rsplit("/", 1)[-1]).strip()
     name = "".join(ch for ch in name if ch.isalnum() or ch in "._- ")[:120].strip(" .")
     return name or f"{file_type.lower()}-{message_id}"
+
+
+# --- Move to Support ------------------------------------------------------------------------------
+
+
+def move_to_support(ticket: str) -> str:
+    """A Messages ticket that is really a customer's ERP problem becomes a Support ticket.
+
+    What a Support ticket gets when it arrives, and a Messages ticket skipped, runs now: the
+    customer's own people (ticket owner or project team), triage, Copilot and the coordinators'
+    notice. The chat stays the ticket's channel: the customer's next messages become replies on the
+    ticket, as for any chat ticket, and replies go back on the same channel."""
+    from helpdesk import triage
+    from helpdesk.chatwoot_bridge import ChatConversation
+    from helpdesk.copilot import conversation as copilot_chat
+    from helpdesk.copilot import people, runs
+
+    doc = frappe.get_doc(TICKET, str(ticket))
+    if doc.get("custom_section") != MESSAGES:
+        frappe.throw(_("Ticket {0} is not in Messages.").format(doc.name))
+    doc.db_set("custom_section", SUPPORT)
+    chat = ChatConversation.for_ticket(doc.name)
+    if chat:
+        # only messages from now on become replies on the ticket: the earlier ones are in Messages
+        message = frappe.qb.DocType(MESSAGE)
+        last = (
+            frappe.qb.from_(message)
+            .select(Max(message.chatwoot_message_id))
+            .where(message.conversation == chat.row.name)
+            .run()
+        )
+        chat.set_values({"last_synced_message_id": cint(last[0][0] if last else 0)})
+        # Copilot's stage lines reach the chat, as for a ticket the AI raised
+        copilot_chat.tbo_chat_ticket(chat.row.name, doc.name)
+    doc.assign_customer_owner()
+    triage.auto_triage_ticket(doc, None)
+    runs.on_ticket_insert(doc)
+    people.on_ticket_insert(doc)
+    doc.add_comment(
+        "Info", _("Moved from Messages to Support by {0}.").format(frappe.session.user)
+    )
+    return doc.name
