@@ -376,6 +376,9 @@ permission_query_conditions = {
     "HD Content Campaign": "helpdesk.helpdesk.doctype.hd_content_campaign.hd_content_campaign.permission_query",
     "HD Work Summary": "helpdesk.helpdesk.doctype.hd_work_summary.hd_work_summary.permission_query",
     "HD Project Status Update": "helpdesk.helpdesk.doctype.hd_project_status_update.hd_project_status_update.permission_query",
+    # Messages' chats: managers and the Messages team only (docs/messages.md)
+    "HD Chat Conversation": "helpdesk.chat_messages.permission_query",
+    "HD Chat Message": "helpdesk.chat_messages.permission_query",
 }
 
 has_permission = {
@@ -390,6 +393,8 @@ has_permission = {
     "HD Content Campaign": "helpdesk.helpdesk.doctype.hd_content_campaign.hd_content_campaign.has_permission",
     "HD Work Summary": "helpdesk.helpdesk.doctype.hd_work_summary.hd_work_summary.has_permission",
     "HD Project Status Update": "helpdesk.helpdesk.doctype.hd_project_status_update.hd_project_status_update.has_permission",
+    "HD Chat Conversation": "helpdesk.chat_messages.has_permission",
+    "HD Chat Message": "helpdesk.chat_messages.has_permission",
 }
 
 

@@ -111,6 +111,22 @@ def can_use(user: str | None = None) -> bool:
     )
 
 
+def may_read(user: str | None = None) -> bool:
+    """Who may read the chats' records (HD Chat Conversation, HD Chat Message) through the
+    REST API and the desk: managers always, other agents only while they may use Messages.
+    The Agent role keeps read on the doctypes, for the live updates' room (hooks.py)."""
+    user = user or frappe.session.user
+    return is_manager(user) or can_use(user)
+
+
+def permission_query(user: str | None = None) -> str | None:
+    return None if may_read(user) else "1 = 0"
+
+
+def has_permission(doc, ptype: str | None = None, user: str | None = None) -> bool:
+    return may_read(user)
+
+
 def tickets_for_all(settings=None) -> bool:
     """Every conversation gets a ticket in the Messages section (docs/messages.md, step 2)."""
     settings = settings or frappe.get_cached_doc(SETTINGS)
@@ -357,8 +373,9 @@ def update_known(
 
 def notify(conversation: str, direction: str):
     """Live update: the Messages screens reload this conversation. It goes to the room of
-    HD Chat Conversation, which only people who may read conversations can join (the page joins it
-    while open); only the conversation's name and whether the customer wrote travel."""
+    HD Chat Conversation (the page joins it while open). Any agent may join that room, since
+    Frappe checks the doctype, not a record; so only the conversation's name and whether the
+    customer wrote travel."""
     from frappe.realtime import get_doctype_room
 
     frappe.publish_realtime(

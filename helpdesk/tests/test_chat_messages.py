@@ -656,6 +656,27 @@ class TestMessagesScreen(TicketsCase):
         with self.assertRaises(frappe.PermissionError):
             messages.get_conversations(view="all")
 
+    def test_the_records_are_closed_to_other_agents(self):
+        message = frappe.get_all(MESSAGE, {"conversation": self.chat}, pluck="name")[0]
+        outsider = make_agent(f"outsider-{self.cid}@example.com")
+        member = make_agent(f"front-{self.cid}@example.com")
+        make_team(self.team, members=[member])
+        for user, sees in ((outsider, False), (member, True)):
+            frappe.set_user(user)
+            with self.subTest(user=user):
+                self.assertEqual(
+                    bool(frappe.get_list(chat_messages.CONVERSATION, pluck="name")),
+                    sees,
+                )
+                self.assertEqual(bool(frappe.get_list(MESSAGE, pluck="name")), sees)
+                self.assertEqual(
+                    frappe.has_permission(MESSAGE, doc=message, user=user), sees
+                )
+                # the live updates' room is joined on the doctype, not a record
+                self.assertTrue(
+                    frappe.has_permission(chat_messages.CONVERSATION, user=user)
+                )
+
     def test_the_sidebar_counts_messages_apart_from_tickets(self):
         from helpdesk.api.sidebar import get_nav_counts
 

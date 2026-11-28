@@ -136,7 +136,9 @@ report arrives in phase 34.
 
 **Who:** System and Agent Managers, and the members of the front-desk team, while the Messages section is on
 (`chat_messages.can_use`, sent as `can_use_messages`). The menu item **Support → Messages** and the page check it,
-and so does every call (`helpdesk.api.messages`).
+and so does every call (`helpdesk.api.messages`). The records themselves (HD Chat Conversation, HD Chat Message)
+follow the same rule through the REST API and the desk (`chat_messages.permission_query` and `has_permission` in
+hooks.py): other agents get no rows; managers always may read.
 
 **The page** (`/helpdesk/messages`; `desk/src/pages/messages/Messages.vue` and `ChatThread.vue`; desktop and phone):
 - **List:**
@@ -189,8 +191,8 @@ copy, also when that copy arrived first.
 **Live updates:**
 - each new message or delivery tick sends `helpdesk:chat-message` with only the conversation's name and whether the
   customer wrote;
-- it goes to the room of HD Chat Conversation, which only people who may read conversations can join, never to the
-  whole site;
+- it goes to the room of HD Chat Conversation, never to the whole site. Frappe lets anyone with the Agent role join
+  that room (it checks the doctype, not a record), which is why the update carries no text;
 - the Messages page joins the room while it is open and reloads the list and the open chat at once;
 - the old refresh runs every 60 seconds, only as a fallback.
 
