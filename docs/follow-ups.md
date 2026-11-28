@@ -140,6 +140,32 @@ Each level **adds** people; nobody drops off.
   plus role-based heads such as the Digital Marketing Head); coordinators and managers from
   the project's team (`Project User.custom_role`).
 
+## Delegates
+
+Asked by the owner on 2026-11-28: as an Agent Manager and lead or manager on many projects he
+had 359 items in "Needs your attention"; he wanted the project coordinator (Archana) to deal
+with them first.
+
+- **Settings → Follow-ups → Delegates** (`HD Follow Up Settings.delegates`, child
+  `HD Follow Up Delegate`: `user` → `delegate`) and **Back to the person after**
+  (`delegate_grace_days`, default 2 working days). Each person once, never their own
+  delegate (`HDFollowUpSettings.validate_delegates`); a disabled delegate is ignored.
+- `route_to_delegates` runs at the end of `evaluate`, so the banner, the attention list,
+  notices, digests and the preview all follow it. For each follow-up, a recipient with a
+  delegate is replaced by the delegate (and listed in `FollowUp.delegated_from`) unless:
+  - they own the item (their own task or ticket): always reaches them;
+  - the delegate is on leave today: the person is told as before;
+  - the item has waited `delegate_grace_days` working days since it went to the delegate:
+    then the person is told too.
+- `record_handoffs` (each run, `process`) writes an **`HD Follow Up Handoff`** (`user`,
+  `reference_doctype`, `reference_name`, `handed_on`) the first time an item goes to a
+  delegate, and deletes it once the item no longer needs anyone's attention, so a new
+  problem on the same item starts the clock again. Removing every delegate clears them all.
+- Turning it on empties the person's list at once; items come back only as they pass the
+  grace days unresolved.
+
+Tests: `TestDelegates` in `helpdesk/tests/test_follow_ups.py`.
+
 ## Delivery: persistent, not spammy
 
 - **In the app**: one notification per person and item per day (the item's most pressing

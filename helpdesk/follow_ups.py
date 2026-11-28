@@ -188,6 +188,8 @@ class FollowUp:
     immediate: bool = False
     link: str = "/my-work"
     days: int = 0
+    # people with a delegate who weren't told: their delegate was, instead (route_to_delegates)
+    delegated_from: list[str] = field(default_factory=list)
 
     @property
     def key(self) -> str:
@@ -331,12 +333,109 @@ class Context:
 def evaluate(ctx: Context | None = None) -> list[FollowUp]:
     """Every follow-up due now, without sending anything."""
     ctx = ctx or Context()
-    return [
-        *TaskRules(ctx).evaluate(),
-        *TicketRules(ctx).evaluate(),
-        *LeadRules(ctx).evaluate(),
-        *ProjectRules(ctx).evaluate(),
-    ]
+    return route_to_delegates(
+        [
+            *TaskRules(ctx).evaluate(),
+            *TicketRules(ctx).evaluate(),
+            *LeadRules(ctx).evaluate(),
+            *ProjectRules(ctx).evaluate(),
+        ],
+        ctx,
+    )
+
+
+# --- delegates ---------------------------------------------------------------
+
+HANDOFF = "HD Follow Up Handoff"
+
+
+def delegates(settings) -> dict[str, str]:
+    """{person: their delegate} from the settings, enabled delegates only."""
+    pairs = {
+        row.user: row.delegate
+        for row in settings.get("delegates") or []
+        if row.user and row.delegate and row.user != row.delegate
+    }
+    reachable = set(enabled_users(pairs.values()))
+    return {user: d for user, d in pairs.items() if d in reachable}
+
+
+def handoffs(users) -> dict[tuple[str, str, str], object]:
+    """{(person, doctype, name): the day the item went to their delegate instead}."""
+    if not users:
+        return {}
+    rows = frappe.get_all(
+        HANDOFF,
+        filters={"user": ("in", list(users))},
+        fields=["user", "reference_doctype", "reference_name", "handed_on"],
+    )
+    return {
+        (r.user, r.reference_doctype, str(r.reference_name)): r.handed_on for r in rows
+    }
+
+
+def route_to_delegates(follow_ups: list[FollowUp], ctx: Context) -> list[FollowUp]:
+    """Someone with a delegate (Settings → Follow-ups → Delegates) isn't told about work
+    that only reaches them as a lead, reviewer, head or manager: their delegate is told
+    instead. Once the item has waited `delegate_grace_days` working days since it went to
+    the delegate, the person is told too. Their own work (they are an owner) always
+    reaches them, and so does everything while the delegate is on leave."""
+    pairs = delegates(ctx.settings)
+    if not pairs:
+        return follow_ups
+    grace = cint(ctx.settings.get("delegate_grace_days"))
+    since = handoffs(pairs)
+    for f in follow_ups:
+        recipients = []
+        for user in f.recipients:
+            delegate = pairs.get(user)
+            handed = since.get((user, f.doctype, str(f.name)))
+            if (
+                not delegate
+                or user in f.owners
+                or delegate in ctx.on_leave
+                or (handed and ctx.calendar.working_days_since(handed) >= grace)
+            ):
+                recipients.append(user)
+                continue
+            recipients.append(delegate)
+            f.delegated_from.append(user)
+        f.recipients = _unique(recipients)
+    return follow_ups
+
+
+def record_handoffs(follow_ups: list[FollowUp], ctx: Context) -> None:
+    """Note the day each item first went to a delegate, so the grace days count from
+    then; forget items no longer needing attention, so a new problem starts again."""
+    today = ctx.today
+    pairs = delegates(ctx.settings)
+    if not pairs:
+        if frappe.db.count(HANDOFF):
+            frappe.db.delete(HANDOFF)
+        return
+    known = handoffs(pairs)
+    live = set()
+    for f in follow_ups:
+        for user in [*f.delegated_from, *(u for u in f.recipients if u in pairs)]:
+            key = (user, f.doctype, str(f.name))
+            live.add(key)
+            if key in known or user not in f.delegated_from:
+                continue
+            frappe.get_doc(
+                {
+                    "doctype": HANDOFF,
+                    "user": user,
+                    "reference_doctype": f.doctype,
+                    "reference_name": str(f.name),
+                    "handed_on": today,
+                }
+            ).insert(ignore_permissions=True)
+            known[key] = today
+    for user, doctype, name in set(known) - live:
+        frappe.db.delete(
+            HANDOFF,
+            {"user": user, "reference_doctype": doctype, "reference_name": name},
+        )
 
 
 def _unique(users) -> list[str]:
@@ -1146,6 +1245,7 @@ def clear_levels() -> None:
 def process(ctx: Context) -> None:
     settings = ctx.settings
     follow_ups = evaluate(ctx)
+    record_handoffs(follow_ups, ctx)
     cache(follow_ups, ctx.today)
     # after the cache: the banner and the manager views still show snoozed work
     follow_ups = drop_snoozed(follow_ups, ctx.today)

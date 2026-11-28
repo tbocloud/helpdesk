@@ -29,6 +29,7 @@ class HDFollowUpSettings(Document):
         self.validate_ladder()
         self.validate_thresholds()
         self.validate_sla_warnings()
+        self.validate_delegates()
 
     def validate_digest_times(self):
         """Stored as "09:30, 15:30", sorted and without repeats."""
@@ -98,3 +99,15 @@ class HDFollowUpSettings(Document):
                 return None
             times.add(f"{int(match.group(1)):02d}:{match.group(2)}")
         return sorted(times)
+
+    def validate_delegates(self):
+        """Each person once, never their own delegate (docs/follow-ups.md#delegates)."""
+        seen = set()
+        for row in self.delegates:
+            if not row.user or not row.delegate:
+                frappe.throw(_("Choose both the person and who it goes to first."))
+            if row.user == row.delegate:
+                frappe.throw(_("Someone can't be their own delegate."))
+            if row.user in seen:
+                frappe.throw(_("{0} is listed twice.").format(row.user))
+            seen.add(row.user)

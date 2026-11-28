@@ -6,7 +6,7 @@ The engine is helpdesk.follow_ups; docs/follow-ups.md describes both.
 import frappe
 from frappe import _
 from frappe.model import no_value_fields
-from frappe.utils import cint
+from frappe.utils import cint, get_fullname
 
 from helpdesk import follow_ups
 from helpdesk.recurrence import time_label
@@ -43,7 +43,7 @@ def get_settings() -> dict:
     hd = frappe.get_cached_doc("HD Settings")
     chat = frappe.get_cached_doc("HD Chat Settings")
     return {
-        "settings": {f: doc.get(f) for f in editable_fields()},
+        "settings": settings_values(doc),
         "working_hours": working_hours(),
         "auto_close": {
             "enabled": bool(hd.auto_close_tickets),
@@ -90,10 +90,36 @@ def save_settings(values: dict | str) -> dict:
     values = frappe.parse_json(values) or {}
     allowed = set(editable_fields())
     doc = frappe.get_doc(follow_ups.SETTINGS)
+    if "delegates" in values:
+        values["delegates"] = clean_delegates(values["delegates"])
     doc.update({k: v for k, v in values.items() if k in allowed})
     doc.save(ignore_permissions=True)
     follow_ups.clear_cache()
-    return {f: doc.get(f) for f in editable_fields()}
+    return settings_values(doc)
+
+
+def settings_values(doc) -> dict:
+    """The editable settings; the delegates as plain rows with names to show."""
+    values = {f: doc.get(f) for f in editable_fields() if f != "delegates"}
+    values["delegates"] = [
+        {
+            "user": row.user,
+            "delegate": row.delegate,
+            "user_name": get_fullname(row.user),
+            "delegate_name": get_fullname(row.delegate),
+        }
+        for row in doc.get("delegates") or []
+    ]
+    return values
+
+
+def clean_delegates(rows) -> list[dict]:
+    """The delegate rows to save, without empty ones (the settings check the rest)."""
+    rows = [
+        {"user": (row or {}).get("user"), "delegate": (row or {}).get("delegate")}
+        for row in frappe.parse_json(rows) or []
+    ]
+    return [row for row in rows if row["user"] or row["delegate"]]
 
 
 @frappe.whitelist(methods=["POST"])
