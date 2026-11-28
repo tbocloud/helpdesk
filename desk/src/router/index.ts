@@ -420,6 +420,13 @@ const portalRoutes = [
     component: () => import("@/pages/messages/Messages.vue"),
     beforeEnter: () => useAuthStore().canUseMessages || { name: "Home" },
   },
+  // Support → Customer chats: customers' ERP chats, live (docs/messages.md, step 6)
+  {
+    path: "/customer-chats",
+    name: "CustomerChats",
+    component: () => import("@/pages/customer-chats/CustomerChats.vue"),
+    beforeEnter: () => useAuthStore().canUseCustomerChats || { name: "Home" },
+  },
   // agents: all of Copilot's work on one page; each sees what their permissions allow (docs/tbo-copilot.md)
   {
     path: "/copilot",

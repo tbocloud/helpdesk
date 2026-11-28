@@ -31,7 +31,27 @@ def get_nav_counts() -> dict:
         "HD Ticket", user, ticket.status_category.isin(["Open", "Paused"])
     )
     counts["follow_ups"] = summary_for(user)
+    counts["customer_chats"] = _customer_chats_waiting(user)
     return counts
+
+
+def _customer_chats_waiting(user: str) -> int:
+    """Customers' ERP chats waiting for a person, for the people who work them."""
+    from helpdesk.content_team import can_work_tickets
+
+    if not can_work_tickets(user):
+        return 0
+    chat = frappe.qb.DocType("HDS Conversation")
+    return (
+        frappe.qb.from_(chat)
+        .select(Count(chat.name))
+        .where(chat.channel == "ERP")
+        .where(
+            (chat.state == "Before a person")
+            | ((chat.asked_for_person == 1) & (chat.state != "Closed"))
+        )
+        .run()[0][0]
+    )
 
 
 def _count_assigned(doctype: str, user: str, condition) -> int:

@@ -24,6 +24,7 @@ import LucideHourglass from "~icons/lucide/hourglass";
 import LucideLayoutDashboard from "~icons/lucide/layout-dashboard";
 import LucideLifeBuoy from "~icons/lucide/life-buoy";
 import LucideListTodo from "~icons/lucide/list-todo";
+import LucideMessageCircle from "~icons/lucide/message-circle";
 import LucideMessagesSquare from "~icons/lucide/messages-square";
 import LucideNewspaper from "~icons/lucide/newspaper";
 import LucidePhoneCall from "~icons/lucide/phone-call";
@@ -59,6 +60,8 @@ export interface NavItem {
   ticketWorkersOnly?: boolean;
   /** Messages: managers and the front-desk team, while the Messages section is on */
   messagesOnly?: boolean;
+  /** Customer chats: the people who work Support's tickets */
+  customerChatsOnly?: boolean;
   /** AI models: Agent Managers and System Managers */
   managersOnly?: boolean;
   leadsOnly?: boolean;
@@ -300,6 +303,15 @@ export const agentNavAreas: NavArea[] = [
             also: ["TicketAgent", "TicketAgentNew"],
             countKey: "tickets",
             ticketWorkersOnly: true,
+          },
+          // customers' ERP chats, live while the AI talks (phase 32, docs/messages.md)
+          {
+            id: "customer-chats",
+            label: __("Customer chats"),
+            icon: LucideMessageCircle,
+            to: "CustomerChats",
+            countKey: "customer_chats",
+            customerChatsOnly: true,
           },
           // agents: Copilot's runs, approvals, releases, sites and known issues (Phase 10)
           {

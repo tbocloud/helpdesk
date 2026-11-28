@@ -1,6 +1,7 @@
 # Messages section (TBO Copilot phase 32)
 
-**Status:** being built, step by step. Plan: the design repo's `phases/one-inbox-plan.md`, section 5.
+**Status:** phase 32 built (steps 1–6), waiting for the owner's local test; not released yet. Plan: the design
+repo's `phases/one-inbox-plan.md`, section 5.
 
 TBO Support answers WhatsApp, Instagram, the Facebook Page and the website chat itself. Chatwoot (TBO Chat) stays
 underneath as the connection to Meta: staff work in TBO Support's **Messages** section and don't open Chatwoot.
@@ -216,6 +217,45 @@ moved to Support or raised by the AI. With the Messages section on, the bridge k
 2. Add it under Settings → TBO Chat → WhatsApp outreach (sync the templates).
 3. Name it in **Ticket update template (WhatsApp)**.
 
+## Step 6: Support → Customer chats (built)
+
+The Support chat in each customer's ERP (the TBO Support Client app) already reached TBO Support: Copilot's chat engine
+answers it and keeps every message (HDS Conversation). Until now, staff saw a chat only once its ticket existed.
+
+**Who:** the people who work Support's tickets (System and Agent Managers, and the ERP team, `can_work_tickets`).
+The menu item **Support → Customer chats** and its badge (chats waiting for a person) follow it, and so does every
+call (`helpdesk.api.customer_chats`). The customer's project team sees the chat once its ticket exists, as before
+(decision 14's fuller version is later).
+
+**The page** (`/helpdesk/customer-chats`; `desk/src/pages/customer-chats/`):
+- **Views:** *Waiting for a person* (the customer asked for one), *AI talking*, *Mine* (the ticket is mine),
+  *Answered by the AI* (no ticket, the AI answered from the knowledge base) and *All*. Search by customer, user,
+  title or ticket.
+- **The chat:**
+  - the customer, the AI, TBO Support's people and Copilot's stage lines;
+  - cards read-only, as the customer saw them, buttons included;
+  - files by name (they reach the ticket when it is raised);
+  - messages to the site not delivered yet are marked.
+- **Beside it:**
+  - the customer, their site, the user and their roles;
+  - where they were: the record, or the page, and the error they saw;
+  - what the AI has gathered so far;
+  - the ticket, and the customer's other open tickets.
+- ***I'll answer*** (`take_over`):
+  - the AI stops;
+  - if there is no ticket, one is raised from the chat, without starting Copilot (the person may start it), and the
+    customer's chat says the ticket is raised;
+  - the ticket is the person's if nobody had it;
+  - the customer's chat says "*first name* from TBO Support joined the chat".
+- **Reply** (`send_reply`): it goes as a reply on the ticket, exactly as from the ticket page, so it reaches the
+  customer's chat at once (and by email where the ticket page's reply would). A chat with no person yet is taken over
+  first.
+- **Live:** each new message of an ERP chat (`conversation._record`) sends `helpdesk:customer-chat` (the
+  conversation's name and who wrote, no text) to each person who may use the page, in their own room.
+
+**Not yet:** files from staff to the customer's ERP chat need the TBO Support Client app's next version. For now,
+attach them on the ticket.
+
 ## Next steps
 
-1. Customers' ERP chats in Support → Customer chats (live while the AI talks, *I'll answer*, files to the site).
+1. Files from staff to the customer's ERP chat (TBO Support Client app: a `chat_files` capability).

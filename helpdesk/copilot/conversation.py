@@ -480,7 +480,7 @@ def _context(context: dict) -> dict:
 
 
 def _record(doc, direction: str, kind: str, text: str = "", **values):
-    return frappe.get_doc(
+    message = frappe.get_doc(
         {
             "doctype": MESSAGE,
             "conversation": doc.name,
@@ -495,6 +495,12 @@ def _record(doc, direction: str, kind: str, text: str = "", **values):
             },
         }
     ).insert(ignore_permissions=True)
+    if doc.channel == "ERP":
+        # Support → Customer chats shows it at once (docs/messages.md, step 6)
+        from helpdesk.api import customer_chats
+
+        customer_chats.notify(doc.name, direction)
+    return message
 
 
 def _say(doc, kind: str, text: str, the_card: dict | None = None, **values):

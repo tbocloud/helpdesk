@@ -122,6 +122,8 @@ def get_user():
         "can_work_tickets": can_work_tickets(current_user),
         # the Messages section: WhatsApp, Instagram, Facebook, website chat (docs/messages.md)
         "can_use_messages": chat_messages.can_use(current_user),
+        # Support → Customer chats: customers' ERP chats, live (docs/messages.md, step 6)
+        "can_use_customer_chats": can_work_tickets(current_user),
         # the Leads page, live from the CRM site (docs/leads.md)
         "can_use_leads": can_use_leads(current_user)
         and not division_without_site(current_user)
