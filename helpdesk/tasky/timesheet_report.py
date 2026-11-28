@@ -239,8 +239,8 @@ def _write_header(sheet, report: dict, width: int) -> int:
 def _write_summary(sheet, report: dict):
     row = _write_header(sheet, report, len(SUMMARY_COLUMNS))
     _column_heads(sheet, row, SUMMARY_COLUMNS)
-    for person in report["people"]:
-        row += 1
+    heads = row
+    for row, person in enumerate(report["people"], start=heads + 1):
         _text(sheet, row, 1, person["full_name"])
         _text(sheet, row, 2, person["user"])
         sheet.cell(row, 3, person["days"])
@@ -252,7 +252,7 @@ def _write_summary(sheet, report: dict):
         ):
             sheet.cell(row, col, person[key]).number_format = "0.00"
         _rule(sheet, row, len(SUMMARY_COLUMNS))
-    row += 1
+    row = heads + len(report["people"]) + 1
     _total_row(
         sheet,
         row,
@@ -300,10 +300,10 @@ def _write_logs(sheet, report: dict):
         hours.number_format = "0.00"
         sheet.row_dimensions[row].height = 22
 
-        row += 1
-        _column_heads(sheet, row, DETAIL_COLUMNS)
-        for log in person["logs"]:
-            row += 1
+        # the column heads under the band, then one row per log
+        heads = row + 1
+        _column_heads(sheet, heads, DETAIL_COLUMNS)
+        for row, log in enumerate(person["logs"], start=heads + 1):
             date = sheet.cell(row, 1, log["date"])
             date.number_format = "DD MMM YYYY"
             _text(sheet, row, 2, log["timesheet"])
@@ -318,7 +318,7 @@ def _write_logs(sheet, report: dict):
                     vertical="top", wrap_text=col in (3, 4, 5)
                 )
             _rule(sheet, row, width)
-        row += 1
+        row = heads + len(person["logs"]) + 1
         _total_row(
             sheet,
             row,

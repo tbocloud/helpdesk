@@ -24,6 +24,7 @@ from helpdesk.test_utils import (
     record_versions,
     run_as_user,
     save_task_as,
+    saved_due,
     use_date_format,
 )
 from helpdesk.utils import add_assignment, remove_assignment
@@ -132,7 +133,8 @@ class TestTaskActivity(TaskActivityCase):
 
     def test_a_due_date_moved_later_shows_once_with_its_reason(self):
         old_due = str(frappe.db.get_value("Task", self.task, "exp_end_date"))
-        new_due = add_days(old_due, 3)
+        # a working day: a day off would add its own "moved off a day off" note
+        new_due = str(saved_due(add_days(old_due, 3)))
         call_as_user(
             LEAD[0],
             "helpdesk.tasky.api.update_task_plan",

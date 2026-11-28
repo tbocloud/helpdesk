@@ -43,6 +43,7 @@ from helpdesk.test_utils import (
     open_signoff_link,
     receive_signoff_reply,
     run_as_user,
+    saved_due,
     signoff_session,
 )
 
@@ -399,7 +400,7 @@ class TestProjectSignoff(FrappeTestCase):
         self.assertEqual(doc.items[0].clarification_task, task)
         self.assertEqual(
             frappe.db.get_value("Task", task, ["priority", "exp_end_date"]),
-            ("Urgent", getdate(add_days(nowdate(), 1))),
+            ("Urgent", saved_due(add_days(nowdate(), 1))),
         )
 
     def test_without_questions_it_is_accepted_by_reply_alone(self):

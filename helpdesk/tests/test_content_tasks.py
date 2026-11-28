@@ -214,7 +214,10 @@ class TestTasksFromPosts(ContentTaskCase):
         today = getdate()
         self.assertEqual(getdate(tasks["Writer"].exp_end_date), today)
         self.assertEqual(getdate(tasks["Designer"].exp_end_date), today)
-        self.assertEqual(getdate(tasks["Marketer"].exp_end_date), add_days(today, 1))
+        self.assertEqual(
+            getdate(tasks["Marketer"].exp_end_date),
+            saved_due(add_days(today, 1), content=True),
+        )
 
     def test_a_missed_post_keeps_its_publish_date(self):
         post = self.post(publish_on=self.at(-1))
@@ -247,7 +250,8 @@ class TestTasksFromPosts(ContentTaskCase):
         tasks = self.tasks(post)
         self.assertEqual(getdate(tasks["Writer"].exp_end_date), getdate())
         self.assertEqual(
-            getdate(tasks["Marketer"].exp_end_date), add_days(getdate(), 1)
+            getdate(tasks["Marketer"].exp_end_date),
+            saved_due(add_days(getdate(), 1), content=True),
         )
 
     def late_writer(self, post):
@@ -570,7 +574,7 @@ class TestSeveralPeopleAndVideoEditor(ContentTaskCase):
         self.assertEqual(set(tasks), {"Writer", "Designer", "Video Editor", "Marketer"})
         self.assertEqual(
             getdate(tasks["Video Editor"].exp_end_date),
-            add_days(getdate(self.publish), -2),
+            saved_due(add_days(getdate(self.publish), -2), content=True),
         )
         self.assertEqual(self.assignees(tasks["Video Editor"]), [EDITOR[0]])
 
