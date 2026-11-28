@@ -134,7 +134,7 @@
                 v-model="row.user"
                 type="select"
                 class="min-w-48 flex-1"
-                :label="__('Person')"
+                :label="__('Follow-ups of (the busy person)')"
                 :options="agentOptions"
               />
               <LucideArrowRight
@@ -145,7 +145,7 @@
                 v-model="row.delegate"
                 type="select"
                 class="min-w-48 flex-1"
-                :label="__('Goes first to')"
+                :label="__('Handled first by (the delegate)')"
                 :options="agentOptions"
               />
               <Button
@@ -160,6 +160,19 @@
               </Button>
             </li>
           </ul>
+          <p
+            v-for="row in form.delegates.filter((r) => r.user && r.delegate)"
+            :key="`${row.user}-${row.delegate}`"
+            class="text-p-sm text-ink-gray-7"
+          >
+            {{
+              __(
+                "{0}'s follow-ups go to {1} first.",
+                agentName(row.user),
+                agentName(row.delegate)
+              )
+            }}
+          </p>
           <div class="flex flex-wrap items-center gap-3">
             <Button
               :label="__('Add a delegate')"
@@ -758,6 +771,11 @@ const form = ref<Form | null>(null);
 const agentStore = useAgentStore();
 if (!agentStore.agents.data && !agentStore.agents.loading)
   agentStore.agents.reload();
+function agentName(user: string) {
+  return (
+    (agentStore.dropdown ?? []).find((o) => o.value === user)?.label ?? user
+  );
+}
 const agentOptions = computed(() => [
   { label: __("Choose a person"), value: "" },
   ...(agentStore.dropdown ?? []),
