@@ -13,6 +13,7 @@ from helpdesk.test_utils import (
     create_customer,
     create_user,
     enable_chatwoot_bridge,
+    make_agent,
     make_chat_conversation,
     make_chatwoot_payload,
     make_team,
@@ -316,6 +317,11 @@ class TicketsCase(MessagesCase):
         # after the rollback: the team's assignment rule must leave Frappe's cached rule list too
         self.addCleanup(clear_doctype_map, "Assignment Rule", "HD Ticket")
         super().setUp()
+        # the customer chat's per-minute limit (Redis) must not hand these chats over
+        from helpdesk.copilot import conversation
+
+        frappe.cache().delete_keys(conversation.RATE_KEY)
+        self.addCleanup(frappe.cache().delete_keys, conversation.RATE_KEY)
         self.team = make_team(f"Front desk {self.cid}").name
         enable_chatwoot_bridge(
             messages_section=1,
@@ -549,3 +555,118 @@ class TestSupportLists(TicketsCase):
             chat_messages.support_only({"custom_section": "Messages"}),
             {"custom_section": "Messages"},
         )
+
+
+class TestMessagesScreen(TicketsCase):
+    """Step 4: the Messages screen's server side (helpdesk.api.messages)."""
+
+    def setUp(self):
+        super().setUp()
+        self.customer_says("Hi, do you do ERPNext?")
+        self.chat = self.row().name
+        self.ticket_name = str(self.row().hd_ticket)
+
+    def listed(self, view="all"):
+        from helpdesk.api import messages
+
+        return {
+            r["name"] for r in messages.get_conversations(view=view, limit=100)["data"]
+        }
+
+    def test_the_list_and_its_views(self):
+        self.assertIn(self.chat, self.listed("all"))
+        self.assertIn(self.chat, self.listed("ai"))
+        self.assertIn(self.chat, self.listed("waiting"))
+
+    def test_a_chat_moved_to_support_leaves_the_list(self):
+        chat_messages.move_to_support(self.ticket_name)
+        self.assertNotIn(self.chat, self.listed("all"))
+
+    def test_opening_a_chat_shows_its_messages_and_marks_it_read(self):
+        from helpdesk.api import messages
+
+        opened = messages.get_conversation(self.chat)
+        first = opened["messages"][0]
+        self.assertEqual(
+            (first["from"], first["text"]), ("Customer", "Hi, do you do ERPNext?")
+        )
+        self.assertEqual(opened["ticket"]["name"], self.ticket_name)
+        self.assertEqual(opened["conversation"]["state"], "AI talking")
+        self.assertEqual(opened["conversation"]["window"]["open"], True)
+        self.assertEqual(self.row().unread, 0)
+
+    def test_a_reply_takes_the_chat_over_from_the_ai(self):
+        from helpdesk.api import messages
+
+        sent = messages.send_message(self.chat, "Hello from TBO, how can I help?")
+        message = frappe.get_doc(MESSAGE, sent["message"])
+        self.assertEqual(
+            (message.sender_type, message.author, message.content),
+            ("Staff", "Administrator", "Hello from TBO, how can I help?"),
+        )
+        self.assertEqual(self.row().status, "Open")
+        self.assertIn("open", self.api.statuses())
+        self.assertIn("Hello from TBO, how can I help?", self.api.posted())
+
+    def test_a_note_stays_private_and_leaves_the_ai_on(self):
+        from helpdesk.api import messages
+
+        sent = messages.send_message(self.chat, "Check their old quote", private=1)
+        self.assertEqual(frappe.db.get_value(MESSAGE, sent["message"], "kind"), "Note")
+        self.assertEqual(self.row().status, "Pending")
+
+    def test_a_closed_window_takes_no_free_reply_but_a_note(self):
+        from helpdesk.api import messages
+
+        frappe.db.set_value(
+            "HD Chat Conversation",
+            self.chat,
+            "window_closes_at",
+            frappe.utils.add_to_date(frappe.utils.now_datetime(), hours=-1),
+        )
+        with self.assertRaises(frappe.ValidationError):
+            messages.send_message(self.chat, "Are you there?")
+        messages.send_message(self.chat, "Ask for a template", private=1)
+
+    def test_ill_answer_gives_an_unassigned_chat_to_the_person(self):
+        from helpdesk.api import messages
+
+        frappe.db.set_value("HD Ticket", self.ticket_name, "_assign", "[]")
+        messages.take_over(self.chat)
+        self.assertIn(
+            "Administrator",
+            frappe.parse_json(
+                frappe.db.get_value("HD Ticket", self.ticket_name, "_assign")
+            ),
+        )
+        self.assertEqual(self.row().status, "Open")
+
+    def test_only_managers_and_the_front_desk_may_use_it(self):
+        from helpdesk.api import messages
+
+        outsider = make_agent(f"outsider-{self.cid}@example.com")
+        frappe.set_user(outsider)
+        with self.assertRaises(frappe.PermissionError):
+            messages.get_conversations(view="mine")
+        frappe.set_user("Administrator")
+        member = make_agent(f"front-{self.cid}@example.com")
+        make_team(self.team, members=[member])
+        frappe.set_user(member)
+        messages.get_conversations(view="mine")
+        with self.assertRaises(frappe.PermissionError):
+            messages.get_conversations(view="all")
+
+    def test_the_sidebar_counts_messages_apart_from_tickets(self):
+        from helpdesk.api.sidebar import get_nav_counts
+
+        member = make_agent(f"front-{self.cid}@example.com")
+        frappe.db.set_value("HD Ticket", self.ticket_name, "_assign", "[]")
+        from helpdesk.utils import add_assignment
+
+        add_assignment(
+            {"assign_to": [member], "doctype": "HD Ticket", "name": self.ticket_name},
+            ignore_permissions=True,
+        )
+        frappe.set_user(member)
+        counts = get_nav_counts()
+        self.assertEqual((counts["messages"], counts["tickets"]), (1, 0))

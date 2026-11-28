@@ -1,6 +1,6 @@
 import frappe
 
-from helpdesk import chatwoot_sso
+from helpdesk import chat_messages, chatwoot_sso
 from helpdesk.adoption import can_see_adoption
 from helpdesk.api.work import can_see_overview
 from helpdesk.content_team import (
@@ -120,6 +120,8 @@ def get_user():
         "in_sales": in_sales(current_user),
         # the Tickets list and New ticket: System / Agent Managers and the ERP team
         "can_work_tickets": can_work_tickets(current_user),
+        # the Messages section: WhatsApp, Instagram, Facebook, website chat (docs/messages.md)
+        "can_use_messages": chat_messages.can_use(current_user),
         # the Leads page, live from the CRM site (docs/leads.md)
         "can_use_leads": can_use_leads(current_user)
         and not division_without_site(current_user)

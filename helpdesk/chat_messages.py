@@ -88,6 +88,29 @@ def enabled(settings=None) -> bool:
     )
 
 
+def is_manager(user: str | None = None) -> bool:
+    user = user or frappe.session.user
+    roles = frappe.get_roles(user)
+    return (
+        user == "Administrator" or "System Manager" in roles or "Agent Manager" in roles
+    )
+
+
+def can_use(user: str | None = None) -> bool:
+    """The Messages screen is open to managers and the front-desk team's members, while the
+    Messages section is on (the teams per purpose come with phase 34)."""
+    settings = frappe.get_cached_doc(SETTINGS)
+    if not enabled(settings):
+        return False
+    user = user or frappe.session.user
+    if is_manager(user):
+        return True
+    team = settings.get("messages_team")
+    return bool(team) and bool(
+        frappe.db.exists("HD Team Member", {"parent": team, "user": user})
+    )
+
+
 def tickets_for_all(settings=None) -> bool:
     """Every conversation gets a ticket in the Messages section (docs/messages.md, step 2)."""
     settings = settings or frappe.get_cached_doc(SETTINGS)

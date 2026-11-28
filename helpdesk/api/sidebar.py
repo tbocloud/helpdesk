@@ -12,8 +12,14 @@ def get_nav_counts() -> dict:
     follow-ups that need them (the sidebar's strip, docs/follow-ups.md)."""
     user = frappe.session.user
     ticket = frappe.qb.DocType("HD Ticket")
+    in_messages = ticket.custom_section == "Messages"
+    open_ = ticket.status_category == "Open"
     counts = {
-        "tickets": _count_assigned("HD Ticket", user, ticket.status_category == "Open"),
+        # Support's Tickets badge leaves Meta's chats out; Messages has its own
+        "tickets": _count_assigned(
+            "HD Ticket", user, open_ & (ticket.custom_section.isnull() | ~in_messages)
+        ),
+        "messages": _count_assigned("HD Ticket", user, open_ & in_messages),
         "my_tasks": 0,
     }
     if frappe.db.table_exists("Task"):
