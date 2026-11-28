@@ -412,6 +412,14 @@ const portalRoutes = [
     name: "Standup",
     component: () => import("@/pages/standup/Standup.vue"),
   },
+  // the Messages section: WhatsApp, Instagram, Facebook and the website chat (docs/messages.md);
+  // the server checks again on every call
+  {
+    path: "/messages",
+    name: "Messages",
+    component: () => import("@/pages/messages/Messages.vue"),
+    beforeEnter: () => useAuthStore().canUseMessages || { name: "Home" },
+  },
   // agents: all of Copilot's work on one page; each sees what their permissions allow (docs/tbo-copilot.md)
   {
     path: "/copilot",

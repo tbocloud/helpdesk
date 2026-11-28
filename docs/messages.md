@@ -131,8 +131,43 @@ Support's tickets keep the default policy, and SLA reports can be filtered by po
 **Reports:** Helpdesk's reports read all tickets. Filter them by **Section** (a standard filter) until the Messages
 report arrives in phase 34.
 
+## Step 4: the Messages screen (built)
+
+**Who:** System and Agent Managers, and the members of the front-desk team, while the Messages section is on
+(`chat_messages.can_use`, sent as `can_use_messages`). The menu item **Support → Messages** and the page check it,
+and so does every call (`helpdesk.api.messages`).
+
+**The page** (`/helpdesk/messages`; `desk/src/pages/messages/Messages.vue` and `ChatThread.vue`; desktop and phone):
+- **List:**
+  - views: *Mine*, *My teams*, *Unassigned*, *Waiting for us*, *AI talking* and, for managers, *All*;
+  - search by name, phone, text or ticket number;
+  - each row shows the channel, *AI talking*, the reply window ("Closes in 5 h" or "Window closed"), unread, and the
+    last message with its time;
+  - closed chats appear only under All;
+  - the view and the open chat are kept in the address.
+- **Chat:**
+  - bubbles for the customer, the AI, staff (with their name) and internal notes (amber);
+  - Chatwoot's activity lines and Copilot's stage lines, small and centred;
+  - pictures inline, voice notes and videos playable, other files as links, locations as map links;
+  - delivery under our messages: ✓, ✓✓, ✓✓ Read, or *Failed* with Meta's reason.
+- **Header:** *I'll answer* (the AI stops; the ticket is assigned to the person if nobody has it), *Move to Support*
+  (asks first, then opens the ticket), and the ticket link.
+- **Reply box:**
+  - a reply, or an internal note;
+  - sending a reply takes the chat over from the AI;
+  - Ctrl or Cmd + Enter sends;
+  - **after WhatsApp's, Instagram's or Facebook's 24 hours** the reply box is locked with an explanation. Notes are
+    still allowed; templates come in the next step.
+- **Context column:** the contact (and whether their email or phone is verified), the customer, the ticket (status,
+  team, who has it), and the contact's earlier Messages tickets.
+
+**Sidebar:** the Messages badge counts the person's open Messages tickets. The Tickets badge no longer counts them.
+
+**Refreshing:** the list every 15 seconds and the open chat every 10 seconds, until live updates (next step).
+
 ## Next steps
 
-1. The Messages screen: list, chat, context and reply box, with Move to Support.
+1. Sending pictures and files, and WhatsApp templates after the 24 hours.
+2. Live updates (Frappe realtime), browser notifications and a sound.
 3. Sending files and templates, the reply window, and live updates.
 4. Customers' ERP chats in Support → Customer chats.

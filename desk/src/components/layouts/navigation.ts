@@ -57,6 +57,8 @@ export interface NavItem {
   /** key of `helpdesk.api.sidebar.get_nav_counts` shown as the badge */
   countKey?: string;
   ticketWorkersOnly?: boolean;
+  /** Messages: managers and the front-desk team, while the Messages section is on */
+  messagesOnly?: boolean;
   /** AI models: Agent Managers and System Managers */
   managersOnly?: boolean;
   leadsOnly?: boolean;
@@ -281,6 +283,15 @@ export const agentNavAreas: NavArea[] = [
     groups: [
       {
         items: [
+          // WhatsApp, Instagram, Facebook and the website chat (phase 32, docs/messages.md)
+          {
+            id: "messages",
+            label: __("Messages"),
+            icon: LucideMessagesSquare,
+            to: "Messages",
+            countKey: "messages",
+            messagesOnly: true,
+          },
           {
             id: "tickets",
             label: __("Tickets"),

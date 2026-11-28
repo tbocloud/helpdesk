@@ -105,6 +105,7 @@ export function useNavigation() {
     return (
       (!item.leadTab || isLeadTabVisible(item.leadTab)) &&
       (!item.ticketWorkersOnly || authStore.canWorkTickets) &&
+      (!item.messagesOnly || authStore.canUseMessages) &&
       (!item.managersOnly || authStore.isAdmin || authStore.isManager) &&
       (authStore.inContentTeam || !CONTENT_ROUTES.has(to)) &&
       (!authStore.isErpOnly || !ERP_EMPLOYEE_HIDDEN_ROUTES.has(to)) &&
