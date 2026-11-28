@@ -1735,6 +1735,20 @@ def follow_up_context(now=None, holidays=(), **settings):
     return follow_ups.Context(doc, now or FOLLOW_UP_MONDAY, calendar)
 
 
+def make_follow_up_handoff(user: str, doctype: str, name, handed_on):
+    """Records that a follow-up on `doctype` `name` went to `user`'s delegate on
+    `handed_on` (helpdesk.follow_ups.record_handoffs writes these)."""
+    return frappe.get_doc(
+        {
+            "doctype": "HD Follow Up Handoff",
+            "user": user,
+            "reference_doctype": doctype,
+            "reference_name": str(name),
+            "handed_on": handed_on,
+        }
+    ).insert(ignore_permissions=True)
+
+
 def get_follow_up_notices(user: str, reference_name) -> list[dict]:
     """The follow-up HD Notifications `user` has about a document: message, key, read."""
     return frappe.get_all(

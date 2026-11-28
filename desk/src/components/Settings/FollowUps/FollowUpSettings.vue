@@ -113,6 +113,81 @@
         </SettingsSection>
 
         <SettingsSection
+          :title="__('Delegates')"
+          :description="
+            __(
+              'Someone busy can have their follow-ups go to a delegate first: work that reaches them only as a lead, reviewer, head or manager goes to the delegate instead, and comes back to them only if it is still open after the days below. Their own tasks always reach them.'
+            )
+          "
+        >
+          <ul
+            v-if="form.delegates.length"
+            role="list"
+            class="flex flex-col gap-3"
+          >
+            <li
+              v-for="(row, index) in form.delegates"
+              :key="index"
+              class="flex flex-wrap items-end gap-3"
+            >
+              <FormControl
+                v-model="row.user"
+                type="select"
+                class="min-w-48 flex-1"
+                :label="__('Person')"
+                :options="agentOptions"
+              />
+              <LucideArrowRight
+                class="mb-2.5 size-4 shrink-0 text-ink-gray-5"
+                aria-hidden="true"
+              />
+              <FormControl
+                v-model="row.delegate"
+                type="select"
+                class="min-w-48 flex-1"
+                :label="__('Goes first to')"
+                :options="agentOptions"
+              />
+              <Button
+                variant="ghost"
+                theme="red"
+                :aria-label="__('Remove this delegate')"
+                @click="form.delegates.splice(index, 1)"
+              >
+                <template #icon>
+                  <LucideTrash2 class="size-4" aria-hidden="true" />
+                </template>
+              </Button>
+            </li>
+          </ul>
+          <div class="flex flex-wrap items-center gap-3">
+            <Button
+              :label="__('Add a delegate')"
+              @click="form.delegates.push({ user: '', delegate: '' })"
+            >
+              <template #prefix>
+                <LucidePlus class="size-4" aria-hidden="true" />
+              </template>
+            </Button>
+          </div>
+          <SettingRow
+            v-slot="{ id }"
+            :label="__('Back to the person after')"
+            :description="
+              __(
+                'Working days the delegate has to act before the person hears about it too.'
+              )
+            "
+          >
+            <NumberInput
+              :id="id"
+              v-model="form.delegate_grace_days"
+              :suffix="__('working days')"
+            />
+          </SettingRow>
+        </SettingsSection>
+
+        <SettingsSection
           :title="__('Task rules')"
           :description="
             __('Counted in working days: weekly offs and holidays are skipped.')
@@ -477,13 +552,16 @@ import { computed, ref } from "vue";
 import LucideArrowRight from "~icons/lucide/arrow-right";
 import LucideChevronRight from "~icons/lucide/chevron-right";
 import LucideCircleCheck from "~icons/lucide/circle-check";
+import LucidePlus from "~icons/lucide/plus";
 import LucideRefreshCw from "~icons/lucide/refresh-cw";
 import LucideSend from "~icons/lucide/send";
+import LucideTrash2 from "~icons/lucide/trash-2";
 import LucideTriangleAlert from "~icons/lucide/triangle-alert";
 import SettingRow from "../SettingRow.vue";
 import SettingsSection from "../SettingsSection.vue";
 import { setActiveSettingsTab } from "../settingsModal";
 import NumberInput from "./NumberInput.vue";
+import { useAgentStore } from "@/stores/agent";
 
 type Form = Record<string, any>;
 
@@ -675,12 +753,27 @@ const ticketRules = [
 ];
 
 const form = ref<Form | null>(null);
+
+// the people a delegate can be set for, and to: the active agents
+const agentStore = useAgentStore();
+if (!agentStore.agents.data && !agentStore.agents.loading)
+  agentStore.agents.reload();
+const agentOptions = computed(() => [
+  { label: __("Choose a person"), value: "" },
+  ...(agentStore.dropdown ?? []),
+]);
 const initial = ref("");
 
 function toForm(values: Form): Form {
   const f: Form = { ...values };
   for (const key of CHECKS) f[key] = Boolean(f[key]);
   f.afternoon_nudge_at = String(f.afternoon_nudge_at || "14:00").slice(0, 5);
+  f.delegates = (f.delegates ?? []).map(
+    (row: { user: string; delegate: string }) => ({
+      user: row.user,
+      delegate: row.delegate,
+    })
+  );
   // a site that never saved the settings has no stored value yet
   f.weekly_challenge = f.weekly_challenge || challengeOptions[0].value;
   return f;

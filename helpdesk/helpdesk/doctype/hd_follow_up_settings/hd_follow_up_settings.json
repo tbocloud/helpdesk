@@ -15,6 +15,9 @@
 		"ladder_l2_days",
 		"ladder_l3_days",
 		"key_tasks_escalate_faster",
+		"delegates_section",
+		"delegates",
+		"delegate_grace_days",
 		"task_section",
 		"due_tomorrow",
 		"due_today",
@@ -123,6 +126,24 @@
 			"fieldtype": "Check",
 			"label": "Key tasks and milestones escalate one level sooner",
 			"default": "1"
+		},
+		{
+			"fieldname": "delegates_section",
+			"fieldtype": "Section Break",
+			"label": "Delegates"
+		},
+		{
+			"fieldname": "delegates",
+			"fieldtype": "Table",
+			"label": "Delegates",
+			"options": "HD Follow Up Delegate"
+		},
+		{
+			"fieldname": "delegate_grace_days",
+			"fieldtype": "Int",
+			"label": "Back To The Person After, Working Days",
+			"default": "2",
+			"non_negative": 1
 		},
 		{
 			"fieldname": "task_section",
@@ -343,7 +364,7 @@
 	"index_web_pages_for_search": 0,
 	"issingle": 1,
 	"links": [],
-	"modified": "2026-10-28 12:00:00.000000",
+	"modified": "2026-11-28 15:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Helpdesk",
 	"name": "HD Follow Up Settings",

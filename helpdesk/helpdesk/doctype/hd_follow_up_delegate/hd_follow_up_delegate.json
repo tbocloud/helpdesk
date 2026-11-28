@@ -1,0 +1,41 @@
+{
+	"actions": [],
+	"creation": "2026-11-28 15:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"index_web_pages_for_search": 0,
+	"links": [],
+	"modified": "2026-11-28 15:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Helpdesk",
+	"owner": "Administrator",
+	"sort_field": "creation",
+	"sort_order": "DESC",
+	"states": [],
+	"name": "HD Follow Up Delegate",
+	"istable": 1,
+	"editable_grid": 1,
+	"permissions": [],
+	"fields": [
+		{
+			"fieldname": "user",
+			"fieldtype": "Link",
+			"label": "Person",
+			"options": "User",
+			"reqd": 1,
+			"in_list_view": 1
+		},
+		{
+			"fieldname": "delegate",
+			"fieldtype": "Link",
+			"label": "Goes First To",
+			"options": "User",
+			"reqd": 1,
+			"in_list_view": 1
+		}
+	],
+	"field_order": [
+		"user",
+		"delegate"
+	]
+}

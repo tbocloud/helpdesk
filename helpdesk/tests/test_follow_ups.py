@@ -15,6 +15,7 @@ from helpdesk.test_utils import (
     make_assigned_ticket,
     make_assignment,
     make_department,
+    make_follow_up_handoff,
     make_hd_leave,
     make_project,
     make_task,
@@ -647,3 +648,68 @@ class TestSettingsAccess(FollowUpCase):
         self.assertEqual([c.args[0] for c in deliver.call_args_list], [MANAGER[0]])
         with self.assertRaises(frappe.PermissionError):
             call_as_user(DEV[0], "helpdesk.api.follow_ups.send_test_digest")
+
+
+class TestDelegates(FollowUpCase):
+    """Someone with a delegate hears about others' work only after the delegate had it
+    for the grace days (docs/follow-ups.md#delegates)."""
+
+    def context(self):
+        return follow_up_context(
+            delegates=[{"user": MANAGER[0], "delegate": COORD[0]}],
+            delegate_grace_days=2,
+        )
+
+    def test_escalations_go_to_the_delegate_first(self):
+        task = self.task("Opening balances", LAST_MONDAY)
+        f = self.one(task, "overdue", self.context())
+        self.assertEqual(f.level, 3)
+        self.assertNotIn(MANAGER[0], f.recipients)
+        self.assertIn(COORD[0], f.recipients)
+        self.assertEqual(f.delegated_from, [MANAGER[0]])
+
+    def test_their_own_work_still_reaches_them(self):
+        task = self.task("Sign the AMC", LAST_MONDAY, assignee=MANAGER)
+        self.assertIn(MANAGER[0], self.one(task, "overdue", self.context()).recipients)
+
+    def test_it_comes_back_after_the_grace_days(self):
+        task = self.task("Opening balances", LAST_MONDAY)
+        # the delegate had it from Wednesday: Thursday, Friday and Saturday have passed
+        make_follow_up_handoff(MANAGER[0], "Task", task, WEDNESDAY)
+        self.assertIn(MANAGER[0], self.one(task, "overdue", self.context()).recipients)
+        frappe.db.delete("HD Follow Up Handoff")
+        # from Saturday: only one working day (Monday) so far
+        make_follow_up_handoff(MANAGER[0], "Task", task, SATURDAY)
+        self.assertNotIn(
+            MANAGER[0], self.one(task, "overdue", self.context()).recipients
+        )
+
+    def test_handoffs_are_recorded_once_and_forgotten_when_resolved(self):
+        task = self.task("Opening balances", LAST_MONDAY)
+        set_follow_up_settings(
+            delegates=[{"user": MANAGER[0], "delegate": COORD[0]}],
+            delegate_grace_days=2,
+        )
+        ctx = self.context()
+        for _run in range(2):
+            follow_ups.record_handoffs(follow_ups.evaluate(ctx), ctx)
+        handoffs = frappe.get_all(
+            "HD Follow Up Handoff",
+            filters={"reference_name": task},
+            fields=["user", "handed_on"],
+        )
+        self.assertEqual(
+            [(h.user, str(h.handed_on)) for h in handoffs],
+            [(MANAGER[0], str(ctx.today))],
+        )
+        frappe.db.set_value("Task", task, "status", "Completed")
+        follow_ups.record_handoffs(follow_ups.evaluate(ctx), ctx)
+        self.assertFalse(
+            frappe.db.exists("HD Follow Up Handoff", {"reference_name": task})
+        )
+
+    def test_nobody_is_their_own_delegate(self):
+        with self.assertRaises(frappe.ValidationError):
+            set_follow_up_settings(
+                delegates=[{"user": MANAGER[0], "delegate": MANAGER[0]}]
+            )
