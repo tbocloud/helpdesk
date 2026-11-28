@@ -108,6 +108,23 @@ def came_in_by(channel: str | None) -> str:
     return CAME_IN_BY.get(channel or "", "Other chat")
 
 
+def support_only(filters):
+    """Support's ticket lists leave out Messages tickets, unless the filter already asks for a
+    section (a manager looking at Messages tickets there). `filters` is a dict or a list of
+    [field, op, value] / [doctype, field, op, value]; it is changed in place and returned."""
+    if isinstance(filters, dict):
+        filters.setdefault("custom_section", ("!=", MESSAGES))
+        return filters
+    names_section = any(
+        isinstance(row, (list, tuple))
+        and "custom_section" in [str(part) for part in row[:2]]
+        for row in filters
+    )
+    if not names_section:
+        filters.append(["custom_section", "!=", MESSAGES])
+    return filters
+
+
 # --- reading a Chatwoot message -------------------------------------------------------------------
 
 

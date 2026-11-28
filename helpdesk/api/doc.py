@@ -7,6 +7,7 @@ from frappe.utils.caching import redis_cache
 from pypika import Criterion
 
 from helpdesk.api.dashboard import COUNT_NAME
+from helpdesk.chat_messages import support_only
 from helpdesk.utils import (
     assigned_to_filter,
     call_log_default_columns,
@@ -103,6 +104,9 @@ def get_list_data(
     # after the default view's filters, which may name an assignee (or @me) too
     handle_at_me_support(filters)
     handle_assigned_to_filter(filters, doctype)
+    if doctype == "HD Ticket":
+        # Meta's chats are worked in the Messages section, not in Support's lists
+        support_only(filters)
 
     if rows is None:
         rows = []

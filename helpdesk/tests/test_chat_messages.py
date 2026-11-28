@@ -500,3 +500,52 @@ class TestMoveToSupport(TicketsCase):
         ticket = make_ticket(subject="Email ticket")
         with self.assertRaises(frappe.ValidationError):
             chat_messages.move_to_support(ticket.name)
+
+
+class TestSupportLists(TicketsCase):
+    """Step 3: Support's ticket lists leave Messages tickets out."""
+
+    def setUp(self):
+        super().setUp()
+        self.customer_says("Hi")
+        self.chat_ticket = str(self.row().hd_ticket)
+        self.support = str(make_ticket(subject=f"Support {self.cid}").name)
+        older = make_ticket(subject=f"Before the field {self.cid}")
+        # a ticket from before the Section field has none: it is Support's
+        frappe.db.set_value("HD Ticket", older.name, "custom_section", None)
+        self.older = str(older.name)
+        self.ours = [self.chat_ticket, self.support, self.older]
+
+    def listed(self, *filters):
+        from helpdesk.api.doc import get_list_data
+
+        result = get_list_data(
+            "HD Ticket",
+            filters=[["name", "in", self.ours], *filters],
+            page_length=50,
+        )
+        return {str(row["name"]) for row in result["data"]}
+
+    def test_the_tickets_list_leaves_out_messages_tickets(self):
+        self.assertEqual(self.listed(), {self.support, self.older})
+
+    def test_asking_for_the_section_shows_them(self):
+        self.assertEqual(
+            self.listed(["custom_section", "=", "Messages"]), {self.chat_ticket}
+        )
+
+    def test_the_phone_apps_lists_leave_them_out_too(self):
+        from helpdesk.api.mobile import get_tickets
+
+        for view in ("all-open", "unassigned"):
+            names = {row["name"] for row in get_tickets(view=view, limit=500)["data"]}
+            self.assertNotIn(self.chat_ticket, names, view)
+            self.assertIn(self.support, names, view)
+
+    def test_the_rule_keeps_a_section_filter_given_either_way(self):
+        rows = [["HD Ticket", "custom_section", "=", "Messages"]]
+        self.assertEqual(chat_messages.support_only(rows), rows)
+        self.assertEqual(
+            chat_messages.support_only({"custom_section": "Messages"}),
+            {"custom_section": "Messages"},
+        )

@@ -53,6 +53,7 @@ from helpdesk.api.work import (
     is_task_overdue,
     sla_due_soon,
 )
+from helpdesk.chat_messages import support_only
 from helpdesk.content_team import can_work_tickets, in_content_team
 from helpdesk.helpdesk.doctype.hd_notification.utils import clear
 from helpdesk.helpdesk.doctype.hd_project_file.hd_project_file import SUPERSEDED
@@ -782,6 +783,8 @@ def get_tickets(
         frappe.throw(_("Unknown ticket view: {0}").format(view))
     user = frappe.session.user
     filters = {"status_category": ("in", OPEN_TICKET_CATEGORIES)}
+    # Meta's chats are worked in the Messages section, not among Support's tickets
+    support_only(filters)
     if view == "mine":
         filters["name"] = assigned_to_filter("HD Ticket", user, finished=False)
     elif view == "team":

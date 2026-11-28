@@ -109,9 +109,30 @@ From then on the chat is the ticket's channel, as for any chat ticket:
 **Not changed:** WhatsApp outreach replies from leads still go to the ERP lead, with no ticket. With the switch off,
 chats behave as before: a ticket only when the AI raises one or an agent adds the label `ticket`.
 
+## Step 3: Support's lists leave Messages tickets out (built)
+
+**The rule** (`chat_messages.support_only`): Support's ticket lists leave out Messages tickets, unless the filter already
+names a section. A manager filtering for *Section = Messages* still sees them. A ticket from before the field, with
+no section, counts as Support's.
+
+**Where it applies:**
+- the agents' Tickets list and its views, and the customer portal's list (`api/doc.get_list_data`);
+- the phone app's ticket lists (`api/mobile.get_tickets`).
+
+Agent Home lists only the person's own tickets, so it needs no change: front-desk people see their chats there, and
+nobody else does.
+
+**SLA: set up in TBO Support, no code.** Helpdesk → SLA policies → new policy **Messages**:
+- condition `doc.custom_section == "Messages"`;
+- response time, for example 15 minutes in office hours.
+
+Support's tickets keep the default policy, and SLA reports can be filtered by policy.
+
+**Reports:** Helpdesk's reports read all tickets. Filter them by **Section** (a standard filter) until the Messages
+report arrives in phase 34.
+
 ## Next steps
 
-1. Support's lists, SLA and reports leaving out Messages tickets.
-2. The Messages screen: list, chat, context and reply box, with Move to Support.
+1. The Messages screen: list, chat, context and reply box, with Move to Support.
 3. Sending files and templates, the reply window, and live updates.
 4. Customers' ERP chats in Support → Customer chats.
