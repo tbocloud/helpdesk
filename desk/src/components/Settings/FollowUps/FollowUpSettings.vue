@@ -774,6 +774,8 @@ function toForm(values: Form): Form {
       delegate: row.delegate,
     })
   );
+  // 0 or empty would hand everything straight back, so the server uses 2 then too
+  f.delegate_grace_days = Number(f.delegate_grace_days) || 2;
   // a site that never saved the settings has no stored value yet
   f.weekly_challenge = f.weekly_challenge || challengeOptions[0].value;
   return f;

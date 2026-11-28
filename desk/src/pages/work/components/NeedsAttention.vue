@@ -14,12 +14,20 @@
     </p>
   </SectionCard>
   <SectionCard
-    v-else-if="total"
+    v-else-if="total || delegate"
     :title="__('Needs your attention')"
     :count="total"
     :icon="LucideBellRing"
     :description="
-      __('Most urgent first. Open an item to act on it, or to see who has it.')
+      delegate
+        ? __(
+            '{0} handles your team\'s follow-ups first; one comes to you only if it is still open after {1} working days. Your own tasks come straight to you.',
+            delegate.full_name,
+            String(delegate.days)
+          )
+        : __(
+            'Most urgent first. Open an item to act on it, or to see who has it.'
+          )
     "
   >
     <template v-if="total > SHORT_LIST" #actions>
@@ -30,7 +38,10 @@
         @click="showAll = !showAll"
       />
     </template>
-    <FollowUpList :rows="rows" empty="" />
+    <FollowUpList
+      :rows="rows"
+      :empty="delegate ? __('Nothing has come back to you.') : ''"
+    />
   </SectionCard>
 </template>
 
@@ -56,6 +67,11 @@ watch(showAll, () => attention.reload());
 
 const total = computed<number>(() => attention.data?.total ?? 0);
 const rows = computed<FollowUpRow[]>(() => attention.data?.rows ?? []);
+const delegate = computed<{
+  user: string;
+  full_name: string;
+  days: number;
+} | null>(() => attention.data?.delegate ?? null);
 
 defineExpose({ reload: () => attention.reload() });
 </script>

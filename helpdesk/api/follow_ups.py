@@ -88,7 +88,8 @@ def working_hours() -> dict:
 def save_settings(values: dict | str) -> dict:
     check_admin()
     values = frappe.parse_json(values) or {}
-    allowed = set(editable_fields())
+    # the delegates are a table, which editable_fields (value fields only) leaves out
+    allowed = {*editable_fields(), "delegates"}
     doc = frappe.get_doc(follow_ups.SETTINGS)
     if "delegates" in values:
         values["delegates"] = clean_delegates(values["delegates"])
@@ -151,8 +152,23 @@ def get_preview() -> list[dict]:
 @agent_only
 def get_my_follow_ups(limit: int | None = None) -> dict:
     """What "Needs your attention" counts for the person asking, the most pressing first:
-    {total, rows}. `limit` rows at most (all of them without it)."""
-    return follow_ups.attention_for(frappe.session.user, cint(limit) or None)
+    {total, rows, delegate}. `limit` rows at most (all of them without it); `delegate`
+    is who gets their follow-ups first, if anyone."""
+    user = frappe.session.user
+    result = follow_ups.attention_for(user, cint(limit) or None)
+    # who handles their follow-ups first, so the list can say why it is short
+    settings = follow_ups.get_settings()
+    delegate = follow_ups.delegates(settings).get(user)
+    result["delegate"] = (
+        {
+            "user": delegate,
+            "full_name": get_fullname(delegate),
+            "days": follow_ups.grace_days(settings),
+        }
+        if delegate
+        else None
+    )
+    return result
 
 
 @frappe.whitelist()
