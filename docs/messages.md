@@ -165,9 +165,41 @@ and so does every call (`helpdesk.api.messages`).
 
 **Refreshing:** the list every 15 seconds and the open chat every 10 seconds, until live updates (next step).
 
+## Step 5: files, templates and live updates (built)
+
+**Files from the reply box** (*Attach*):
+- the person uploads files as private files, then sends them with or without text;
+- `send_message(files=…)` takes only the person's own fresh uploads, at most 10, each within *Largest file to keep*;
+- they go to Chatwoot as a multipart form (`ChatwootClient.post_files`);
+- the message keeps them as its files, and the File records are attached to it;
+- after a closed window, files are blocked like text, except in an internal note.
+
+**WhatsApp templates after the 24 hours** (*Send a template*, WhatsApp chats only):
+- the person picks one of the approved templates in use (Settings → TBO Chat → WhatsApp outreach);
+- they fill its blanks, one box per `{{n}}`, and see the text before sending;
+- `send_template` sends it through Chatwoot's template parameters, takes the chat over like a reply, and keeps it
+  as a *Template* by that person;
+- Instagram and Facebook say that a person may still answer in TBO Chat within 7 days (the human-agent tag; never
+  the AI).
+
+**Who sent it wins.** What TBO Support records about its own message (who sent it, its kind) wins over Chatwoot's
+copy, also when that copy arrived first.
+
+**Live updates:**
+- each new message or delivery tick sends `helpdesk:chat-message` with only the conversation's name and whether the
+  customer wrote;
+- it goes to the room of HD Chat Conversation, which only people who may read conversations can join, never to the
+  whole site;
+- the Messages page joins the room while it is open and reloads the list and the open chat at once;
+- the old refresh runs every 60 seconds, only as a fallback.
+
+**Notifications:** *Notify me* asks the browser's permission, and is remembered in that browser. A customer's
+message in a chat the person isn't looking at shows "New message — A customer wrote in Messages", without the text.
+Clicking it opens the chat.
+
 ## Next steps
 
-1. Sending pictures and files, and WhatsApp templates after the 24 hours.
-2. Live updates (Frappe realtime), browser notifications and a sound.
+1. Replies and Copilot's lines on a ticket moved to Support, after the 24 hours: a "ticket update" template on
+   WhatsApp, and a note on the ticket for Instagram and Facebook.
 3. Sending files and templates, the reply window, and live updates.
 4. Customers' ERP chats in Support → Customer chats.

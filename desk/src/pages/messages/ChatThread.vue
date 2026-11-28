@@ -167,11 +167,24 @@
           class="mb-2 rounded-lg bg-surface-amber-1 px-3 py-2 text-p-sm text-ink-gray-8"
         >
           {{
-            __(
-              "The 24-hour window closed {0}. This channel takes only an approved template now (templates come in the next update). You can still add an internal note.",
-              closedWhen
-            )
+            isWhatsApp
+              ? __(
+                  "The 24-hour window closed {0}. WhatsApp takes only an approved template now. You can still add an internal note.",
+                  closedWhen
+                )
+              : __(
+                  "The 24-hour window closed {0}. Instagram and Facebook take no more replies from here; a person may still answer in TBO Chat within 7 days. You can still add an internal note.",
+                  closedWhen
+                )
           }}
+          <Button
+            v-if="isWhatsApp"
+            class="mt-2"
+            size="sm"
+            variant="solid"
+            :label="__('Send a template')"
+            @click="openTemplates"
+          />
         </div>
         <textarea
           v-model="draft"
@@ -187,7 +200,39 @@
           @keydown.enter.ctrl.prevent="send"
           @keydown.enter.meta.prevent="send"
         />
+        <div v-if="attachments.length" class="mt-2 flex flex-wrap gap-2">
+          <span
+            v-for="(f, i) in attachments"
+            :key="f.file_url"
+            class="flex items-center gap-1 rounded bg-surface-gray-2 px-2 py-1 text-p-sm text-ink-gray-8"
+          >
+            {{ f.file_name }}
+            <button
+              type="button"
+              class="text-ink-gray-5 hover:text-ink-gray-8"
+              :aria-label="__('Remove {0}', f.file_name)"
+              @click="attachments.splice(i, 1)"
+            >
+              ×
+            </button>
+          </span>
+        </div>
         <div class="mt-2 flex items-center gap-3">
+          <FileUploader
+            :upload-args="{ private: true }"
+            @success="(f) => attachments.push(f)"
+          >
+            <template #default="{ openFileSelector, uploading }">
+              <Button
+                size="sm"
+                variant="subtle"
+                icon-left="lucide-paperclip"
+                :label="uploading ? __('Uploading…') : __('Attach')"
+                :disabled="uploading || sending || (windowClosed && !asNote)"
+                @click="openFileSelector()"
+              />
+            </template>
+          </FileUploader>
           <label class="flex items-center gap-2 text-p-sm text-ink-gray-7">
             <input v-model="asNote" type="checkbox" />
             {{ __("Internal note") }}
@@ -203,7 +248,10 @@
             variant="solid"
             :label="asNote ? __('Add note') : __('Send')"
             :loading="sending"
-            :disabled="!draft.trim() || (windowClosed && !asNote)"
+            :disabled="
+              (!draft.trim() && !attachments.length) ||
+              (windowClosed && !asNote)
+            "
             @click="send"
           />
         </div>
@@ -280,6 +328,50 @@
       </div>
     </aside>
 
+    <Dialog v-model="templatesOpen" :options="{ title: __('Send a template') }">
+      <template #body-content>
+        <div class="flex flex-col gap-3">
+          <div v-if="!templates.length" class="text-p-sm text-ink-gray-6">
+            {{
+              __(
+                "No approved templates are in use. Add them in Settings → TBO Chat → WhatsApp outreach."
+              )
+            }}
+          </div>
+          <select
+            v-else
+            v-model="chosen"
+            class="rounded border border-outline-gray-2 px-2 py-1.5 text-p-base"
+          >
+            <option v-for="t in templates" :key="t.name" :value="t.name">
+              {{ t.name }} ({{ t.language }})
+            </option>
+          </select>
+          <template v-if="chosenTemplate">
+            <input
+              v-for="(_v, i) in blanks"
+              :key="i"
+              v-model="blanks[i]"
+              class="rounded border border-outline-gray-2 px-2 py-1.5 text-p-base"
+              :placeholder="__('Blank {0}', String(i + 1))"
+            />
+            <div
+              class="whitespace-pre-wrap rounded-lg bg-surface-gray-2 px-3 py-2 text-p-sm text-ink-gray-8"
+            >
+              {{ templatePreview }}
+            </div>
+          </template>
+          <Button
+            variant="solid"
+            :label="__('Send template')"
+            :loading="busy === 'template'"
+            :disabled="!chosenTemplate || blanks.some((b) => !b.trim())"
+            @click="sendTemplate"
+          />
+        </div>
+      </template>
+    </Dialog>
+
     <Dialog
       v-model="confirmMove"
       :options="{
@@ -302,7 +394,8 @@
 <script setup lang="ts">
 import { __ } from "@/translation";
 import { dateFormat, errorText } from "@/utils";
-import { Badge, Button, Dialog, call, dayjs } from "frappe-ui";
+import { globalStore } from "@/stores/globalStore";
+import { Badge, Button, Dialog, FileUploader, call, dayjs } from "frappe-ui";
 import {
   computed,
   nextTick,
@@ -314,7 +407,8 @@ import {
 import { useRouter } from "vue-router";
 
 const API = "helpdesk.api.messages";
-const REFRESH_MS = 10000;
+// live updates do the work; this only covers a lost socket
+const REFRESH_MS = 60000;
 
 type FileItem = {
   type: string;
@@ -373,7 +467,14 @@ const router = useRouter();
 const data = ref<Data | null>(null);
 const loading = ref(false);
 const sending = ref(false);
-const busy = ref<"" | "take" | "move">("");
+const busy = ref<"" | "take" | "move" | "template">("");
+const attachments = ref<{ file_url: string; file_name: string }[]>([]);
+const templatesOpen = ref(false);
+const templates = ref<
+  { name: string; language: string; body: string; blanks: number }[]
+>([]);
+const chosen = ref("");
+const blanks = ref<string[]>([]);
 const notice = ref<{ ok: boolean; text: string } | null>(null);
 const draft = ref("");
 const asNote = ref(false);
@@ -384,6 +485,15 @@ const chat = computed(() => data.value?.conversation || null);
 const messages = computed(() => data.value?.messages || []);
 const windowClosed = computed(
   () => !!chat.value?.window && !chat.value.window.open
+);
+const isWhatsApp = computed(() => chat.value?.channel === "WhatsApp");
+const chosenTemplate = computed(() =>
+  templates.value.find((t) => t.name === chosen.value)
+);
+const templatePreview = computed(() =>
+  (chosenTemplate.value?.body || "").replace(/\{\{\s*(\d+)\s*\}\}/g, (all, n) =>
+    blanks.value[Number(n) - 1]?.trim() ? blanks.value[Number(n) - 1] : all
+  )
 );
 const closedWhen = computed(() =>
   chat.value?.window?.closes_at
@@ -427,7 +537,9 @@ async function scrollToEnd() {
 
 async function send() {
   const text = draft.value.trim();
-  if (!text || sending.value || (windowClosed.value && !asNote.value)) return;
+  const files = attachments.value.map((f) => f.file_url);
+  if ((!text && !files.length) || sending.value) return;
+  if (windowClosed.value && !asNote.value) return;
   sending.value = true;
   notice.value = null;
   try {
@@ -435,14 +547,52 @@ async function send() {
       name: props.name,
       text,
       private: asNote.value ? 1 : 0,
+      files,
     });
-    // only what was sent is cleared: text typed meanwhile stays
+    // only what was sent is cleared: text typed or files added meanwhile stay
     if (draft.value.trim() === text) draft.value = "";
+    attachments.value = attachments.value.filter(
+      (f) => !files.includes(f.file_url)
+    );
     emit("changed");
   } catch (err) {
     notice.value = { ok: false, text: errorText(err, __("Not sent")) };
   } finally {
     sending.value = false;
+  }
+  await load(true);
+}
+
+async function openTemplates() {
+  templatesOpen.value = true;
+  try {
+    const answer = (await call(`${API}.get_templates`, {
+      name: props.name,
+    })) as { templates: typeof templates.value };
+    templates.value = answer.templates;
+    if (!chosen.value && templates.value.length)
+      chosen.value = templates.value[0].name;
+  } catch (err) {
+    notice.value = { ok: false, text: errorText(err, __("Not loaded")) };
+  }
+}
+
+async function sendTemplate() {
+  if (!chosenTemplate.value) return;
+  busy.value = "template";
+  notice.value = null;
+  try {
+    await call(`${API}.send_template`, {
+      name: props.name,
+      template: chosen.value,
+      values: blanks.value.map((b) => b.trim()),
+    });
+    templatesOpen.value = false;
+    emit("changed");
+  } catch (err) {
+    notice.value = { ok: false, text: errorText(err, __("Not sent")) };
+  } finally {
+    busy.value = "";
   }
   await load(true);
 }
@@ -527,14 +677,27 @@ function timeOf(stamp: string) {
   return stamp ? dateFormat(stamp, "D MMM, HH:mm") : "";
 }
 
+// a new message in this chat (or a delivery tick) reloads it at once
+const { $socket } = globalStore();
+function onLive(event: { conversation: string }) {
+  if (event?.conversation === props.name && !sending.value) load();
+}
+
 let timer: number | undefined;
 onMounted(() => {
   load(true);
-  // live updates come with step 5; until then the chat refreshes itself
+  $socket?.on("helpdesk:chat-message", onLive);
   timer = window.setInterval(() => {
     if (!sending.value) load();
   }, REFRESH_MS);
 });
-onBeforeUnmount(() => window.clearInterval(timer));
+onBeforeUnmount(() => {
+  $socket?.off("helpdesk:chat-message", onLive);
+  window.clearInterval(timer);
+});
 watch(asNote, () => (notice.value = null));
+// a template's blanks: one box per {{n}}
+watch(chosenTemplate, (t) => {
+  blanks.value = Array.from({ length: t?.blanks || 0 }, () => "");
+});
 </script>

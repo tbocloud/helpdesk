@@ -9,6 +9,7 @@ members, while the Messages section is on. Each call checks it again.
 
 import contextlib
 import json
+import mimetypes
 
 import frappe
 from frappe import _
@@ -24,6 +25,7 @@ from helpdesk.utils import (
 
 VIEWS = ("mine", "team", "unassigned", "waiting", "ai", "all")
 MAX_TEXT = 4096
+MAX_FILES = 10
 PAGE = 30
 MESSAGES_SHOWN = 200
 STATES = {"Pending": "AI talking", "Open": "With a person", "Resolved": "Closed"}
@@ -353,15 +355,19 @@ def _earlier_tickets(row) -> list[dict]:
 
 @frappe.whitelist(methods=["POST"])
 @agent_only
-def send_message(name: str, text: str, private: int | str = 0) -> dict:
-    """A person's reply (or, with `private`, an internal note) on the chat's channel. A reply
-    takes the chat over from the AI; WhatsApp, Instagram and Facebook refuse a free-form reply
-    once their 24-hour window has closed."""
+def send_message(
+    name: str, text: str = "", private: int | str = 0, files: list | str | None = None
+) -> dict:
+    """A person's reply (or, with `private`, an internal note) on the chat's channel, with the
+    files they uploaded (`files`: their File URLs). A reply takes the chat over from the AI;
+    WhatsApp, Instagram and Facebook refuse a free-form reply once their 24-hour window has
+    closed."""
     _require_use()
     chat = _chat(name)
     text = (text or "").strip()
-    if not text:
-        frappe.throw(_("Write a message first."))
+    uploads = _uploads(files)
+    if not text and not uploads:
+        frappe.throw(_("Write a message or add a file first."))
     if len(text) > MAX_TEXT:
         frappe.throw(_("A message is at most {0} characters.").format(MAX_TEXT))
     private = bool(cint(private))
@@ -374,7 +380,15 @@ def send_message(name: str, text: str, private: int | str = 0) -> dict:
         )
     if not private:
         _take_over(chat)
-    posted = chat.client.post_message(chat.conversation_id, text, private=private)
+    if uploads:
+        posted = chat.client.post_files(
+            chat.conversation_id,
+            text,
+            [(f.file_name, content, mime) for f, content, mime in uploads],
+            private=private,
+        )
+    else:
+        posted = chat.client.post_message(chat.conversation_id, text, private=private)
     if posted is None:
         frappe.throw(_("TBO Chat didn't take the message. Try again in a moment."))
     # what Chatwoot answers is the message; what we sent fills in anything it leaves out
@@ -385,7 +399,136 @@ def send_message(name: str, text: str, private: int | str = 0) -> dict:
         **(posted if isinstance(posted, dict) else {}),
     }
     kept = chat_messages.keep(
-        chat, message, author=frappe.session.user, sender_type="Staff"
+        chat,
+        message,
+        author=frappe.session.user,
+        sender_type="Staff",
+        files=[_file_row(f, content, mime) for f, content, mime in uploads] or None,
+    )
+    # the files belong to the message from now on (and its readers may open them)
+    for f, _content, _mime in uploads:
+        frappe.db.set_value(
+            "File",
+            f.name,
+            {"attached_to_doctype": chat_messages.MESSAGE, "attached_to_name": kept},
+        )
+    return {"message": kept}
+
+
+def _uploads(files) -> list[tuple]:
+    """The person's own fresh uploads, as (File, content, MIME type), within the size limit."""
+    urls = frappe.parse_json(files) if isinstance(files, str) else (files or [])
+    if not isinstance(urls, list):
+        frappe.throw(_("Files must be a list."))
+    if len(urls) > MAX_FILES:
+        frappe.throw(_("At most {0} files in one message.").format(MAX_FILES))
+    limit = max(cint(_settings().get("max_file_mb")) or 25, 1) * chat_messages.MB
+    found = []
+    for url in urls:
+        name = frappe.db.get_value(
+            "File",
+            {
+                "file_url": str(url),
+                "owner": frappe.session.user,
+                "attached_to_doctype": ["in", ["", None]],
+            },
+        )
+        if not name:
+            frappe.throw(_("A file to send was not found among your uploads."))
+        file = frappe.get_doc("File", name)
+        content = file.get_content()
+        if isinstance(content, str):
+            content = content.encode()
+        if len(content) > limit:
+            frappe.throw(
+                _("{0} is bigger than {1} MB.").format(
+                    file.file_name, limit // chat_messages.MB
+                )
+            )
+        mime = (
+            mimetypes.guess_type(file.file_name or "")[0] or "application/octet-stream"
+        )
+        found.append((file, content, mime))
+    return found
+
+
+def _file_row(file, content: bytes, mime: str) -> dict:
+    kind = mime.split("/", 1)[0]
+    return {
+        "file_type": {"image": "Image", "audio": "Audio", "video": "Video"}.get(
+            kind, "File"
+        ),
+        "file": file.file_url,
+        "file_name": file.file_name,
+        "size": len(content),
+        "note": "",
+        "source_url": "",
+    }
+
+
+@frappe.whitelist()
+@agent_only
+def get_templates(name: str) -> dict:
+    """The approved WhatsApp templates a person may send in this chat (WhatsApp only)."""
+    from helpdesk import whatsapp_outreach
+
+    _require_use()
+    chat = _chat(name)
+    if chat.row.channel != "Channel::Whatsapp":
+        return {"templates": []}
+    return {
+        "templates": [
+            {
+                "name": t.template_name,
+                "language": t.language,
+                "body": t.body or "",
+                "blanks": whatsapp_outreach.blanks_of(t),
+            }
+            for t in whatsapp_outreach.usable_templates(chat.settings)
+        ]
+    }
+
+
+@frappe.whitelist(methods=["POST"])
+@agent_only
+def send_template(name: str, template: str, values: list | str | None = None) -> dict:
+    """An approved WhatsApp template, its blanks filled by the person: what may go after the
+    24-hour window. It takes the chat over from the AI, like a reply."""
+    from helpdesk import whatsapp_outreach
+
+    _require_use()
+    chat = _chat(name)
+    if chat.row.channel != "Channel::Whatsapp":
+        frappe.throw(_("Templates are for WhatsApp chats."))
+    chosen = whatsapp_outreach.find_template(template, chat.settings)
+    if not chosen:
+        frappe.throw(_("Template {0} is not in use.").format(template))
+    values = frappe.parse_json(values) if isinstance(values, str) else (values or [])
+    values = [whatsapp_outreach.clean_value(v) for v in values]
+    if len(values) != whatsapp_outreach.blanks_of(chosen) or not all(values):
+        frappe.throw(_("Fill in every blank of the template."))
+    content = whatsapp_outreach.render(chosen, values)
+    _take_over(chat)
+    posted = chat.client.post_template(
+        chat.conversation_id,
+        content,
+        {
+            "name": chosen.template_name,
+            "category": whatsapp_outreach.CATEGORY,
+            "language": chosen.language,
+            "processed_params": {
+                str(position): value for position, value in enumerate(values, 1)
+            },
+        },
+    )
+    if not posted:
+        frappe.throw(_("TBO Chat didn't take the template. Try again in a moment."))
+    kept = chat_messages.keep(
+        chat,
+        {"content": content, "message_type": "outgoing", **posted},
+        author=frappe.session.user,
+        sender_type="Staff",
+        kind="Template",
     )
     return {"message": kept}
 

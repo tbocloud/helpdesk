@@ -3036,7 +3036,9 @@ class FakeChatwootAPI:
             {
                 "method": method,
                 "url": url,
-                "body": json or {},
+                # a message with files comes as a multipart form: its fields read like a body
+                "body": json or kwargs.get("data") or {},
+                "files": [name for _field, (name, *_rest) in kwargs.get("files") or []],
                 "token": (headers or {}).get("Api-Access-Token"),
             }
         )
@@ -3070,10 +3072,15 @@ class FakeChatwootAPI:
 
     def posted(self, private: bool | None = None) -> list[str]:
         """Contents of the messages posted, optionally only private notes (True) or public ones (False)."""
+
+        def is_private(value) -> bool:
+            # JSON sends True/False; a multipart form, "true"/"false"
+            return value is True or str(value).lower() in ("true", "1")
+
         return [
             c["body"].get("content")
             for c in self.calls_to("/messages")
-            if private is None or bool(c["body"].get("private")) == private
+            if private is None or is_private(c["body"].get("private")) == private
         ]
 
     def statuses(self) -> list[str]:

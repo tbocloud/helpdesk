@@ -7,7 +7,18 @@
           'WhatsApp, Instagram, Facebook and the website chat: the AI answers first, then you.'
         )
       "
-    />
+    >
+      <template #right-header>
+        <Button
+          v-if="canNotify"
+          size="sm"
+          :variant="notifyOn ? 'subtle' : 'solid'"
+          :icon-left="notifyOn ? 'lucide-bell' : 'lucide-bell-off'"
+          :label="notifyOn ? __('Notifications on') : __('Notify me')"
+          @click="toggleNotify"
+        />
+      </template>
+    </LayoutHeader>
     <div class="flex min-h-0 flex-1">
       <!-- the conversations -->
       <section
@@ -133,6 +144,8 @@
 <script setup lang="ts">
 import LayoutHeader from "@/components/LayoutHeader.vue";
 import { useAuthStore } from "@/stores/auth";
+import { globalStore } from "@/stores/globalStore";
+import { useDebounceFn } from "@vueuse/core";
 import { __ } from "@/translation";
 import { errorText, timeAgo } from "@/utils";
 import {
@@ -149,7 +162,9 @@ import { useRoute, useRouter } from "vue-router";
 import ChatThread from "./ChatThread.vue";
 
 const API = "helpdesk.api.messages";
-const REFRESH_MS = 15000;
+// live updates do the work; this only covers a lost socket
+const REFRESH_MS = 60000;
+const NOTIFY_KEY = "hd-messages-notify";
 
 type Row = {
   name: string;
@@ -244,13 +259,73 @@ watch([view, selected], () => {
 });
 watch([view, search], refreshList);
 
+// --- live updates and notifications --------------------------------------------------------
+
+const { $socket } = globalStore();
+const refreshSoon = useDebounceFn(refreshList, 700);
+const canNotify = typeof window !== "undefined" && "Notification" in window;
+const notifyOn = ref(readNotify());
+
+// a per-person convenience: remembered in this browser only
+function readNotify() {
+  try {
+    return (
+      canNotify &&
+      Notification.permission === "granted" &&
+      localStorage.getItem(NOTIFY_KEY) === "1"
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function toggleNotify() {
+  if (notifyOn.value) {
+    notifyOn.value = false;
+  } else {
+    const permission =
+      Notification.permission === "granted"
+        ? "granted"
+        : await Notification.requestPermission();
+    notifyOn.value = permission === "granted";
+  }
+  try {
+    localStorage.setItem(NOTIFY_KEY, notifyOn.value ? "1" : "0");
+  } catch {
+    // private window: it lasts for this visit only
+  }
+}
+
+function onLive(event: { conversation: string; direction: string }) {
+  refreshSoon();
+  // a customer wrote, and the person isn't looking at that chat: tell them, without the text
+  const looking = !document.hidden && selected.value === event?.conversation;
+  if (event?.direction === "In" && notifyOn.value && !looking) {
+    const note = new Notification(__("New message"), {
+      body: __("A customer wrote in Messages."),
+      tag: `hd-messages-${event.conversation}`,
+    });
+    note.onclick = () => {
+      window.focus();
+      open(event.conversation);
+      note.close();
+    };
+  }
+}
+
 let timer: number | undefined;
 onMounted(() => {
   refreshList();
-  // live updates come with step 5; until then the list refreshes itself
+  // the server checks this person may read conversations before letting them in
+  $socket?.emit("doctype_subscribe", "HD Chat Conversation");
+  $socket?.on("helpdesk:chat-message", onLive);
   timer = window.setInterval(refreshList, REFRESH_MS);
 });
-onBeforeUnmount(() => window.clearInterval(timer));
+onBeforeUnmount(() => {
+  $socket?.off("helpdesk:chat-message", onLive);
+  $socket?.emit("doctype_unsubscribe", "HD Chat Conversation");
+  window.clearInterval(timer);
+});
 
 usePageMeta(() => ({ title: __("Messages") }));
 </script>

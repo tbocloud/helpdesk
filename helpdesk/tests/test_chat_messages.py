@@ -670,3 +670,144 @@ class TestMessagesScreen(TicketsCase):
         frappe.set_user(member)
         counts = get_nav_counts()
         self.assertEqual((counts["messages"], counts["tickets"]), (1, 0))
+
+
+class TestFilesAndTemplates(TicketsCase):
+    """Step 5: files from the reply box, WhatsApp templates, live updates."""
+
+    def setUp(self):
+        super().setUp()
+        self.customer_says("Hi, can you send your price list?")
+        self.chat = self.row().name
+
+    def upload(self, name="plan.png", content=b"\x89PNG plan", owner=None):
+        file = frappe.get_doc(
+            {"doctype": "File", "file_name": name, "is_private": 1, "content": content}
+        ).insert(ignore_permissions=True)
+        if owner:
+            file.db_set("owner", owner)
+        path = file.get_full_path()
+        self.addCleanup(lambda: os.path.exists(path) and os.remove(path))
+        return file
+
+    def test_a_picture_goes_with_the_reply(self):
+        from helpdesk.api import messages
+
+        file = self.upload()
+        sent = messages.send_message(self.chat, "Our plans", files=[file.file_url])
+        call = self.api.calls_to("/messages")[-1]
+        self.assertEqual(
+            (call["body"]["content"], call["files"]), ("Our plans", ["plan.png"])
+        )
+        row = frappe.get_doc(MESSAGE, sent["message"])
+        self.assertEqual(
+            (row.files[0].file_type, row.files[0].file), ("Image", file.file_url)
+        )
+        self.assertEqual(
+            frappe.db.get_value(
+                "File", file.name, ["attached_to_doctype", "attached_to_name"]
+            ),
+            (MESSAGE, row.name),
+        )
+
+    def test_only_ones_own_fresh_uploads_go(self):
+        from helpdesk.api import messages
+
+        other = make_agent(f"other-{self.cid}@example.com")
+        theirs = self.upload(name="theirs.txt", content=b"theirs", owner=other)
+        with self.assertRaises(frappe.ValidationError):
+            messages.send_message(self.chat, "x", files=[theirs.file_url])
+
+    def test_a_file_over_the_limit_is_refused(self):
+        from helpdesk.api import messages
+
+        big = self.upload(name="big.txt", content=b"0" * (2 * 1024 * 1024))
+        with self.assertRaises(frappe.ValidationError):
+            messages.send_message(self.chat, "", files=[big.file_url])
+
+    def test_whatsapp_templates_are_offered_and_sent(self):
+        from helpdesk.api import messages
+
+        enable_chatwoot_bridge(
+            messages_section=1,
+            ticket_every_conversation=1,
+            messages_team=self.team,
+            whatsapp_templates=[
+                {
+                    "template_name": "tbo_update",
+                    "language": "en",
+                    "enabled": 1,
+                    "body": "Hi {{1}}, an update from TBO: {{2}}",
+                }
+            ],
+        )
+        offered = messages.get_templates(self.chat)["templates"]
+        self.assertEqual(
+            [(t["name"], t["blanks"]) for t in offered], [("tbo_update", 2)]
+        )
+        with self.assertRaises(frappe.ValidationError):
+            messages.send_template(self.chat, "tbo_update", ["Anita"])
+        sent = messages.send_template(
+            self.chat, "tbo_update", ["Anita", "we will call you today"]
+        )
+        call = self.api.calls_to("/messages")[-1]
+        self.assertEqual(call["body"]["template_params"]["name"], "tbo_update")
+        self.assertEqual(
+            call["body"]["template_params"]["processed_params"],
+            {"1": "Anita", "2": "we will call you today"},
+        )
+        row = frappe.get_doc(MESSAGE, sent["message"])
+        self.assertEqual(
+            (row.kind, row.author, row.content),
+            (
+                "Template",
+                "Administrator",
+                "Hi Anita, an update from TBO: we will call you today",
+            ),
+        )
+
+    def test_templates_are_for_whatsapp_only(self):
+        from helpdesk.api import messages
+
+        frappe.db.set_value(
+            "HD Chat Conversation", self.chat, "channel", "Channel::Instagram"
+        )
+        self.assertEqual(messages.get_templates(self.chat)["templates"], [])
+        with self.assertRaises(frappe.ValidationError):
+            messages.send_template(self.chat, "tbo_update", ["a", "b"])
+
+    def test_each_new_message_tells_the_screens(self):
+        with patch("helpdesk.chat_messages.frappe.publish_realtime") as published:
+            self.customer_says("One more question", message_id=self.mid + 1)
+        events = [(c.args[:2], c.kwargs.get("room")) for c in published.call_args_list]
+        # only to the room of those who may read conversations, never the whole site
+        self.assertIn(
+            (
+                (
+                    "helpdesk:chat-message",
+                    {"conversation": self.chat, "direction": "In"},
+                ),
+                "doctype:HD Chat Conversation",
+            ),
+            events,
+        )
+
+    def test_our_record_of_a_reply_wins_over_the_webhook_that_came_first(self):
+        payload = make_chatwoot_payload(
+            "message_created",
+            conversation_id=self.cid,
+            message_id=self.mid + 5,
+            message_type="outgoing",
+            sender_type="user",
+            content="Sent from TBO Support",
+        )
+        send_chatwoot_webhook("account", payload)
+        self.assertFalse(kept(self.mid + 5).author)
+        chat = chatwoot_bridge.ChatConversation(
+            frappe.get_doc("HD Chat Conversation", self.chat),
+            frappe.get_single("HD Chatwoot Settings"),
+        )
+        chat_messages.keep(
+            chat, {"id": self.mid + 5}, author="Administrator", sender_type="Staff"
+        )
+        self.assertEqual(kept(self.mid + 5).author, "Administrator")

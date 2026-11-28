@@ -65,6 +65,8 @@ HANDLED_EVENTS = (
     "conversation_status_changed",
 )
 REQUEST_TIMEOUT = 15
+# a file goes to Chatwoot and on to Meta: room for a large one
+FILE_TIMEOUT = 120
 # room for a thinking model's second, larger attempt (see call_haiku)
 AI_JOB_TIMEOUT = 360
 TICKET_LABEL = "ticket"
@@ -1205,6 +1207,30 @@ class ChatwootClient:
             as_bot=as_bot,
         )
 
+    def post_files(
+        self,
+        conversation_id: int,
+        content: str,
+        files: list[tuple[str, bytes, str]],
+        private: bool = False,
+    ):
+        """A message with files, as a person: `files` are (name, content, MIME type). Chatwoot takes
+        them as a multipart form, under attachments[]."""
+        path = f"/conversations/{conversation_id}/messages"
+        return self.send(
+            "POST",
+            self.base + path,
+            path,
+            self.user_token,
+            None,
+            form={
+                "content": content,
+                "message_type": "outgoing",
+                "private": "true" if private else "false",
+            },
+            files=[("attachments[]", file) for file in files],
+        )
+
     def toggle_status(self, conversation_id: int, status: str, as_bot: bool = False):
         return self.request(
             "POST",
@@ -1244,7 +1270,16 @@ class ChatwootClient:
             body,
         )
 
-    def send(self, method: str, url: str, path: str, token: str | None, body):
+    def send(
+        self,
+        method: str,
+        url: str,
+        path: str,
+        token: str | None,
+        body,
+        form: dict | None = None,
+        files: list | None = None,
+    ):
         # only `path` is logged: never a token, a request body or a successful answer
         if not token:
             frappe.log_error(
@@ -1252,15 +1287,17 @@ class ChatwootClient:
                 message=f"{method} {path}: no access token in {SETTINGS}",
             )
             return None
+        # a multipart form (files) goes as data + files; everything else as JSON
+        payload = {"data": form, "files": files} if files else {"json": body}
         try:
             response = requests.request(
                 method,
                 url,
-                json=body,
                 # dashes, not underscores: proxies such as Caddy/nginx drop
                 # underscore header names, and Chatwoot reads both spellings
                 headers={"Api-Access-Token": token, "Accept": "application/json"},
-                timeout=REQUEST_TIMEOUT,
+                timeout=REQUEST_TIMEOUT if not files else FILE_TIMEOUT,
+                **payload,
             )
         except requests.RequestException:
             frappe.log_error(

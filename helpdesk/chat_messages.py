@@ -274,11 +274,15 @@ def keep(
     message: dict,
     author: str | None = None,
     sender_type: str | None = None,
+    kind: str | None = None,
+    files: list[dict] | None = None,
 ):
     """The message's row, written or brought up to date; None when the message has no id.
 
-    `conversation` is the bridge's ChatConversation. `author` and `sender_type` are given when
-    TBO Support itself sent the message (a person's reply), and stay over what the webhook says."""
+    `conversation` is the bridge's ChatConversation. `author`, `sender_type` and `kind` are given
+    when TBO Support itself sent the message (a person's reply, note or template): they win over
+    what the webhook says, also when its copy got here first. `files` are the rows of files TBO
+    Support sent, already stored here."""
     mid = cint(message.get("id"))
     if not mid or not conversation.row.name:
         return None
@@ -286,14 +290,16 @@ def keep(
     existing = frappe.db.get_value(
         MESSAGE,
         {"chatwoot_message_id": mid},
-        ["name", "status", "content"],
+        ["name", "status", "content", "author", "sender_type", "kind", "direction"],
         as_dict=True,
     )
     if existing:
-        update_known(existing, message, status, error)
+        ours = {"author": author, "sender_type": sender_type, "kind": kind}
+        update_known(existing, message, status, error, ours)
+        notify(conversation.row.name, existing.direction)
         return existing.name
 
-    files = file_rows(message)
+    files = files if files is not None else file_rows(message)
     doc = frappe.get_doc(
         {
             "doctype": MESSAGE,
@@ -303,7 +309,7 @@ def keep(
             "direction": direction_of(message),
             "sender_type": sender_type or sender_of(message),
             "author": author or staff_member(message),
-            "kind": kind_of(message),
+            "kind": kind or kind_of(message),
             "content": str(message.get("content") or "").strip(),
             "reply_to": reply_to(message) or None,
             "sent_at": sent_at(message),
@@ -324,12 +330,20 @@ def keep(
             enqueue_after_commit=True,
             now=frappe.flags.in_test,
         )
+    notify(conversation.row.name, doc.direction)
     return doc.name
 
 
-def update_known(existing, message: dict, status: str, error: str):
-    """A message seen before: delivery moves forward only, and text that arrived later fills in."""
-    values = {}
+def update_known(
+    existing, message: dict, status: str, error: str, ours: dict | None = None
+):
+    """A message seen before: delivery moves forward only, text that arrived later fills in, and
+    what TBO Support knows about its own message (who sent it, its kind) wins."""
+    values = {
+        field: value
+        for field, value in (ours or {}).items()
+        if value and existing.get(field) != value
+    }
     if status and moves_forward(existing.status or "", status):
         values["status"] = status
         if status == "Failed":
@@ -339,6 +353,20 @@ def update_known(existing, message: dict, status: str, error: str):
         values["content"] = content
     if values:
         frappe.db.set_value(MESSAGE, existing.name, values, update_modified=False)
+
+
+def notify(conversation: str, direction: str):
+    """Live update: the Messages screens reload this conversation. It goes to the room of
+    HD Chat Conversation, which only people who may read conversations can join (the page joins it
+    while open); only the conversation's name and whether the customer wrote travel."""
+    from frappe.realtime import get_doctype_room
+
+    frappe.publish_realtime(
+        "helpdesk:chat-message",
+        {"conversation": conversation, "direction": direction},
+        room=get_doctype_room(CONVERSATION),
+        after_commit=True,
+    )
 
 
 def moves_forward(current: str, new: str) -> bool:
