@@ -4,6 +4,7 @@ the handover. Admins, Project Managers and department heads only (`can_hand_over
 
 import frappe
 from frappe import _
+from frappe.query_builder.functions import Count
 from frappe.utils import cint, cstr, get_fullname
 
 from helpdesk.helpdesk.doctype.hd_employee_handover.hd_employee_handover import (
@@ -85,14 +86,14 @@ def access_entries_by(user: str, projects: list[str]) -> dict[str, int]:
     """How many access entries the person added on each project."""
     if not projects:
         return {}
+    # query builder, not a "count(name)" field string: newer Frappe refuses SQL in fields
+    access = frappe.qb.DocType("HD Project Access")
     return dict(
-        frappe.get_all(
-            "HD Project Access",
-            filters={"added_by": user, "project": ("in", projects)},
-            fields=["project", "count(name) as n"],
-            group_by="project",
-            as_list=True,
-        )
+        frappe.qb.from_(access)
+        .select(access.project, Count(access.name))
+        .where((access.added_by == user) & access.project.isin(projects))
+        .groupby(access.project)
+        .run()
     )
 
 
@@ -104,13 +105,20 @@ def get_people() -> dict:
     require_hand_over()
     return {
         "people": people_holding_work(),
-        "takers": frappe.get_all(
-            "HD Agent",
-            filters={"is_active": 1},
-            fields=["user as name", "agent_name as full_name"],
-            order_by="agent_name asc",
-        ),
+        "takers": active_agents(),
     }
+
+
+def active_agents() -> list[dict]:
+    """The active agents, as {name, full_name}."""
+    agent = frappe.qb.DocType("HD Agent")
+    return (
+        frappe.qb.from_(agent)
+        .select(agent.user.as_("name"), agent.agent_name.as_("full_name"))
+        .where(agent.is_active == 1)
+        .orderby(agent.agent_name)
+        .run(as_dict=True)
+    )
 
 
 def people_holding_work() -> list[dict]:
